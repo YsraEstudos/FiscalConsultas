@@ -1,0 +1,34 @@
+/* ===========================================
+   Design Tokens (CSS Variables)
+   Extracted from index.css for better organization
+   =========================================== */
+
+:root {
+    /* Layout */
+    --header-height: 80px;
+
+    /* Background Colors */
+    --bg-primary: #0f0f1a;
+    --bg-secondary: #1a1a2e;
+    --bg-tertiary: #252540;
+
+    /* Accent Colors */
+    --accent-primary: #6366f1;
+    --accent-secondary: #8b5cf6;
+    --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+
+    /* Text Colors */
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+
+    /* Utility Colors */
+    --border-color: #334155;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --error: #ef4444;
+
+    /* Doc Badges */
+    --badge-nesh-gradient: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    --badge-tipi-gradient: linear-gradient(135deg, #f59e0b, #d97706);
+}

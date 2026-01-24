@@ -1,0 +1,243 @@
+.sidebarOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    /* Prevent blocking clicks when hidden */
+    transition: all 0.3s;
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+}
+
+.sidebarOverlay.open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    /* Enable clicks when visible */
+}
+
+.navSidebar {
+    width: 250px;
+    min-width: 250px;
+    background: var(--bg-tertiary);
+    border-right: 1px solid var(--border-color);
+    height: 100%;
+    overflow-y: auto;
+    display: none;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+/* In module we don't usually use global 'active', but conditional rendering or props. 
+   However, assuming existing logic toggles classes on it. */
+.navSidebar.active {
+    display: flex;
+}
+
+.navHeader {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-secondary);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.navHeader h3 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.closeSidebarBtn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: none;
+    /* Desktop default */
+}
+
+/* Mobile specific styles for the sidebar itself */
+@media (max-width: 768px) {
+    .navSidebar {
+        position: fixed;
+        top: 0;
+        left: -280px;
+        height: 100vh;
+        z-index: 1000;
+        transition: left 0.3s ease;
+        box-shadow: 5px 0 15px rgba(0, 0, 0, 0.5);
+    }
+
+    .navSidebar.mobileOpen {
+        left: 0;
+    }
+
+    .closeSidebarBtn {
+        display: block;
+    }
+}
+
+.chapterGroup {
+    border-bottom: 1px solid var(--border-color);
+}
+
+.chapterTitle {
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent-secondary);
+    background: rgba(139, 92, 246, 0.05);
+    /* accent-secondary alpha */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.chapterBadge {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.positions {
+    display: flex;
+    flex-direction: column;
+}
+
+.item {
+    padding: 0.5rem 1rem;
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    gap: 0.75rem;
+    align-items: start;
+    background: transparent;
+    border: none;
+    border-left: 2px solid transparent;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s;
+    width: 100%;
+}
+
+.item:hover {
+    background: rgba(255, 255, 255, 0.03);
+    border-left-color: var(--accent-primary);
+}
+
+.itemCode {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--accent-secondary);
+    font-weight: 700;
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 6px;
+    padding: 0.15rem 0.35rem;
+    text-align: center;
+    min-width: 54px;
+}
+
+.itemDesc {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+}
+
+.item:hover .itemDesc {
+    color: var(--text-primary);
+}
+
+/* Highlight para item encontrado pelo autoscroll */
+.itemHighlight {
+    background: rgba(99, 102, 241, 0.25) !important;
+    border-left-color: var(--accent-primary) !important;
+    animation: sidebarFlash 2.5s ease-out;
+}
+
+.itemHighlight .itemCode {
+    background: var(--accent-primary);
+    color: #fff;
+    border-color: var(--accent-primary);
+}
+
+.itemHighlight .itemDesc {
+    color: var(--text-primary);
+}
+
+
+
+.virtualContainer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    /* Ensure it fills available space */
+    min-height: 0;
+    /* Crucial for nested flex scrolling */
+}
+
+.virtualList {
+    height: 100% !important;
+    /* Virtuoso needs explicit height or 100% of parent */
+}
+
+.navSidebarTipi {
+    width: 280px;
+    min-width: 280px;
+    background: var(--bg-tertiary);
+}
+
+.chapterTitleTipi {
+    color: #93c5fd;
+    background: rgba(59, 130, 246, 0.1);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.itemTipi {
+    grid-template-columns: 76px 1fr;
+    padding: 0.6rem 0.9rem;
+    border-left: 3px solid transparent;
+    border-bottom: 1px dashed rgba(148, 163, 184, 0.15);
+}
+
+.itemCodeTipi {
+    font-size: 0.75rem;
+    background: rgba(59, 130, 246, 0.14);
+    border-color: rgba(59, 130, 246, 0.35);
+    color: #bfdbfe;
+}
+
+.itemDescTipi {
+    font-size: 0.78rem;
+    color: #cbd5f5;
+    line-height: 1.35;
+}
+
+.virtualListTipi {
+    padding-bottom: 0.75rem;
+}
+
+.tipiLevel1 { padding-left: 0; }
+.tipiLevel2 { padding-left: 6px; }
+.tipiLevel3 { padding-left: 12px; }
+.tipiLevel4 { padding-left: 18px; }
+.tipiLevel5 { padding-left: 24px; }

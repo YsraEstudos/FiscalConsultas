@@ -1,0 +1,54 @@
+/* ===========================================
+   Glossary Styles
+   =========================================== */
+
+.glossary-term {
+    border-bottom: 2px dotted var(--accent-secondary);
+    cursor: help;
+    transition: all 0.2s;
+    position: relative;
+    color: var(--text-primary);
+}
+
+.glossary-term:hover {
+    background-color: rgba(139, 92, 246, 0.15);
+    color: var(--accent-primary);
+}
+
+.glossary-tooltip {
+    position: fixed;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+    max-width: 300px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    z-index: 9999;
+    display: none;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    pointer-events: none;
+    /* Don't block mouse */
+}
+
+.glossary-header {
+    font-weight: 700;
+    color: var(--accent-secondary);
+    margin-bottom: 0.5rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.glossary-def {
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.glossary-syns {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-style: italic;
+    border-top: 1px solid var(--border-color);
+    padding-top: 0.5rem;
+}

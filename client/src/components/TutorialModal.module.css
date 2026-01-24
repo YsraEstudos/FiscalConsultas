@@ -1,0 +1,10 @@
+/* Tutorial Modal (CSS Module) */
+
+.content {
+    line-height: 1.6;
+}
+
+.separator {
+    margin: 1rem 0;
+    border-color: var(--border-color);
+}

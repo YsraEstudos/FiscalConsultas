@@ -1,0 +1,321 @@
+/* ===========================================
+   TIPI Styles (Tabela de Incidência do IPI)
+   Extracted from index.css for modularity
+   =========================================== */
+
+/* TIPI Chapter Block */
+.tipi-chapter {
+    margin-bottom: 2rem;
+    background: var(--bg-tertiary);
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+
+.tipi-chapter-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(251, 191, 36, 0.08) 100%);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.tipi-cap-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    height: 36px;
+    background: var(--badge-tipi-gradient);
+    color: white;
+    font-weight: 700;
+    font-size: 0.9rem;
+    border-radius: 8px;
+}
+
+.tipi-positions {
+    padding: 0.5rem;
+}
+
+/* TIPI Position Layout - Grid System */
+.tipi-position {
+    display: grid;
+    grid-template-columns: 80px 1fr 100px;
+    gap: 1.5rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    align-items: start;
+    border-bottom: 1px solid var(--border-color);
+    transition: all 0.15s;
+}
+
+.tipi-position:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+/* Níveis de indentação TIPI */
+.tipi-nivel-1 {
+    padding-left: 1rem;
+}
+
+.tipi-nivel-2 {
+    padding-left: 2rem;
+}
+
+.tipi-nivel-3 {
+    padding-left: 3rem;
+}
+
+.tipi-nivel-4 {
+    padding-left: 4rem;
+}
+
+/* TIPI NCM Code */
+.tipi-ncm {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-weight: 600;
+    color: var(--accent-secondary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    min-width: 80px;
+}
+
+.tipi-ncm:hover {
+    color: var(--accent-primary);
+    text-decoration: underline;
+}
+
+/* TIPI Description */
+.tipi-desc {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.4;
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+/* TIPI Aliquota */
+.tipi-aliquota {
+    font-weight: 700;
+    font-size: 0.85rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    text-align: center;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+/* Aliquota Color Classes */
+.aliquot-zero {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.aliquot-nt {
+    background: rgba(148, 163, 184, 0.2);
+    color: #94a3b8;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.aliquot-low {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.aliquot-med {
+    background: rgba(250, 204, 21, 0.2);
+    color: #facc15;
+    border: 1px solid rgba(250, 204, 21, 0.3);
+}
+
+.aliquot-high {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* TIPI Text Search Results */
+.tipi-results-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.tipi-result-item {
+    display: grid;
+    grid-template-columns: 140px 80px 1fr 70px;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--bg-tertiary);
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s;
+    cursor: pointer;
+    align-items: center;
+}
+
+.tipi-result-item:hover {
+    border-color: var(--accent-primary);
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.tipi-result-ncm {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-weight: 600;
+    color: var(--accent-secondary);
+}
+
+.tipi-result-cap {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    background: var(--bg-primary);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+.tipi-result-desc {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tipi-result-aliq {
+    font-weight: 700;
+    font-size: 0.85rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    text-align: center;
+}
+
+/* --- TIPI Tooltip Styles --- */
+.tipi-aliquota[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-color);
+    z-index: 100;
+    opacity: 0;
+    animation: tooltipFade 0.2s ease forwards;
+}
+
+.tipi-aliquota[data-tooltip] {
+    position: relative;
+    cursor: help;
+}
+
+@keyframes tooltipFade {
+    to {
+        opacity: 1;
+    }
+}
+
+/* --- TIPI Article Structure --- */
+article.tipi-position {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+article.tipi-position:hover {
+    background: var(--bg-tertiary);
+    transform: translateX(4px);
+}
+
+/* Accessibility improvements */
+.tipi-ncm[role='link']:focus {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* --- TIPI Flash Highlight (Auto-Scroll Target) --- */
+/* 3 piscadas para destacar o NCM buscado */
+@keyframes tipi-flash {
+
+    /* Blink 1 */
+    0% {
+        background: rgba(251, 191, 36, 0.5);
+        box-shadow: 0 0 25px rgba(251, 191, 36, 0.6),
+            inset 0 0 15px rgba(251, 191, 36, 0.4);
+        outline: 2px solid rgba(251, 191, 36, 0.8);
+        outline-offset: 2px;
+    }
+
+    11% {
+        background: transparent;
+        box-shadow: none;
+        outline: none;
+    }
+
+    /* Blink 2 */
+    22% {
+        background: rgba(251, 191, 36, 0.5);
+        box-shadow: 0 0 25px rgba(251, 191, 36, 0.6),
+            inset 0 0 15px rgba(251, 191, 36, 0.4);
+        outline: 2px solid rgba(251, 191, 36, 0.8);
+        outline-offset: 2px;
+    }
+
+    33% {
+        background: transparent;
+        box-shadow: none;
+        outline: none;
+    }
+
+    /* Blink 3 */
+    44% {
+        background: rgba(251, 191, 36, 0.5);
+        box-shadow: 0 0 25px rgba(251, 191, 36, 0.6),
+            inset 0 0 15px rgba(251, 191, 36, 0.4);
+        outline: 2px solid rgba(251, 191, 36, 0.8);
+        outline-offset: 2px;
+    }
+
+    55% {
+        background: transparent;
+        box-shadow: none;
+        outline: none;
+    }
+
+    100% {
+        background: transparent;
+        box-shadow: none;
+        outline: none;
+    }
+}
+
+.tipi-position.flash-highlight,
+article.tipi-position.flash-highlight {
+    animation: tipi-flash 3s ease-out;
+    border-radius: 8px;
+    position: relative;
+    z-index: 10;
+}
+
+/* Scroll margin para não ficar escondido sob o header */
+.tipi-position,
+article.tipi-position {
+    scroll-margin-top: 120px;
+}

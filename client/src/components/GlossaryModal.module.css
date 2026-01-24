@@ -1,0 +1,29 @@
+/* Glossary Modal (CSS Module) */
+
+.content {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.loadingState {
+    display: flex;
+    align-items: center;
+    color: var(--text-secondary);
+}
+
+.definitionBody {
+    line-height: 1.6;
+    color: var(--text-primary);
+}
+
+.glossaryFooter {
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.errorText {
+    color: var(--error);
+}
+

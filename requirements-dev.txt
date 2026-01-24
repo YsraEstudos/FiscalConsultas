@@ -1,0 +1,8 @@
+# Dev/test dependencies
+pytest>=8.0
+pytest-benchmark>=4.0
+
+# Performance optimizations
+orjson>=3.9  # Fast JSON serialization (2-10x faster than stdlib)
+httpx
+

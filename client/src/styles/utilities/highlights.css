@@ -1,0 +1,130 @@
+/* ===========================================
+   Highlights & Text Decorations
+   (Search, Units, Exclusions, Smart Links)
+   =========================================== */
+
+/* Search Results (Text Search) */
+.search-highlight {
+    border-radius: 2px;
+    padding: 0 2px;
+}
+
+/* Match EXATO: todas as palavras juntas - VERDE forte */
+.search-highlight.search-highlight-exact {
+    background-color: var(--success);
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+}
+
+/* Match PARCIAL: palavras isoladas - AMARELO fraco */
+.search-highlight.search-highlight-partial {
+    background-color: rgba(253, 224, 71, 0.4);
+    color: inherit;
+    box-shadow: none;
+}
+
+/* Match ativo (navegação) */
+.search-highlight.active {
+    background-color: #f97316;
+    color: white;
+    transform: scale(1.1);
+    font-weight: bold;
+    box-shadow: 0 0 12px rgba(249, 115, 22, 0.8);
+}
+
+/* Exclusion Highlighter (Caça-Exceções) */
+.highlight-exclusion {
+    color: var(--error);
+    font-weight: 700;
+}
+
+/* Unit Highlighter (Raio-X de Unidades) */
+.highlight-unit {
+    background-color: rgba(59, 130, 246, 0.2);
+    color: #93c5fd;
+    padding: 0 3px;
+    border-radius: 3px;
+    font-weight: 500;
+}
+
+/* Toggle classes to disable highlights via Settings Panel */
+body.disable-exclusion-highlights .highlight-exclusion {
+    background: none;
+    border-bottom: none;
+    color: inherit;
+    font-weight: inherit;
+}
+
+body.disable-unit-highlights .highlight-unit {
+    background: none;
+    color: inherit;
+    font-weight: inherit;
+}
+
+body.disable-smart-links .smart-link {
+    pointer-events: none;
+    color: inherit;
+    text-decoration: none;
+}
+
+/* Highlight Animation Pulse - 3 blinks */
+@keyframes highlight-pulse {
+
+    /* Blink 1 */
+    0% {
+        background-color: rgba(251, 191, 36, 0.5);
+        transform: scale(1.01);
+        box-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
+    }
+
+    11% {
+        background-color: transparent;
+        transform: scale(1);
+        box-shadow: none;
+    }
+
+    /* Blink 2 */
+    22% {
+        background-color: rgba(251, 191, 36, 0.5);
+        transform: scale(1.01);
+        box-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
+    }
+
+    33% {
+        background-color: transparent;
+        transform: scale(1);
+        box-shadow: none;
+    }
+
+    /* Blink 3 */
+    44% {
+        background-color: rgba(251, 191, 36, 0.5);
+        transform: scale(1.01);
+        box-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
+    }
+
+    55% {
+        background-color: transparent;
+        transform: scale(1);
+        box-shadow: none;
+    }
+
+    100% {
+        background-color: transparent;
+        transform: scale(1);
+        box-shadow: none;
+    }
+}
+
+.highlight-anim {
+    animation: highlight-pulse 3s ease-out;
+    border-radius: 6px;
+    transition: all 0.3s;
+}
+
+.flash-highlight {
+    animation: highlight-pulse 3s ease-out;
+    position: relative;
+    z-index: 10;
+}

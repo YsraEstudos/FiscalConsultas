@@ -1,0 +1,17 @@
+/* ===========================================
+   Main Entry Point
+   Loads modular CSS files in dependency order
+   =========================================== */
+
+/* 1. Core Variables & Base */
+@import './styles/_variables.css';
+@import './styles/base.css';
+
+/* 2. Content (backend-rendered HTML) */
+@import './styles/components/glossary.css';
+@import './styles/features/nesh.css';
+@import './styles/features/tipi.css';
+
+/* 3. Utilities */
+@import './styles/utilities/scrollbar.css';
+@import './styles/utilities/highlights.css';

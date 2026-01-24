@@ -1,0 +1,46 @@
+/* App-level layout helpers (CSS Module) */
+
+.resultsSection {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-radius: 0 0 16px 16px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.emptyState {
+    text-align: center;
+    padding: 4rem;
+    color: var(--text-muted);
+}
+
+.emptyStateIcon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.emptyStateTitle {
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.emptyStateHint {
+    font-size: 0.8rem;
+    margin-top: 1rem;
+    opacity: 0.6;
+}
+
+.tabPane {
+    display: none;
+    height: 100%;
+    width: 100%;
+}
+
+.tabPaneActive {
+    display: block;
+}

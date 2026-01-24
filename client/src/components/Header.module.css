@@ -1,0 +1,236 @@
+/* Header & Navigation (CSS Module) */
+
+.header {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    padding: 1.5rem 2rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+}
+
+.headerContent {
+    max-width: 1600px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.logoIcon {
+    width: 40px;
+    height: 40px;
+    background: var(--accent-gradient);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+}
+
+.logoText {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.logoText h1 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.logoSubtitle {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.searchContainer {
+    flex: 1;
+    max-width: 700px;
+}
+
+.docSelector {
+    display: flex;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 4px;
+    gap: 4px;
+}
+
+.docButton {
+    padding: 0.5rem 1rem;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.25s ease;
+    letter-spacing: 0.5px;
+}
+
+.docButton:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+}
+
+.docButtonActive {
+    background: var(--accent-gradient);
+    color: white;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.menuDropdown {
+    position: relative;
+}
+
+.menuTrigger {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.menuTrigger:hover {
+    border-color: var(--accent-primary);
+    color: var(--text-primary);
+}
+
+.menuTriggerActive {
+    border-color: var(--accent-primary);
+    color: var(--text-primary);
+}
+
+.menuContent {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    min-width: 200px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.25s ease;
+}
+
+.menuContentOpen {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.menuContent button {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.menuContent button:hover {
+    background: rgba(99, 102, 241, 0.15);
+    color: var(--text-primary);
+}
+
+.menuDivider {
+    border: none;
+    height: 1px;
+    background: var(--border-color);
+    margin: 8px 0;
+}
+
+.adminBadge {
+    background: rgba(0, 255, 0, 0.1);
+    color: #4caf50;
+    cursor: default;
+}
+
+.logoutButton {
+    color: #ff4444;
+}
+
+/* Mobile Navigation Toggle */
+.mobileNavToggle {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .mobileNavToggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        font-size: 1.2rem;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        margin-right: 0.5rem;
+        padding: 0;
+    }
+
+    .mobileNavToggle:hover {
+        border-color: var(--accent-primary);
+        background: rgba(99, 102, 241, 0.1);
+        color: var(--accent-primary);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .mobileNavToggle:active {
+        transform: scale(0.95);
+        box-shadow: none;
+    }
+
+    .headerContent {
+        gap: 0.75rem;
+        padding: 0;
+    }
+
+    .logoSubtitle {
+        display: none;
+    }
+}

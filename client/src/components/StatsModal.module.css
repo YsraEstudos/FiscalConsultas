@@ -1,0 +1,71 @@
+/* Stats Modal (CSS Module) */
+
+.statsContent {
+    padding: 1.5rem;
+}
+
+.statsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.statCard {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.statLabel {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.statValue {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.statSub {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.statStatus {
+    font-size: 1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.statStatusOnline {
+    color: var(--success);
+}
+
+.statStatusOnline::before {
+    content: '●';
+    font-size: 0.75rem;
+}
+
+.statStatusError {
+    color: var(--error);
+}
+
+.statStatusError::before {
+    content: '●';
+    font-size: 0.75rem;
+}
+
+.statDetails {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
