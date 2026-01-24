@@ -1,0 +1,38 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.benchmarks/
+
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+
+# Data and Heavy Files
+data/
+raw_data/
+*.zip
+*.xlsx
+# Specific large markdown from raw_data
+raw_data/nesh.md
+
+# Node / Vite
+client/node_modules/
+client/dist/
+client/.vite/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Logs and Test results
+*.log
+test_results*.txt
+
+# Environment Variables
+.env
+.env.local
+
