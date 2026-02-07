@@ -1,6 +1,6 @@
-# Seguranca e Rotacao de Secrets (Technical Reference)
+# Segurança e Rotação de Secrets (Technical Reference)
 
-Este documento descreve como o backend lida com secrets, rotacao e hot-reload.
+Este documento descreve como o backend lida com secrets, rotação e hot-reload.
 
 ## Escopo
 
@@ -13,27 +13,27 @@ Secrets relevantes hoje:
 
 Esses valores sao carregados via `.env`/env vars pelo `AppSettings`.
 
-## Janela de coexistencia (novo + antigo)
+## Janela de coexistência (novo + antigo)
 
-Durante a rotacao, o backend aceita **o valor atual e o valor anterior** para:
+Durante a rotação, o backend aceita **o valor atual e o valor anterior** para:
 - Senha admin
 - Token admin
 
 Isso evita downtime quando clientes ainda usam o token antigo.
 
-## Rotacao via script
+## Rotação via script
 
 O script `scripts/rotate_secrets.py`:
 1. Le os valores atuais do `.env`.
 2. Grava os valores atuais nos campos `*_PREVIOUS`.
-3. Gera novos valores e salva em `*_ADMIN_PASSWORD`, `*_ADMIN_TOKEN` e `AUTH__SECRET_KEY`.
+3. Gera novos valores e salva em `AUTH__ADMIN_PASSWORD`, `AUTH__ADMIN_TOKEN` e `AUTH__SECRET_KEY`.
 
 ## Hot-reload no backend
 
 Endpoint protegido por token admin:
 - `POST /api/admin/reload-secrets`
 
-Esse endpoint recarrega as configuracoes de env/.env em runtime, sem reiniciar o servidor.
+Esse endpoint recarrega as configurações de env/.env em runtime, sem reiniciar o servidor.
 
 ## Operacao recomendada
 
@@ -43,5 +43,5 @@ Esse endpoint recarrega as configuracoes de env/.env em runtime, sem reiniciar o
 
 ## Observacoes
 
-- A troca e segura apenas se o token admin for mantido em sigilo.
-- Em producao, preferir Secret Manager e variaveis de ambiente injetadas.
+- A troca é segura apenas se o token admin for mantido em sigilo.
+- Em produção, preferir Secret Manager e variáveis de ambiente injetadas.

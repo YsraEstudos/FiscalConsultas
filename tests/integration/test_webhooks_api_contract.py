@@ -1,9 +1,15 @@
 import pytest
 from fastapi.testclient import TestClient
 import json
+from copy import deepcopy
 from pathlib import Path
+from uuid import uuid4
+
+from sqlalchemy import delete, select
 
 from backend.config.settings import settings
+from backend.domain.sqlmodels import Subscription, Tenant
+from backend.infrastructure.db_engine import get_session
 from backend.presentation.routes import webhooks
 from backend.server.app import app
 
@@ -87,3 +93,60 @@ def test_webhook_payment_confirmed_calls_processor(client, monkeypatch, asaas_pa
         "plan_name": "pro",
         "status": "CONFIRMED",
     }
+
+
+async def _read_subscription_state(tenant_id: str):
+    async with get_session() as session:
+        tenant = await session.get(Tenant, tenant_id)
+        result = await session.execute(
+            select(Subscription).where(
+                Subscription.provider == "asaas",
+                Subscription.tenant_id == tenant_id,
+            )
+        )
+        subscriptions = result.scalars().all()
+        return tenant, subscriptions
+
+
+async def _cleanup_subscription_state(tenant_id: str):
+    async with get_session() as session:
+        await session.execute(
+            delete(Subscription).where(Subscription.tenant_id == tenant_id)
+        )
+        await session.execute(delete(Tenant).where(Tenant.id == tenant_id))
+
+
+@pytest.mark.asyncio
+async def test_process_payment_confirmed_requires_external_reference(asaas_payment_confirmed_payload):
+    payload = deepcopy(asaas_payment_confirmed_payload)
+    payload["payment"].pop("externalReference", None)
+
+    result = await webhooks.process_asaas_payment_confirmed(payload)
+
+    assert result == {"processed": False, "reason": "missing_external_reference"}
+
+
+@pytest.mark.asyncio
+async def test_process_payment_confirmed_is_idempotent_for_same_subscription(asaas_payment_confirmed_payload):
+    tenant_id = f"org_test_{uuid4().hex[:8]}"
+    provider_subscription_id = f"sub_{uuid4().hex[:8]}"
+
+    payload = deepcopy(asaas_payment_confirmed_payload)
+    payload["payment"]["externalReference"] = tenant_id
+    payload["payment"]["subscription"] = provider_subscription_id
+    payload["payment"]["id"] = f"pay_{uuid4().hex[:8]}"
+
+    try:
+        first = await webhooks.process_asaas_payment_confirmed(payload)
+        second = await webhooks.process_asaas_payment_confirmed(payload)
+
+        assert first["processed"] is True
+        assert second["processed"] is True
+
+        tenant, subscriptions = await _read_subscription_state(tenant_id)
+        assert tenant is not None
+        assert tenant.is_active is True
+        assert len(subscriptions) == 1
+        assert subscriptions[0].provider_subscription_id == provider_subscription_id
+    finally:
+        await _cleanup_subscription_state(tenant_id)

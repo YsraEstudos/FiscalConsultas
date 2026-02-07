@@ -39,7 +39,6 @@ describe('useRobustScroll Hook', () => {
         const onComplete = vi.fn();
         vi.useFakeTimers();
 
-        console.log('Mounting hook...');
         renderHook(() =>
             useRobustScroll({
                 targetId: 'future-element',
@@ -53,7 +52,6 @@ describe('useRobustScroll Hook', () => {
         expect(onComplete).not.toHaveBeenCalled();
 
         // Simulate async insertion
-        console.log('Simulating insertion...');
         await act(async () => {
             const el = document.createElement('div');
             el.id = 'future-element';

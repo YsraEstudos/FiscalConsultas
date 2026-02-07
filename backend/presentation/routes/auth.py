@@ -60,7 +60,7 @@ async def chat_endpoint(
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     limiter_key = _build_limiter_key(http_request, token)
-    allowed, retry_after = ai_chat_rate_limiter.consume(
+    allowed, retry_after = await ai_chat_rate_limiter.consume(
         key=limiter_key,
         limit=settings.security.ai_chat_requests_per_minute,
     )
