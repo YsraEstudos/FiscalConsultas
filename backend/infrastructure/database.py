@@ -13,8 +13,10 @@ from typing import Dict, List, Optional, Any
 from contextlib import asynccontextmanager
 
 from ..config.constants import SearchConfig
+from ..config.db_schema import CHAPTER_NOTES_SECTION_COLUMNS
 from ..config.logging_config import db_logger as logger
 from ..config.exceptions import DatabaseError, DatabaseNotFoundError
+from ..config.settings import settings
 
 
 class ConnectionPool:
@@ -112,9 +114,13 @@ class DatabaseAdapter:
         Inicializa o adapter com pool de conexões.
         """
         self.db_path = db_path
+        self.is_postgres = settings.database.is_postgres
         self._fts_schema_cache: Optional[Dict[str, Any]] = None
         self._fts_schema_cache_lock = asyncio.Lock()
         self._last_check_ts = 0.0
+        self._chapter_notes_schema_cache: Optional[Dict[str, Any]] = None
+        self._chapter_notes_schema_cache_lock = asyncio.Lock()
+        self._chapter_notes_last_check_ts = 0.0
         self.pool_size = pool_size
         self.pool = None
         logger.debug(f"DatabaseAdapter inicializado: {db_path}")
@@ -218,6 +224,51 @@ class DatabaseAdapter:
             self._last_check_ts = now
             return schema
 
+    async def _get_chapter_notes_columns(self, conn: aiosqlite.Connection) -> set:
+        """Lê colunas disponíveis na tabela chapter_notes."""
+        try:
+            cursor = await conn.execute("PRAGMA table_info(chapter_notes)")
+            rows = await cursor.fetchall()
+            return {row['name'] for row in rows}
+        except Exception as e:
+            logger.warning(f"Falha ao inspecionar chapter_notes: {e}")
+            return set()
+
+    async def _get_chapter_notes_columns_cached(self, conn: aiosqlite.Connection) -> set:
+        """Cache simples de colunas de chapter_notes (TTL 60s, invalida por mudança no DB)."""
+        now = time.time()
+
+        async with self._chapter_notes_schema_cache_lock:
+            if self._chapter_notes_schema_cache and (now - self._chapter_notes_last_check_ts < 60):
+                return self._chapter_notes_schema_cache["columns"]
+
+            signature = self._get_db_signature()
+            if (
+                self._chapter_notes_schema_cache
+                and self._chapter_notes_schema_cache.get("db_signature") == signature
+            ):
+                self._chapter_notes_last_check_ts = now
+                return self._chapter_notes_schema_cache["columns"]
+
+            columns = await self._get_chapter_notes_columns(conn)
+            self._chapter_notes_schema_cache = {
+                "db_signature": signature,
+                "columns": columns,
+            }
+            self._chapter_notes_last_check_ts = now
+            return columns
+
+    @staticmethod
+    def _has_section_content(sections: Dict[str, Optional[str]]) -> bool:
+        """Verifica se há conteúdo real em alguma seção (ignora vazios/whitespace)."""
+        for value in sections.values():
+            if isinstance(value, str):
+                if value.strip():
+                    return True
+            elif value:
+                return True
+        return False
+
     @staticmethod
     def _fts_rank_sql(schema: Dict[str, Any]) -> Dict[str, str]:
         """Retorna SQL para selecionar/ordenar por rank de forma portável."""
@@ -281,11 +332,21 @@ class DatabaseAdapter:
         
         # get_connection já trata exceções e lança DatabaseError se falhar
         async with self.get_connection() as conn:
+            notes_cols = await self._get_chapter_notes_columns_cached(conn)
+            expected_sections = set(CHAPTER_NOTES_SECTION_COLUMNS)
+            has_sections = expected_sections.issubset(notes_cols)
+            section_select = ", ".join(f"cn.{col}" for col in CHAPTER_NOTES_SECTION_COLUMNS)
+            null_section_select = ", ".join(f"NULL AS {col}" for col in CHAPTER_NOTES_SECTION_COLUMNS)
+            notes_select = (
+                f"cn.notes_content, {section_select}"
+                if has_sections
+                else f"cn.notes_content, {null_section_select}"
+            )
             cursor = await conn.execute('''
                 SELECT 
                     c.chapter_num,
                     c.content,
-                    cn.notes_content,
+                    {notes_select},
                     p.codigo,
                     p.descricao
                 FROM chapters c
@@ -293,7 +354,7 @@ class DatabaseAdapter:
                 LEFT JOIN positions p ON c.chapter_num = p.chapter_num
                 WHERE c.chapter_num = ?
                 ORDER BY p.codigo
-            ''', (chapter_num,))
+            '''.format(notes_select=notes_select), (chapter_num,))
             
             rows = await cursor.fetchall()
             if not rows:
@@ -311,12 +372,16 @@ class DatabaseAdapter:
                     })
             
             logger.debug(f"Capítulo {chapter_num}: {len(positions)} posições (1 query)")
-            
+            sections = {col: first_row[col] for col in CHAPTER_NOTES_SECTION_COLUMNS}
+            if not self._has_section_content(sections):
+                sections = None
+
             return {
                 'chapter_num': first_row['chapter_num'],
                 'content': first_row['content'],
                 'positions': positions,
-                'notes': first_row['notes_content']
+                'notes': first_row['notes_content'],
+                'sections': sections
             }
 
     async def get_all_chapters_list(self) -> List[str]:

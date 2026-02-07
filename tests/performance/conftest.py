@@ -5,6 +5,8 @@ import time
 
 import pytest
 
+pytestmark = pytest.mark.perf
+
 
 @pytest.fixture(scope="session")
 def nesh_service():

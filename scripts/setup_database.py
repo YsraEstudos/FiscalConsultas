@@ -10,6 +10,17 @@ import time
 import hashlib
 import zipfile
 import shutil
+import sys
+
+# Adiciona diretório pai ao path para importar utils
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from backend.utils.nesh_sections import extract_chapter_sections
+from backend.config.db_schema import (
+    CHAPTER_NOTES_COLUMNS,
+    CHAPTER_NOTES_CREATE_SQL,
+    CHAPTER_NOTES_INSERT_SQL,
+)
 
 # Caminhos dos arquivos
 SCRIPT_DIR = os.path.dirname(__file__)
@@ -229,14 +240,7 @@ def create_database(chapters: dict, content_hash: str):
         )
     ''')
     
-    cursor.execute('''
-        CREATE TABLE chapter_notes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chapter_num TEXT UNIQUE NOT NULL,
-            notes_content TEXT,
-            FOREIGN KEY (chapter_num) REFERENCES chapters(chapter_num)
-        )
-    ''')
+    cursor.execute(CHAPTER_NOTES_CREATE_SQL)
     
     # Tabela de metadados para controle de versão/updates
     cursor.execute('''
@@ -274,12 +278,21 @@ def create_database(chapters: dict, content_hash: str):
             )
         total_positions += len(positions)
         
-        # Extrai e insere notas (regras gerais) do capítulo
+        # Extrai e insere notas/sections do capítulo
+        sections = extract_chapter_sections(content)
         notes = extract_chapter_notes(content)
-        if notes:
+        if notes or any(sections.values()):
+            values_map = {
+                "chapter_num": chapter_num,
+                "notes_content": notes,
+                "titulo": sections.get("titulo"),
+                "notas": sections.get("notas"),
+                "consideracoes": sections.get("consideracoes"),
+                "definicoes": sections.get("definicoes"),
+            }
             cursor.execute(
-                'INSERT INTO chapter_notes (chapter_num, notes_content) VALUES (?, ?)',
-                (chapter_num, notes)
+                CHAPTER_NOTES_INSERT_SQL,
+                [values_map[col] for col in CHAPTER_NOTES_COLUMNS]
             )
     
     conn.commit()

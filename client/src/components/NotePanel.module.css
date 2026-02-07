@@ -1,0 +1,133 @@
+/* NotePanel - Painel lateral para notas */
+
+.panel {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    width: 320px;
+    max-width: 90vw;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.4);
+    transition: transform 0.3s ease;
+}
+
+/* Posição esquerda */
+.left {
+    left: 0;
+    border-left: none;
+    border-radius: 0 16px 16px 0;
+    transform: translateX(-100%);
+}
+
+.left.open {
+    transform: translateX(0);
+}
+
+/* Posição direita */
+.right {
+    right: 0;
+    border-right: none;
+    border-radius: 16px 0 0 16px;
+    transform: translateX(100%);
+}
+
+.right.open {
+    transform: translateX(0);
+}
+
+/* Header */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+    gap: 0.5rem;
+}
+
+.title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.chapter {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.crossChapterBadge {
+    font-size: 0.7rem;
+    background: var(--accent-primary);
+    color: white;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    font-weight: 500;
+    width: fit-content;
+}
+
+.closeBtn {
+    background: transparent;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    line-height: 1;
+}
+
+.closeBtn:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+/* Content */
+.content {
+    flex: 1;
+    padding: 1.25rem;
+    overflow-y: auto;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    font-size: 0.95rem;
+    white-space: pre-wrap;
+}
+
+/* Premium scrollbar */
+.content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.content::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+}
+
+.content::-webkit-scrollbar-thumb {
+    background: var(--accent-primary);
+    border-radius: 4px;
+}
+
+.content::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-secondary);
+}
+
+/* Responsivo */
+@media (max-width: 768px) {
+    .panel {
+        width: 100%;
+        max-width: 100%;
+        border-radius: 0;
+    }
+}

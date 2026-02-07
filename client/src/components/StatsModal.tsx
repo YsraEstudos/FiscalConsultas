@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Modal } from './Modal';
 import { getSystemStatus } from '../services/api';
+import type { SystemStatusResponse } from '../types/api.types';
 import styles from './StatsModal.module.css';
 
 interface StatsModalProps {
@@ -9,8 +10,14 @@ interface StatsModalProps {
 }
 
 export function StatsModal({ isOpen, onClose }: StatsModalProps) {
-    const [stats, setStats] = useState<any>(null); // Weak type for now
+    const [stats, setStats] = useState<SystemStatusResponse | null>(null);
     const [loading, setLoading] = useState(false);
+
+    const dbStatus = stats?.database?.status;
+    const tipiStatus = stats?.tipi?.status;
+    const isDatabaseOnline = dbStatus === 'online';
+    const isTipiOnline = tipiStatus === 'online';
+    const tipiChapterCount = stats?.tipi?.chapters ?? 0;
 
     useEffect(() => {
         if (isOpen) {
@@ -37,8 +44,8 @@ export function StatsModal({ isOpen, onClose }: StatsModalProps) {
 
                         <div className={styles.statCard}>
                             <div className={styles.statLabel}>Banco NESH</div>
-                            <div className={`${styles.statStatus} ${stats.database?.status === 'ok' ? styles.statStatusOnline : styles.statStatusError}`}>
-                                {stats.database?.status === 'ok' ? 'Online' : 'Erro'}
+                            <div className={`${styles.statStatus} ${isDatabaseOnline ? styles.statStatusOnline : styles.statStatusError}`}>
+                                {isDatabaseOnline ? 'Online' : 'Erro'}
                             </div>
                             <div className={styles.statDetails}>
                                 <div>{stats.database?.chapters || 0} Capítulos</div>
@@ -48,11 +55,11 @@ export function StatsModal({ isOpen, onClose }: StatsModalProps) {
 
                         <div className={styles.statCard}>
                             <div className={styles.statLabel}>Tabela TIPI</div>
-                            <div className={`${styles.statStatus} ${stats.tipi?.status === 'online' ? styles.statStatusOnline : styles.statStatusError}`}>
-                                {stats.tipi?.status === 'online' ? 'Online' : 'Offline'}
+                            <div className={`${styles.statStatus} ${isTipiOnline ? styles.statStatusOnline : styles.statStatusError}`}>
+                                {isTipiOnline ? 'Online' : 'Offline'}
                             </div>
                             <div className={styles.statDetails}>
-                                {stats.tipi?.chapters_count > 0 && <div>{stats.tipi.chapters_count} Capítulos</div>}
+                                {tipiChapterCount > 0 && <div>{tipiChapterCount} Capítulos</div>}
                             </div>
                         </div>
                     </div>

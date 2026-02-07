@@ -3,6 +3,8 @@ import pytest
 import hashlib
 import json
 
+pytestmark = pytest.mark.snapshot
+
 # List of test cases to verify against snapshot
 # Ideally, we could extract these keys from the snapshot itself if we want full coverage,
 # but keeping the explicit list allows us to know what *should* be there.

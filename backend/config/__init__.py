@@ -1,5 +1,5 @@
 # Config Module
-from .loader import ConfigLoader, CONFIG
+from .loader import CONFIG
 from .constants import (
     ApiRoutes, HttpHeaders, CacheConfig, SearchConfig, 
     DatabaseConfig, ServerConfig, RegexPatterns, Messages,

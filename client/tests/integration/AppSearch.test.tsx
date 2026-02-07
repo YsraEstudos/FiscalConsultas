@@ -17,6 +17,16 @@ vi.mock('../../src/hooks/useHistory', () => ({
     }),
 }));
 
+vi.mock('../../src/context/CrossChapterNoteContext', () => ({
+    useCrossChapterNotes: () => ({
+        fetchNotes: vi.fn(),
+        getNote: vi.fn(),
+        isLoading: vi.fn(() => false),
+        cache: {}
+    }),
+    CrossChapterNoteProvider: ({ children }) => <div>{children}</div>
+}));
+
 // Mock window.scrollTo since it's not supported in JSDOM
 window.scrollTo = vi.fn();
 

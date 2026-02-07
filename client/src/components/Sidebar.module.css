@@ -136,6 +136,102 @@
     width: 100%;
 }
 
+.notesItem {
+    background: rgba(16, 185, 129, 0.08);
+    border-left-color: var(--accent-primary);
+}
+
+.notesItem:hover {
+    background: rgba(16, 185, 129, 0.15);
+}
+
+.notesItem .itemCode {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: rgba(16, 185, 129, 0.4);
+    color: #6ee7b7;
+}
+
+.notesItem .itemDesc {
+    color: #a7f3d0;
+    font-style: italic;
+}
+
+/* Base style for all section items */
+.sectionItem {
+    background: rgba(99, 102, 241, 0.05);
+    border-left: 3px solid transparent;
+}
+
+.sectionItem:hover {
+    background: rgba(99, 102, 241, 0.12);
+}
+
+/* Título do Capítulo - Purple */
+.sectionItemTitulo {
+    background: rgba(139, 92, 246, 0.1);
+    border-left-color: #8b5cf6;
+}
+
+.sectionItemTitulo .itemCode {
+    background: rgba(139, 92, 246, 0.2);
+    border-color: rgba(139, 92, 246, 0.4);
+    color: #c4b5fd;
+}
+
+.sectionItemTitulo .itemDesc {
+    color: #ddd6fe;
+    font-weight: 600;
+}
+
+/* Notas do Capítulo - Green */
+.sectionItemNotas {
+    background: rgba(16, 185, 129, 0.08);
+    border-left-color: #10b981;
+}
+
+.sectionItemNotas .itemCode {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: rgba(16, 185, 129, 0.4);
+    color: #6ee7b7;
+}
+
+.sectionItemNotas .itemDesc {
+    color: #a7f3d0;
+    font-style: italic;
+}
+
+/* Considerações Gerais - Blue */
+.sectionItemConsideracoes {
+    background: rgba(59, 130, 246, 0.08);
+    border-left-color: #3b82f6;
+}
+
+.sectionItemConsideracoes .itemCode {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: rgba(59, 130, 246, 0.4);
+    color: #93c5fd;
+}
+
+.sectionItemConsideracoes .itemDesc {
+    color: #bfdbfe;
+}
+
+/* Definições Técnicas - Orange */
+.sectionItemDefinicoes {
+    background: rgba(249, 115, 22, 0.08);
+    border-left-color: #f97316;
+}
+
+.sectionItemDefinicoes .itemCode {
+    background: rgba(249, 115, 22, 0.2);
+    border-color: rgba(249, 115, 22, 0.4);
+    color: #fdba74;
+}
+
+.sectionItemDefinicoes .itemDesc {
+    color: #fed7aa;
+}
+
 .item:hover {
     background: rgba(255, 255, 255, 0.03);
     border-left-color: var(--accent-primary);
@@ -236,8 +332,22 @@
     padding-bottom: 0.75rem;
 }
 
-.tipiLevel1 { padding-left: 0; }
-.tipiLevel2 { padding-left: 6px; }
-.tipiLevel3 { padding-left: 12px; }
-.tipiLevel4 { padding-left: 18px; }
-.tipiLevel5 { padding-left: 24px; }
+.tipiLevel1 {
+    padding-left: 0;
+}
+
+.tipiLevel2 {
+    padding-left: 6px;
+}
+
+.tipiLevel3 {
+    padding-left: 12px;
+}
+
+.tipiLevel4 {
+    padding-left: 18px;
+}
+
+.tipiLevel5 {
+    padding-left: 24px;
+}

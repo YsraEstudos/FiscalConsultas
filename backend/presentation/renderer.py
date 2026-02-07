@@ -29,9 +29,9 @@ def _get_position_pattern(pos_code: str) -> re.Pattern:
     - Separator (dash, en-dash, em-dash, colon, or just space)
     """
     safe_code = re.escape(pos_code)
-    # Allow: normal dash (-), en-dash (–), em-dash (—), colon (:), or just space
+    # Allow: normal dash (-), en-dash (–), em-dash (—), colon (:)
     # FIX: Allow leading whitespace (^\s*) and optional markdown bold (** or *)
-    return re.compile(fr'^\s*(?:\*\*|\*)?{safe_code}(?:\*\*|\*)?\s*(?:[-\u2013\u2014:]|\s)\s*', re.MULTILINE)
+    return re.compile(fr'^\s*(?:\*\*|\*)?{safe_code}(?:\*\*|\*)?\s*(?:[-\u2013\u2014:])\s*', re.MULTILINE)
 
 
 class HtmlRenderer:
@@ -58,6 +58,9 @@ class HtmlRenderer:
     # Filtrar linhas com apenas código NCM isolado (ex: "73.24" sozinho sem descrição)
     # Padrão: linha com apenas código no formato XX.XX ou XX.XX.XX (sem texto após)
     RE_STANDALONE_NCM = re.compile(r'^\s*\d{2}\.\d{2}(?:\.\d{2})?\s*$', re.MULTILINE)
+    # Alguns capítulos trazem artefatos de lista no texto fonte (ex: "- *" sozinho).
+    RE_STRAY_LIST_MARKER = re.compile(r'^\s*-\s*\*?\s*$', re.MULTILINE)
+    RE_STRAY_STAR_MARKER = re.compile(r'^\s*\*\s*$', re.MULTILINE)
 
     @staticmethod
     def clean_content(content: str) -> str:
@@ -75,14 +78,19 @@ class HtmlRenderer:
         content = HtmlRenderer.RE_NESH_INTERNAL_REF.sub('', content)
         # Remove linhas com apenas código NCM isolado (duplicatas do código com descrição)
         content = HtmlRenderer.RE_STANDALONE_NCM.sub('', content)
+        # Remove marcadores soltos que viram listas vazias no renderer (ex: "- *", "*")
+        content = HtmlRenderer.RE_STRAY_LIST_MARKER.sub('', content)
+        content = HtmlRenderer.RE_STRAY_STAR_MARKER.sub('', content)
         content = HtmlRenderer.RE_CLEAN_SPACES.sub('\n\n', content)
         return '\n'.join([line.strip() for line in content.split('\n')])
 
     # Regex patterns for text-to-HTML conversion
     # Pattern: **XX.XX - Description** (bold markers optional but preferred)
-    # Captures: Code (2-4 digits.2 digits), Description
-    # FIX: Made bold markers optional to capture headings in plain text
-    RE_NCM_HEADING = re.compile(r'^\s*(?:\*\*|\*)?(\d{2,4}\.\d{2}(?:\.\d{2})?)(?:\*\*|\*)?\s*-\s*(.+?)(?:\*\*|\*)?\s*$', re.MULTILINE)
+    # Captures: Code (2 digits.2 digits ONLY - main positions, NOT subpositions like 8417.10)
+    # FIX: Restrict to exactly 2 digits before dot to avoid matching subpositions
+    RE_NCM_HEADING = re.compile(r'^\s*(?:\*\*|\*)?(\d{2}\.\d{2})(?:\*\*|\*)?\s*-\s*(.+?)(?:\*\*|\*)?\s*$', re.MULTILINE)
+    # Short subpositions like 8419.8 or 8419.80
+    RE_NCM_SUBHEADING = re.compile(r'^\s*(?:\*\*|\*)?(\d{4}\.\d{1,2})(?:\*\*|\*)?\s*-\s*(.+?)(?:\*\*|\*)?\s*$', re.MULTILINE)
     RE_LETTER_LIST = re.compile(r'^([a-z]\))\s+(.+)$', re.MULTILINE)
     RE_NUMBER_LIST = re.compile(r'^(\d+[\.\)])\s+(.+)$', re.MULTILINE)
     RE_ROMAN_LIST = re.compile(r'^([IVX]+[\.\)])\s+(.+)$', re.MULTILINE)
@@ -205,8 +213,8 @@ class HtmlRenderer:
         """
         Transforma referências a notas em elementos clicáveis.
         
-        Exemplo: "ver Nota 3" -> <span onclick="nesh.openNote('3')">ver Nota 3</span>
-        Exemplo: "ver a Nota 6 do Capítulo 84" -> <span onclick="nesh.openNote('6','84')">ver a Nota 6 do Capítulo 84</span>
+        Exemplo: "ver Nota 3" -> <span class="note-ref" data-note="3">ver Nota 3</span>
+        Exemplo: "ver a Nota 6 do Capítulo 84" -> <span class="note-ref" data-note="6" data-chapter="84">ver a Nota 6 do Capítulo 84</span>
         
         Args:
             text: Texto com referências a notas
@@ -219,8 +227,8 @@ class HtmlRenderer:
             note_num = match.group(2)
             chapter_num = match.group(3)
             if chapter_num:
-                return f'<span class="note-ref" onclick="nesh.openNote(\'{note_num}\',\'{chapter_num}\')">{full_match}</span>'
-            return f'<span class="note-ref" onclick="nesh.openNote(\'{note_num}\')">{full_match}</span>'
+                return f'<span class="note-ref" data-note="{note_num}" data-chapter="{chapter_num}">{full_match}</span>'
+            return f'<span class="note-ref" data-note="{note_num}">{full_match}</span>'
         return cls.RE_NOTE_REF.sub(replacer, text)
 
     @classmethod
@@ -551,6 +559,22 @@ class HtmlRenderer:
             state['ids_injected'].append(anchor_id)
             return opening
 
+        def sub_section_wrapper(match):
+            pos_code = match.group(1)
+            pos_desc = match.group(2)
+
+            anchor_id = generate_anchor_id(pos_code)
+            opening = (
+                f'<h4 class="nesh-subsection" id="{anchor_id}" data-ncm="{pos_code}">'
+                f'<strong>{pos_code}</strong> - {pos_desc}'
+                f'</h4>\n\n'
+            )
+            state['injected_count'] += 1
+            state['ids_injected'].append(anchor_id)
+            return opening
+
+        # First: short subpositions (e.g., 8419.8)
+        content = cls.RE_NCM_SUBHEADING.sub(sub_section_wrapper, content)
         content = cls.RE_NCM_HEADING.sub(section_wrapper, content)
 
         # ---------------------------------------------------------------------------
@@ -588,6 +612,8 @@ class HtmlRenderer:
         # ---------------------------------------------------------------------------
         # FALLBACK: Inject scroll anchors even when headings aren't bolded.
         # Some sources/tests use plain lines like "85.17 - ..." without ** markers.
+        # CRITICAL FIX: Only inject anchors for MAIN positions (XX.XX format),
+        # and require the line to be a heading (has dash/colon separator).
         # ---------------------------------------------------------------------------
         posicoes = data.get("posicoes") or []
         logger.info(f"[RENDERER] Checking {len(posicoes)} positions for ID injection fallback in Cap {data['capitulo']}")
@@ -598,6 +624,12 @@ class HtmlRenderer:
             pos_code = (pos.get("codigo") or "").strip()
             if not pos_code:
                 continue
+            
+            # CRITICAL: Skip subpositions (e.g., 8417.10) - only process main positions (84.17)
+            # Main positions have format XX.XX (exactly 2 digits before and after dot)
+            if not re.match(r'^\d{2}\.\d{2}$', pos_code):
+                logger.debug(f"[RENDERER] Skipping non-main position: {pos_code}")
+                continue
 
             anchor_id = generate_anchor_id(pos_code)
             if f'id="{anchor_id}"' in content:
@@ -606,22 +638,25 @@ class HtmlRenderer:
                 continue
 
             pattern = _get_position_pattern(pos_code)
-            # FIX: Inject the ID directly into a wrapper or preceding anchor
-            # We use a span wrapper to avoid breaking layout, with the ID on it.
-            # OR keep the empty div but ensure it's not hidden by regex misses.
             
             # Check if match found before sub (for debugging)
-            if not pattern.search(content):
+            match = pattern.search(content)
+            if not match:
                 logger.warning(f"[RENDERER] Failed to find content match for position {pos_code} using pattern {pattern.pattern}")
-                # Optional: Try a purely containment based fallback if regex fails?
-                # For now just log usage
-            else:
-                logger.debug(f"[RENDERER] Injecting fallback anchor for {pos_code}")
+                continue
+            
+            # VALIDATION: Ensure we're matching the heading line, not random text
+            # The heading should contain a separator (dash/colon) after the code
+            matched_text = match.group(0)
+            if not any(sep in matched_text for sep in ['-', '–', '—', ':']):
+                logger.warning(f"[RENDERER] Skipping non-heading match for {pos_code}: '{matched_text[:50]}'")
+                continue
+                
+            logger.debug(f"[RENDERER] Injecting fallback anchor for {pos_code}")
 
-            # Fallback: Wrap the matched text in a span with the ID, or inject a transparent anchor span *inside* the text flow
-            # Using a span wrapper around the code ensures the target is the text itself.
+            # Fallback: Wrap the matched text in a span with the ID
             content = pattern.sub(
-                lambda m, anchor_id=anchor_id: f'<span id="{anchor_id}" class="ncm-target">{m.group(0)}</span>',
+                lambda m, anchor_id=anchor_id: f'<span id="{anchor_id}" class="ncm-target ncm-position-title">{m.group(0)}</span>',
                 content,
                 count=1,
             )

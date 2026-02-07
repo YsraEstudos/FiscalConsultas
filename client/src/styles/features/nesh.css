@@ -51,6 +51,8 @@
 .markdown-body {
     color: var(--text-primary);
     line-height: 1.8;
+    contain: content;
+    /* Performance: Isolate layout calculations */
 }
 
 .markdown-body h1,
@@ -278,7 +280,7 @@
 
 .content-renderer h2,
 .content-renderer h3 {
-    scroll-margin-top: 100px;
+    scroll-margin-top: var(--scroll-offset);
     /* For sticky header offset */
 }
 
@@ -317,7 +319,7 @@
     overflow-wrap: anywhere;
 }
 
-.markdown-body .nesh-section-body > *:first-child {
+.markdown-body .nesh-section-body>*:first-child {
     margin-top: 0;
 }
 
@@ -466,7 +468,7 @@
 .markdown-body h2,
 .markdown-body h3,
 .ncm-target {
-    scroll-margin-top: calc(var(--header-height) + 20px);
+    scroll-margin-top: var(--scroll-offset);
 }
 
 .markdown-body .ncm-target {
@@ -486,6 +488,100 @@
     border-bottom: 3px solid var(--accent-primary);
     color: var(--text-primary);
 }
+
+/* Pure HTML specific classes */
+.nesh-divider {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 2rem 0;
+}
+
+.nesh-chapter-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.4rem;
+    margin-top: 2.5rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 3px solid var(--accent-primary);
+    color: var(--text-primary);
+}
+
+.nesh-blockquote {
+    border-left: 2px solid var(--border-color);
+    background: transparent;
+    margin: 0.5rem 0;
+    padding: 0.75rem 1rem;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.9rem;
+    line-height: 1.7;
+}
+
+/* --- Chapter Sections (Structured) --- */
+.section-titulo,
+.section-notas,
+.section-consideracoes,
+.section-definicoes {
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    margin: 1.25rem 0;
+    background: var(--bg-secondary);
+}
+
+.section-header {
+    margin: 0 0 0.75rem 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.titulo-header {
+    color: #c4b5fd;
+}
+
+.notas-header {
+    color: #6ee7b7;
+}
+
+.consideracoes-header {
+    color: #93c5fd;
+}
+
+.definicoes-header {
+    color: #fdba74;
+}
+
+.section-titulo {
+    background: rgba(139, 92, 246, 0.08);
+    border-left: 3px solid #8b5cf6;
+}
+
+.section-notas {
+    background: rgba(16, 185, 129, 0.08);
+    border-left: 3px solid #10b981;
+}
+
+.section-consideracoes {
+    background: rgba(59, 130, 246, 0.08);
+    border-left: 3px solid #3b82f6;
+}
+
+.section-definicoes {
+    background: rgba(249, 115, 22, 0.08);
+    border-left: 3px solid #f97316;
+}
+
+.consideracoes-content,
+.definicoes-content {
+    font-size: 0.92rem;
+    line-height: 1.7;
+    color: var(--text-secondary);
+}
+
 
 
 /* ===========================================
@@ -512,7 +608,7 @@
 }
 
 .scroll-anchor {
-    scroll-margin-top: 140px;
+    scroll-margin-top: var(--scroll-offset);
     display: block;
     height: 0;
     width: 0;

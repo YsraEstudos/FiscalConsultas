@@ -43,12 +43,35 @@ def main():
     # Configurações do servidor (pode vir do config.py se necessário)
     HOST = "127.0.0.1"
     PORT = 8000
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    backend_dir = os.path.join(project_root, "backend")
+
+    # Hot reload controlado:
+    # - Evita watcher global em todo o projeto (muito pesado no Windows/OneDrive)
+    # - Pode ser desabilitado com NESH_RELOAD=0
+    reload_enabled = os.getenv("NESH_RELOAD", "1").lower() not in {"0", "false", "no"}
     
     print(f"Starting Nesh Server on http://{HOST}:{PORT}")
     
     # Executa Uvicorn
-    # reload=True ajuda no desenvolvimento (hot reload)
-    uvicorn.run("backend.server.app:app", host=HOST, port=PORT, reload=True)
+    uvicorn.run(
+        "backend.server.app:app",
+        host=HOST,
+        port=PORT,
+        reload=reload_enabled,
+        reload_dirs=[backend_dir],
+        reload_excludes=[
+            "client/node_modules/*",
+            "client/dist/*",
+            ".venv/*",
+            ".git/*",
+            "data/*",
+            "raw_data/*",
+            "database/*",
+            "snapshots/*",
+            "__pycache__/*",
+        ],
+    )
 
 if __name__ == "__main__":
     main()

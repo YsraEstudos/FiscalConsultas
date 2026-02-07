@@ -27,8 +27,11 @@ def setup_logging(level: int = logging.INFO, log_file: Optional[str] = None) -> 
         # Windows requires specific handling or reconfiguring stdout
         # Using sys.stdout directly often fails with Unicode if not configured
         # Simple fix: Use UTF-8 encoding for file handlers, but for stream rely on python's new utf-8 mode
-        # or just fallback to 'replace' error handler for safety
-        sys.stdout.reconfigure(encoding='utf-8')
+        if hasattr(sys.stdout, 'reconfigure'):
+            try:
+                sys.stdout.reconfigure(encoding='utf-8')
+            except Exception:
+                pass
         
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)

@@ -6,6 +6,7 @@
 :root {
     /* Layout */
     --header-height: 80px;
+    --scroll-offset: calc(var(--header-height) + 40px);
 
     /* Background Colors */
     --bg-primary: #0f0f1a;

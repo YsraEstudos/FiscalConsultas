@@ -1,13 +1,21 @@
 import { TextSearchResults } from './TextSearchResults';
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { marked } from 'marked';
-import { useAutoScroll } from '../hooks/useAutoScroll';
+import DOMPurify from 'dompurify';
+import { useRobustScroll } from '../hooks/useRobustScroll';
 import { generateAnchorId } from '../utils/id_utils';
 import { SearchResultItem } from './TextSearchResults';
 import styles from './ResultDisplay.module.css';
 import { debug } from '../utils/debug';
+import { NeshRenderer } from '../utils/NeshRenderer';
+import { useSettings } from '../context/SettingsContext';
 
 const Sidebar = React.lazy(() => import('./Sidebar').then(module => ({ default: module.Sidebar })));
+
+const sanitizeHtml = (html: string) => DOMPurify.sanitize(html, {
+    ALLOW_DATA_ATTR: true,
+    ADD_ATTR: ['data-ncm', 'data-note', 'data-chapter', 'aria-label', 'data-tooltip', 'role', 'tabindex']
+});
 
 
 const getAliquotClass = (aliquota: string) => {
@@ -101,6 +109,8 @@ interface ResultDisplayProps {
     isNewSearch: boolean;
     /** Callback para consumir flag após auto-scroll, recebendo opcionalmente o scroll final */
     onConsumeNewSearch: (finalScrollTop?: number) => void;
+    /** Callback to notify parent when content is ready (for coordinated loading) */
+    onContentReady?: () => void;
 }
 
 export const ResultDisplay = React.memo(function ResultDisplay({
@@ -112,8 +122,10 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     initialScrollTop,
     onPersistScroll,
     isNewSearch,
-    onConsumeNewSearch
+    onConsumeNewSearch,
+    onContentReady
 }: ResultDisplayProps) {
+    const { sidebarPosition } = useSettings();
     const containerRef = useRef<HTMLDivElement>(null);
     const [targetId, setTargetId] = useState<string | string[] | null>(null);
     const latestScrollTopRef = useRef(0);
@@ -124,6 +136,11 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     const renderTaskRef = useRef<number | null>(null);
     const lastMarkupRef = useRef<string | null>(null);
     const lastHtmlRef = useRef<string | null>(null);
+    const onContentReadyRef = useRef(onContentReady);
+
+    // Sidebar collapsed state for lateral layout
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), []);
 
     const findAnchorIdForQuery = useCallback((resultados: any, query: string) => {
         if (!resultados || typeof resultados !== 'object') return null;
@@ -141,13 +158,13 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                 const codigo = (pos?.codigo || pos?.ncm || '').toString();
                 if (!codigo) continue;
                 const normalizedCodigo = codigo.replace(/\D/g, '');
-                
+
                 // Exact match has priority
                 if (normalizedCodigo === normalizedQuery) {
                     exactMatch = pos?.anchor_id || generateAnchorId(codigo);
                     break; // Found exact, stop searching
                 }
-                
+
                 // Prefix match as fallback (first one wins)
                 if (!prefixMatch && normalizedCodigo && normalizedCodigo.startsWith(normalizedQuery)) {
                     prefixMatch = pos?.anchor_id || generateAnchorId(codigo);
@@ -287,6 +304,14 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     useEffect(() => {
         onPersistScrollRef.current = onPersistScroll;
     }, [onPersistScroll]);
+    useEffect(() => {
+        onContentReadyRef.current = onContentReady;
+    }, [onContentReady]);
+    useEffect(() => {
+        if (isContentReady) {
+            onContentReadyRef.current?.();
+        }
+    }, [isContentReady]);
 
     const handleAutoScrollComplete = useCallback((success?: boolean) => {
         if (!success) return;
@@ -303,8 +328,14 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     // 1. Tab is active
     // 2. This is a NEW search (not returning to existing tab)
     // @ts-ignore
-    const shouldAutoScroll = !!targetId && isActive && isNewSearch && isContentReady;
-    useAutoScroll(targetId, shouldAutoScroll, containerRef, handleAutoScrollComplete);
+    const shouldAutoScroll = !!targetId && isActive && isNewSearch && isContentReady && data?.type !== 'text';
+    useRobustScroll({
+        targetId,
+        shouldScroll: shouldAutoScroll,
+        containerRef,
+        onComplete: handleAutoScrollComplete,
+        expectedTags: ['H1', 'H2', 'H3', 'H4', 'ARTICLE', 'SECTION', 'DIV']
+    });
 
     // Track scroll position for persistence
     useEffect(() => {
@@ -393,14 +424,28 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
     // Render Markdown
     useEffect(() => {
+        if (data?.type === 'text') {
+            setIsContentReady(true);
+            return;
+        }
         setIsContentReady(false); // Reset ready state on change
-        if (data?.type === 'text' || !containerRef.current) return;
+        if (!containerRef.current) return;
 
         const rawMarkdown = typeof data?.markdown === 'string' ? data.markdown.trim() : '';
-        const shouldUseFallback = !rawMarkdown && isTipiResults(data?.resultados || null);
-        const fallbackMarkup = shouldUseFallback && data?.resultados ? renderTipiFallback(data.resultados) : '';
+        const isTipi = isTipiResults(data?.resultados || null);
 
-        const markupToRender = rawMarkdown || fallbackMarkup;
+        // Determine markup to render with fallbacks
+        let markupToRender = rawMarkdown;
+
+        if (!markupToRender) {
+            if (isTipi && data?.resultados) {
+                // TIPI fallback rendering
+                markupToRender = renderTipiFallback(data.resultados);
+            } else if (data?.resultados) {
+                // NESH client-side rendering
+                markupToRender = NeshRenderer.renderFullResponse(data.resultados);
+            }
+        }
 
         if (!markupToRender) {
             containerRef.current.innerHTML = '';
@@ -423,7 +468,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                 // If we generated fallback markup (TIPI), it is pure HTML. 
                 // If it came from backend.markdown, it is Mixed (Markdown + HTML injections).
                 // We should run marked() on backend content to process the **bold** and # headers.
-                const isPureHtml = shouldUseFallback;
+                const isPureHtml = isTipi || !rawMarkdown;
 
                 let rawMarkup: string;
                 if (lastMarkupRef.current === markupToRender && lastHtmlRef.current) {
@@ -435,7 +480,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                     lastHtmlRef.current = rawMarkup;
                 }
 
-                containerRef.current.innerHTML = rawMarkup;
+                containerRef.current.innerHTML = sanitizeHtml(rawMarkup);
                 setIsContentReady(true); // Content injected, now safe to show sidebar
             } catch (e) {
                 console.error("Markdown parse error:", e);
@@ -545,20 +590,28 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     }
 
     // Default: Code View (Markdown + Sidebar)
+    // Layout: Grid with content and sidebar (position from settings)
+    const wrapperClasses = [
+        styles.wrapper,
+        sidebarCollapsed ? styles.sidebarCollapsed : '',
+        mobileMenuOpen ? styles.sidebarOpen : '',
+        sidebarPosition === 'left' ? styles.sidebarLeft : ''
+    ].filter(Boolean).join(' ');
+
     return (
-        <div className={styles.wrapper}>
-            {isContentReady && (
-                <React.Suspense fallback={<div className={`${styles.navSidebar} ${styles.sidebarSkeleton}`} />}>
-                    <Sidebar
-                        results={data.resultados}
-                        onNavigate={handleNavigate}
-                        isOpen={mobileMenuOpen}
-                        onClose={onCloseMobileMenu}
-                        searchQuery={data.query || data.ncm}
-                        activeAnchorId={activeAnchorId}
-                    />
-                </React.Suspense>
-            )}
+        <div className={wrapperClasses}>
+            {/* Toggle Button */}
+            <button
+                className={styles.sidebarToggle}
+                onClick={toggleSidebar}
+                aria-label={sidebarCollapsed ? 'Expandir navegação' : 'Recolher navegação'}
+            >
+                {sidebarPosition === 'left'
+                    ? (sidebarCollapsed ? '▶' : '◀')
+                    : (sidebarCollapsed ? '◀' : '▶')}
+            </button>
+
+            {/* Content - Coluna 1 */}
             <div
                 className={`${styles.content} ${isContentReady ? styles.contentVisible : styles.contentHidden} markdown-body`}
                 ref={containerRef}
@@ -566,6 +619,22 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             >
                 {!data.markdown && !isTipiResults(data?.resultados || null) && <p>Sem resultados para exibir.</p>}
             </div>
+
+            {/* Sidebar Container - Coluna 2 */}
+            {isContentReady && (
+                <div className={styles.sidebarContainer}>
+                    <React.Suspense fallback={<div className={styles.sidebarSkeleton} />}>
+                        <Sidebar
+                            results={data.resultados}
+                            onNavigate={handleNavigate}
+                            isOpen={mobileMenuOpen}
+                            onClose={onCloseMobileMenu}
+                            searchQuery={data.query || data.ncm}
+                            activeAnchorId={activeAnchorId}
+                        />
+                    </React.Suspense>
+                </div>
+            )}
         </div>
     );
 });

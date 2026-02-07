@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AIChat } from '../../src/../src/components/AIChat';
 import { api } from '../../src/services/api';
@@ -8,10 +8,6 @@ vi.mock('../../src/services/api', () => ({
     api: {
         post: vi.fn()
     }
-}));
-
-vi.mock('../../src/context/AuthContext', () => ({
-    useAuth: () => ({ authToken: 'fake-token' })
 }));
 
 // Mock toast to avoid errors and verify calls
@@ -60,8 +56,7 @@ describe('AIChat Component', () => {
         await waitFor(() => {
             expect(screen.getByText('AI Response')).toBeInTheDocument();
             expect(api.post).toHaveBeenCalledWith('/ai/chat', {
-                message: 'Hello AI',
-                token: 'fake-token'
+                message: 'Hello AI'
             });
         });
     });

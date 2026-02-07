@@ -1,32 +1,29 @@
-import { useEffect, useCallback, useState, Suspense, lazy } from 'react';
-import axios from 'axios';
+import { useEffect, useCallback, useState, Suspense } from 'react';
+
 import { Toaster, toast } from 'react-hot-toast';
 import { Layout } from './components/Layout';
 import { ResultDisplay } from './components/ResultDisplay';
 import { TabsBar } from './components/TabsBar';
 import { ResultSkeleton } from './components/ResultSkeleton';
+import { TabPanel } from './components/Tabs/TabPanel';
 import { useTabs } from './hooks/useTabs';
-import { searchNCM, searchTipi, getGlossaryTerm } from './services/api';
-import { useAuth } from './context/AuthContext';
-import { useSettings } from './context/SettingsContext';
+import { useCrossChapterNotes } from './context/CrossChapterNoteContext';
+import { useSearch } from './hooks/useSearch';
 import { useHistory } from './hooks/useHistory';
+import { extractChapter } from './utils/chapterDetection';
+import { isCodeSearchResponse } from './types/api.types';
+import { useSettings } from './context/SettingsContext';
+import { NotePanel } from './components/NotePanel';
 import styles from './App.module.css';
 
-// Lazy load heavy modals to optimize initial bundle size
-const SettingsModal = lazy(() => import('./components/SettingsModal').then(module => ({ default: module.SettingsModal })));
-const TutorialModal = lazy(() => import('./components/TutorialModal').then(module => ({ default: module.TutorialModal })));
-const GlossaryModal = lazy(() => import('./components/GlossaryModal').then(module => ({ default: module.GlossaryModal })));
-const StatsModal = lazy(() => import('./components/StatsModal').then(module => ({ default: module.StatsModal })));
-const LoginModal = lazy(() => import('./components/LoginModal').then(module => ({ default: module.LoginModal })));
-const AIChat = lazy(() => import('./components/AIChat').then(module => ({ default: module.AIChat })));
-const ComparatorModal = lazy(() => import('./components/ComparatorModal').then(module => ({ default: module.ComparatorModal })));
-const CrossNavContextMenu = lazy(() => import('./components/CrossNavContextMenu').then(module => ({ default: module.CrossNavContextMenu })));
+import { ModalManager } from './components/ModalManager';
 
-// Global declaration moved to vite-env.d.ts
+// Declaracao global movida para vite-env.d.ts
 
 function App() {
     const {
         tabs,
+        tabsById,
         activeTab,
         activeTabId,
         createTab,
@@ -35,40 +32,37 @@ function App() {
         updateTab
     } = useTabs();
 
-    const { history, addToHistory, removeFromHistory, clearHistory } = useHistory();
-
+    // Estados dos modais
     const [_isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [_isTutorialOpen, setIsTutorialOpen] = useState(false);
     const [isStatsOpen, setIsStatsOpen] = useState(false);
-    const [isLoginOpen, setIsLoginOpen] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [isComparatorOpen, setIsComparatorOpen] = useState(false);
+    const [noteModal, setNoteModal] = useState<{
+        note: string;
+        chapter: string;
+        content: string;
+        isCrossChapter?: boolean;
+    } | null>(null);
 
-    const { isAdmin, logout } = useAuth();
-    const { tipiViewMode } = useSettings();
+    const { sidebarPosition } = useSettings();
+
+    // Hooks customizados
+    const { history, addToHistory, removeFromHistory, clearHistory } = useHistory();
+    const { executeSearchForTab } = useSearch(tabsById, updateTab, addToHistory);
 
     const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
-    const noop = useCallback(() => {}, []);
+    const noop = useCallback(() => { }, []);
+    const resetLoadedChaptersForDoc = useCallback((doc: DocType) => {
+        const current = activeTab.loadedChaptersByDoc || { nesh: [], tipi: [] };
+        return { ...current, [doc]: [] };
+    }, [activeTab.loadedChaptersByDoc]);
 
-    // Glossary State
-    type GlossaryState = {
-        isOpen: boolean;
-        term: string;
-        definition: any; // Specify strict type once data model is known
-        loading: boolean;
-    };
 
-    const [glossaryState, setGlossaryState] = useState<GlossaryState>({
-        isOpen: false,
-        term: '',
-        definition: null,
-        loading: false
-    });
-
-    // Global Keyboard Shortcuts
+    // Atalhos globais de teclado
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            // Focus search with '/'
+            // Foca a busca com '/'
             if (document.activeElement && e.key === '/' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
                 e.preventDefault();
                 const searchInput = document.getElementById('ncmInput');
@@ -79,93 +73,151 @@ function App() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-    // Glossary Click Handler (Delegation)
-    useEffect(() => {
-        const handleGlobalClick = async (event: MouseEvent) => {
-            const target = event.target as HTMLElement;
-            const termElement = target.closest('.glossary-term') as HTMLElement;
-            if (termElement) {
-                const term = termElement.dataset.term;
-                if (term) {
-                    openGlossary(term);
-                }
-            }
-        };
-
-        document.addEventListener('click', handleGlobalClick);
-        return () => document.removeEventListener('click', handleGlobalClick);
-    }, []);
-
-    const openGlossary = async (term: string) => {
-        setGlossaryState({ isOpen: true, term, definition: null, loading: true });
-        try {
-            const data = await getGlossaryTerm(term);
-            if (data.found) {
-                setGlossaryState(prev => ({ ...prev, definition: data.data, loading: false }));
-            } else {
-                setGlossaryState(prev => ({ ...prev, definition: null, loading: false }));
-            }
-        } catch (e) {
-            console.error(e);
-            setGlossaryState(prev => ({ ...prev, loading: false }));
-            toast.error("Erro ao buscar termo.");
-        }
-    };
-
-    const closeGlossary = () => {
-        setGlossaryState(prev => ({ ...prev, isOpen: false }));
-    };
 
     type DocType = 'nesh' | 'tipi';
 
-    const executeSearchForTab = useCallback(async (tabId: string, doc: DocType, query: string, saveHistory: boolean = true) => {
-        if (!query) return;
 
-        if (saveHistory) addToHistory(query);
+    const splitSearchTerms = useCallback((raw: string) => {
+        return raw
+            .split(/[,\s]+/)
+            .map(term => term.trim())
+            .filter(Boolean);
+    }, []);
 
-        updateTab(tabId, { loading: true, error: null, ncm: query, title: query });
+    // Busca atua na aba ativa, mas suporta multiplos NCMs por virgula/espaco
+    const handleSearch = useCallback((query: string) => {
+        const terms = splitSearchTerms(query);
+        if (terms.length === 0) return;
 
-        try {
-            const data = doc === 'nesh'
-                ? await searchNCM(query)
-                : await searchTipi(query, tipiViewMode);
-
-            updateTab(tabId, {
-                results: { ...data, query },
-                content: data.markdown || data.resultados,
-                loading: false,
-                isNewSearch: true
-            });
-        } catch (err) {
-            console.error(err);
-            let message = 'Erro ao buscar dados. Verifique a API.';
-
-            if (axios.isAxiosError(err)) {
-                const status = err.response?.status;
-                if (status === 404) {
-                    message = 'Endpoint não encontrado (404). Verifique se o backend está rodando e se a base URL está correta.';
-                } else if (status) {
-                    message = `Erro ${status} ao buscar dados. Verifique a API.`;
-                } else if (err.code === 'ECONNABORTED') {
-                    message = 'Tempo limite na requisição. Verifique a conexão com o backend.';
-                }
-            }
-
-            toast.error(message);
-            updateTab(tabId, {
-                error: message,
-                loading: false
-            });
-        }
-    }, [addToHistory, tipiViewMode, updateTab]);
-
-    // Search function deals with the ACTIVE tab
-    const handleSearch = useCallback(async (query: string) => {
         const doc = (activeTab?.document || 'nesh') as DocType;
-        await executeSearchForTab(activeTabId, doc, query, true);
-    }, [activeTab?.document, activeTabId, executeSearchForTab]);
 
-    // Smart-link Click Handler (Delegation)
+        if (terms.length === 1) {
+            void executeSearchForTab(activeTabId, doc, terms[0], true);
+            return;
+        }
+
+        const canReuseActiveTab = !activeTab?.loading && !activeTab?.results && !activeTab?.ncm;
+        let startIndex = 0;
+
+        if (canReuseActiveTab) {
+            void executeSearchForTab(activeTabId, doc, terms[0], true);
+            startIndex = 1;
+        }
+
+        for (let i = startIndex; i < terms.length; i += 1) {
+            const tabId = createTab(doc);
+            void executeSearchForTab(tabId, doc, terms[i], true);
+        }
+    }, [
+        activeTab?.document,
+        activeTab?.loading,
+        activeTab?.ncm,
+        activeTab?.results,
+        activeTabId,
+        createTab,
+        executeSearchForTab,
+        splitSearchTerms
+    ]);
+
+    const scrollToNotesSection = useCallback((chapter?: string) => {
+        const container = document.getElementById(`results-content-${activeTabId}`);
+        if (!container) return false;
+
+        const selectors = [
+            ...(chapter ? [`#chapter-${chapter}-notas`, `#cap-${chapter}`] : []),
+            '.section-notas',
+            '.regras-gerais'
+        ];
+
+        let target: HTMLElement | null = null;
+        for (const sel of selectors) {
+            const el = container.querySelector(sel) as HTMLElement | null;
+            if (el) {
+                target = el;
+                break;
+            }
+        }
+
+        if (!target) return false;
+
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        target.classList.add('flash-highlight');
+        setTimeout(() => target?.classList.remove('flash-highlight'), 2000);
+        return true;
+    }, [activeTabId]);
+
+    // Hook para notas cross-chapter
+    const { fetchNotes: fetchCrossChapterNotes } = useCrossChapterNotes();
+
+    const handleOpenNote = useCallback(async (note: string, chapter?: string) => {
+        const results = activeTab?.results;
+        if (!results || !isCodeSearchResponse(results)) {
+            toast.error('Notas indisponíveis para esta aba.');
+            return;
+        }
+
+        const resultsMap = results.resultados || results.results;
+        if (!resultsMap) {
+            toast.error('Notas indisponíveis para esta aba.');
+            return;
+        }
+
+        let targetChapter = chapter;
+        if (!targetChapter) {
+            const fromQuery = extractChapter(activeTab?.ncm || results.query || '');
+            if (fromQuery && resultsMap[fromQuery]) {
+                targetChapter = fromQuery;
+            } else {
+                const keys = Object.keys(resultsMap);
+                if (keys.length === 1) targetChapter = keys[0];
+            }
+        }
+
+        // CROSS-CHAPTER: Verificar se o capítulo está carregado localmente
+        const isLocalChapter = targetChapter && resultsMap[targetChapter];
+        let notesMap: Record<string, string> | null = null;
+        let isCrossChapter = false;
+
+        if (isLocalChapter && targetChapter) {
+            // Capítulo local: usar notas já carregadas
+            const chapterData = (resultsMap as Record<string, any>)[targetChapter] || {};
+            notesMap = chapterData?.notas_parseadas || {};
+        } else if (targetChapter) {
+            // CROSS-CHAPTER: Buscar notas do outro capítulo
+            isCrossChapter = true;
+            const loadingToastId = toast.loading(`Carregando notas do Capítulo ${targetChapter}...`);
+
+            try {
+                notesMap = await fetchCrossChapterNotes(targetChapter);
+            } catch (error) {
+                toast.error(`Erro ao carregar notas do Capítulo ${targetChapter}.`);
+                return;
+            } finally {
+                toast.dismiss(loadingToastId);
+            }
+        }
+
+        if (!targetChapter) {
+            toast.error('Não foi possível identificar o capítulo da nota.');
+            return;
+        }
+
+        const content = notesMap?.[note];
+
+        if (!content) {
+            const scrolled = scrollToNotesSection(targetChapter);
+            if (!scrolled) {
+                toast.error(`Nota ${note} não encontrada no capítulo ${targetChapter}.`);
+            } else {
+                toast(`Nota ${note} não encontrada. Mostrando notas do capítulo.`);
+            }
+            return;
+        }
+
+        setNoteModal({ note, chapter: targetChapter, content, isCrossChapter });
+    }, [activeTab?.ncm, activeTab?.results, fetchCrossChapterNotes, scrollToNotesSection]);
+
+    // Handler de clique em smart-link (delegacao)
     useEffect(() => {
         const handleSmartLinkClick = (event: MouseEvent) => {
             const target = event.target as HTMLElement;
@@ -183,13 +235,31 @@ function App() {
         return () => document.removeEventListener('click', handleSmartLinkClick);
     }, [handleSearch]);
 
+    // Handler de clique em note-ref (delegacao)
+    useEffect(() => {
+        const handleNoteRefClick = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            const noteRef = target.closest('.note-ref') as HTMLElement | null;
+            if (!noteRef) return;
+
+            const note = noteRef.dataset.note;
+            if (!note) return;
+
+            const chapter = noteRef.dataset.chapter;
+            handleOpenNote(note, chapter);
+        };
+
+        document.addEventListener('click', handleNoteRefClick);
+        return () => document.removeEventListener('click', handleNoteRefClick);
+    }, [handleOpenNote]);
+
     const openInDocNewTab = useCallback(async (doc: DocType, ncm: string) => {
         const tabId = createTab(doc);
         await executeSearchForTab(tabId, doc, ncm, false);
     }, [createTab, executeSearchForTab]);
 
     const openInDocCurrentTab = useCallback(async (doc: DocType, ncm: string) => {
-        // If current tab is occupied, open a new tab to avoid clobbering.
+        // Se a aba atual estiver ocupada, abre nova para evitar sobrescrever.
         if (activeTab.results || activeTab.ncm || activeTab.loading) {
             await openInDocNewTab(doc, ncm);
             return;
@@ -200,78 +270,80 @@ function App() {
             results: null,
             content: null,
             error: null,
-            ncm: ''
+            ncm: '',
+            isContentReady: false, // Reseta estado de pronto
+            loadedChaptersByDoc: resetLoadedChaptersForDoc(doc) // Reseta cache de capitulos por documento
         });
         await executeSearchForTab(activeTabId, doc, ncm, false);
     }, [activeTab.loading, activeTab.ncm, activeTab.results, activeTabId, executeSearchForTab, openInDocNewTab, updateTab]);
 
-    // Set document type for active tab (or open new if current has content)
+    // Define o documento na aba ativa (ou abre nova se ja houver conteudo)
     const setDoc = (doc: string) => {
-        // If current tab has search results or search in progress, open in NEW tab
-        if (activeTab.results || activeTab.ncm || activeTab.loading) { // Accessing ncm property which might be dynamic, check Tab type
-            createTab(doc);
+        // Se a aba atual tem resultados ou busca em andamento, abre nova aba
+        if (activeTab.results || activeTab.ncm || activeTab.loading) {
+            createTab(doc as DocType);
         } else {
-            // If current tab is empty/initial, just switch its document type
+            // Se a aba atual esta vazia/inicial, apenas troca o documento
             updateTab(activeTabId, {
-                document: doc,
+                document: doc as DocType,
                 results: null,
                 content: null,
                 error: null,
-                // @ts-ignore: Tab type might not have ncm yet or it's extra
-                ncm: ''
+                ncm: '',
+                isContentReady: false, // Reseta estado de pronto
+                loadedChaptersByDoc: resetLoadedChaptersForDoc(doc as DocType) // Reseta cache de capitulos por documento
             });
         }
     };
 
-    // Legacy Bridge + Settings Bridge
+    // Ponte legado + ponte de configuracoes
     useEffect(() => {
         window.nesh = {
             smartLinkSearch: (ncm: string) => {
                 handleSearch(ncm);
             },
             openNote: (note: string, chapter?: string) => {
-                alert(`Nota: ${note} (Capítulo ${chapter || 'Atual'})`);
+                handleOpenNote(note, chapter);
             },
             openSettings: () => {
                 setIsSettingsOpen(true);
             }
         };
         return () => {
-            // @ts-ignore
-            delete window.nesh;
+            (window as any).nesh = undefined;
         };
-    }, [handleSearch]);
+    }, [handleOpenNote, handleSearch]);
 
     return (
         <>
             <Toaster position="top-right" />
             <Suspense fallback={null}>
-                <StatsModal isOpen={isStatsOpen} onClose={() => setIsStatsOpen(false)} />
-                <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
-                <SettingsModal isOpen={_isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-                <TutorialModal isOpen={_isTutorialOpen} onClose={() => setIsTutorialOpen(false)} />
-                <ComparatorModal
-                    isOpen={isComparatorOpen}
-                    onClose={() => setIsComparatorOpen(false)}
-                    defaultDoc={(activeTab?.document || 'nesh') as DocType}
-                />
-
-                <CrossNavContextMenu
+                <ModalManager
+                    modals={{
+                        settings: _isSettingsOpen,
+                        tutorial: _isTutorialOpen,
+                        stats: isStatsOpen,
+                        comparator: isComparatorOpen
+                    }}
+                    onClose={{
+                        settings: () => setIsSettingsOpen(false),
+                        tutorial: () => setIsTutorialOpen(false),
+                        stats: () => setIsStatsOpen(false),
+                        comparator: () => setIsComparatorOpen(false)
+                    }}
                     currentDoc={(activeTab?.document || 'nesh') as DocType}
                     onOpenInDoc={openInDocCurrentTab}
                     onOpenInNewTab={openInDocNewTab}
                 />
-
-                {isAdmin && <AIChat />}
-
-                <GlossaryModal
-                    isOpen={glossaryState.isOpen}
-                    onClose={closeGlossary}
-                    term={glossaryState.term}
-                    definition={glossaryState.definition}
-                    loading={glossaryState.loading}
-                />
             </Suspense>
+            <NotePanel
+                isOpen={!!noteModal}
+                onClose={() => setNoteModal(null)}
+                note={noteModal?.note || ''}
+                chapter={noteModal?.chapter || ''}
+                content={noteModal?.content || ''}
+                position={sidebarPosition}
+            />
 
             <Layout
                 onSearch={handleSearch}
@@ -282,10 +354,7 @@ function App() {
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 onOpenTutorial={() => setIsTutorialOpen(true)}
                 onOpenStats={() => setIsStatsOpen(true)}
-                onOpenLogin={() => setIsLoginOpen(true)}
                 onOpenComparator={() => setIsComparatorOpen(true)}
-                isAdmin={isAdmin}
-                onLogout={logout}
                 history={history}
                 onClearHistory={clearHistory}
                 onRemoveHistory={removeFromHistory}
@@ -300,58 +369,66 @@ function App() {
                 />
 
                 <div className={styles.resultsSection}>
-                    {activeTab?.loading && <ResultSkeleton />}
+                    {/* Renderizacao persistente das abas - usa TabPanel para lazy loading + keep alive */}
+                    {tabs.map(tab => (
+                        <TabPanel
+                            key={tab.id}
+                            id={tab.id}
+                            activeTabId={activeTabId}
+                            className={styles.tabPane}
+                        >
+                            {/* Loading unificado: mostra skeleton se carregando OU se o conteudo ainda nao esta pronto */}
+                            {(tab.loading || (tab.results && tab.isContentReady === false)) && <ResultSkeleton />}
 
-                    {activeTab?.error && (
-                        <div className={styles.emptyState}>
-                            <h3 className={styles.emptyStateTitle}>Erro</h3>
-                            <p>{activeTab.error}</p>
-                        </div>
-                    )}
+                            {tab.error && (
+                                <div className={styles.emptyState}>
+                                    <h3 className={styles.emptyStateTitle}>Erro</h3>
+                                    <p>{tab.error}</p>
+                                </div>
+                            )}
 
-                    {!activeTab?.loading && !activeTab?.results && !activeTab?.error && (
-                        <div className={styles.emptyState}>
-                            <div className={styles.emptyStateIcon}>🔎</div>
-                            <h3 className={styles.emptyStateTitle}>Pronto para buscar</h3>
-                            <p>Digite um NCM acima ou use o histórico</p>
-                            <p className={styles.emptyStateHint}>
-                                Dica: Pressione <kbd>/</kbd> para buscar
-                            </p>
-                        </div>
-                    )}
+                            {!tab.loading && !tab.results && !tab.error && (
+                                <div className={styles.emptyState}>
+                                    <div className={styles.emptyStateIcon}>🔎</div>
+                                    <h3 className={styles.emptyStateTitle}>Pronto para buscar</h3>
+                                    <p>Digite um NCM acima ou use o histórico</p>
+                                    <p className={styles.emptyStateHint}>
+                                        Dica: Pressione <kbd>/</kbd> para buscar
+                                    </p>
+                                </div>
+                            )}
 
-                    {/* Persistent Tabs Rendering - Keeps DOM alive for all tabs with results */}
-                    {tabs.map(tab => {
-                        if (!tab.results) return null;
-
-                        const isActiveTab = tab.id === activeTabId;
-
-                        // Hide active tab content if loading (show skeleton instead)
-                        if (isActiveTab && tab.loading) return null;
-
-                        return (
-                            <div
-                                key={tab.id}
-                                className={`${styles.tabPane} ${isActiveTab ? styles.tabPaneActive : ''}`}
-                            >
+                            {!tab.loading && tab.results && (
                                 <ResultDisplay
                                     data={tab.results}
-                                    mobileMenuOpen={isActiveTab ? mobileMenuOpen : false}
-                                    onCloseMobileMenu={isActiveTab ? closeMobileMenu : noop}
-                                    isActive={isActiveTab}
+                                    mobileMenuOpen={tab.id === activeTabId ? mobileMenuOpen : false}
+                                    onCloseMobileMenu={tab.id === activeTabId ? closeMobileMenu : noop}
+                                    isActive={tab.id === activeTabId}
                                     tabId={tab.id}
                                     isNewSearch={tab.isNewSearch || false}
-                                    onConsumeNewSearch={(finalScroll) => {
+                                    onConsumeNewSearch={(_finalScroll) => {
                                         const updates: Partial<any> = { isNewSearch: false };
-                                        if (typeof finalScroll === 'number') updates.scrollTop = finalScroll;
+                                        if (typeof _finalScroll === 'number') {
+                                            updates.scrollTop = _finalScroll;
+                                        }
                                         updateTab(tab.id, updates);
                                     }}
-                                    initialScrollTop={typeof tab.scrollTop === 'number' ? tab.scrollTop : undefined}
+                                    // Persistencia explicita do scroll para robustez em unmounts/otimizacoes
+                                    initialScrollTop={tab.scrollTop}
                                     onPersistScroll={(id, top) => updateTab(id, { scrollTop: top })}
+                                    onContentReady={() => {
+                                        if (!tab.isContentReady) {
+                                            updateTab(tab.id, { isContentReady: true });
+                                        }
+                                    }}
                                 />
-                            </div>
-                        );
-                    })}
+                            )}
+                            {/* Esconder visualmente ResultDisplay se nao estiver pronto? Nao, manter montado para o IntersectionObserver rodar,
+                                apenas cobrir com Skeleton (posicionado absoluto) ou controlar visibilidade via CSS se precisar.
+                                Na pratica o ResultDisplay controla sua propria visibilidade via isContentReady.
+                            */}
+                        </TabPanel>
+                    ))}
                 </div>
             </Layout>
         </>
