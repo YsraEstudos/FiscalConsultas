@@ -9,6 +9,7 @@ Este middleware:
 """
 import logging
 import time
+from contextvars import ContextVar
 from typing import Optional, Any, Dict
 import jwt
 from jwt import PyJWKClient
@@ -16,8 +17,13 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from backend.infrastructure.db_engine import tenant_context
 from backend.config.settings import settings
+
+try:
+    from backend.infrastructure.db_engine import tenant_context
+except ModuleNotFoundError:
+    # Fallback para evitar crash de import quando db_engine ainda não existe no branch.
+    tenant_context: ContextVar[str] = ContextVar("tenant_context", default="")
 
 logger = logging.getLogger("middleware.tenant")
 
@@ -25,7 +31,7 @@ logger = logging.getLogger("middleware.tenant")
 _jwks_client: Optional[PyJWKClient] = None
 
 # JWT decode cache
-_jwt_decode_cache: dict[int, tuple[dict, float]] = {}
+_jwt_decode_cache: dict[int, tuple[dict, float, Optional[float]]] = {}
 _JWT_CACHE_TTL = 60.0
 _JWT_CACHE_MAX_SIZE = 1000
 
@@ -49,6 +55,26 @@ def get_jwks_client() -> Optional[PyJWKClient]:
     return _jwks_client
 
 
+def _get_payload_exp(payload: dict) -> Optional[float]:
+    exp = payload.get("exp")
+    if exp is None:
+        return None
+    try:
+        return float(exp)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_payload_expired(payload: dict) -> bool:
+    exp = payload.get("exp")
+    if exp is None:
+        return False
+    exp_value = _get_payload_exp(payload)
+    if exp_value is None:
+        return True
+    return time.time() >= exp_value
+
+
 def decode_clerk_jwt(token: str) -> Optional[dict]:
     """
     Valida e decodifica JWT do Clerk.
@@ -60,11 +86,14 @@ def decode_clerk_jwt(token: str) -> Optional[dict]:
     # Performance: Check cache first
     global _jwt_decode_cache
     token_hash = hash(token)
-    now = time.monotonic()
+    now_monotonic = time.monotonic()
     cached = _jwt_decode_cache.get(token_hash)
     if cached:
-        payload, cached_at = cached
-        if now - cached_at < _JWT_CACHE_TTL:
+        payload, cached_at, exp_epoch = cached
+        if now_monotonic - cached_at < _JWT_CACHE_TTL:
+            if exp_epoch is not None and time.time() >= exp_epoch:
+                del _jwt_decode_cache[token_hash]
+                return None
             return payload
         else:
             del _jwt_decode_cache[token_hash]
@@ -88,13 +117,17 @@ def decode_clerk_jwt(token: str) -> Optional[dict]:
             # Desenvolvimento: Decodificar sem validar assinatura
             payload = jwt.decode(token, options={"verify_signature": False})
 
+        if _is_payload_expired(payload):
+            logger.warning("JWT expirado")
+            return None
+
         # Cache the result
         if len(_jwt_decode_cache) >= _JWT_CACHE_MAX_SIZE:
             # Evict oldest entries
             oldest_keys = sorted(_jwt_decode_cache, key=lambda k: _jwt_decode_cache[k][1])[:50]
             for k in oldest_keys:
                 del _jwt_decode_cache[k]
-        _jwt_decode_cache[token_hash] = (payload, now)
+        _jwt_decode_cache[token_hash] = (payload, now_monotonic, _get_payload_exp(payload))
         return payload
 
     except jwt.ExpiredSignatureError:

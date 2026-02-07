@@ -14,7 +14,7 @@ from pathlib import Path
 try:
     import openpyxl
 except ImportError:
-    print("ERRO: openpyxl não instalado. Execute: pip install openpyxl")
+    print("ERRO: openpyxl não instalado. Execute: uv add openpyxl")
     exit(1)
 
 # Configuração de paths

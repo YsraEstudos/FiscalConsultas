@@ -124,7 +124,7 @@ function App() {
         if (!container) return false;
 
         const selectors = [
-            ...(chapter ? [`#chapter-${chapter}-notas`, `#cap-${chapter}`] : []),
+            ...(chapter ? [`#chapter-${chapter}-notas`, `#chapter-${chapter}`, `#cap-${chapter}`] : []),
             '.section-notas',
             '.regras-gerais'
         ];
