@@ -12,15 +12,27 @@ import re
 import asyncio
 import aiosqlite
 from pathlib import Path
+from collections import OrderedDict
+from contextlib import asynccontextmanager
 from typing import Dict, Any, List, Tuple, Optional
 
 from ..config.logging_config import service_logger as logger
 from ..config.exceptions import DatabaseError
+from ..config.constants import CacheConfig
 from ..utils.id_utils import generate_anchor_id
 from ..utils import ncm_utils
 
 # Caminho do banco de dados TIPI
 TIPI_DB_PATH = Path(__file__).parent.parent.parent / "database" / "tipi.db"
+
+# SQLModel Repository imports (optional - for new code paths)
+try:
+    from ..infrastructure.repositories.tipi_repository import TipiRepository
+    from ..infrastructure.db_engine import get_session
+    _REPO_AVAILABLE = True
+except ImportError:
+    _REPO_AVAILABLE = False
+    TipiRepository = None
 
 class TipiService:
     """
@@ -39,9 +51,66 @@ class TipiService:
     _pool_lock: Optional[asyncio.Lock] = None
     _pool_max_size: int = 3
     
-    def __init__(self, db_path: Path = TIPI_DB_PATH):
+    def __init__(self, db_path: Path = TIPI_DB_PATH, *, repository: 'TipiRepository' = None, repository_factory=None):
+        """
+        Inicializa o serviço com pool aiosqlite ou repository.
+        
+        Args:
+            db_path: Caminho do banco SQLite (legado)
+            repository: TipiRepository para novo padrão SQLModel
+            repository_factory: Factory async context manager para criar repos sob demanda
+        """
         self.db_path = db_path
         self._schema_columns_cache: Dict[str, set[str]] = {}
+        self._repository = repository
+        self._repository_factory = repository_factory
+        self._use_repository = repository is not None or repository_factory is not None
+        
+        # Performance: LRU caches for search results
+        self._code_search_cache: OrderedDict = OrderedDict()  # key: (ncm_query, view_mode) -> result
+        self._chapter_positions_cache: OrderedDict = OrderedDict()  # key: chapter_num -> positions
+        self._cache_lock: Optional[asyncio.Lock] = None  # Lazy init
+        
+        mode = "Repository" if self._use_repository else "aiosqlite"
+        logger.info(f"TipiService inicializado (modo: {mode})")
+    
+    @classmethod
+    async def create_with_repository(cls) -> 'TipiService':
+        """
+        Factory assíncrono para criar TipiService com TipiRepository.
+        Usa factory pattern para criar repos sob demanda (cada chamada tem sua session).
+        
+        Uso:
+            service = await TipiService.create_with_repository()
+            results = await service.search_text("bomba")
+        """
+        if not _REPO_AVAILABLE:
+            raise RuntimeError("Repository não disponível. Instale sqlmodel.")
+        
+        @asynccontextmanager
+        async def repo_factory():
+            async with get_session() as session:
+                yield TipiRepository(session)
+
+        return cls(repository_factory=repo_factory)
+    
+    def _get_cache_lock(self) -> asyncio.Lock:
+        """Lazy initialization do lock para evitar criação fora do event loop."""
+        if self._cache_lock is None:
+            self._cache_lock = asyncio.Lock()
+        return self._cache_lock
+
+    @asynccontextmanager
+    async def _get_repo(self):
+        """Get repository via direct instance or factory."""
+        if self._repository is not None:
+            yield self._repository
+            return
+        if self._repository_factory is not None:
+            async with self._repository_factory() as repo:
+                yield repo
+            return
+        yield None
     
     @classmethod
     def _get_pool_lock(cls) -> asyncio.Lock:
@@ -118,8 +187,7 @@ class TipiService:
                 return {
                     "ok": True,
                     "chapters": chapters,
-                    "positions": positions,
-                    "db_path": str(self.db_path)
+                    "positions": positions
                 }
             finally:
                 await self._release_connection(conn)
@@ -145,7 +213,30 @@ class TipiService:
     async def _get_chapter_positions(self, cap_num: str) -> Tuple[Dict[str, Any], ...]:
         """
         Fetch positions for a chapter.
+        Performance: Uses LRU cache for full chapter positions.
         """
+        # Performance: Check chapter cache
+        async with self._get_cache_lock():
+            if cap_num in self._chapter_positions_cache:
+                self._chapter_positions_cache.move_to_end(cap_num)
+                return self._chapter_positions_cache[cap_num]
+
+        if self._use_repository:
+            async with self._get_repo() as repo:
+                if repo:
+                    rows_list = await repo.get_by_chapter(cap_num)
+                    # Normalize keys to match legacy format
+                    rows = tuple(
+                        {**r, 'capitulo': r.get('capitulo', cap_num), 'nivel': r.get('nivel', 0)}
+                        for r in rows_list
+                    )
+                    # Cache result
+                    async with self._get_cache_lock():
+                        self._chapter_positions_cache[cap_num] = rows
+                        if len(self._chapter_positions_cache) > CacheConfig.TIPI_CHAPTER_CACHE_SIZE:
+                            self._chapter_positions_cache.popitem(last=False)
+                    return rows
+
         conn = await self._get_connection()
         try:
             # Check for ncm_sort column availability
@@ -162,7 +253,14 @@ class TipiService:
                 (cap_num,),
             )
             rows = await cursor.fetchall()
-            return tuple(dict(row) for row in rows)
+            result = tuple(dict(row) for row in rows)
+            
+            # Cache result
+            async with self._get_cache_lock():
+                self._chapter_positions_cache[cap_num] = result
+                if len(self._chapter_positions_cache) > CacheConfig.TIPI_CHAPTER_CACHE_SIZE:
+                    self._chapter_positions_cache.popitem(last=False)
+            return result
         finally:
             await self._release_connection(conn)
 
@@ -177,6 +275,15 @@ class TipiService:
             prefix: Prefixo NCM para filtrar descendentes (ex: "8413")
             ancestor_prefixes: Set de prefixos ancestrais (ex: {"8413", "841391"})
         """
+        if self._use_repository:
+            async with self._get_repo() as repo:
+                if repo:
+                    rows_list = await repo.get_family_positions(cap_num, prefix, ancestor_prefixes)
+                    return tuple(
+                        {**r, 'capitulo': r.get('capitulo', cap_num), 'nivel': r.get('nivel', 0)}
+                        for r in rows_list
+                    )
+
         conn = await self._get_connection()
         try:
             cols = await self._get_table_columns(conn, "tipi_positions")
@@ -212,11 +319,18 @@ class TipiService:
     async def search_by_code(self, ncm_query: str, view_mode: str = "family") -> Dict[str, Any]:
         """
         Busca por código NCM na TIPI (Async).
+        Performance: Cacheia resultados por (query, view_mode) com LRU.
         
         Args:
             ncm_query: Código NCM (ex: "85.17" ou "8517")
             view_mode: 'family' (retorna apenas família NCM) ou 'chapter' (capítulo completo)
         """
+        # Performance: Check LRU cache
+        cache_key = (ncm_query, view_mode)
+        async with self._get_cache_lock():
+            if cache_key in self._code_search_cache:
+                self._code_search_cache.move_to_end(cache_key)
+                return self._code_search_cache[cache_key]
         # Suporta múltiplos NCMs via vírgula/;
         parts = ncm_utils.split_ncm_query(ncm_query)
         if len(parts) > 1:
@@ -308,7 +422,7 @@ class TipiService:
                 }
             )
 
-        return {
+        result = {
             "success": True,
             "type": "code",
             "query": ncm_query,
@@ -317,11 +431,34 @@ class TipiService:
             "total": len(rows),
             "total_capitulos": len(resultados),
         }
+
+        # Performance: Store in LRU cache
+        async with self._get_cache_lock():
+            self._code_search_cache[cache_key] = result
+            if len(self._code_search_cache) > CacheConfig.TIPI_RESULT_CACHE_SIZE:
+                self._code_search_cache.popitem(last=False)
+
+        return result
     
     async def search_text(self, query: str, limit: int = 50) -> Dict[str, Any]:
         """
-        Busca textual via FTS5 (Async).
+        Busca textual via FTS5/tsvector (Async).
         """
+        if self._use_repository:
+            async with self._get_repo() as repo:
+                if repo:
+                    results = await repo.search_fulltext(query, limit)
+                    return {
+                        "success": True,
+                        "type": "text",
+                        "query": query,
+                        "normalized": query,
+                        "match_type": "fts",
+                        "warning": None,
+                        "total": len(results),
+                        "results": results,
+                    }
+
         conn = await self._get_connection()
         try:
             # Busca FTS
@@ -373,6 +510,11 @@ class TipiService:
     
     async def get_all_chapters(self) -> List[Dict[str, str]]:
         """Retorna lista de todos os capítulos (Async)."""
+        if self._use_repository:
+            async with self._get_repo() as repo:
+                if repo:
+                    return await repo.get_all_chapters()
+
         conn = await self._get_connection()
         try:
             cursor = await conn.execute('''

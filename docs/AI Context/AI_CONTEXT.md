@@ -1,181 +1,317 @@
-# Nesh / Fiscal — AI Context (Jan/2026)
+# Nesh / Fiscal - AI_CONTEXT
 
-Este arquivo contém o contexto técnico essencial para manutenção do projet Nesh/Fiscal. Todas as informações aqui foram verificadas contra o código em produção.
+Atualizado em: 2026-02-07 (auditado contra o código atual do repositório)
+Revisão desta atualização: alinhada ao README e à validação local de comandos (build/lint/test) em 2026-02-07.
 
-## 1. Visão Geral e Arquitetura
+## 1) Propósito do projeto
 
-O **Nesh/Fiscal** é um sistema de consulta de NCM local híbrido (Python/FastAPI + React).
+Nesh/Fiscal é um sistema de consulta fiscal com backend FastAPI e frontend React/Vite. Ele combina busca por código e texto nas Notas Explicativas do Sistema Harmonizado (NESH), consulta de alíquotas TIPI e recursos de interface (abas, smart-links, glossário e chat IA) para acelerar análise de classificação fiscal.
 
-### Componentes Principais
+## 2) Estrutura do repositório (mapa rápido)
 
-* **Backend (`backend/server/app.py` + `Nesh.py`):**
-  * FastAPI expõe endpoints em `/api/*`.
-  * Serve o frontend compilado (`client/dist`) na raiz `/`.
-  * **Entrypoint:** `python Nesh.py` (inicia Uvicorn na porta 8000).
-* **Frontend (`client/src`):**
-  * React + Vite + TypeScript.
-  * Renderiza Markdown injetado com HTML (smart-links, highlights).
-  * Gerencia estado de abas e histórico.
-  * **Estilos:** CSS Modules por componente + CSS global mínimo em `src/index.css`.
-* **Dados:**
-  * `nesh.db` (SQLite): Dados das Notas Explicativas + Índice FTS5.
-  * `tipi.db` (SQLite): Dados da Tabela TIPI (Alíquotas IPI).
+```text
+backend/
+  config/                settings, constantes e logging
+  server/                app FastAPI, middleware, handlers
+  presentation/routes/   endpoints HTTP
+  services/              lógica de negócio (NESH, TIPI, IA)
+  infrastructure/        adapters SQLite + engine SQLModel
+  domain/                modelos (TypedDict e SQLModel)
+  data/                  glossary_db.json
 
-## 2. Lógica de Busca (NESH) - `backend/services/nesh_service.py`
+client/
+  src/                   app React + hooks + contexts + serviços
+  tests/                 testes de frontend (unit/integration/perf)
+  package.json           scripts npm
 
-O serviço `NeshService` decide a estratégia baseada na query:
+scripts/
+  setup_database.py      cria banco SQLite NESH (sem FTS)
+  setup_fulltext.py      cria índice FTS SQLite (search_index)
+  setup_tipi_database.py cria banco SQLite TIPI
+  migrate_to_postgres.py migra dados SQLite -> PostgreSQL
+  setup_postgres_rls.sql políticas RLS
+  rotate_secrets.py      rotação de secrets no .env
 
-### A. Busca por Código (NCM)
+migrations/
+  versions/001-004       migrations Alembic para PostgreSQL
 
-Ativada quando query contém apenas números e pontuação (ex: `8517`, `73.18`).
+database/
+  nesh.db                SQLite NESH
+  tipi.db                SQLite TIPI
 
-* Normaliza query (remove pontos).
-* Retorna capítulo inteiro em Markdown.
-* Frontend rola automaticamente para a âncora `#pos-XXXX`.
+tests/                   suíte principal backend (pytest.ini aponta para aqui)
+backend/tests/           suíte backend adicional (exige PYTHONPATH)
+```
 
-### B. Busca Textual (FTS5) - `search_full_text`
+## 3) Source of truth de execução
 
-Utiliza estratégia de 3 Tiers para relevância (`ranking` implementado em `database.py`):
+- Entrypoint principal backend: `Nesh.py`
+  - chama `uvicorn.run("backend.server.app:app", host="127.0.0.1", port=8000, reload=True)`
+- App FastAPI real: `backend/server/app.py`
+  - inclui routers com prefixos `/api`, `/api/tipi`, `/api/webhooks`
+  - monta `client/dist` na raiz `/` quando build existe
+- Frontend dev server: `client/package.json` script `dev` (`vite --port 5173 --strictPort --host`)
 
-1. **Tier 1 (Exato):** Procura a frase exata (ex: `"bomba submersível"`). Base score: 1000+.
-2. **Tier 2 (AND):** Contém **TODAS** as palavras (com prefix search `*`). Base score: 500+.
-3. **Tier 3 (OR):** Contém **QUALQUER** palavra (fallback). Base score: 100+.
-    * *Nota:* Tier 3 estima cobertura de palavras para evitar resultados irrelevantes.
+## 4) Como rodar localmente (comandos exatos)
 
-**Bônus NEAR:** Adiciona score extra se as palavras estarem próximas (distância configurável).
+### 4.1 Backend + Frontend (SQLite local)
 
-## 3. Lógica TIPI (IPI) - `backend/services/tipi_service.py`
+1. Instalar dependências:
 
-Diferente da NESH, a TIPI foca em alíquotas.
+```powershell
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt -r requirements-dev.txt
+cd client
+npm install
+cd ..
+```
 
-* **Banco separado:** `tipi.db`.
-* **Formato NCM:** `XXXX.XX.XX` (ex: `8517.13.00`).
-* **Visualização:** Controlada pelo `view_mode` (Enum):
-  * `CHAPTER`: Retorna capítulo completo.
-  * `FAMILY`: Busca hierárquica (Ancestrais + Item + Descendentes).
-* **Busca:**
-  * **Código:** Usa SQL otimizado (`REPLACE` + `LIKE`) para filtrar família sem overhead Python.
-  * **Texto:** FTS5 no `tipi.db`.
+2. Configurar env:
 
-## 4. Renderização e Contratos Frontend-Backend
+```powershell
+Copy-Item .env.example .env
+```
 
-O backend (`backend/presentation/renderer.py`) transforma texto bruto em HTML "rico".
+Ajustar `.env` para SQLite:
 
-### Smart Links (Navegação)
+```env
+DATABASE__ENGINE=sqlite
+```
 
-O backend identifica códigos NCM no texto e os transforma em links.
+Criar `client/.env.local`:
 
-* **Regex:** Detecta códigos como `84.71` ou `8517.12`.
-* **Transformação:** Injeta `<a href="#" class="smart-link" data-ncm="8471">84.71</a>`.
-* **Interação (Frontend):** `App.tsx` usa **event delegation** para interceptar cliques em `.smart-link`, ler `data-ncm` e disparar nova busca/navegação.
-  * *Correção Histórica:* Documentação antiga citava `onclick` inline, mas o código atual usa `data-ncm` + React delegation.
+```env
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_sua_chave
+```
 
-### Highlights de Unidades
+3. Popular dados:
 
-O backend injeta spans para unidades de medida (ex: `kg`, `m²`).
+```powershell
+python scripts/setup_tipi_database.py
+$env:PYTHONUTF8="1"; python scripts/setup_database.py
+$env:PYTHONUTF8="1"; python scripts/setup_fulltext.py
+```
 
-* **Segurança:** Usa um parser HTML (`_UnitHighlighter`) para **jamais** injetar highlights dentro de tags existentes (como links), evitando quebrar o HTML.
-* **CSS:** Classe `.highlight-unit` (azul no tema padrão).
+4. Subir app:
 
-## 4.1. CSS (Estado Atual)
+```powershell
+python Nesh.py
+```
 
-### CSS Modules (padrão)
+Em outro terminal:
 
-- Estilos de UI ficam ao lado do componente em `*.module.css`.
-* Componentes importam o módulo e usam `styles.classe`.
+```powershell
+cd client
+npm run dev
+```
 
-### CSS Global (núcleo mínimo)
+5. Validar status:
 
-Mantidos apenas estilos necessários para HTML injetado pelo backend e utilidades globais:
-* Tokens/base: [client/src/styles/_variables.css](client/src/styles/_variables.css), [client/src/styles/base.css](client/src/styles/base.css)
-* Utilidades: [client/src/styles/utilities](client/src/styles/utilities)
-* Conteúdo Markdown/HTML: [client/src/styles/features/nesh.css](client/src/styles/features/nesh.css), [client/src/styles/features/tipi.css](client/src/styles/features/tipi.css), [client/src/styles/components/glossary.css](client/src/styles/components/glossary.css)
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/status"
+```
 
-## 4.2. NESH — Normalização e Renderização Visual
+### 4.2 Modo PostgreSQL
 
-* O backend converte linhas com `**TÍTULO**` em `<h4 class="nesh-subheading">` e títulos inline em `<span class="nesh-inline-title">`.
-* Bullets soltos são removidos e bullets com texto viram listas.
-* Antes de injetar smart-links, todo `**texto**` é convertido para `<strong>`, inclusive dentro de parágrafos HTML.
-* O frontend encapsula cada seção NESH (`h3.nesh-section`) em um card visual (`.nesh-section-card`), agrupando o texto principal, subtítulos e listas.
-* O CSS garante destaque visual, badge NCM com overflow controlado e hierarquia clara entre títulos, subtítulos e conteúdo.
+1. Banco local (docker):
 
-## 5. Performance (Otimizações Verificadas)
+```powershell
+docker compose up -d
+```
 
-* **Regex Cache:** Padrões compilados no nível do módulo (`renderer.py`).
-* **LRU Cache (Backend):**
-  * Cache de resultados FTS (`nesh_service.py`).
-  * Cache de posições TIPI (Desativado temporariamente para garantir consistência).
-* **TIPI SQL Filter:** Filtro de família NCM movido para SQL (`REPLACE` + `LIKE`) para evitar overhead em capítulos grandes.
-* **Connection Pooling:** `DatabaseAdapter` gerencia pool de conexões SQLite thread-safe.
-* **Vite Proxy:** `vite.config.js` configurado para proxy `/api` -> `localhost:8000` em dev.
-* **Frontend Optimizations:**
-  * **Lazy Loading:** Modais principais carregados sob demanda via `React.lazy` + `Suspense` para reduzir bundle inicial.
-  * **Memoization:** `React.memo` em componentes críticos (`Sidebar`, `ResultDisplay`, `TabsBar`) e `useMemo` em hooks (`useTabs`) para prevenir re-renders.
-  * **Debug Cleanup:** `console.debug` removidos de produção via utilitário `debug.ts`, reduzindo overhead de serialização.
-  * **UX:** Skeleton screens (`ResultSkeleton`) para feedback visual imediato durante o carregamento de buscas.
-  * **Observers Debounce:** `useAutoScroll` utiliza debounce para evitar múltiplos repaints em resize/mutation.
+2. `.env`:
 
-## 6. Setup e Comandos Úteis
+```env
+DATABASE__ENGINE=postgresql
+DATABASE__POSTGRES_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/nesh_db
+```
 
-* **Start Geral:** `start_nesh.bat` (Builda frontend + Roda backend).
-* **Dev Backend:** `python Nesh.py`
-* **Dev Frontend:** `cd client && npm run dev`
-* **Recriar Banco:** `python scripts/setup_database.py` (NESH) / `setup_tipi_database.py` (TIPI).
-* **Testes:** `pytest` (Backend) / `npm test` (Frontend).
+3. Criar schema:
 
-## 7. Troubleshooting Comum
+```powershell
+alembic upgrade head
+```
 
-* **Busca retorna 404 no Frontend Dev:** Verifique se o proxy está configurado no `vite.config.js`.
-* **Highlights sumiram:** Verifique se a regex em `constants.py` cobre o caso (espaços, maiúsculas).
-* **TIPI desatualizada:** Rode `setup_tipi_database.py` novamente.
+4. Migrar dados do SQLite:
 
-## 8. Database Schema (Reference)
+```powershell
+python scripts/migrate_to_postgres.py
+```
 
-Detalhes das tabelas SQLite (`nesh.db`). O banco TIPI (`tipi.db`) segue estrutura similar para capítulos/posições.
+## 5) Testes, lint e build
 
-### Tabelas Principais (`nesh.db`)
+Comandos válidos:
 
-1. **chapters**
-    * Armazena o conteúdo completo de cada capítulo em Markdown.
-    * `chapter_num` (TEXT UNIQUE): PK natural (ex: "01", "85").
-    * `content` (TEXT): Texto completo renderizável.
-    * `raw_text` (TEXT): Texto puro para indexação inicial.
+```powershell
+pytest -q
+$env:PYTHONPATH='.'; pytest -q backend/tests
+cd client; npm run lint
+cd client; npm run test
+cd client; npm run build
+```
 
-2. **positions**
-    * Mapeia códigos NCM para descrições.
-    * `codigo` (TEXT PK): NCM formatado (ex: "8517.12.31").
-    * `chapter_num` (TEXT FK): Link para tabela chapters.
+Resultado observado em 2026-02-07:
 
-3. **search_index** (FTS5 Virtual Table)
-    * Motor de busca textual.
-    * `indexed_content`: Conteúdo tokenizado.
-    * `rank`: Coluna calculada nativamente pelo FTS5 (BM25).
-    * `type`: 'chapter' ou 'position'.
+- `pytest -q`: 2 falhas (`tests/integration/test_api_regression.py` para buscas textuais)
+- `pytest -q backend/tests` sem `PYTHONPATH`: erro de import `ModuleNotFoundError: No module named 'backend'`
+- `pytest -q backend/tests` com `PYTHONPATH='.'`: executa, com 2 falhas de asserção
+- `npm run lint`: OK
+- `npm run test`: falhas em testes que não montam providers obrigatórios (`ClerkProvider`, `SettingsProvider`, `CrossChapterNoteProvider`)
+- `npm run build`: OK
 
-4. **chapter_notes**
-    * `chapter_num` (PK).
-    * `notes_content`: Texto cru das notas legais.
+## 6) Endpoints e contratos HTTP
 
-5. **glossary**
-    * `term` (PK): Termo técnico.
-    * `definition`: Tooltip text.
+Prefixos:
 
-### Performance e Índices
+- `/api/*` (auth/search/system)
+- `/api/tipi/*`
+- `/api/webhooks/*`
 
-* Índices B-Tree em chaves primárias e `chapter_num`.
-* PRAGMA `journal_mode=WAL` ativado pelo `DatabaseAdapter`.
+Rotas mapeadas no código:
 
-## 9. Estrutura de Testes
+- `GET /api/search?ncm=...`
+- `GET /api/chapters`
+- `GET /api/nesh/chapter/{chapter}/notes`
+- `GET /api/glossary?term=...`
+- `GET /api/tipi/search?ncm=...&view_mode=family|chapter`
+- `GET /api/tipi/chapters`
+- `GET /api/status`
+- `GET /api/debug/anchors` (somente com `features.debug_mode=true` e JWT válido)
+- `GET /api/auth/me`
+- `POST /api/ai/chat`
+- `POST /api/admin/reload-secrets`
+- `POST /api/webhooks/asaas`
 
-O diretório `tests/` organiza a suíte de testes do projeto:
+Contratos importantes para o frontend:
 
-* **`unit/`**: Testes unitários de componentes isolados.
-* **`integration/`**: Testes de integração (Database, API Services).
-* **`scripts/`**: Scripts para debugging e verificações manuais.
-* **`performance/`**: Benchmarks e testes de performance.
+- respostas de busca por código mantêm `results` e alias legado `resultados`
+- TIPI usa `view_mode` com valores estritos `family` e `chapter`
+- chat IA exige Bearer token Clerk válido e respeita `SECURITY__AI_CHAT_REQUESTS_PER_MINUTE`
 
-**Execução:**
+## 7) Fontes de dados e inicialização
 
-* Todos: `pytest` (Usa `pytest-asyncio` para testes assíncronos)
-* Apenas Unitários: `pytest tests/unit`
-* Scripts: `python tests/scripts/nome_do_script.py`
+- NESH (SQLite): `database/nesh.db`
+  - tabelas principais: `chapters`, `positions`, `chapter_notes`, `search_index` (FTS)
+- TIPI (SQLite): `database/tipi.db`
+  - tabelas: `tipi_chapters`, `tipi_positions`, `tipi_fts`
+- Glossário: `backend/data/glossary_db.json`
+- PostgreSQL (opcional): schema criado por Alembic (`migrations/versions/*.py`)
+
+## 8) Variáveis de ambiente efetivamente usadas
+
+- `DATABASE__ENGINE`
+- `DATABASE__POSTGRES_URL`
+- `SERVER__ENV`
+- `AUTH__CLERK_DOMAIN`
+- `BILLING__ASAAS_WEBHOOK_TOKEN`
+- `SECURITY__AI_CHAT_REQUESTS_PER_MINUTE`
+- `GOOGLE_API_KEY`
+- `VITE_CLERK_PUBLISHABLE_KEY`
+- `VITE_API_URL`
+- `VITE_API_FILTER_URL`
+
+Observação:
+
+- `BILLING__ASAAS_API_KEY` existe em `settings`, mas não é consumida diretamente nas rotas atuais.
+
+## 9) Workflows comuns para manutenção
+
+### 9.1 Adicionar endpoint
+
+1. Criar handler em `backend/presentation/routes/<arquivo>.py`
+2. Incluir router em `backend/server/app.py`
+3. Se necessário, adicionar método em `backend/services/*`
+4. Atualizar cliente em `client/src/services/api.ts` e tipos em `client/src/types/api.types.ts`
+
+### 9.2 Alterar modelo SQLModel / banco PostgreSQL
+
+1. Editar `backend/domain/sqlmodels.py`
+2. Criar migration Alembic em `migrations/versions/`
+3. Executar `alembic upgrade head`
+4. Validar endpoint `/api/status`
+
+### 9.3 Atualizar dados NESH/TIPI (SQLite)
+
+- NESH:
+
+```powershell
+$env:PYTHONUTF8="1"; python scripts/setup_database.py
+$env:PYTHONUTF8="1"; python scripts/setup_fulltext.py
+```
+
+- TIPI:
+
+```powershell
+python scripts/setup_tipi_database.py
+```
+
+### 9.4 Rotacionar secrets de admin
+
+```powershell
+python scripts/rotate_secrets.py
+```
+
+Depois, sem restart:
+
+- `POST /api/admin/reload-secrets` com JWT Clerk válido
+
+## 10) Regras para edição por IA (Do/Don't)
+
+Do:
+
+- manter compatibilidade de payload (`results` + `resultados`)
+- preservar prefixos de rota (`/api`, `/api/tipi`, `/api/webhooks`)
+- atualizar docs junto com mudanças em execução/build/teste
+- preferir alterações localizadas em `services`/`routes` sem quebrar contratos do frontend
+
+Don't:
+
+- não remover aliases de resposta usados pelo frontend
+- não mudar `view_mode` da TIPI sem atualizar backend, frontend e testes
+- não editar manualmente `database/*.db` em vez de usar scripts
+- não assumir que `backend/tests` roda com `pytest` puro (exige `PYTHONPATH='.'`)
+
+## 11) Gotchas conhecidos
+
+- `client/src/main.tsx` exige `VITE_CLERK_PUBLISHABLE_KEY`; sem isso a UI principal não monta.
+- `npm run dev` usa `--strictPort`; se 5173 estiver ocupada, o comando falha.
+- scripts Python com emojis podem quebrar em Windows CP1252 (`UnicodeEncodeError`); usar `PYTHONUTF8=1`.
+- `setup_database.py` pode falhar ao remover `database/nesh.db` se o arquivo estiver em uso.
+- em modo PostgreSQL, se dados não forem migrados, buscas textuais podem retornar zero resultados.
+
+## 12) Troubleshooting rápido
+
+### Erro: `Port 5173 is already in use`
+
+- libere a porta 5173 ou encerre o processo Vite em execução.
+
+### Erro: `UnicodeEncodeError` em scripts de setup
+
+```powershell
+$env:PYTHONUTF8="1"
+```
+
+Execute o script novamente no mesmo terminal.
+
+### Erro: `ModuleNotFoundError: No module named 'backend'` ao rodar `backend/tests`
+
+```powershell
+$env:PYTHONPATH='.'; pytest -q backend/tests
+```
+
+### `/api/status` com `database.chapters = 0` em modo PostgreSQL
+
+- rode `alembic upgrade head`
+- rode `python scripts/migrate_to_postgres.py`
+
+### `POST /api/ai/chat` retorna 401
+
+- validar Bearer token Clerk
+- conferir `AUTH__CLERK_DOMAIN`
+- em produção, sem domínio Clerk configurado, o token não é validado
+
+## 13) Itens Unknown
+
+- Processo oficial de deploy em produção (além de `npm run build` + execução do backend): **Unknown**
+- Pipeline CI/CD versionado em `.github/workflows`: **Unknown** (diretório não existe neste snapshot)

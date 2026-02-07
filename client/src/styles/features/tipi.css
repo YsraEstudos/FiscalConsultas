@@ -236,6 +236,10 @@ article.tipi-position {
     padding: 0.75rem 1rem;
     border-radius: 8px;
     transition: background 0.2s ease, transform 0.2s ease;
+    will-change: transform;
+    /* GPU acceleration for hover */
+    position: relative;
+    /* For pseudo-element flash */
 }
 
 article.tipi-position:hover {
@@ -250,72 +254,54 @@ article.tipi-position:hover {
     border-radius: 4px;
 }
 
-/* --- TIPI Flash Highlight (Auto-Scroll Target) --- */
-/* 3 piscadas para destacar o NCM buscado */
-@keyframes tipi-flash {
+/* --- TIPI Flash Highlight (GPU-Optimized) --- */
+/* Uses pseudo-element with opacity for compositor-only animation */
+.tipi-position::after,
+article.tipi-position::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.4), rgba(251, 191, 36, 0.2));
+    border: 2px solid rgba(251, 191, 36, 0.6);
+    opacity: 0;
+    pointer-events: none;
+    z-index: -1;
+}
 
-    /* Blink 1 */
-    0% {
-        background: rgba(251, 191, 36, 0.5);
-        box-shadow: 0 0 25px rgba(251, 191, 36, 0.6),
-            inset 0 0 15px rgba(251, 191, 36, 0.4);
-        outline: 2px solid rgba(251, 191, 36, 0.8);
-        outline-offset: 2px;
-    }
+@keyframes tipi-flash-gpu {
 
-    11% {
-        background: transparent;
-        box-shadow: none;
-        outline: none;
-    }
-
-    /* Blink 2 */
-    22% {
-        background: rgba(251, 191, 36, 0.5);
-        box-shadow: 0 0 25px rgba(251, 191, 36, 0.6),
-            inset 0 0 15px rgba(251, 191, 36, 0.4);
-        outline: 2px solid rgba(251, 191, 36, 0.8);
-        outline-offset: 2px;
-    }
-
-    33% {
-        background: transparent;
-        box-shadow: none;
-        outline: none;
-    }
-
-    /* Blink 3 */
+    0%,
+    22%,
     44% {
-        background: rgba(251, 191, 36, 0.5);
-        box-shadow: 0 0 25px rgba(251, 191, 36, 0.6),
-            inset 0 0 15px rgba(251, 191, 36, 0.4);
-        outline: 2px solid rgba(251, 191, 36, 0.8);
-        outline-offset: 2px;
+        opacity: 1;
     }
 
-    55% {
-        background: transparent;
-        box-shadow: none;
-        outline: none;
-    }
-
+    11%,
+    33%,
+    55%,
     100% {
-        background: transparent;
-        box-shadow: none;
-        outline: none;
+        opacity: 0;
     }
+}
+
+.tipi-position.flash-highlight::after,
+article.tipi-position.flash-highlight::after {
+    animation: tipi-flash-gpu 2.5s ease-out;
 }
 
 .tipi-position.flash-highlight,
 article.tipi-position.flash-highlight {
-    animation: tipi-flash 3s ease-out;
-    border-radius: 8px;
-    position: relative;
     z-index: 10;
 }
 
 /* Scroll margin para não ficar escondido sob o header */
 .tipi-position,
 article.tipi-position {
-    scroll-margin-top: 120px;
+    scroll-margin-top: var(--scroll-offset);
+}
+
+/* Performance: Isolate layout calculations */
+.tipi-positions {
+    contain: content;
 }

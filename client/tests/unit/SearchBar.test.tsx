@@ -60,6 +60,7 @@ describe('SearchBar Component', () => {
         const input = screen.getByPlaceholderText(/Digite os NCMs/i);
 
         act(() => {
+            fireEvent.pointerDown(input, { button: 0 });
             fireEvent.focus(input);
         });
 
@@ -73,6 +74,7 @@ describe('SearchBar Component', () => {
         const input = screen.getByPlaceholderText(/Digite os NCMs/i);
 
         act(() => {
+            fireEvent.pointerDown(input, { button: 0 });
             fireEvent.focus(input);
         });
         expect(screen.getByText('Buscas Recentes')).toBeInTheDocument();
@@ -98,6 +100,7 @@ describe('SearchBar Component', () => {
         const input = screen.getByPlaceholderText(/Digite os NCMs/i);
 
         act(() => {
+            fireEvent.pointerDown(input, { button: 0 });
             fireEvent.focus(input);
         });
 
@@ -112,6 +115,7 @@ describe('SearchBar Component', () => {
         const input = screen.getByPlaceholderText(/Digite os NCMs/i);
 
         act(() => {
+            fireEvent.pointerDown(input, { button: 0 });
             fireEvent.focus(input);
         });
 
@@ -126,6 +130,7 @@ describe('SearchBar Component', () => {
         const input = screen.getByPlaceholderText(/Digite os NCMs/i);
 
         act(() => {
+            fireEvent.pointerDown(input, { button: 0 });
             fireEvent.focus(input);
         });
 

@@ -13,10 +13,7 @@ interface LayoutProps {
     onOpenSettings: () => void;
     onOpenTutorial: () => void;
     onOpenStats: () => void;
-    onOpenLogin: () => void;
     onOpenComparator: () => void;
-    isAdmin: boolean;
-    onLogout: () => void;
     history: HistoryItem[];
     onClearHistory: () => void;
     onRemoveHistory: (term: string) => void;
@@ -33,10 +30,7 @@ export function Layout({
     onOpenSettings,
     onOpenTutorial,
     onOpenStats,
-    onOpenLogin,
     onOpenComparator,
-    isAdmin,
-    onLogout,
     history,
     onClearHistory,
     onRemoveHistory,
@@ -53,10 +47,7 @@ export function Layout({
                 onOpenSettings={onOpenSettings}
                 onOpenTutorial={onOpenTutorial}
                 onOpenStats={onOpenStats}
-                onOpenLogin={onOpenLogin}
                 onOpenComparator={onOpenComparator}
-                isAdmin={isAdmin}
-                onLogout={onLogout}
                 history={history}
                 onClearHistory={onClearHistory}
                 onRemoveHistory={onRemoveHistory}

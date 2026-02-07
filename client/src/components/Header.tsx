@@ -1,6 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
+import { SignedIn, SignedOut, UserButton, OrganizationSwitcher, SignInButton, useClerk } from '@clerk/clerk-react';
 import { SearchBar } from './SearchBar';
 import { HistoryItem } from '../hooks/useHistory';
+import {
+    clerkOrganizationSwitcherAppearance,
+    clerkTheme,
+    clerkUserButtonAppearance
+} from '../config/clerkAppearance';
+import { useAuth } from '../context/AuthContext';
+import { Modal } from './Modal';
 import styles from './Header.module.css';
 
 interface HeaderProps {
@@ -11,14 +19,11 @@ interface HeaderProps {
     onOpenSettings: () => void;
     onOpenTutorial: () => void;
     onOpenStats: () => void;
-    onOpenLogin: () => void;
     onOpenComparator: () => void;
-    isAdmin: boolean;
-    onLogout: () => void;
     history: HistoryItem[];
     onClearHistory: () => void;
     onRemoveHistory: (term: string) => void;
-    onMenuOpen: () => void; // Prop for mobile sidebar toggle
+    onMenuOpen: () => void;
     isLoading?: boolean;
 }
 
@@ -30,18 +35,20 @@ export function Header({
     onOpenSettings,
     onOpenTutorial,
     onOpenStats,
-    onOpenLogin,
     onOpenComparator,
-    isAdmin,
-    onLogout,
     history,
     onClearHistory,
     onRemoveHistory,
-    onMenuOpen, // Prop for mobile sidebar toggle
+    onMenuOpen,
     isLoading
 }: HeaderProps) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [shouldRenderClerkWidgets, setShouldRenderClerkWidgets] = useState(false);
+    const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+    const [isSigningOut, setIsSigningOut] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
+    const { signOut } = useClerk();
+    const { userName, userEmail } = useAuth();
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -55,6 +62,32 @@ export function Header({
             document.removeEventListener("mousedown", handleClickOutside);
         };
     }, []);
+
+    const handleLogoutClick = () => {
+        setIsMenuOpen(false);
+        setIsLogoutConfirmOpen(true);
+    };
+
+    const handleToggleMenu = () => {
+        setIsMenuOpen(prev => {
+            const next = !prev;
+            if (next && !shouldRenderClerkWidgets) {
+                setShouldRenderClerkWidgets(true);
+            }
+            return next;
+        });
+    };
+
+    const handleConfirmLogout = async () => {
+        if (isSigningOut) return;
+        setIsSigningOut(true);
+        try {
+            await signOut();
+        } finally {
+            setIsSigningOut(false);
+            setIsLogoutConfirmOpen(false);
+        }
+    };
 
     return (
         <header className={styles.header}>
@@ -104,7 +137,7 @@ export function Header({
                 <div className={styles.menuDropdown} ref={menuRef}>
                     <button
                         className={`${styles.menuTrigger} ${isMenuOpen ? styles.menuTriggerActive : ''}`}
-                        onClick={() => setIsMenuOpen(!isMenuOpen)}
+                        onClick={handleToggleMenu}
                     >
                         <span>☰</span> Menu
                     </button>
@@ -127,24 +160,64 @@ export function Header({
 
                         <div className={styles.menuDivider}></div>
 
-                        {!isAdmin ? (
-                            <button onClick={() => { setIsMenuOpen(false); onOpenLogin(); }}>
-                                <span>🔒</span> Acesso Admin
-                            </button>
-                        ) : (
+                        {/* Clerk Auth Section */}
+                        {shouldRenderClerkWidgets && (
                             <>
-                                <button className={styles.adminBadge}>
-                                    <span>👑</span> Admin Ativo
-                                </button>
-                                <div className={styles.menuDivider}></div>
-                                <button className={styles.logoutButton} onClick={() => { setIsMenuOpen(false); onLogout(); }}>
-                                    <span>🚪</span> Sair
-                                </button>
+                                <SignedOut>
+                                    <SignInButton mode="modal" appearance={clerkTheme}>
+                                        <button onClick={() => setIsMenuOpen(false)}>
+                                            <span>🔐</span> Entrar
+                                        </button>
+                                    </SignInButton>
+                                </SignedOut>
+
+                                <SignedIn>
+                                    <div className={styles.orgSwitcher}>
+                                        <OrganizationSwitcher appearance={clerkOrganizationSwitcherAppearance} />
+                                    </div>
+                                    <div className={styles.userSection}>
+                                        <UserButton appearance={clerkUserButtonAppearance} afterSignOutUrl="/" />
+                                    </div>
+                                    <div className={styles.userSummary}>
+                                        <strong>{userName || 'Usuário'}</strong>
+                                        <span>{userEmail || 'Conta autenticada'}</span>
+                                    </div>
+                                    <button className={styles.logoutMenuButton} onClick={handleLogoutClick}>
+                                        <span>🚪</span> Sair da conta
+                                    </button>
+                                </SignedIn>
                             </>
                         )}
                     </div>
                 </div>
             </div>
+            <Modal
+                isOpen={isLogoutConfirmOpen}
+                onClose={() => !isSigningOut && setIsLogoutConfirmOpen(false)}
+                title="Confirmar saída"
+            >
+                <div className={styles.logoutModalBody}>
+                    <p>Deseja encerrar sua sessão agora?</p>
+                    <div className={styles.logoutActions}>
+                        <button
+                            type="button"
+                            className={styles.logoutCancelButton}
+                            onClick={() => setIsLogoutConfirmOpen(false)}
+                            disabled={isSigningOut}
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="button"
+                            className={styles.logoutConfirmButton}
+                            onClick={handleConfirmLogout}
+                            disabled={isSigningOut}
+                        >
+                            {isSigningOut ? 'Saindo...' : 'Sair'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
         </header>
     );
 }

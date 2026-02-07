@@ -193,7 +193,7 @@
     display: none;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
     .mobileNavToggle {
         display: flex;
         align-items: center;
@@ -231,6 +231,113 @@
     }
 
     .logoSubtitle {
+        display: none;
+    }
+}
+
+/* Clerk Components Styling */
+.orgSwitcher {
+    display: flex;
+    align-items: center;
+    padding: 0.25rem 0.25rem 0.75rem;
+}
+
+.userSection {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0;
+}
+
+.userSummary {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding: 0.25rem 1rem 0.75rem;
+}
+
+.userSummary strong {
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.userSummary span {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.logoutMenuButton {
+    color: #fca5a5 !important;
+    border: 1px solid rgba(239, 68, 68, 0.35) !important;
+    background: rgba(239, 68, 68, 0.08) !important;
+}
+
+.logoutMenuButton:hover {
+    color: #fecaca !important;
+    background: rgba(239, 68, 68, 0.18) !important;
+    border-color: rgba(239, 68, 68, 0.55) !important;
+}
+
+.logoutModalBody {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.logoutModalBody p {
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.logoutActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+
+.logoutCancelButton,
+.logoutConfirmButton {
+    border-radius: 10px;
+    padding: 0.6rem 1rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.logoutCancelButton {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.logoutCancelButton:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.logoutConfirmButton {
+    border: 1px solid rgba(220, 38, 38, 0.75);
+    color: white;
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    box-shadow: 0 8px 20px rgba(220, 38, 38, 0.25);
+}
+
+.logoutConfirmButton:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 24px rgba(220, 38, 38, 0.35);
+}
+
+.logoutCancelButton:disabled,
+.logoutConfirmButton:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+@media (max-width: 768px) {
+    .orgSwitcher {
         display: none;
     }
 }
