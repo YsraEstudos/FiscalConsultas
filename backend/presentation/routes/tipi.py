@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from backend.services.tipi_service import TipiService
 from backend.server.dependencies import get_tipi_service
@@ -9,8 +9,30 @@ import hashlib
 
 router = APIRouter()
 
+
+def _cache_scope_key(request: Request) -> str:
+    try:
+        from backend.server.middleware import get_current_tenant
+        tenant_id = get_current_tenant()
+    except Exception:
+        tenant_id = None
+
+    if tenant_id:
+        return f"tenant:{tenant_id}"
+
+    header_tenant = (request.headers.get("X-Tenant-Id") or "").strip()
+    if header_tenant:
+        return f"tenant:{header_tenant}"
+
+    if request.headers.get("Authorization"):
+        return "auth-user"
+
+    return "public"
+
+
 @router.get("/search")
 async def tipi_search(
+    request: Request,
     ncm: str = Query(..., description="Código NCM ou termo para busca na TIPI"),
     view_mode: ViewMode = Query(ViewMode.FAMILY, description="Modo de visualização: 'chapter' (completo) ou 'family' (apenas família NCM)"),
     tipi_service: TipiService = Depends(get_tipi_service)
@@ -56,9 +78,11 @@ async def tipi_search(
     
     # Performance: Add caching headers for TIPI catalog data
     response = JSONResponse(content=result)
-    etag = hashlib.md5(f"tipi:{ncm}:{view_mode.value}".encode()).hexdigest()[:16]
-    response.headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=86400"
+    cache_key = _cache_scope_key(request)
+    etag = hashlib.md5(f"tipi:{cache_key}:{ncm}:{view_mode.value}".encode()).hexdigest()[:16]
+    response.headers["Cache-Control"] = "private, max-age=3600, stale-while-revalidate=86400"
     response.headers["ETag"] = f'W/"{etag}"'
+    response.headers["Vary"] = "Authorization, X-Tenant-Id"
     return response
 
 @router.get("/chapters")

@@ -2,7 +2,7 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 echo ==========================================
-echo   INICIANDO MODO DE DESENVOLVIMENTO
+echo   INICIANDO MODO DE DESENVOLVIMENTO (UV)
 echo   As altera??es aparecem em tempo real!
 echo ==========================================
 
@@ -24,26 +24,36 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8000 ^| findstr LISTENING') 
     taskkill /PID %%a /F >nul 2>&1
 )
 
-REM Detectar Python
-set "PYTHON_CMD=python"
-if exist "%~dp0.venv\Scripts\python.exe" set "PYTHON_CMD=%~dp0.venv\Scripts\python.exe"
+REM Detectar UV
+uv --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] 'uv' nao encontrado no PATH.
+    echo Instale com: pip install uv
+    pause
+    exit /b 1
+)
 
-REM Atualiza Dependencias
+REM Atualiza Dependencias com UV
 echo.
-echo [1/4] Verificando dependencias Python...
-"%PYTHON_CMD%" -m pip install -r requirements.txt >nul 2>&1
+echo [1/4] Sincronizando ambiente Python com UV...
+call uv sync
+if %errorlevel% neq 0 (
+    echo [ERROR] Falha ao sincronizar dependencias.
+    pause
+    exit /b 1
+)
 
 REM Rebuild opcional
 if /I "%~1"=="--rebuild" (
     echo.
     echo [1.5/4] Recriando bancos de dados...
-    "%PYTHON_CMD%" scripts\rebuild_index.py
-    "%PYTHON_CMD%" scripts\setup_tipi_database.py
+    call uv run scripts\rebuild_index.py
+    call uv run scripts\setup_tipi_database.py
 )
 
 REM Inicia Backend
 echo [2/4] Iniciando Backend...
-start "Nesh Backend Server" cmd /k ""%PYTHON_CMD%" Nesh.py"
+start "Nesh Backend Server" cmd /k "uv run Nesh.py"
 
 REM Inicia Frontend
 echo.

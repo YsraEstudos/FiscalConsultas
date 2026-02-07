@@ -25,7 +25,11 @@ def extract_chapter_from_ncm(ncm: str) -> Tuple[Optional[str], Optional[str]]:
     Returns:
         Tupla (capitulo, posicao_alvo)
         - capitulo: Primeiros 2 dígitos com zero à esquerda
-        - posicao_alvo: Formato XX.XX se NCM tiver 4+ dígitos, else None
+        - posicao_alvo:
+          - Mantém XXXX.X ou XXXX.XX quando usuário informa subposição curta explícita
+            (ex: "8419.8", "8419.80").
+          - Caso contrário, usa XX.XX quando houver 4+ dígitos.
+          - None quando não há dígitos suficientes.
     """
     raw = (ncm or "").strip()
     compact = re.sub(r"\s+", "", raw)

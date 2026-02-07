@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateAnchorId } from '../../src/../src/utils/id_utils';
+import { generateAnchorId, generateChapterId, normalizeNCMQuery } from '../../src/utils/id_utils';
 
 describe('generateAnchorId', () => {
     it('should generate "pos-{code}" replacing dots with dashes', () => {
@@ -25,9 +25,6 @@ describe('generateAnchorId', () => {
     });
 });
 
-// Importar normalizeNCMQuery para testar
-import { normalizeNCMQuery } from '../../src/../src/utils/id_utils';
-
 describe('normalizeNCMQuery', () => {
     it('should convert 4-digit code to XX.XX format', () => {
         expect(normalizeNCMQuery('8417')).toBe('84.17');
@@ -50,5 +47,20 @@ describe('normalizeNCMQuery', () => {
         expect(normalizeNCMQuery('')).toBe('');
         expect(normalizeNCMQuery(null)).toBe('');
         expect(normalizeNCMQuery(undefined)).toBe('');
+    });
+});
+
+describe('generateChapterId', () => {
+    it('should use chapter- prefix for raw chapter numbers', () => {
+        expect(generateChapterId('84')).toBe('chapter-84');
+        expect(generateChapterId(73)).toBe('chapter-73');
+    });
+
+    it('should be idempotent for chapter- ids', () => {
+        expect(generateChapterId('chapter-84')).toBe('chapter-84');
+    });
+
+    it('should normalize legacy cap- ids to chapter-', () => {
+        expect(generateChapterId('cap-84')).toBe('chapter-84');
     });
 });
