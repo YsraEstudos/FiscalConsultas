@@ -2,47 +2,42 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from backend.services.ai_service import AiService
 from backend.config.settings import settings
 from backend.server.dependencies import get_ai_service
-from backend.server.middleware import decode_clerk_jwt, is_clerk_token_valid
+from backend.server.middleware import decode_clerk_jwt
 from backend.server.rate_limit import ai_chat_rate_limiter
 from backend.presentation.schemas.chat import ChatRequest
+from backend.utils.auth import extract_bearer_token, extract_client_ip
 
 router = APIRouter()
 
-def _extract_token(request: Request) -> str | None:
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.lower().startswith("bearer "):
-        return auth_header[7:].strip()
-    return None
+
+def _extract_client_ip(request: Request) -> str:
+    return extract_client_ip(request)
 
 
 def _is_authenticated(token: str | None) -> bool:
     if not token:
         return False
-    return is_clerk_token_valid(token)
+    return decode_clerk_jwt(token) is not None
 
 
-def _extract_client_ip(request: Request) -> str:
-    forwarded_for = request.headers.get("X-Forwarded-For", "").strip()
-    if forwarded_for:
-        # Primeiro IP da cadeia
-        return forwarded_for.split(",")[0].strip()
-    if request.client and request.client.host:
-        return request.client.host
-    return "unknown"
-
-
-def _build_limiter_key(http_request: Request, token: str | None) -> str:
-    if token:
+def _build_limiter_key(
+    http_request: Request,
+    token: str | None = None,
+    jwt_payload: dict | None = None,
+) -> str:
+    payload = jwt_payload
+    if payload is None and token:
         payload = decode_clerk_jwt(token) or {}
+    if payload:
         user_id = payload.get("sub")
         if user_id:
             return f"ai:user:{user_id}"
-    return f"ai:ip:{_extract_client_ip(http_request)}"
+    return f"ai:ip:{extract_client_ip(http_request)}"
 
 
 @router.get("/auth/me")
 async def auth_me(http_request: Request):
-    token = _extract_token(http_request)
+    token = extract_bearer_token(http_request)
     return {"authenticated": _is_authenticated(token)}
 
 @router.post("/ai/chat")
@@ -55,11 +50,21 @@ async def chat_endpoint(
     Endpoint de Chat com IA.
     Protegido por JWT do Clerk.
     """
-    token = _extract_token(http_request)
-    if not _is_authenticated(token):
+    message = (request.message or "").strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="message must not be empty")
+    if len(message) > settings.security.ai_chat_max_message_chars:
+        raise HTTPException(
+            status_code=413,
+            detail=f"message too long (max {settings.security.ai_chat_max_message_chars} chars)",
+        )
+
+    token = extract_bearer_token(http_request)
+    payload = decode_clerk_jwt(token) if token else None
+    if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    limiter_key = _build_limiter_key(http_request, token)
+    limiter_key = _build_limiter_key(http_request, token=token, jwt_payload=payload)
     allowed, retry_after = await ai_chat_rate_limiter.consume(
         key=limiter_key,
         limit=settings.security.ai_chat_requests_per_minute,
@@ -71,5 +76,5 @@ async def chat_endpoint(
             headers={"Retry-After": str(retry_after)},
         )
 
-    response_text = await ai_service.get_chat_response(request.message)
+    response_text = await ai_service.get_chat_response(message)
     return {"success": True, "reply": response_text}

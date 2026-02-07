@@ -1,5 +1,7 @@
 import json
 import secrets
+import re
+import logging
 from datetime import date, datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -11,6 +13,8 @@ from backend.domain.sqlmodels import Subscription, Tenant
 from backend.infrastructure.db_engine import get_session
 
 router = APIRouter()
+logger = logging.getLogger("routes.webhooks")
+_TENANT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{3,128}$")
 
 
 def _extract_asaas_token(request: Request) -> str | None:
@@ -54,13 +58,8 @@ def _parse_datetime(value: Any) -> Optional[datetime]:
             parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
         return parsed
     except Exception:
-        try:
-            parsed = datetime.fromisoformat(raw[:19])
-            if parsed.tzinfo is not None:
-                parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
-            return parsed
-        except Exception:
-            return None
+        logger.warning("Invalid datetime format in Asaas payload: %s", raw)
+        return None
 
 
 async def process_asaas_payment_confirmed(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -73,6 +72,8 @@ async def process_asaas_payment_confirmed(payload: Dict[str, Any]) -> Dict[str, 
     tenant_id = str(external_reference or "").strip()
     if not tenant_id:
         return {"processed": False, "reason": "missing_external_reference"}
+    if not _TENANT_ID_RE.fullmatch(tenant_id):
+        return {"processed": False, "reason": "invalid_tenant_id"}
 
     plan_name = str(
         payment.get("plan")
@@ -86,6 +87,8 @@ async def process_asaas_payment_confirmed(payload: Dict[str, Any]) -> Dict[str, 
         amount = float(amount) if amount is not None else None
     except (TypeError, ValueError):
         amount = None
+    if amount is not None and amount <= 0:
+        return {"processed": False, "reason": "invalid_amount"}
 
     billing_cycle = payment.get("billingType")
     payment_status = str(payment.get("status") or "CONFIRMED")[:64]
@@ -111,7 +114,16 @@ async def process_asaas_payment_confirmed(payload: Dict[str, Any]) -> Dict[str, 
             tenant.subscription_plan = plan_name
 
         subscription = None
-        if provider_subscription_id:
+        if provider_payment_id:
+            result = await session.execute(
+                select(Subscription).where(
+                    Subscription.provider == "asaas",
+                    Subscription.provider_payment_id == provider_payment_id,
+                )
+            )
+            subscription = result.scalars().first()
+
+        if not subscription and provider_subscription_id:
             result = await session.execute(
                 select(Subscription).where(
                     Subscription.provider == "asaas",
@@ -133,6 +145,9 @@ async def process_asaas_payment_confirmed(payload: Dict[str, Any]) -> Dict[str, 
             subscription = result.scalar_one_or_none()
 
         raw_payload = json.dumps(payload, ensure_ascii=False)
+        max_payload = max(1, int(settings.billing.asaas_max_payload_bytes))
+        if len(raw_payload.encode("utf-8")) > max_payload:
+            raw_payload = raw_payload.encode("utf-8")[:max_payload].decode("utf-8", errors="ignore")
         now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         if not subscription:
@@ -180,10 +195,17 @@ async def asaas_webhook(request: Request):
     if not _is_valid_asaas_webhook(request):
         raise HTTPException(status_code=401, detail="Invalid Asaas webhook token")
 
+    content_length = request.headers.get("content-length")
+    if content_length and content_length.isdigit():
+        if int(content_length) > settings.billing.asaas_max_payload_bytes:
+            raise HTTPException(status_code=413, detail="Payload too large")
+
     try:
         payload = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid webhook payload")
 
     event = str(payload.get("event") or "").strip()
     if not event:
