@@ -152,9 +152,15 @@ cors_origins = settings.server.cors_allowed_origins or [
     "http://127.0.0.1:5173",
 ]
 
+# Dev convenience: allow local-network Vite hosts on :5173 without opening broad CORS in production.
+cors_allow_origin_regex = None
+if settings.server.env == "development":
+    cors_allow_origin_regex = r"^https?://(?:localhost|127\.0\.0\.1|\d{1,3}(?:\.\d{1,3}){3})(?::5173)?$"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
+    allow_origin_regex=cors_allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -1,5 +1,4 @@
-from typing import AsyncGenerator
-from fastapi import Request, Depends
+from fastapi import Request
 
 from backend.infrastructure.database import DatabaseAdapter
 from backend.services.nesh_service import NeshService

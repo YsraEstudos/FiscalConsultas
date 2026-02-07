@@ -133,7 +133,7 @@ async def process_asaas_payment_confirmed(payload: Dict[str, Any]) -> Dict[str, 
             subscription = result.scalar_one_or_none()
 
         raw_payload = json.dumps(payload, ensure_ascii=False)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         if not subscription:
             subscription = Subscription(

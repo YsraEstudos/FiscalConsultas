@@ -79,6 +79,9 @@ def test_search_code_response_keeps_resultados_alias(client):
     assert payload["type"] == "code"
     assert payload["resultados"] == payload["results"]
     assert payload["total_capitulos"] == 1
+    assert response.headers["Cache-Control"].startswith("private")
+    assert "ETag" in response.headers
+    assert response.headers["Vary"] == "Authorization, X-Tenant-Id"
 
 
 def test_search_text_response_does_not_inject_resultados(client):
@@ -102,6 +105,9 @@ def test_tipi_code_response_enforces_compatibility_fields(client):
     assert payload["type"] == "code"
     assert payload["results"] == payload["resultados"]
     assert payload["total_capitulos"] == 1
+    assert response.headers["Cache-Control"].startswith("private")
+    assert "ETag" in response.headers
+    assert response.headers["Vary"] == "Authorization, X-Tenant-Id"
 
 
 def test_tipi_text_response_sets_route_defaults(client):

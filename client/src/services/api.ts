@@ -10,7 +10,14 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import type { SystemStatusResponse } from '../types/api.types';
 
 const explicitBaseUrl = import.meta.env.VITE_API_FILTER_URL || import.meta.env.VITE_API_URL;
-const rawBaseUrl = explicitBaseUrl || '/api';
+const isLocalHost = (host: string) => host === 'localhost' || host === '127.0.0.1';
+const isExplicitLocalApi =
+    !!explicitBaseUrl &&
+    /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$)/i.test(explicitBaseUrl);
+const shouldUseProxyApi =
+    typeof window !== 'undefined' && isExplicitLocalApi && !isLocalHost(window.location.hostname);
+
+const rawBaseUrl = shouldUseProxyApi ? '/api' : (explicitBaseUrl || '/api');
 
 const normalizeApiUrl = (base: string) => {
     const trimmed = base.replace(/\/$/, '');

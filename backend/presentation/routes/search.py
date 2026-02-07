@@ -7,12 +7,33 @@ from backend.config.exceptions import ValidationError
 from backend.data.glossary_manager import glossary_manager
 from backend.config.logging_config import server_logger as logger
 import hashlib
-import json
 
 router = APIRouter()
 
+
+def _cache_scope_key(request: Request) -> str:
+    try:
+        from backend.server.middleware import get_current_tenant
+        tenant_id = get_current_tenant()
+    except Exception:
+        tenant_id = None
+
+    if tenant_id:
+        return f"tenant:{tenant_id}"
+
+    header_tenant = (request.headers.get("X-Tenant-Id") or "").strip()
+    if header_tenant:
+        return f"tenant:{header_tenant}"
+
+    if request.headers.get("Authorization"):
+        return "auth-user"
+
+    return "public"
+
+
 @router.get("/search")
 async def search(
+    request: Request,
     ncm: str = Query(..., description="Código NCM ou termo textual para busca"),
     service: NeshService = Depends(get_nesh_service)
 ):
@@ -50,10 +71,11 @@ async def search(
     
     # Performance: Add caching headers for catalog data (rarely changes)
     response = JSONResponse(content=response_data)
-    # Generate ETag from query for cache validation
-    etag = hashlib.md5(f"nesh:{ncm}".encode()).hexdigest()[:16]
-    response.headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=86400"
+    cache_key = _cache_scope_key(request)
+    etag = hashlib.md5(f"nesh:{cache_key}:{ncm}".encode()).hexdigest()[:16]
+    response.headers["Cache-Control"] = "private, max-age=3600, stale-while-revalidate=86400"
     response.headers["ETag"] = f'W/"{etag}"'
+    response.headers["Vary"] = "Authorization, X-Tenant-Id"
     return response
 
 @router.get("/chapters")
