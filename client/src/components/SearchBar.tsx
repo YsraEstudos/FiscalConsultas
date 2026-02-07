@@ -68,7 +68,7 @@ export function SearchBar({ onSearch, history, onClearHistory, onRemoveHistory, 
                 type="text"
                 id="ncmInput"
                 className={styles.searchInput}
-                placeholder="Digite os NCMs separados por vírgula (ex: 01, 02, 0301, 84.71)"
+                placeholder="Digite os NCMs separados por vírgula ou espaço (ex: 01, 02, 0301, 84.71)"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}

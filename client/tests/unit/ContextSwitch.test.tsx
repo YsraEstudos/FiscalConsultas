@@ -64,6 +64,16 @@ vi.mock('../../src/hooks/useHistory', () => ({
     })
 }));
 
+vi.mock('../../src/context/CrossChapterNoteContext', () => ({
+    useCrossChapterNotes: () => ({
+        fetchNotes: vi.fn(),
+        getNote: vi.fn(),
+        isLoading: vi.fn(() => false),
+        cache: {}
+    }),
+    CrossChapterNoteProvider: ({ children }) => <div>{children}</div>
+}));
+
 describe('App Analysis - Context Switch', () => {
     it('Scenario 1: Clicking TIPI on an EMPTY tab should update the current tab (no new tab)', async () => {
         const { container } = render(<App />);

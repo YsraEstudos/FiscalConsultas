@@ -1,0 +1,12 @@
+{
+  "event": "PAYMENT_CONFIRMED",
+  "payment": {
+    "id": "pay_123",
+    "externalReference": "org_test",
+    "status": "CONFIRMED",
+    "value": 199.9,
+    "billingType": "CREDIT_CARD",
+    "dueDate": "2026-02-07",
+    "paymentDate": "2026-02-07T10:00:00Z"
+  }
+}

@@ -266,16 +266,16 @@ def verify_results(conn):
     # Contagem total
     cursor.execute("SELECT COUNT(*) FROM tipi_positions")
     total = cursor.fetchone()[0]
-    print(f"\n✓ Total de posições: {total}")
+    print(f"\nOK Total de posições: {total}")
     
     # Distribuição por nível
-    print("\n✓ Distribuição por nível:")
+    print("\nOK Distribuição por nível:")
     cursor.execute("SELECT nivel, COUNT(*) FROM tipi_positions GROUP BY nivel ORDER BY nivel")
     for nivel, count in cursor.fetchall():
         print(f"    Nível {nivel}: {count} itens")
     
     # Verificar capítulo 84.13
-    print("\n✓ Amostra do capítulo 84.13:")
+    print("\nOK Amostra do capítulo 84.13:")
     cursor.execute("""
         SELECT ncm, descricao, aliquota, nivel 
         FROM tipi_positions 
@@ -291,7 +291,7 @@ def verify_results(conn):
     # Verificar exceções
     cursor.execute("SELECT COUNT(*) FROM tipi_positions WHERE ncm LIKE '% Ex %'")
     ex_count = cursor.fetchone()[0]
-    print(f"\n✓ Total de exceções (Ex): {ex_count}")
+    print(f"\nOK Total de exceções (Ex): {ex_count}")
 
 
 def main():
@@ -320,7 +320,7 @@ def main():
     verify_results(conn)
     
     conn.close()
-    print("\n✅ Setup TIPI concluído!")
+    print("\nOK Setup TIPI concluído!")
 
 
 if __name__ == "__main__":

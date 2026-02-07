@@ -7,8 +7,9 @@ e entender por que a navegação não está funcionando.
 import sqlite3
 import re
 import unicodedata
+from backend.config.constants import DatabaseConfig
 
-DB_PATH = "nesh.db"
+DB_PATH = DatabaseConfig.DEFAULT_DB_FILENAME
 
 def normalize_text(text):
     """Remove acentos e normaliza texto."""

@@ -1,7 +1,11 @@
 {
     "server": {
         "port": 8000,
-        "host": "localhost"
+        "host": "localhost",
+        "cors_allowed_origins": [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173"
+        ]
     },
     "database": {
         "filename": "database/nesh.db"
@@ -36,5 +40,8 @@
     "features": {
         "enable_fts": true,
         "debug_mode": false
+    },
+    "security": {
+        "ai_chat_requests_per_minute": 5
     }
 }

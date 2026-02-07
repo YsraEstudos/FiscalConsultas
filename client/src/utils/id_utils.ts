@@ -96,3 +96,7 @@ export function generateAnchorId(ncmCode: string | null | undefined): string {
 
     return `pos-${cleanCode}`;
 }
+
+export function generateChapterId(chapter: string | number): string {
+    return `cap-${chapter}`;
+}

@@ -35,9 +35,11 @@ describe('TextSearchResults', () => {
             </SettingsProvider>
         );
 
-        const highlighted = screen.getByText('Cavalo');
+        const matches = screen.getAllByText('Cavalo');
+        const highlighted = matches.find((el) =>
+            el.tagName === 'SPAN' && el.className.includes('searchHighlight')
+        );
         expect(highlighted).toBeTruthy();
-        expect(highlighted.tagName).toBe('SPAN');
     });
 
     it('virtualizes when list is large', () => {

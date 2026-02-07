@@ -5,8 +5,9 @@ Contém toda a lógica de negócio, isolada de I/O e apresentação.
 
 import re
 import asyncio
+from contextlib import asynccontextmanager
 from collections import OrderedDict
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, Callable, AsyncGenerator
 
 from ..config import CONFIG
 from ..utils import ncm_utils
@@ -15,6 +16,15 @@ from ..config.logging_config import service_logger as logger
 from ..config.exceptions import ChapterNotFoundError, DatabaseError
 from ..domain import SearchResult, ServiceResponse
 from ..infrastructure import DatabaseAdapter
+
+# SQLModel Repository imports (optional - for new code paths)
+try:
+    from ..infrastructure.repositories.chapter_repository import ChapterRepository
+    from ..infrastructure.db_engine import get_session
+    _REPO_AVAILABLE = True
+except ImportError:
+    _REPO_AVAILABLE = False
+    ChapterRepository = None
 
 # Import text_processor - using absolute import from project root
 try:
@@ -31,6 +41,10 @@ from ..utils.id_utils import generate_anchor_id
 
 # Pre-compiled regex patterns for performance
 _RE_NOTE_HEADER = re.compile(RegexPatterns.NOTE_HEADER)
+# Detect first NCM position line to trim chapter preamble when sections are rendered separately
+_RE_FIRST_POSITION = re.compile(
+    r'^\s*(?:\*\*|\*)?\d{2}\.\d{2}(?:\*\*|\*)?\s*[-\u2013\u2014:]', re.MULTILINE
+)
 
 # Performance: Cache size for FTS results
 _FTS_CACHE_SIZE = 64
@@ -52,14 +66,28 @@ class NeshService:
         processor: Processador de texto para FTS
     """
     
-    def __init__(self, db: DatabaseAdapter):
+    def __init__(
+        self,
+        db: DatabaseAdapter = None,
+        *,
+        repository: 'ChapterRepository' = None,
+        repository_factory: Optional[Callable[[], AsyncGenerator['ChapterRepository', None]]] = None
+    ):
         """
-        Inicializa o serviço com adapter de banco.
+        Inicializa o serviço com adapter de banco ou repository.
         
         Args:
-            db: Instância configurada do DatabaseAdapter
+            db: Instância configurada do DatabaseAdapter (legado)
+            repository: ChapterRepository para novo padrão SQLModel
+            
+        Note:
+            Use um ou outro. Se ambos forem passados, repository tem prioridade.
         """
-        self.db = db
+        self.db = db  # Legado
+        self._repository = repository  # Novo padrão
+        self._repository_factory = repository_factory
+        self._use_repository = repository is not None or repository_factory is not None
+        
         self.processor = NeshTextProcessor(list(CONFIG.stopwords))
         
         # Async-friendly manual cache for FTS results using OrderedDict as LRU
@@ -67,13 +95,57 @@ class NeshService:
         self._chapter_cache: OrderedDict = OrderedDict()
         self._cache_lock: Optional[asyncio.Lock] = None  # Lazy init
         
-        logger.info("NeshService inicializado")
+        mode = "Repository" if self._use_repository else "DatabaseAdapter"
+        logger.info(f"NeshService inicializado (modo: {mode})")
+    
+    @classmethod
+    async def create_with_repository(cls) -> 'NeshService':
+        """
+        Factory assíncrono para criar NeshService com ChapterRepository.
+        
+        Uso:
+            service = await NeshService.create_with_repository()
+            results = await service.search_full_text("bomba")
+        """
+        if not _REPO_AVAILABLE:
+            raise RuntimeError("Repository não disponível. Instale sqlmodel e configure db_engine.")
+
+        @asynccontextmanager
+        async def repo_factory():
+            async with get_session() as session:
+                yield ChapterRepository(session)
+
+        return cls(repository_factory=repo_factory)
     
     def _get_cache_lock(self) -> asyncio.Lock:
         """Lazy initialization do lock para evitar criação fora do event loop."""
         if self._cache_lock is None:
             self._cache_lock = asyncio.Lock()
         return self._cache_lock
+
+    @asynccontextmanager
+    async def _get_repo(self):
+        if self._repository is not None:
+            yield self._repository
+            return
+        if self._repository_factory is not None:
+            async with self._repository_factory() as repo:
+                yield repo
+            return
+        yield None
+
+    @staticmethod
+    def _strip_chapter_preamble(content: str) -> str:
+        """
+        Remove chapter preamble (title/notes/consideracoes) so body starts at first NCM position.
+        Only used when structured sections are rendered separately.
+        """
+        if not content:
+            return content
+        match = _RE_FIRST_POSITION.search(content)
+        if not match:
+            return content
+        return content[match.start():].lstrip()
 
     def parse_chapter_notes(self, notes_content: str) -> Dict[str, str]:
         """
@@ -125,9 +197,36 @@ class NeshService:
 
         logger.debug(f"Fetching capítulo {chapter_num} (cache miss)")
         
-        raw_data = await self.db.get_chapter_raw(chapter_num)
-        if not raw_data:
-            return None
+        # Use repository if available, otherwise fallback to legacy adapter
+        if self._use_repository:
+            async with self._get_repo() as repo:
+                if not repo:
+                    raise RuntimeError("Repository não disponível")
+                chapter = await repo.get_by_num(chapter_num)
+                if not chapter:
+                    return None
+
+                raw_data = {
+                    'chapter_num': chapter.chapter_num,
+                    'content': chapter.content,
+                    'notes': chapter.notes.notes_content if chapter.notes else None,
+                    'positions': [
+                        {'codigo': p.codigo, 'descricao': p.descricao}
+                        for p in chapter.positions
+                    ],
+                    'sections': {
+                        'titulo': chapter.notes.titulo if chapter.notes else None,
+                        'notas': chapter.notes.notas if chapter.notes else None,
+                        'consideracoes': chapter.notes.consideracoes if chapter.notes else None,
+                        'definicoes': chapter.notes.definicoes if chapter.notes else None,
+                    } if chapter.notes else None
+                }
+        else:
+            if not self.db:
+                raise RuntimeError("DatabaseAdapter não configurado")
+            raw_data = await self.db.get_chapter_raw(chapter_num)
+            if not raw_data:
+                return None
             
         raw_data['parsed_notes'] = self.parse_chapter_notes(raw_data['notes'])
         raw_data['positions'] = self._enrich_positions_with_id(raw_data.get('positions', []))
@@ -151,8 +250,19 @@ class NeshService:
     def normalize_query(self, text: str) -> str:
         """
         Normaliza query para busca FTS.
+        Otimização: Remove duplicatas e limita termos.
         """
-        return self.processor.process_query_for_fts(text)
+        processed = self.processor.process_query_for_fts(text)
+        if not processed:
+            return ""
+            
+        # Deduplica termos ("ma* ma*" -> "ma*") para otimizar busca AND
+        parts = processed.split()
+        unique = list(dict.fromkeys(parts))
+        # Limita quantidade de tokens para evitar DoS
+        unique = unique[:20]
+        
+        return " ".join(unique)
 
     async def _fts_scored_cached(self, query: str, tier: int, limit: int,
                            words_matched: int, total_words: int) -> List[Dict[str, Any]]:
@@ -166,10 +276,35 @@ class NeshService:
                 self._fts_cache.move_to_end(key)
                 return list(self._fts_cache[key])
 
-        results = await self.db.fts_search_scored(
-            query, tier=tier, limit=limit,
-            words_matched=words_matched, total_words=total_words
-        )
+        # Use repository if available, otherwise fallback to legacy adapter
+        if self._use_repository:
+            async with self._get_repo() as repo:
+                if not repo:
+                    raise RuntimeError("Repository não disponível")
+                results = await repo.search_scored(
+                    query, tier=tier, limit=limit,
+                    words_matched=words_matched, total_words=total_words
+                )
+                # Convert SearchResultItem to dict for compatibility
+                results = [
+                    {
+                        'ncm': r.ncm,
+                        'display_text': r.display_text,
+                        'type': r.type,
+                        'description': r.description,
+                        'score': r.score,
+                        'tier': r.tier,
+                        'rank': r.score  # Compatibility
+                    }
+                    for r in results
+                ]
+        else:
+            if not self.db:
+                raise RuntimeError("DatabaseAdapter não configurado")
+            results = await self.db.fts_search_scored(
+                query, tier=tier, limit=limit,
+                words_matched=words_matched, total_words=total_words
+            )
         
         async with self._get_cache_lock():
             self._fts_cache[key] = results
@@ -245,7 +380,7 @@ class NeshService:
             add_results(and_results)
 
         # ========== BÔNUS DE PROXIMIDADE (NEAR) ==========
-        if len(stemmed_words) >= 2:
+        if (not self._use_repository) and len(stemmed_words) >= 2:
             near_results = await self.db.fts_search_near(
                 stemmed_words, 
                 distance=SearchConfig.NEAR_DISTANCE,
@@ -261,8 +396,14 @@ class NeshService:
 
         # ========== TIER 3: Qualquer palavra (OR com wildcards) ==========
         if len(original_words) > 1:
+            # Otimização: Dedup e limite de termos para evitar query muito pesada
+            # Preserva ordem de aparição (dict.fromkeys)
+            unique_words = list(dict.fromkeys(original_words))
+            # Limita aos primeiros 20 termos únicos para busca OR (suficiente para relevância)
+            unique_words = unique_words[:20]
+            
             or_parts = []
-            for word in original_words:
+            for word in unique_words:
                 word_normalized = self.processor.process_query_for_fts(word)
                 if word_normalized:
                     or_parts.append(word_normalized)
@@ -376,6 +517,14 @@ class NeshService:
             
             if data:
                 if chapter_num not in results:
+                    sections = data.get('sections') or {}
+                    has_sections = any(
+                        (sections.get(key) or "").strip()
+                        for key in ("titulo", "notas", "consideracoes", "definicoes")
+                    )
+                    content = data['content']
+                    if has_sections:
+                        content = self._strip_chapter_preamble(content)
                     results[chapter_num] = {
                         "ncm_buscado": ncm,
                         "capitulo": chapter_num,
@@ -383,9 +532,15 @@ class NeshService:
                         "posicoes": data['positions'],
                         "notas_gerais": data['notes'],
                         "notas_parseadas": data['parsed_notes'],
-                        "conteudo": data['content'],
+                        "conteudo": content,
                         "real_content_found": True,
-                        "erro": None
+                        "erro": None,
+                        "secoes": {
+                            "titulo": sections.get('titulo'),
+                            "notas": sections.get('notas'),
+                            "consideracoes": sections.get('consideracoes'),
+                            "definicoes": sections.get('definicoes')
+                        } if has_sections else None
                     }
             else:
                 logger.warning(f"Capítulo não encontrado: {chapter_num}")

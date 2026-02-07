@@ -9,13 +9,51 @@
 }
 
 .wrapper {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr var(--sidebar-width, 260px);
+    gap: 0;
     position: relative;
     flex: 1;
     overflow: hidden;
     height: 100%;
     min-height: 400px;
-    /* Critical for nested flex scrolling */
+}
+
+/* Sidebar colapsada */
+.sidebarCollapsed {
+    --sidebar-width: 0px;
+}
+
+/* Sidebar à esquerda */
+.sidebarLeft {
+    grid-template-columns: var(--sidebar-width, 260px) 1fr;
+}
+
+.sidebarLeft.sidebarCollapsed {
+    grid-template-columns: 0px 1fr;
+}
+
+.sidebarLeft .content {
+    grid-column: 2;
+}
+
+.sidebarLeft .sidebarContainer {
+    grid-column: 1;
+    grid-row: 1;
+    border-left: none;
+    border-right: 1px solid var(--border-color);
+    transform: translateX(0);
+    transition: transform 0.2s ease, width 0.2s ease, opacity 0.2s ease;
+}
+
+.sidebarLeft .sidebarToggle {
+    right: auto;
+    left: var(--sidebar-width, 260px);
+    border-radius: 0 6px 6px 0;
+}
+
+.sidebarLeft.sidebarCollapsed .sidebarToggle {
+    left: 0;
 }
 
 .header {
@@ -45,15 +83,41 @@
     color: white;
 }
 
+/* Content - Coluna principal */
 .content {
+    grid-column: 1;
     padding: 2rem;
+    padding-right: 1.5rem;
     flex: 1;
     overflow-y: auto;
-    scroll-behavior: smooth;
     position: relative;
-    /* Define offset for ALL scroll actions within this container */
-    scroll-padding-top: 120px;
-    /* max-height removed to allow full flex expansion */
+    scroll-padding-top: var(--scroll-offset, 120px);
+}
+
+/* Scrollbar premium - FIX CASO 3 */
+.content::-webkit-scrollbar {
+    width: 10px;
+}
+
+.content::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+    border-radius: 5px;
+}
+
+.content::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, var(--accent-primary), var(--accent-secondary));
+    border-radius: 5px;
+    border: 2px solid var(--bg-tertiary);
+}
+
+.content::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-primary);
+}
+
+/* Firefox scrollbar */
+.content {
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-primary) var(--bg-tertiary);
 }
 
 .contentHidden {
@@ -66,6 +130,84 @@
     transition: opacity 0.2s;
 }
 
+/* Sidebar container - Coluna 2 */
+.sidebarContainer {
+    grid-column: 2;
+    height: 100%;
+    overflow: hidden;
+    border-left: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    transition: width 0.2s ease, opacity 0.2s ease;
+    min-width: 0;
+}
+
+.sidebarCollapsed .sidebarContainer {
+    width: 0;
+    opacity: 0;
+    border: none;
+    overflow: hidden;
+    max-width: 0;
+    pointer-events: none;
+    transform: translateX(100%);
+    visibility: hidden;
+}
+
+.sidebarLeft.sidebarCollapsed .sidebarContainer {
+    transform: translateX(-100%);
+}
+
+/* Toggle button */
+.sidebarToggle {
+    position: absolute;
+    right: var(--sidebar-width, 260px);
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 10;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px 0 0 6px;
+    padding: 0.5rem 0.35rem;
+    cursor: pointer;
+    transition: right 0.2s ease, background 0.2s ease;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.sidebarToggle:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.sidebarCollapsed .sidebarToggle {
+    right: 0;
+    border-radius: 6px 0 0 6px;
+}
+
+.sidebarLeft.sidebarCollapsed .sidebarToggle {
+    right: auto;
+    left: 0;
+    border-radius: 0 6px 6px 0;
+}
+
+.sidebarSkeleton {
+    width: 100%;
+    height: 100%;
+    background: var(--bg-tertiary);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+}
+
 .emptyMessage {
     padding: 2rem;
 }
@@ -73,4 +215,79 @@
 /* Ensure markdown content looks good inside */
 .content :global(.markdown-body) {
     max-width: 100%;
+}
+
+/* Responsivo: < 1024px - sidebar colapsa por padrão */
+@media (max-width: 1024px) {
+    .wrapper {
+        --sidebar-width: 0px;
+    }
+
+    .sidebarContainer {
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: 280px;
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+        z-index: 100;
+        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .sidebarLeft .sidebarContainer {
+        right: auto;
+        left: 0;
+        transform: translateX(-100%);
+        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .sidebarOpen .sidebarContainer {
+        transform: translateX(0);
+    }
+
+    .sidebarLeft.sidebarOpen .sidebarContainer {
+        transform: translateX(0);
+    }
+
+    .sidebarToggle {
+        right: 0;
+    }
+
+    .sidebarLeft .sidebarToggle {
+        right: auto;
+        left: 0;
+        border-radius: 0 6px 6px 0;
+    }
+
+    .sidebarOpen .sidebarToggle {
+        right: 280px;
+    }
+
+    .sidebarLeft.sidebarOpen .sidebarToggle {
+        right: auto;
+        left: 280px;
+    }
+}
+
+/* Mobile: < 768px */
+@media (max-width: 768px) {
+    .content {
+        padding: 1rem;
+    }
+
+    .sidebarContainer {
+        width: 100%;
+    }
+
+    .sidebarOpen .sidebarToggle {
+        right: 100%;
+        transform: translateY(-50%) translateX(100%);
+    }
+
+    .sidebarLeft.sidebarOpen .sidebarToggle {
+        right: auto;
+        left: 100%;
+        transform: translateY(-50%) translateX(-100%);
+    }
 }

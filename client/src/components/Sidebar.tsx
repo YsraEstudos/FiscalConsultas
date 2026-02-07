@@ -12,9 +12,18 @@ interface Position {
     aliquota?: string;
 }
 
+interface ChapterSections {
+    titulo?: string | null;
+    notas?: string | null;
+    consideracoes?: string | null;
+    definicoes?: string | null;
+}
+
 interface Chapter {
     capitulo: string;
     posicoes: Position[];
+    notas_gerais?: string | null;
+    secoes?: ChapterSections;
 }
 
 interface SidebarProps {
@@ -26,10 +35,22 @@ interface SidebarProps {
     activeAnchorId?: string | null;
 }
 
-// Flat list types (Header or Item)
+// Section navigation item types
+type SectionType = 'titulo' | 'notas' | 'consideracoes' | 'definicoes';
+
+// Flat list types (Header, Section, or Item)
 type SidebarItem =
     | { type: 'header'; capitulo: string; count: number }
+    | { type: 'section'; sectionType: SectionType; capitulo: string; label: string; icon: string }
     | { type: 'item'; pos: Position };
+
+// Section metadata for navigation
+const SECTION_CONFIG: Record<SectionType, { label: string; icon: string }> = {
+    titulo: { label: 'Título do Capítulo', icon: '📖' },
+    notas: { label: 'Notas do Capítulo', icon: '📝' },
+    consideracoes: { label: 'Considerações Gerais', icon: '📚' },
+    definicoes: { label: 'Definições Técnicas', icon: '📋' }
+};
 
 export const Sidebar = React.memo(function Sidebar({ results, onNavigate, isOpen, onClose, searchQuery, activeAnchorId }: SidebarProps) {
     debug.log('[Sidebar] Rendering with results keys:', results ? Object.keys(results).length : 'null');
@@ -43,6 +64,7 @@ export const Sidebar = React.memo(function Sidebar({ results, onNavigate, isOpen
 
     const virtuosoRef = useRef<VirtuosoHandle>(null);
     const lastScrolledQueryRef = useRef<string | null>(null);
+    const lastSearchScrollAtRef = useRef<number>(0);
 
     useEffect(() => {
         lastScrolledQueryRef.current = null;
@@ -68,6 +90,39 @@ export const Sidebar = React.memo(function Sidebar({ results, onNavigate, isOpen
                 count: chapter.posicoes.length
             });
 
+            // Add structured section items (NESH only)
+            const secoes = chapter.secoes;
+            if (secoes) {
+                const sectionOrder: SectionType[] = ['titulo', 'notas', 'consideracoes', 'definicoes'];
+                sectionOrder.forEach(sectionType => {
+                    if (secoes[sectionType]) {
+                        const config = SECTION_CONFIG[sectionType];
+                        const currentIndex = flatList.length;
+                        flatList.push({
+                            type: 'section',
+                            sectionType,
+                            capitulo: chapter.capitulo,
+                            label: config.label,
+                            icon: config.icon
+                        });
+                        const sectionAnchorId = `chapter-${chapter.capitulo}-${sectionType}`;
+                        anchorMap[sectionAnchorId] = currentIndex;
+                    }
+                });
+            } else if (chapter.notas_gerais) {
+                // Legacy: single notes item
+                const currentIndex = flatList.length;
+                flatList.push({
+                    type: 'section',
+                    sectionType: 'notas',
+                    capitulo: chapter.capitulo,
+                    label: SECTION_CONFIG.notas.label,
+                    icon: SECTION_CONFIG.notas.icon
+                });
+                const sectionAnchorId = `chapter-${chapter.capitulo}-notas`;
+                anchorMap[sectionAnchorId] = currentIndex;
+            }
+
             // Add Positions
             chapter.posicoes.forEach(pos => {
                 const currentIndex = flatList.length;
@@ -87,8 +142,18 @@ export const Sidebar = React.memo(function Sidebar({ results, onNavigate, isOpen
 
     const [highlightedIndex, setHighlightedIndex] = React.useState<number | null>(null);
 
-    // 2. Handle Auto-Scroll using Virtuoso
-    // 2. Handle Auto-Scroll using Virtuoso
+    // Sync active anchor from main content to sidebar highlight
+    useEffect(() => {
+        if (!activeAnchorId) return;
+        const idx = anchorToIndex[activeAnchorId];
+        if (idx !== undefined) {
+            setHighlightedIndex(idx);
+            // Optional: Auto-follow? Maybe too aggressive.
+            // But highlighting is good.
+        }
+    }, [activeAnchorId, anchorToIndex]);
+
+    // 2. Handle Auto-Scroll using Virtuoso (Robust Implementation)
     useEffect(() => {
         if (!searchQuery || items.length === 0) return;
 
@@ -97,22 +162,37 @@ export const Sidebar = React.memo(function Sidebar({ results, onNavigate, isOpen
 
         const normalizedQuery = isTipi ? rawQuery : normalizeNCMQuery(rawQuery);
         // Guard: Check normalized query to prevent loops if format changes slightly
-        if (lastScrolledQueryRef.current === normalizedQuery) return;
+        if (lastScrolledQueryRef.current === normalizedQuery) return; // Prevent re-scroll on same query
 
         const cleanQuery = isTipi
             ? rawQuery.replace(/\D/g, '')
             : normalizedQuery.replace(/\./g, '');
 
-        debug.log('[Sidebar Autoscroll] Look for:', normalizedQuery, 'Last:', lastScrolledQueryRef.current);
+        debug.log('[Sidebar Autoscroll] Look for:', normalizedQuery);
 
-        // Try exact match first
-        let targetIndex = codeToIndex[normalizedQuery] ?? codeToIndex[cleanQuery];
+        const cleanRaw = rawQuery.replace(/\D/g, '');
+        // Strategy: 
+        // 1. Exact Code Match needed? Check indexMap
+        // 2. Fallback to clean codes
+        let targetIndex = codeToIndex[rawQuery] ?? codeToIndex[cleanRaw];
 
-        // Partial match if strict fails (look for startsWith in keys?)
-        // Since O(N) lookup on keys is okay for user action (clicks/search), we can scan if needed.
         if (targetIndex === undefined) {
-            // Find first item that starts with query
-            // Note: items contains headers too, we only care about positions
+            // 3. Fallback: Prefix Match (4 digits)
+            const positionDigits = !isTipi && cleanRaw.length >= 4 ? cleanRaw.slice(0, 4) : cleanRaw;
+            const positionDotted = !isTipi && positionDigits.length === 4
+                ? `${positionDigits.slice(0, 2)}.${positionDigits.slice(2)}`
+                : positionDigits;
+
+            targetIndex = codeToIndex[positionDigits] ?? codeToIndex[positionDotted];
+        }
+
+        if (targetIndex === undefined) {
+            // 4. Normalized Query Match
+            targetIndex = codeToIndex[normalizedQuery] ?? codeToIndex[cleanQuery];
+        }
+
+        if (targetIndex === undefined) {
+            // 5. Scan for startsWith (Last Resort)
             const foundItemIndex = items.findIndex(item =>
                 item.type === 'item' &&
                 item.pos.codigo.replace(/\D/g, '').startsWith(cleanQuery)
@@ -122,42 +202,27 @@ export const Sidebar = React.memo(function Sidebar({ results, onNavigate, isOpen
 
         if (targetIndex !== undefined) {
             debug.log('[Sidebar Autoscroll] Scrolling to index:', targetIndex);
+            lastScrolledQueryRef.current = normalizedQuery;
+            lastSearchScrollAtRef.current = Date.now();
 
-            // Wait for slight delay to ensure list is ready/measured
-            requestAnimationFrame(() => {
-                // Double check Ref execution to avoid race conditions
-                if (lastScrolledQueryRef.current === normalizedQuery) return;
-                lastScrolledQueryRef.current = normalizedQuery;
-
-                virtuosoRef.current?.scrollToIndex({
-                    index: targetIndex,
-                    align: 'center',
-                    behavior: 'smooth'
-                });
-
-                // Set highlight
-                setHighlightedIndex(targetIndex);
-
-                // Remove highlight after animation
-                setTimeout(() => {
-                    setHighlightedIndex(null);
-                }, 2500);
+            // Direct Scroll - Trust Virtuoso
+            virtuosoRef.current?.scrollToIndex({
+                index: targetIndex,
+                align: 'center',
+                behavior: 'auto'
             });
+
+            setHighlightedIndex(targetIndex);
+
+            // Clear highlight after delay
+            const timer = setTimeout(() => {
+                setHighlightedIndex(null);
+            }, 2500);
+            return () => clearTimeout(timer);
         }
-    }, [searchQuery, items, codeToIndex]);
+    }, [searchQuery, items, codeToIndex, isTipi]);
 
-    useEffect(() => {
-        if (!activeAnchorId || items.length === 0) return;
-        const targetIndex = anchorToIndex[activeAnchorId];
-        if (targetIndex === undefined) return;
 
-        virtuosoRef.current?.scrollToIndex({
-            index: targetIndex,
-            align: 'center',
-            behavior: 'smooth'
-        });
-        setHighlightedIndex(targetIndex);
-    }, [activeAnchorId, anchorToIndex, items.length]);
 
 
     if (!results || Object.keys(results).length === 0) return null;
@@ -180,6 +245,7 @@ export const Sidebar = React.memo(function Sidebar({ results, onNavigate, isOpen
                         ref={virtuosoRef}
                         data={items}
                         totalCount={items.length}
+                        overscan={200} /* Pre-render 200px above/below viewport for smoother scroll */
                         className={`${styles.virtualList} ${isTipi ? styles.virtualListTipi : ''}`}
                         itemContent={(index, item) => {
                             if (item.type === 'header') {
@@ -188,6 +254,26 @@ export const Sidebar = React.memo(function Sidebar({ results, onNavigate, isOpen
                                         <span>Capítulo {item.capitulo}</span>
                                         <span className={styles.chapterBadge}>{item.count}</span>
                                     </div>
+                                );
+                            }
+
+                            if (item.type === 'section') {
+                                const sectionAnchorId = `chapter-${item.capitulo}-${item.sectionType}`;
+                                const styleClass = styles[`sectionItem${item.sectionType.charAt(0).toUpperCase() + item.sectionType.slice(1)}` as keyof typeof styles] || styles.notesItem;
+                                const isHighlighted = index === highlightedIndex;
+                                return (
+                                    <button
+                                        className={`${styles.item} ${styles.sectionItem} ${styleClass} ${isHighlighted ? styles.itemHighlight : ''}`}
+                                        onClick={() => {
+                                            debug.log('[Sidebar] Navigating to section:', sectionAnchorId);
+                                            onNavigate(sectionAnchorId);
+                                            if (window.innerWidth < 768) onClose();
+                                        }}
+                                        title={item.label}
+                                    >
+                                        <span className={styles.itemCode}>{item.icon}</span>
+                                        <span className={styles.itemDesc}>{item.label}</span>
+                                    </button>
                                 );
                             }
 

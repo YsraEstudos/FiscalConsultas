@@ -32,4 +32,4 @@ class AiService:
             return response.text
         except Exception as e:
             logger.error(f"AI Generation Error: {e}")
-            raise ServiceError(f"Erro ao processar mensagem com IA: {e}", service="AI")
+            raise ServiceError("Erro ao processar mensagem com IA.", service="AI")

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { TipiViewMode, VIEW_MODE_VALUES, STORAGE_KEYS, DEFAULTS } from '../constants';
+import { TipiViewMode, VIEW_MODE_VALUES, STORAGE_KEYS, DEFAULTS, SidebarPosition, SIDEBAR_POSITION } from '../constants';
 
 interface SettingsContextType {
     theme: string;
@@ -7,11 +7,13 @@ interface SettingsContextType {
     highlightEnabled: boolean;
     adminMode: boolean;
     tipiViewMode: TipiViewMode;
+    sidebarPosition: SidebarPosition;
     updateTheme: (newTheme: string) => void;
     updateFontSize: (newSize: number) => void;
     toggleHighlight: () => void;
     toggleAdminMode: () => void;
     updateTipiViewMode: (mode: TipiViewMode) => void;
+    updateSidebarPosition: (position: SidebarPosition) => void;
     restoreDefaults: () => void;
 }
 
@@ -24,6 +26,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const [highlightEnabled, setHighlightEnabled] = useState<boolean>(DEFAULTS.HIGHLIGHT);
     const [adminMode, setAdminMode] = useState<boolean>(DEFAULTS.ADMIN_MODE);
     const [tipiViewMode, setTipiViewMode] = useState<TipiViewMode>(DEFAULTS.TIPI_VIEW_MODE);
+    const [sidebarPosition, setSidebarPosition] = useState<SidebarPosition>(DEFAULTS.SIDEBAR_POSITION);
 
     // Initialization (Load from LocalStorage)
     useEffect(() => {
@@ -48,6 +51,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             const savedTipiView = localStorage.getItem(STORAGE_KEYS.TIPI_VIEW_MODE) as TipiViewMode | null;
             if (savedTipiView && VIEW_MODE_VALUES.includes(savedTipiView)) {
                 setTipiViewMode(savedTipiView);
+            }
+
+            const savedSidebarPos = localStorage.getItem(STORAGE_KEYS.SIDEBAR_POSITION) as SidebarPosition | null;
+            if (savedSidebarPos && (savedSidebarPos === SIDEBAR_POSITION.LEFT || savedSidebarPos === SIDEBAR_POSITION.RIGHT)) {
+                setSidebarPosition(savedSidebarPos);
             }
         } catch (e) {
             console.error("Failed to load settings", e);
@@ -77,12 +85,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(STORAGE_KEYS.TIPI_VIEW_MODE, tipiViewMode);
     }, [tipiViewMode]);
 
+    useEffect(() => {
+        localStorage.setItem(STORAGE_KEYS.SIDEBAR_POSITION, sidebarPosition);
+    }, [sidebarPosition]);
+
     // Actions
     const updateTheme = (newTheme: string) => setTheme(newTheme);
     const updateFontSize = (newSize: number) => setFontSize(newSize);
     const toggleHighlight = () => setHighlightEnabled(prev => !prev);
     const toggleAdminMode = () => setAdminMode(prev => !prev);
     const updateTipiViewMode = (mode: TipiViewMode) => setTipiViewMode(mode);
+    const updateSidebarPosition = (position: SidebarPosition) => setSidebarPosition(position);
 
     const restoreDefaults = () => {
         setTheme(DEFAULTS.THEME);
@@ -90,6 +103,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setHighlightEnabled(DEFAULTS.HIGHLIGHT);
         setAdminMode(DEFAULTS.ADMIN_MODE);
         setTipiViewMode(DEFAULTS.TIPI_VIEW_MODE);
+        setSidebarPosition(DEFAULTS.SIDEBAR_POSITION);
     };
 
     return (
@@ -99,11 +113,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             highlightEnabled,
             adminMode,
             tipiViewMode,
+            sidebarPosition,
             updateTheme,
             updateFontSize,
             toggleHighlight,
             toggleAdminMode,
             updateTipiViewMode,
+            updateSidebarPosition,
             restoreDefaults
         }}>
             {children}

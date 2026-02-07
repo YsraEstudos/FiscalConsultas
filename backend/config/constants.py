@@ -19,7 +19,9 @@ class HttpHeaders:
 
 class CacheConfig:
     """Configurações de cache."""
-    CHAPTER_CACHE_SIZE = 32  # Número de capítulos em LRU cache
+    CHAPTER_CACHE_SIZE = 128  # Número de capítulos em LRU cache (NESH has ~100 chapters)
+    TIPI_RESULT_CACHE_SIZE = 128  # Cache de resultados TIPI por código NCM
+    TIPI_CHAPTER_CACHE_SIZE = 100  # Cache de capítulos TIPI completos
 
 
 class PerformanceConfig:
@@ -81,7 +83,8 @@ class RegexPatterns:
     NOTE_REFERENCE = r'(?i)\b(nota[s]?\s+(\d+))(?:\s+(?:do|da|de)\s+cap[ií]tulo\s+(\d{1,2}))?'
     
     # Padrão para links NCM
-    NCM_LINK = r'\b(\d{2}\.\d{2}(?:\.\d{2}\.\d{2})?|\d{4}\.\d{2})\b'
+    # Aceita subposições curtas como 8418.9 (1 dígito após o ponto)
+    NCM_LINK = r'\b(\d{2}\.\d{2}(?:\.\d{2}\.\d{2})?|\d{4}\.\d{1,2})\b'
     
     # Padrão para limpar páginas
     CLEAN_PAGE = r'Página \d+\r?\n'

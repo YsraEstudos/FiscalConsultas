@@ -1,6 +1,16 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Sidebar } from '../../src/../src/components/Sidebar';
 import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('react-virtuoso', () => ({
+    Virtuoso: ({ data, itemContent }: any) => (
+        <div data-testid="virtuoso">
+            {data.map((item: any, index: number) => (
+                <div key={index}>{itemContent(index, item)}</div>
+            ))}
+        </div>
+    )
+}));
 
 describe('Sidebar Component', () => {
     const mockResults = {
@@ -73,5 +83,85 @@ describe('Sidebar Component', () => {
         expect(chapters[0]).toHaveTextContent('Capítulo 01');
         expect(chapters[1]).toHaveTextContent('Capítulo 10');
         expect(chapters[2]).toHaveTextContent('Capítulo 85');
+    });
+
+    it('renders structured section items when secoes are present', () => {
+        const resultsWithSections = {
+            "84": {
+                capitulo: "84",
+                posicoes: [],
+                secoes: {
+                    titulo: "Máquinas e aparelhos",
+                    notas: "Notas do capítulo",
+                    consideracoes: "Considerações gerais",
+                    definicoes: "Definições técnicas"
+                }
+            }
+        };
+
+        render(
+            <Sidebar results={resultsWithSections} {...defaultProps} />
+        );
+
+        expect(screen.getByText('Título do Capítulo')).toBeInTheDocument();
+        expect(screen.getByText('Notas do Capítulo')).toBeInTheDocument();
+        expect(screen.getByText('Considerações Gerais')).toBeInTheDocument();
+        expect(screen.getByText('Definições Técnicas')).toBeInTheDocument();
+    });
+
+    it('navigates to section anchor when section item is clicked', () => {
+        const onNavigate = vi.fn();
+        const resultsWithSections = {
+            "84": {
+                capitulo: "84",
+                posicoes: [],
+                secoes: {
+                    titulo: "Máquinas e aparelhos",
+                    notas: "Notas do capítulo",
+                    consideracoes: "Considerações gerais",
+                    definicoes: "Definições técnicas"
+                }
+            }
+        };
+
+        render(
+            <Sidebar results={resultsWithSections} onNavigate={onNavigate} isOpen={false} onClose={() => { }} />
+        );
+
+        const item = screen.getByText('Considerações Gerais').closest('button');
+        if (item) fireEvent.click(item);
+
+        expect(onNavigate).toHaveBeenCalledWith('chapter-84-consideracoes');
+    });
+
+    it('highlights section item when activeAnchorId matches', async () => {
+        const resultsWithSections = {
+            "84": {
+                capitulo: "84",
+                posicoes: [],
+                secoes: {
+                    titulo: "Máquinas e aparelhos",
+                    notas: "Notas do capítulo",
+                    consideracoes: "Considerações gerais",
+                    definicoes: "Definições técnicas"
+                }
+            }
+        };
+
+        render(
+            <Sidebar
+                results={resultsWithSections}
+                {...defaultProps}
+                activeAnchorId="chapter-84-notas"
+            />
+        );
+
+        const item = screen.getByText('Notas do Capítulo').closest('button');
+        expect(item).not.toBeNull();
+        if (!item) return;
+
+        await waitFor(() => {
+            expect(item.className).toContain('itemHighlight');
+        });
     });
 });

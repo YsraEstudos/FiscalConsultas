@@ -2,7 +2,7 @@
  * Debug utility to prevent console noise and serialization overhead in production.
  * Only logs when import.meta.env.DEV is true.
  */
-const IS_DEV = import.meta.env.DEV;
+const IS_DEV = import.meta.env.DEV && import.meta.env.MODE !== 'test';
 
 export const debug = {
     log: IS_DEV ? console.debug.bind(console) : () => { },

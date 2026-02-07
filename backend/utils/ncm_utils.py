@@ -27,6 +27,13 @@ def extract_chapter_from_ncm(ncm: str) -> Tuple[Optional[str], Optional[str]]:
         - capitulo: Primeiros 2 dígitos com zero à esquerda
         - posicao_alvo: Formato XX.XX se NCM tiver 4+ dígitos, else None
     """
+    raw = (ncm or "").strip()
+    compact = re.sub(r"\s+", "", raw)
+    # Preserve short subposition like 8419.8 or 8419.80 if user typed it explicitly
+    if re.fullmatch(r"\d{4}\.\d{1,2}", compact):
+        chapter = compact[:2].zfill(2)
+        return chapter, compact
+
     ncm_clean = clean_ncm(ncm)
     
     chapter = None

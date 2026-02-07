@@ -29,12 +29,14 @@ class ChapterData(TypedDict):
         positions: Lista de posições NCM do capítulo
         notes: Texto das notas/regras gerais (raw)
         parsed_notes: Dicionário de notas parseadas {numero: conteudo}
+        sections: Seções estruturadas (titulo, notas, consideracoes, definicoes)
     """
     chapter_num: str
     content: str
     positions: List[Position]
     notes: Optional[str]
     parsed_notes: Dict[str, str]
+    sections: Optional[Dict[str, Optional[str]]]
 
 
 class SearchResult(TypedDict):
@@ -51,6 +53,7 @@ class SearchResult(TypedDict):
         conteudo: Conteúdo completo do capítulo
         real_content_found: Se o capítulo existe no banco
         erro: Mensagem de erro (se houver)
+        secoes: Seções estruturadas (titulo, notas, consideracoes, definicoes)
     """
     ncm_buscado: str
     capitulo: str
@@ -61,6 +64,7 @@ class SearchResult(TypedDict):
     conteudo: str
     real_content_found: bool
     erro: Optional[str]
+    secoes: Optional[Dict[str, Optional[str]]]
 
 
 class ServiceResponse(TypedDict):

@@ -6,3 +6,11 @@ google-generativeai>=0.3.2
 python-dotenv>=1.0.0
 aiosqlite>=0.19.0
 pytest-asyncio>=0.23.0
+# PostgreSQL Migration (SQLModel)
+sqlmodel>=0.0.14
+sqlalchemy[asyncio]>=2.0
+asyncpg>=0.29.0
+alembic>=1.13.0
+pydantic-settings>=2.1.0
+# JWT Authentication (Clerk)
+PyJWT[crypto]>=2.8.0

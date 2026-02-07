@@ -1,0 +1,201 @@
+"""
+Script de migração de dados: SQLite → PostgreSQL.
+
+Este script:
+1. Lê todos os dados dos bancos SQLite (nesh.db, tipi.db)
+2. Insere no PostgreSQL usando SQLModel
+3. Atualiza os search_vectors para FTS
+
+Uso:
+    python scripts/migrate_to_postgres.py
+
+Pré-requisitos:
+    1. PostgreSQL rodando e acessível
+    2. DATABASE__ENGINE=postgresql no .env
+    3. DATABASE__POSTGRES_URL configurado
+    4. Rodar: alembic upgrade head
+"""
+import asyncio
+import sys
+import os
+
+# Adicionar root ao path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import aiosqlite
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.infrastructure.db_engine import get_session
+from backend.domain.sqlmodels import Chapter, Position, ChapterNotes, Glossary
+from backend.config.settings import settings
+
+
+async def migrate_chapters(sqlite_path: str, pg_session: AsyncSession) -> int:
+    """Migra tabela chapters do SQLite para PostgreSQL (catálogo global)."""
+    count = 0
+    async with aiosqlite.connect(sqlite_path) as db:
+        db.row_factory = aiosqlite.Row
+        
+        # Check if raw_text column exists
+        async with db.execute("PRAGMA table_info(chapters)") as cursor:
+            columns = [row[1] async for row in cursor]
+        has_raw_text = "raw_text" in columns
+        
+        query = "SELECT chapter_num, content" + (", raw_text" if has_raw_text else "") + " FROM chapters"
+        async with db.execute(query) as cursor:
+            async for row in cursor:
+                chapter = Chapter(
+                    chapter_num=row["chapter_num"],
+                    content=row["content"],
+                    raw_text=row["raw_text"] if has_raw_text else None,
+                    tenant_id=None
+                )
+                pg_session.add(chapter)
+                count += 1
+    await pg_session.commit()
+    print(f"  ✅ {count} capítulos migrados")
+    return count
+
+
+async def migrate_positions(sqlite_path: str, pg_session: AsyncSession) -> int:
+    """Migra tabela positions do SQLite para PostgreSQL (catálogo global)."""
+    count = 0
+    async with aiosqlite.connect(sqlite_path) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT codigo, descricao, chapter_num FROM positions") as cursor:
+            async for row in cursor:
+                position = Position(
+                    codigo=row["codigo"],
+                    descricao=row["descricao"],
+                    chapter_num=row["chapter_num"],
+                    tenant_id=None
+                )
+                pg_session.add(position)
+                count += 1
+                # Commit em batches para evitar memory issues
+                if count % 1000 == 0:
+                    await pg_session.commit()
+    await pg_session.commit()
+    print(f"  ✅ {count} posições migradas")
+    return count
+
+
+async def migrate_chapter_notes(sqlite_path: str, pg_session: AsyncSession) -> int:
+    """Migra tabela chapter_notes do SQLite para PostgreSQL (catálogo global)."""
+    count = 0
+    async with aiosqlite.connect(sqlite_path) as db:
+        db.row_factory = aiosqlite.Row
+        try:
+            async with db.execute("""
+                SELECT chapter_num, notes_content, titulo, notas, consideracoes, definicoes 
+                FROM chapter_notes
+            """) as cursor:
+                async for row in cursor:
+                    notes = ChapterNotes(
+                        chapter_num=row["chapter_num"],
+                        notes_content=row["notes_content"],
+                        titulo=row["titulo"],
+                        notas=row["notas"],
+                        consideracoes=row["consideracoes"],
+                        definicoes=row["definicoes"],
+                        tenant_id=None
+                    )
+                    pg_session.add(notes)
+                    count += 1
+        except Exception as e:
+            print(f"  ⚠️ Aviso ao migrar chapter_notes: {e}")
+    await pg_session.commit()
+    print(f"  ✅ {count} notas de capítulo migradas")
+    return count
+
+
+async def migrate_glossary(sqlite_path: str, pg_session: AsyncSession) -> int:
+    """Migra tabela glossary do SQLite para PostgreSQL."""
+    count = 0
+    async with aiosqlite.connect(sqlite_path) as db:
+        db.row_factory = aiosqlite.Row
+        try:
+            async with db.execute("SELECT term, definition FROM glossary") as cursor:
+                async for row in cursor:
+                    glossary = Glossary(
+                        term=row["term"],
+                        definition=row["definition"],
+                    )
+                    pg_session.add(glossary)
+                    count += 1
+        except Exception as e:
+            print(f"  ⚠️ Aviso ao migrar glossary: {e}")
+    await pg_session.commit()
+    print(f"  ✅ {count} termos do glossário migrados")
+    return count
+
+
+async def update_search_vectors(pg_session: AsyncSession):
+    """
+    Força atualização dos search_vectors em registros existentes.
+    Necessário porque os triggers só disparam em INSERT/UPDATE.
+    """
+    from sqlalchemy import text
+    
+    print("\n📊 Atualizando search_vectors...")
+    
+    await pg_session.execute(text("""
+        UPDATE chapters 
+        SET search_vector = to_tsvector('portuguese', COALESCE(content, ''))
+    """))
+    
+    await pg_session.execute(text("""
+        UPDATE positions 
+        SET search_vector = to_tsvector('portuguese', COALESCE(descricao, ''))
+    """))
+    
+    await pg_session.commit()
+    print("  ✅ Search vectors atualizados")
+
+
+async def main():
+    """Função principal de migração."""
+    print("=" * 60)
+    print("🚀 Migração SQLite → PostgreSQL")
+    print("=" * 60)
+    
+    # Verificar se está configurado para PostgreSQL
+    if not settings.database.is_postgres:
+        print("\n❌ Erro: DATABASE__ENGINE deve ser 'postgresql'")
+        print("   Configure no .env:")
+        print("   DATABASE__ENGINE=postgresql")
+        print("   DATABASE__POSTGRES_URL=postgresql+asyncpg://user:pass@host/db")
+        return
+    
+    print(f"\n📁 SQLite source: {settings.database.path}")
+    print(f"🐘 PostgreSQL target: {settings.database.postgres_url}")
+    
+    # Verificar se SQLite existe
+    if not os.path.exists(settings.database.path):
+        print(f"\n❌ Erro: Banco SQLite não encontrado: {settings.database.path}")
+        return
+    
+    print("\n" + "-" * 60)
+    print("📦 Migrando dados...")
+    print("-" * 60)
+    
+    async with get_session() as session:
+        # Migrar tabelas na ordem correta (FK constraints)
+        await migrate_chapters(settings.database.path, session)
+        await migrate_positions(settings.database.path, session)
+        await migrate_chapter_notes(settings.database.path, session)
+        await migrate_glossary(settings.database.path, session)
+        
+        # Atualizar search_vectors
+        await update_search_vectors(session)
+    
+    print("\n" + "=" * 60)
+    print("✅ Migração concluída com sucesso!")
+    print("=" * 60)
+    print("\nPróximos passos:")
+    print("  1. Testar busca: curl 'http://localhost:8000/api/search?ncm=bomba'")
+    print("  2. Verificar FTS: psql -d nesh_db -c \"SELECT codigo, ts_headline('portuguese', descricao, plainto_tsquery('portuguese', 'bomba')) FROM positions WHERE search_vector @@ plainto_tsquery('portuguese', 'bomba') LIMIT 5;\"")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

@@ -9,7 +9,12 @@ echo ==========================================
 echo.
 echo [0/4] Limpando processos antigos...
 
-REM Finaliza processos anteriores nas portas
+REM Finaliza processos anteriores (Por Título de Janela)
+taskkill /F /FI "WINDOWTITLE eq Nesh Backend Server" >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq Nesh Client (Dev)" >nul 2>&1
+taskkill /F /IM "node.exe" >nul 2>&1
+
+REM Finaliza processos anteriores nas portas (Redundância)
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5173 ^| findstr LISTENING') do (
     echo    - Finalizando Frontend na porta 5173 (PID: %%a)
     taskkill /PID %%a /F >nul 2>&1
@@ -38,7 +43,7 @@ if /I "%~1"=="--rebuild" (
 
 REM Inicia Backend
 echo [2/4] Iniciando Backend...
-start "Nesh Backend Server" cmd /k "%PYTHON_CMD% Nesh.py"
+start "Nesh Backend Server" cmd /k ""%PYTHON_CMD%" Nesh.py"
 
 REM Inicia Frontend
 echo.
@@ -51,10 +56,10 @@ start "Nesh Client (Dev)" cmd /k "npm run dev"
 
 echo.
 echo Aguardando servidores subirem...
-timeout /t 5 >nul
+timeout /t 8 >nul
 
-REM Abre o navegador
-start "" "http://localhost:5173"
+REM Abre o navegador (Usando IP explicito para evitar erro de IPv6)
+start "" "http://127.0.0.1:5173"
 
 echo.
 echo Configure as janelas e bom trabalho!

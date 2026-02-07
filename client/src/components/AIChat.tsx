@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, FormEvent } from 'react';
 import { api } from '../services/api';
-import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-hot-toast';
 import styles from './AIChat.module.css';
 
@@ -17,7 +16,6 @@ export function AIChat() {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const { authToken } = useAuth();
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -37,10 +35,7 @@ export function AIChat() {
         setLoading(true);
 
         try {
-            const response = await api.post('/ai/chat', {
-                message: userMsg,
-                token: authToken
-            });
+            const response = await api.post('/ai/chat', { message: userMsg });
 
             if (response.data.success) {
                 setMessages(prev => [...prev, { role: 'assistant', text: response.data.reply }]);

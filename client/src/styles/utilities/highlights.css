@@ -123,6 +123,7 @@ body.disable-smart-links .smart-link {
     transition: all 0.3s;
 }
 
+/* Flash Highlight - Uses same animation as highlight-anim */
 .flash-highlight {
     animation: highlight-pulse 3s ease-out;
     position: relative;

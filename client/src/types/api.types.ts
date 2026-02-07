@@ -70,6 +70,14 @@ export interface ChapterPosition {
     nivel?: number;
 }
 
+/** Seções estruturadas do capítulo */
+export interface ChapterSections {
+    titulo: string | null;
+    notas: string | null;
+    consideracoes: string | null;
+    definicoes: string | null;
+}
+
 /** Dados de um capítulo NESH */
 export interface ChapterData {
     ncm_buscado: string;
@@ -81,6 +89,7 @@ export interface ChapterData {
     conteudo: string;
     real_content_found: boolean;
     erro: string | null;
+    secoes?: ChapterSections;
 }
 
 /** Resposta de busca por código NESH */
@@ -201,7 +210,7 @@ export interface SystemStatusResponse {
     version: string;
     backend: string;
     database: DatabaseStatus;
-    tipi: DatabaseStatus & { ok?: boolean; db_path?: string };
+    tipi: DatabaseStatus;
 }
 
 /** Login response */

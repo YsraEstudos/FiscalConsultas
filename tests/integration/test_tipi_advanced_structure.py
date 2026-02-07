@@ -3,7 +3,8 @@ import sqlite3
 import pytest
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent / "tipi.db"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DB_PATH = PROJECT_ROOT / "database" / "tipi.db"
 
 @pytest.fixture
 def db_connection():

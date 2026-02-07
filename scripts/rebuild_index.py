@@ -16,10 +16,16 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.utils.text_processor import NeshTextProcessor
+from backend.utils.nesh_sections import extract_chapter_sections
+from backend.config.db_schema import (
+    CHAPTER_NOTES_COLUMNS,
+    CHAPTER_NOTES_CREATE_SQL,
+    CHAPTER_NOTES_INSERT_SQL,
+)
 
 # Configuração
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-NESH_FILE = os.path.join(SCRIPT_DIR, "..", "data", "Nesh.txt")
+NESH_FILE = os.path.join(SCRIPT_DIR, "..", "data", "debug_nesh", "Nesh.txt")
 DB_FILE = os.path.join(SCRIPT_DIR, "..", "database", "nesh.db")
 CONFIG_FILE = os.path.join(SCRIPT_DIR, "..", "config", "settings.json")
 
@@ -34,56 +40,39 @@ except:
 processor = NeshTextProcessor(stopwords)
 
 def extract_positions_from_chapter(chapter_content: str) -> list:
-    position_pattern = r'^(\d{2}\.\d{2})\s*-'
+    # Match: 01.01 - or **01.01 -**
+    position_pattern = r'^\s*(?:\*\*|\*)?(\d{2}\.\d{2})(?:\*\*|\*)?\s*-'
     positions = []
     
     for line in chapter_content.split('\n'):
         match = re.match(position_pattern, line.strip())
         if match:
             pos = match.group(1)
-            desc_match = re.match(r'^\d{2}\.\d{2}\s*-\s*(.+)', line.strip())
-            desc = desc_match.group(1)[:200] if desc_match else ''
+            # Handle description after dash, potentially removing trailing bold
+            desc_match = re.match(r'^\s*(?:\*\*|\*)?\d{2}\.\d{2}(?:\*\*|\*)?\s*-\s*(.+)', line.strip())
+            desc = desc_match.group(1).replace('**', '').replace('*', '').strip() if desc_match else ''
+            # Truncate if too long (database limit check)
+            desc = desc[:300] 
             positions.append({'codigo': pos, 'descricao': desc})
     
     return positions
 
 def extract_chapter_notes(chapter_content: str) -> str:
-    lines = chapter_content.split('\n')
-    notes_lines = []
-    notes_started = False
-    
-    for line in lines:
-        stripped = line.strip()
-        
-        # Pula linhas iniciais
-        if stripped.startswith('Capítulo ') or not stripped:
-            if not notes_started: continue
-        
-        # Início/Fim
-        if re.match(r'^Notas?\.?$', stripped, re.IGNORECASE):
-            notes_started = True
-            notes_lines.append(stripped)
-            continue
-        
-        if not notes_started and stripped and not re.match(r'^\d{2}\.\d{2}\s*-', stripped):
-             notes_started = True
-             notes_lines.append(stripped)
-             continue
-
-        if re.match(r'^\d{2}\.\d{2}\s*-', stripped):
-            break
-        
-        if notes_started:
-            notes_lines.append(stripped)
-    
-    return '\n'.join(notes_lines).strip()
+    """
+    Legacy: Retorna todo conteúdo pré-NCM como string única.
+    Mantido para compatibilidade.
+    """
+    sections = extract_chapter_sections(chapter_content)
+    parts = [sections['titulo'], sections['notas'], sections['consideracoes'], sections['definicoes']]
+    return '\n\n'.join(p for p in parts if p)
 
 def parse_nesh_file():
     print(f"📖 Lendo {NESH_FILE}...")
     with open(NESH_FILE, 'r', encoding='utf-8') as f:
         content = f.read()
     
-    chapter_pattern = r'\nCapítulo\s+(\d+)\r?\n'
+    # Match: Capítulo 1 or **Capítulo 1** at start of line
+    chapter_pattern = r'(?m)^\s*(?:\*\*|\*)?Capítulo\s+(\d+)\s*(?:\*\*|\*)?\s*$'
     matches = list(re.finditer(chapter_pattern, content))
     chapters = {}
     
@@ -122,14 +111,7 @@ def create_database(chapters: dict):
             FOREIGN KEY (chapter_num) REFERENCES chapters(chapter_num)
         )
     ''')
-    cursor.execute('''
-        CREATE TABLE chapter_notes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chapter_num TEXT UNIQUE NOT NULL,
-            notes_content TEXT,
-            FOREIGN KEY (chapter_num) REFERENCES chapters(chapter_num)
-        )
-    ''')
+    cursor.execute(CHAPTER_NOTES_CREATE_SQL)
     
     # 2. Tabela FTS (Busca Textual)
     # ncm: identificador principal (capítulo ou posição)
@@ -159,10 +141,23 @@ def create_database(chapters: dict):
         cursor.execute('INSERT INTO chapters (chapter_num, content) VALUES (?, ?)', (chapter_num, content))
         count_ch += 1
         
-        # Insere Notas
-        notes = extract_chapter_notes(content)
-        if notes:
-            cursor.execute('INSERT INTO chapter_notes (chapter_num, notes_content) VALUES (?, ?)', (chapter_num, notes))
+        # Extrai seções estruturadas
+        sections = extract_chapter_sections(content)
+        notes = extract_chapter_notes(content)  # Legacy: tudo junto
+        
+        if notes or any(sections.values()):
+            values_map = {
+                "chapter_num": chapter_num,
+                "notes_content": notes,
+                "titulo": sections.get("titulo"),
+                "notas": sections.get("notas"),
+                "consideracoes": sections.get("consideracoes"),
+                "definicoes": sections.get("definicoes"),
+            }
+            cursor.execute(
+                CHAPTER_NOTES_INSERT_SQL,
+                [values_map[col] for col in CHAPTER_NOTES_COLUMNS]
+            )
         
         # --- FTS para o Capítulo ---
         # Indexamos o conteúdo inteiro do capítulo? Ou só notas e título?

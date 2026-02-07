@@ -1,6 +1,6 @@
 import { useSettings } from '../context/SettingsContext';
 import { ChangeEvent, useEffect } from 'react';
-import { VIEW_MODE } from '../constants';
+import { VIEW_MODE, SIDEBAR_POSITION } from '../constants';
 import styles from './SettingsModal.module.css';
 
 interface SettingsModalProps {
@@ -10,8 +10,8 @@ interface SettingsModalProps {
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     const {
-        theme, fontSize, highlightEnabled, adminMode, tipiViewMode,
-        updateTheme, updateFontSize, toggleHighlight, toggleAdminMode, updateTipiViewMode, restoreDefaults
+        theme, fontSize, highlightEnabled, adminMode, tipiViewMode, sidebarPosition,
+        updateTheme, updateFontSize, toggleHighlight, toggleAdminMode, updateTipiViewMode, updateSidebarPosition, restoreDefaults
     } = useSettings();
 
     // Close on ESC
@@ -122,7 +122,31 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             </div>
                         </div>
 
-                        {/* CARD 3: TIPI (Full width or contained) */}
+                        {/* CARD 3: NAVEGAÇÃO */}
+                        <div className={styles.card}>
+                            <div className={styles.item}>
+                                <div className={styles.label}>
+                                    <span>Posição da Navegação</span>
+                                    <span className={styles.hint}>Lado da sidebar de capítulos</span>
+                                </div>
+                                <div className={styles.toggleGroup}>
+                                    <button
+                                        className={`${styles.toggleBtn} ${sidebarPosition === SIDEBAR_POSITION.LEFT ? styles.active : ''}`}
+                                        onClick={() => updateSidebarPosition(SIDEBAR_POSITION.LEFT)}
+                                    >
+                                        ◀ Esquerda
+                                    </button>
+                                    <button
+                                        className={`${styles.toggleBtn} ${sidebarPosition === SIDEBAR_POSITION.RIGHT ? styles.active : ''}`}
+                                        onClick={() => updateSidebarPosition(SIDEBAR_POSITION.RIGHT)}
+                                    >
+                                        Direita ▶
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* CARD 4: TIPI (Full width) */}
                         <div className={styles.card} style={{ gridColumn: '1 / -1' }}>
                             <div className={styles.item}>
                                 <div className={styles.label}>
