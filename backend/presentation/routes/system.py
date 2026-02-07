@@ -1,20 +1,27 @@
 from fastapi import APIRouter, Depends, Query, Request, HTTPException
+import re
 import time
 
 from backend.services import NeshService
 from backend.services.tipi_service import TipiService
 from backend.server.dependencies import get_nesh_service
-from backend.config.settings import settings, reload_settings
-from backend.server.middleware import is_clerk_token_valid
+from backend.config.settings import settings, reload_settings, is_valid_admin_token
+from backend.server.middleware import decode_clerk_jwt
+from backend.utils.auth import extract_bearer_token, is_admin_payload
 
 router = APIRouter()
 
 
-def _extract_token(request: Request) -> str | None:
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.lower().startswith("bearer "):
-        return auth_header[7:].strip()
-    return None
+def _is_admin_request(request: Request) -> bool:
+    admin_token = request.headers.get("X-Admin-Token")
+    if is_valid_admin_token(admin_token):
+        return True
+
+    token = extract_bearer_token(request)
+    if not token:
+        return False
+    payload = decode_clerk_jwt(token)
+    return is_admin_payload(payload)
 
 
 def _to_int(value, default: int = 0) -> int:
@@ -78,8 +85,8 @@ async def get_status(request: Request):
     Retorna versão da API e estado atual dos serviços.
     """
     # Access state directly from request
-    db = request.app.state.db
-    tipi_service = request.app.state.tipi_service
+    db = getattr(request.app.state, "db", None)
+    tipi_service = getattr(request.app.state, "tipi_service", None)
     
     start = time.perf_counter()
     if db:
@@ -102,10 +109,13 @@ async def get_status(request: Request):
 
     # TIPI status - captura erros localmente para agregação
     tipi_stats = None
-    try:
-        tipi_stats = await tipi_service.check_connection()
-    except Exception as tipi_err:
-        tipi_stats = {"status": "error", "error": str(tipi_err)}
+    if tipi_service is None:
+        tipi_stats = {"status": "error", "error": "TIPI service unavailable"}
+    else:
+        try:
+            tipi_stats = await tipi_service.check_connection()
+        except Exception as tipi_err:
+            tipi_stats = {"status": "error", "error": str(tipi_err)}
 
     normalized_db = _normalize_db_status(db_stats, db_latency_ms)
     normalized_tipi = _normalize_tipi_status(tipi_stats)
@@ -117,7 +127,7 @@ async def get_status(request: Request):
 
     status = {
         "status": overall_status,
-        "version": "4.2",
+        "version": getattr(request.app, "version", "unknown"),
         "backend": "FastAPI",
         "database": normalized_db,
         "tipi": normalized_tipi,
@@ -137,11 +147,8 @@ async def debug_anchors(
     if not settings.features.debug_mode:
         raise HTTPException(status_code=404, detail="Not found")
 
-    token = _extract_token(request)
-    if not token or not is_clerk_token_valid(token):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    import re
+    if not _is_admin_request(request):
+        raise HTTPException(status_code=403, detail="Forbidden")
     
     response_data = await service.process_request(ncm)
     
@@ -169,9 +176,8 @@ async def reload_secrets(request: Request):
     """
     Recarrega secrets de env/.env sem reiniciar o servidor.
     """
-    token = _extract_token(request)
-    if not token or not is_clerk_token_valid(token):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not _is_admin_request(request):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     reload_settings()
     return {"success": True}
