@@ -59,9 +59,15 @@ async def lifespan(app: FastAPI):
             app.state.sqlmodel_enabled = True
             logger.info("SQLModel engine ready (Postgres migrations via Alembic)")
         else:
-            await init_db()
-            app.state.sqlmodel_enabled = True
-            logger.info("SQLModel engine initialized (SQLite)")
+            try:
+                await init_db()
+                app.state.sqlmodel_enabled = True
+                logger.info("SQLModel engine initialized (SQLite)")
+            except Exception as e:
+                # Alguns ambientes SQLite não suportam tipos específicos (ex: TSVECTOR).
+                # Nesses casos, seguimos com o adaptador legado sem interromper startup.
+                app.state.sqlmodel_enabled = False
+                logger.warning("SQLModel init skipped (SQLite incompatibility): %s", e)
     except ImportError:
         app.state.sqlmodel_enabled = False
         logger.debug("SQLModel not available, using legacy DatabaseAdapter")
