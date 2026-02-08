@@ -5,29 +5,9 @@ from backend.server.dependencies import get_tipi_service
 from backend.config.constants import SearchConfig, ViewMode
 from backend.config.exceptions import ValidationError
 from backend.config.logging_config import server_logger as logger
-import hashlib
+from backend.utils.cache import cache_scope_key, weak_etag
 
 router = APIRouter()
-
-
-def _cache_scope_key(request: Request) -> str:
-    try:
-        from backend.server.middleware import get_current_tenant
-        tenant_id = get_current_tenant()
-    except Exception:
-        tenant_id = None
-
-    if tenant_id:
-        return f"tenant:{tenant_id}"
-
-    header_tenant = (request.headers.get("X-Tenant-Id") or "").strip()
-    if header_tenant:
-        return f"tenant:{header_tenant}"
-
-    if request.headers.get("Authorization"):
-        return "auth-user"
-
-    return "public"
 
 
 @router.get("/search")
@@ -60,7 +40,8 @@ async def tipi_search(
             field="ncm"
         )
     
-    logger.info(f"TIPI Busca: '{ncm}' (mode={view_mode})")
+    safe_ncm = ncm.replace("\r", "\\r").replace("\n", "\\n")
+    logger.info("TIPI Busca: '%s' (mode=%s)", safe_ncm, view_mode)
     
     # Detectar tipo de busca - Exceções propagam para o handler global
     if tipi_service.is_code_query(ncm):
@@ -78,10 +59,9 @@ async def tipi_search(
     
     # Performance: Add caching headers for TIPI catalog data
     response = JSONResponse(content=result)
-    cache_key = _cache_scope_key(request)
-    etag = hashlib.md5(f"tipi:{cache_key}:{ncm}:{view_mode.value}".encode()).hexdigest()[:16]
+    cache_key = cache_scope_key(request)
     response.headers["Cache-Control"] = "private, max-age=3600, stale-while-revalidate=86400"
-    response.headers["ETag"] = f'W/"{etag}"'
+    response.headers["ETag"] = weak_etag("tipi", cache_key, ncm, view_mode.value)
     response.headers["Vary"] = "Authorization, X-Tenant-Id"
     return response
 

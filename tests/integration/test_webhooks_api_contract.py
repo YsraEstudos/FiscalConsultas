@@ -1,9 +1,11 @@
 import pytest
 from fastapi.testclient import TestClient
+from fastapi import HTTPException
 import json
 from copy import deepcopy
 from pathlib import Path
 from uuid import uuid4
+from starlette.requests import Request
 
 from sqlalchemy import delete, select
 
@@ -65,6 +67,39 @@ def test_webhook_requires_configured_token_when_present(client, monkeypatch):
     assert response.json()["detail"] == "Invalid Asaas webhook token"
 
 
+@pytest.mark.asyncio
+async def test_webhook_rejects_oversized_payload_without_content_length(monkeypatch):
+    monkeypatch.setattr(settings.billing, "asaas_max_payload_bytes", 32)
+
+    body = b'{"event":"' + (b"A" * 128) + b'"}'
+    messages = [{"type": "http.request", "body": body, "more_body": False}]
+
+    async def receive():
+        if messages:
+            return messages.pop(0)
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    scope = {
+        "type": "http",
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/api/webhooks/asaas",
+        "raw_path": b"/api/webhooks/asaas",
+        "query_string": b"",
+        "headers": [(b"content-type", b"application/json")],
+        "client": ("testclient", 50000),
+        "server": ("testserver", 80),
+    }
+    request = Request(scope, receive)
+
+    with pytest.raises(HTTPException) as exc:
+        await webhooks.asaas_webhook(request)
+
+    assert exc.value.status_code == 413
+    assert exc.value.detail == "Payload too large"
+
+
 def test_webhook_payment_confirmed_calls_processor(client, monkeypatch, asaas_payment_confirmed_payload):
     monkeypatch.setattr(settings.billing, "asaas_webhook_token", "expected-token")
 
@@ -124,6 +159,27 @@ async def test_process_payment_confirmed_requires_external_reference(asaas_payme
     result = await webhooks.process_asaas_payment_confirmed(payload)
 
     assert result == {"processed": False, "reason": "missing_external_reference"}
+
+
+@pytest.mark.asyncio
+async def test_process_payment_confirmed_rejects_invalid_tenant_id(asaas_payment_confirmed_payload):
+    payload = deepcopy(asaas_payment_confirmed_payload)
+    payload["payment"]["externalReference"] = "tenant invalido"
+
+    result = await webhooks.process_asaas_payment_confirmed(payload)
+
+    assert result == {"processed": False, "reason": "invalid_tenant_id"}
+
+
+@pytest.mark.asyncio
+async def test_process_payment_confirmed_rejects_non_positive_amount(asaas_payment_confirmed_payload):
+    payload = deepcopy(asaas_payment_confirmed_payload)
+    payload["payment"]["externalReference"] = f"org_test_{uuid4().hex[:8]}"
+    payload["payment"]["value"] = -1
+
+    result = await webhooks.process_asaas_payment_confirmed(payload)
+
+    assert result == {"processed": False, "reason": "invalid_amount"}
 
 
 @pytest.mark.asyncio

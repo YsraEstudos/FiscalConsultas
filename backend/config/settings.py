@@ -85,11 +85,14 @@ class BillingSettings(BaseModel):
     """Billing/Webhook settings."""
     asaas_api_key: Optional[str] = None
     asaas_webhook_token: Optional[str] = None
+    asaas_max_payload_bytes: int = 1_048_576
 
 
 class SecuritySettings(BaseModel):
     """Security and anti-abuse controls."""
     ai_chat_requests_per_minute: int = 5
+    ai_chat_max_message_chars: int = 4000
+    trusted_proxy_ips: List[str] = Field(default_factory=list)
 
 
 class AppSettings(BaseSettings):
