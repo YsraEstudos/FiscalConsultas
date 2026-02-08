@@ -264,6 +264,28 @@ class NeshService:
         
         return " ".join(unique)
 
+    def normalize_query_raw(self, text: str) -> str:
+        """
+        Normaliza query para FTS sem stemming agressivo.
+        Usado como fallback quando stemming não encontra resultados.
+        """
+        normalized = self.processor.normalize(text)
+        words = re.findall(r'\b\w+\b', normalized)
+
+        processed = []
+        for w in words:
+            if w in self.processor.stopwords:
+                continue
+            if len(w) < 2:
+                continue
+            processed.append(f"{w}*")
+
+        if not processed:
+            return ""
+
+        unique = list(dict.fromkeys(processed))[:20]
+        return " ".join(unique)
+
     async def _fts_scored_cached(self, query: str, tier: int, limit: int,
                            words_matched: int, total_words: int) -> List[Dict[str, Any]]:
         """
@@ -323,6 +345,7 @@ class NeshService:
         total_words = len(original_words)
         
         normalized_q = self.normalize_query(query)
+        normalized_raw_q = self.normalize_query_raw(query)
         
         if not normalized_q:
             logger.debug("Query vazia após normalização")
@@ -375,6 +398,14 @@ class NeshService:
             words_matched=total_words,
             total_words=total_words
         )
+        if not and_results and normalized_raw_q and normalized_raw_q != normalized_q:
+            and_results = await self._fts_scored_cached(
+                normalized_raw_q,
+                tier=2,
+                limit=SearchConfig.TIER2_LIMIT,
+                words_matched=total_words,
+                total_words=total_words
+            )
         if and_results:
             logger.info(f"FTS TIER2 (AND): {len(and_results)} resultados")
             add_results(and_results)
@@ -417,6 +448,16 @@ class NeshService:
                     words_matched=max(1, total_words // 2),
                     total_words=total_words
                 )
+                if (not partial_results) and normalized_raw_q:
+                    raw_or_query = " OR ".join(normalized_raw_q.split())
+                    if raw_or_query != or_query:
+                        partial_results = await self._fts_scored_cached(
+                            raw_or_query,
+                            tier=3,
+                            limit=SearchConfig.TIER3_LIMIT,
+                            words_matched=max(1, total_words // 2),
+                            total_words=total_words
+                        )
                 if partial_results:
                     logger.info(f"FTS TIER3 (OR): {len(partial_results)} resultados")
                     add_results(partial_results)

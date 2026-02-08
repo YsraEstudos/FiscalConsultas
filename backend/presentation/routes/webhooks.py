@@ -195,13 +195,18 @@ async def asaas_webhook(request: Request):
     if not _is_valid_asaas_webhook(request):
         raise HTTPException(status_code=401, detail="Invalid Asaas webhook token")
 
+    max_payload = max(1, int(settings.billing.asaas_max_payload_bytes))
     content_length = request.headers.get("content-length")
     if content_length and content_length.isdigit():
-        if int(content_length) > settings.billing.asaas_max_payload_bytes:
+        if int(content_length) > max_payload:
             raise HTTPException(status_code=413, detail="Payload too large")
 
+    raw_body = await request.body()
+    if len(raw_body) > max_payload:
+        raise HTTPException(status_code=413, detail="Payload too large")
+
     try:
-        payload = await request.json()
+        payload = json.loads(raw_body)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
     if not isinstance(payload, dict):
