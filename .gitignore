@@ -31,6 +31,8 @@ Thumbs.db
 # Logs and Test results
 *.log
 test_results*.txt
+.coverage
+coverage.xml
 
 # Environment Variables
 .env

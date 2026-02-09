@@ -1,5 +1,8 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
-from fastapi.responses import JSONResponse
+from starlette.responses import Response
+from collections import OrderedDict
+import gzip
+import threading
 from backend.services import NeshService
 from backend.server.dependencies import get_nesh_service
 from backend.config.constants import SearchConfig
@@ -7,6 +10,69 @@ from backend.config.exceptions import ValidationError
 from backend.data.glossary_manager import glossary_manager
 from backend.config.logging_config import server_logger as logger
 from backend.utils.cache import cache_scope_key, weak_etag
+from backend.utils.payload_cache_metrics import search_payload_cache_metrics
+
+import orjson as _orjson
+
+
+_CODE_PAYLOAD_CACHE_MAX = 16
+_code_payload_cache: OrderedDict[str, tuple[bytes, bytes]] = OrderedDict()
+_code_payload_cache_lock = threading.Lock()
+
+
+def _orjson_response(content: dict, headers: dict[str, str] | None = None) -> Response:
+    """Build a Response pre-serialized with orjson (5-10x faster than stdlib json)."""
+    body = _orjson.dumps(content)
+    resp = Response(content=body, media_type="application/json")
+    if headers:
+        resp.headers.update(headers)
+    return resp
+
+
+def _code_payload_cache_get(key: str) -> tuple[bytes, bytes] | None:
+    with _code_payload_cache_lock:
+        payload = _code_payload_cache.get(key)
+        if payload is None:
+            search_payload_cache_metrics.record_miss()
+            return None
+        _code_payload_cache.move_to_end(key)
+        search_payload_cache_metrics.record_hit()
+        return payload
+
+
+def _code_payload_cache_set(key: str, payload: tuple[bytes, bytes]) -> None:
+    with _code_payload_cache_lock:
+        _code_payload_cache[key] = payload
+        _code_payload_cache.move_to_end(key)
+        search_payload_cache_metrics.record_set()
+        if len(_code_payload_cache) > _CODE_PAYLOAD_CACHE_MAX:
+            _code_payload_cache.popitem(last=False)
+            search_payload_cache_metrics.record_eviction()
+
+
+def _accepts_gzip(request: Request) -> bool:
+    accept_encoding = (request.headers.get("Accept-Encoding") or "").lower()
+    return "gzip" in accept_encoding
+
+
+def get_payload_cache_metrics() -> dict[str, float | int]:
+    snapshot = search_payload_cache_metrics.snapshot(
+        current_size=len(_code_payload_cache),
+        max_size=_CODE_PAYLOAD_CACHE_MAX,
+    )
+    return {
+        "name": search_payload_cache_metrics.name,
+        "hits": snapshot.hits,
+        "misses": snapshot.misses,
+        "sets": snapshot.sets,
+        "evictions": snapshot.evictions,
+        "served_gzip": snapshot.served_gzip,
+        "served_identity": snapshot.served_identity,
+        "current_size": snapshot.current_size,
+        "max_size": snapshot.max_size,
+        "hit_rate": snapshot.hit_rate,
+    }
+
 
 router = APIRouter()
 
@@ -40,23 +106,51 @@ async def search(
         )
     
     safe_ncm = ncm.replace("\r", "\\r").replace("\n", "\\n")
-    logger.info("Busca: '%s'", safe_ncm)
+    logger.debug("Busca: '%s'", safe_ncm)
     
     # Service Layer (ASYNC) - Exceções propagam para o handler global
     response_data = await service.process_request(ncm)
     
-    # Presentation Layer (Separated View: Client-side rendering)
-    # Ensure 'resultados' alias exists for frontend compatibility
-    if response_data.get('type') == 'code':
-        response_data['resultados'] = response_data['results']
+    # NOTE: 'resultados' alias removed from backend response (v4.3).
+    # The duplication added ~862KB to every code response, doubling GZip cost.
+    # Frontend normalizes in api.ts: data.resultados = data.results (JS ref, zero cost).
     
-    # Performance: Add caching headers for catalog data (rarely changes)
-    response = JSONResponse(content=response_data)
+    # Performance: orjson serialization + caching headers (catalog data rarely changes)
     cache_key = cache_scope_key(request)
-    response.headers["Cache-Control"] = "private, max-age=3600, stale-while-revalidate=86400"
-    response.headers["ETag"] = weak_etag("nesh", cache_key, ncm)
-    response.headers["Vary"] = "Authorization, X-Tenant-Id"
-    return response
+    headers = {
+        "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",
+        "ETag": weak_etag("nesh", cache_key, ncm),
+        "Vary": "Authorization, X-Tenant-Id, Accept-Encoding",
+    }
+
+    # Hot path optimization:
+    # code lookups are frequently repeated with very large payloads (~860KB+).
+    # Cache both raw and gzip bodies to avoid serializing/compressing each request.
+    if response_data.get("type") == "code":
+        payload_key = f"{cache_key}:{ncm}"
+        cache_status = "MISS"
+        cached_payload = _code_payload_cache_get(payload_key)
+        if cached_payload is None:
+            raw_body = _orjson.dumps(response_data)
+            gzip_body = gzip.compress(raw_body, compresslevel=1, mtime=0)
+            cached_payload = (raw_body, gzip_body)
+            _code_payload_cache_set(payload_key, cached_payload)
+        else:
+            cache_status = "HIT"
+
+        raw_body, gzip_body = cached_payload
+        common_headers = {**headers, "X-Payload-Cache": cache_status}
+        if _accepts_gzip(request):
+            search_payload_cache_metrics.record_served(gzip=True)
+            return Response(
+                content=gzip_body,
+                media_type="application/json",
+                headers={**common_headers, "Content-Encoding": "gzip"},
+            )
+        search_payload_cache_metrics.record_served(gzip=False)
+        return Response(content=raw_body, media_type="application/json", headers=common_headers)
+
+    return _orjson_response(response_data, headers=headers)
 
 @router.get("/chapters")
 async def get_chapters(request: Request):

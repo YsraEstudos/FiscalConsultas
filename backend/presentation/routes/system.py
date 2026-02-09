@@ -134,6 +134,36 @@ async def get_status(request: Request):
     }
     return status
 
+
+@router.get("/cache-metrics")
+async def get_cache_metrics(request: Request):
+    """
+    Métricas de hit/miss dos payload caches de /api/search e /api/tipi/search.
+    Restrito a admins por conter dados operacionais internos.
+    """
+    if not _is_admin_request(request):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    from backend.presentation.routes import search as search_route
+    from backend.presentation.routes import tipi as tipi_route
+
+    nesh_internal = None
+    if hasattr(request.app.state, "service") and request.app.state.service:
+        nesh_internal = await request.app.state.service.get_internal_cache_metrics()
+
+    tipi_internal = None
+    if hasattr(request.app.state, "tipi_service") and request.app.state.tipi_service:
+        tipi_internal = await request.app.state.tipi_service.get_internal_cache_metrics()
+
+    return {
+        "status": "ok",
+        "search_code_payload_cache": search_route.get_payload_cache_metrics(),
+        "tipi_code_payload_cache": tipi_route.get_payload_cache_metrics(),
+        "nesh_internal_caches": nesh_internal,
+        "tipi_internal_caches": tipi_internal,
+    }
+
+
 @router.get("/debug/anchors")
 async def debug_anchors(
     request: Request,
