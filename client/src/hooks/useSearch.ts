@@ -33,7 +33,15 @@ export function useSearch(
 
     const updateResultsQuery = useCallback((results: SearchResponse, query: string): SearchResponse => {
         if (results.query === query) return results;
-        return { ...results, query };
+
+        const nextResults = { ...results, query } as SearchResponse;
+
+        // Preserve legacy alias when source came from non-enumerable getter.
+        if (isCodeSearchResponse(nextResults) && !(nextResults as any).resultados) {
+            (nextResults as any).resultados = (results as any).resultados ?? (results as any).results;
+        }
+
+        return nextResults;
     }, []);
 
     const executeSearchForTab = useCallback(async (tabId: string, doc: DocType, query: string, saveHistory: boolean = true) => {

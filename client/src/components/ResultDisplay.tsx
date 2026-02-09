@@ -139,6 +139,16 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     // Sidebar collapsed state for lateral layout
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), []);
+    const codeResults = useMemo(() => {
+        if (!data || data.type === 'text') return null;
+        if (data.resultados && typeof data.resultados === 'object') {
+            return data.resultados as Record<string, any>;
+        }
+        if (data.results && !Array.isArray(data.results) && typeof data.results === 'object') {
+            return data.results as Record<string, any>;
+        }
+        return null;
+    }, [data?.type, data?.resultados, data?.results]);
 
     const findAnchorIdForQuery = useCallback((resultados: any, query: string) => {
         if (!resultados || typeof resultados !== 'object') return null;
@@ -248,8 +258,8 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         }
 
         if (ncmToScroll) {
-            const posicaoAlvo = data?.resultados ? getPosicaoAlvoFromResultados(data.resultados) : null;
-            const anchorFromResultados = data?.resultados ? findAnchorIdForQuery(data.resultados, ncmToScroll) : null;
+            const posicaoAlvo = codeResults ? getPosicaoAlvoFromResultados(codeResults) : null;
+            const anchorFromResultados = codeResults ? findAnchorIdForQuery(codeResults, ncmToScroll) : null;
             const exactId = anchorFromResultados || (posicaoAlvo ? generateAnchorId(posicaoAlvo) : null) || generateAnchorId(ncmToScroll);
             const candidates = [exactId];
 
@@ -290,7 +300,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         } else {
             setTargetId(prev => prev ? null : prev);
         }
-    }, [data]);
+    }, [codeResults, data, findAnchorIdForQuery, getPosicaoAlvoFromResultados]);
 
     // Stabilize onConsumeNewSearch callback to prevent AutoScroll effect loop
     const onConsumeNewSearchRef = useRef(onConsumeNewSearch);
@@ -346,7 +356,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
         element.addEventListener('scroll', handleScroll, { passive: true });
         return () => element.removeEventListener('scroll', handleScroll);
-    }, [data?.type, data?.markdown, data?.resultados]);
+    }, [codeResults, data?.type, data?.markdown]);
 
     // Persist scroll when tab becomes inactive
     useEffect(() => {
@@ -380,7 +390,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             containerRef.current.scrollTop = targetScrollTop;
             latestScrollTopRef.current = targetScrollTop;
         });
-    }, [isActive, initialScrollTop, isNewSearch, data?.type, data?.markdown, data?.resultados]);
+    }, [codeResults, isActive, initialScrollTop, isNewSearch, data?.type, data?.markdown]);
 
 
 
@@ -430,18 +440,18 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         if (!containerRef.current) return;
 
         const rawMarkdown = typeof data?.markdown === 'string' ? data.markdown.trim() : '';
-        const isTipi = isTipiResults(data?.resultados || null);
+        const isTipi = isTipiResults(codeResults || null);
 
         // Determine markup to render with fallbacks
         let markupToRender = rawMarkdown;
 
         if (!markupToRender) {
-            if (isTipi && data?.resultados) {
+            if (isTipi && codeResults) {
                 // TIPI fallback rendering
-                markupToRender = renderTipiFallback(data.resultados);
-            } else if (data?.resultados) {
+                markupToRender = renderTipiFallback(codeResults);
+            } else if (codeResults) {
                 // NESH client-side rendering
-                markupToRender = NeshRenderer.renderFullResponse(data.resultados);
+                markupToRender = NeshRenderer.renderFullResponse(codeResults);
             }
         }
 
@@ -456,7 +466,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             // If it came from backend.markdown, it is Mixed (Markdown + HTML injections).
             // We should run marked() on backend content to process **bold** and # headers.
             const isPureHtml = isTipi || !rawMarkdown;
-            const isTrustedNeshHtml = !rawMarkdown && !isTipi && !!data?.resultados;
+            const isTrustedNeshHtml = !rawMarkdown && !isTipi && !!codeResults;
 
             let rawMarkup: string;
             if (lastMarkupRef.current === markupToRender && lastHtmlRef.current) {
@@ -477,7 +487,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             containerRef.current.innerText = "Error parsing content.";
             setIsContentReady(true);
         }
-    }, [data?.type, data?.markdown, data?.resultados, renderer]);
+    }, [codeResults, data?.type, data?.markdown, renderer]);
 
     // Ensure target anchor exists by using data-ncm as fallback
     useEffect(() => {
@@ -487,7 +497,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         const existing = targets.some(id => containerRef.current?.querySelector(`#${CSS.escape(id)}`));
         if (existing) return;
 
-        const posicaoAlvo = data?.resultados ? getPosicaoAlvoFromResultados(data.resultados) : null;
+        const posicaoAlvo = codeResults ? getPosicaoAlvoFromResultados(codeResults) : null;
         const candidateNcm = posicaoAlvo || (data?.ncm || data?.query || '');
         if (!candidateNcm) return;
 
@@ -504,13 +514,13 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             }
             setTargetId(id);
         }
-    }, [data?.ncm, data?.query, data?.resultados, getPosicaoAlvoFromResultados, isContentReady, targetId]);
+    }, [codeResults, data?.ncm, data?.query, getPosicaoAlvoFromResultados, isContentReady, targetId]);
 
     // Sync Sidebar to current visible anchor
     useEffect(() => {
-        if (!isActive || !isContentReady || !data?.resultados || !containerRef.current) return;
+        if (!isActive || !isContentReady || !codeResults || !containerRef.current) return;
 
-        const ids = getAnchorIdsFromResultados(data.resultados);
+        const ids = getAnchorIdsFromResultados(codeResults);
         if (ids.length === 0) return;
 
         const elements = ids
@@ -539,7 +549,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         elements.forEach(el => observer.observe(el));
 
         return () => observer.disconnect();
-    }, [data?.resultados, getAnchorIdsFromResultados, isActive, isContentReady]);
+    }, [codeResults, getAnchorIdsFromResultados, isActive, isContentReady]);
 
 
     if (!data) {
@@ -588,14 +598,14 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                 ref={containerRef}
                 id={containerId}
             >
-                {!data.markdown && !isTipiResults(data?.resultados || null) && <p>Sem resultados para exibir.</p>}
+                {!data.markdown && !isTipiResults(codeResults || null) && <p>Sem resultados para exibir.</p>}
             </div>
 
             {/* Sidebar Container - Coluna 2 */}
             {isContentReady && (
                 <div className={styles.sidebarContainer}>
                     <Sidebar
-                        results={data.resultados}
+                        results={codeResults}
                         onNavigate={handleNavigate}
                         isOpen={mobileMenuOpen}
                         onClose={onCloseMobileMenu}

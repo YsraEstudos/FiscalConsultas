@@ -187,10 +187,14 @@ def _seed_nesh_db(db_path: Path) -> None:
                 notas TEXT,
                 consideracoes TEXT,
                 definicoes TEXT,
+                parsed_notes_json TEXT,
                 tenant_id TEXT
             )
             """
         )
+        chapter_notes_columns = {row[1] for row in conn.execute("PRAGMA table_info(chapter_notes)").fetchall()}
+        if "parsed_notes_json" not in chapter_notes_columns:
+            conn.execute("ALTER TABLE chapter_notes ADD COLUMN parsed_notes_json TEXT")
 
         # Billing/multi-tenant tables used by webhook integration tests.
         conn.execute(
