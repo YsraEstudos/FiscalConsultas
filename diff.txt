@@ -1,0 +1,410 @@
+diff --git a/backend/infrastructure/database.py b/backend/infrastructure/database.py
+index dec852d..8a62c6c 100644
+--- a/backend/infrastructure/database.py
++++ b/backend/infrastructure/database.py
+@@ -126,6 +126,7 @@ class DatabaseAdapter:
+         # Cached SQL fragments for get_chapter_raw (rebuilt on schema change)
+         self._chapter_sql_cache: Optional[str] = None
+         self._chapter_sql_has_sections: Optional[bool] = None
++        self._chapter_sql_has_parsed_notes_json: Optional[bool] = None
+         logger.debug(f"DatabaseAdapter inicializado: {db_path}")
+ 
+     async def _ensure_pool(self):
+@@ -327,17 +328,19 @@ class DatabaseAdapter:
+             logger.error(f"Erro ao verificar DB: {e}")
+             return None
+ 
+-    def _build_chapter_sql(self, has_sections: bool) -> str:
++    def _build_chapter_sql(self, has_sections: bool, has_parsed_notes_json: bool) -> str:
+         """Build and cache chapter SQL query (avoids repeated string ops)."""
+-        if self._chapter_sql_cache is not None and self._chapter_sql_has_sections == has_sections:
++        if (
++            self._chapter_sql_cache is not None
++            and self._chapter_sql_has_sections == has_sections
++            and self._chapter_sql_has_parsed_notes_json == has_parsed_notes_json
++        ):
+             return self._chapter_sql_cache
+         section_select = ", ".join(f"cn.{col}" for col in CHAPTER_NOTES_SECTION_COLUMNS)
+         null_section_select = ", ".join(f"NULL AS {col}" for col in CHAPTER_NOTES_SECTION_COLUMNS)
+-        notes_select = (
+-            f"cn.notes_content, cn.parsed_notes_json, {section_select}"
+-            if has_sections
+-            else f"cn.notes_content, NULL AS parsed_notes_json, {null_section_select}"
+-        )
++        parsed_notes_select = "cn.parsed_notes_json" if has_parsed_notes_json else "NULL AS parsed_notes_json"
++        section_projection = section_select if has_sections else null_section_select
++        notes_select = f"cn.notes_content, {parsed_notes_select}, {section_projection}"
+         sql = f'''SELECT 
+                     c.chapter_num,
+                     c.content,
+@@ -347,6 +350,7 @@ class DatabaseAdapter:
+                 WHERE c.chapter_num = ?'''
+         self._chapter_sql_cache = sql
+         self._chapter_sql_has_sections = has_sections
++        self._chapter_sql_has_parsed_notes_json = has_parsed_notes_json
+         return sql
+ 
+     async def get_chapter_raw(self, chapter_num: str) -> Optional[Dict[str, Any]]:
+@@ -360,7 +364,8 @@ class DatabaseAdapter:
+             notes_cols = await self._get_chapter_notes_columns_cached(conn)
+             expected_sections = set(CHAPTER_NOTES_SECTION_COLUMNS)
+             has_sections = expected_sections.issubset(notes_cols)
+-            chapter_sql = self._build_chapter_sql(has_sections)
++            has_parsed_notes_json = "parsed_notes_json" in notes_cols
++            chapter_sql = self._build_chapter_sql(has_sections, has_parsed_notes_json)
+             cursor = await conn.execute(chapter_sql, (chapter_num,))
+ 
+             first_row = await cursor.fetchone()
+diff --git a/client/src/components/ResultDisplay.tsx b/client/src/components/ResultDisplay.tsx
+index dc14e37..38291b3 100644
+--- a/client/src/components/ResultDisplay.tsx
++++ b/client/src/components/ResultDisplay.tsx
+@@ -139,6 +139,16 @@ export const ResultDisplay = React.memo(function ResultDisplay({
+     // Sidebar collapsed state for lateral layout
+     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+     const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), []);
++    const codeResults = useMemo(() => {
++        if (!data || data.type === 'text') return null;
++        if (data.resultados && typeof data.resultados === 'object') {
++            return data.resultados as Record<string, any>;
++        }
++        if (data.results && !Array.isArray(data.results) && typeof data.results === 'object') {
++            return data.results as Record<string, any>;
++        }
++        return null;
++    }, [data?.type, data?.resultados, data?.results]);
+ 
+     const findAnchorIdForQuery = useCallback((resultados: any, query: string) => {
+         if (!resultados || typeof resultados !== 'object') return null;
+@@ -248,8 +258,8 @@ export const ResultDisplay = React.memo(function ResultDisplay({
+         }
+ 
+         if (ncmToScroll) {
+-            const posicaoAlvo = data?.resultados ? getPosicaoAlvoFromResultados(data.resultados) : null;
+-            const anchorFromResultados = data?.resultados ? findAnchorIdForQuery(data.resultados, ncmToScroll) : null;
++            const posicaoAlvo = codeResults ? getPosicaoAlvoFromResultados(codeResults) : null;
++            const anchorFromResultados = codeResults ? findAnchorIdForQuery(codeResults, ncmToScroll) : null;
+             const exactId = anchorFromResultados || (posicaoAlvo ? generateAnchorId(posicaoAlvo) : null) || generateAnchorId(ncmToScroll);
+             const candidates = [exactId];
+ 
+@@ -290,7 +300,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
+         } else {
+             setTargetId(prev => prev ? null : prev);
+         }
+-    }, [data]);
++    }, [codeResults, data, findAnchorIdForQuery, getPosicaoAlvoFromResultados]);
+ 
+     // Stabilize onConsumeNewSearch callback to prevent AutoScroll effect loop
+     const onConsumeNewSearchRef = useRef(onConsumeNewSearch);
+@@ -346,7 +356,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
+ 
+         element.addEventListener('scroll', handleScroll, { passive: true });
+         return () => element.removeEventListener('scroll', handleScroll);
+-    }, [data?.type, data?.markdown, data?.resultados]);
++    }, [codeResults, data?.type, data?.markdown]);
+ 
+     // Persist scroll when tab becomes inactive
+     useEffect(() => {
+@@ -380,7 +390,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
+             containerRef.current.scrollTop = targetScrollTop;
+             latestScrollTopRef.current = targetScrollTop;
+         });
+-    }, [isActive, initialScrollTop, isNewSearch, data?.type, data?.markdown, data?.resultados]);
++    }, [codeResults, isActive, initialScrollTop, isNewSearch, data?.type, data?.markdown]);
+ 
+ 
+ 
+@@ -430,18 +440,18 @@ export const ResultDisplay = React.memo(function ResultDisplay({
+         if (!containerRef.current) return;
+ 
+         const rawMarkdown = typeof data?.markdown === 'string' ? data.markdown.trim() : '';
+-        const isTipi = isTipiResults(data?.resultados || null);
++        const isTipi = isTipiResults(codeResults || null);
+ 
+         // Determine markup to render with fallbacks
+         let markupToRender = rawMarkdown;
+ 
+         if (!markupToRender) {
+-            if (isTipi && data?.resultados) {
++            if (isTipi && codeResults) {
+                 // TIPI fallback rendering
+-                markupToRender = renderTipiFallback(data.resultados);
+-            } else if (data?.resultados) {
++                markupToRender = renderTipiFallback(codeResults);
++            } else if (codeResults) {
+                 // NESH client-side rendering
+-                markupToRender = NeshRenderer.renderFullResponse(data.resultados);
++                markupToRender = NeshRenderer.renderFullResponse(codeResults);
+             }
+         }
+ 
+@@ -456,7 +466,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
+             // If it came from backend.markdown, it is Mixed (Markdown + HTML injections).
+             // We should run marked() on backend content to process **bold** and # headers.
+             const isPureHtml = isTipi || !rawMarkdown;
+-            const isTrustedNeshHtml = !rawMarkdown && !isTipi && !!data?.resultados;
++            const isTrustedNeshHtml = !rawMarkdown && !isTipi && !!codeResults;
+ 
+             let rawMarkup: string;
+             if (lastMarkupRef.current === markupToRender && lastHtmlRef.current) {
+@@ -477,7 +487,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
+             containerRef.current.innerText = "Error parsing content.";
+             setIsContentReady(true);
+         }
+-    }, [data?.type, data?.markdown, data?.resultados, renderer]);
++    }, [codeResults, data?.type, data?.markdown, renderer]);
+ 
+     // Ensure target anchor exists by using data-ncm as fallback
+     useEffect(() => {
+@@ -487,7 +497,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
+         const existing = targets.some(id => containerRef.current?.querySelector(`#${CSS.escape(id)}`));
+         if (existing) return;
+ 
+-        const posicaoAlvo = data?.resultados ? getPosicaoAlvoFromResultados(data.resultados) : null;
++        const posicaoAlvo = codeResults ? getPosicaoAlvoFromResultados(codeResults) : null;
+         const candidateNcm = posicaoAlvo || (data?.ncm || data?.query || '');
+         if (!candidateNcm) return;
+ 
+@@ -504,13 +514,13 @@ export const ResultDisplay = React.memo(function ResultDisplay({
+             }
+             setTargetId(id);
+         }
+-    }, [data?.ncm, data?.query, data?.resultados, getPosicaoAlvoFromResultados, isContentReady, targetId]);
++    }, [codeResults, data?.ncm, data?.query, getPosicaoAlvoFromResultados, isContentReady, targetId]);
+ 
+     // Sync Sidebar to current visible anchor
+     useEffect(() => {
+-        if (!isActive || !isContentReady || !data?.resultados || !containerRef.current) return;
++        if (!isActive || !isContentReady || !codeResults || !containerRef.current) return;
+ 
+-        const ids = getAnchorIdsFromResultados(data.resultados);
++        const ids = getAnchorIdsFromResultados(codeResults);
+         if (ids.length === 0) return;
+ 
+         const elements = ids
+@@ -539,7 +549,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
+         elements.forEach(el => observer.observe(el));
+ 
+         return () => observer.disconnect();
+-    }, [data?.resultados, getAnchorIdsFromResultados, isActive, isContentReady]);
++    }, [codeResults, getAnchorIdsFromResultados, isActive, isContentReady]);
+ 
+ 
+     if (!data) {
+@@ -588,14 +598,14 @@ export const ResultDisplay = React.memo(function ResultDisplay({
+                 ref={containerRef}
+                 id={containerId}
+             >
+-                {!data.markdown && !isTipiResults(data?.resultados || null) && <p>Sem resultados para exibir.</p>}
++                {!data.markdown && !isTipiResults(codeResults || null) && <p>Sem resultados para exibir.</p>}
+             </div>
+ 
+             {/* Sidebar Container - Coluna 2 */}
+             {isContentReady && (
+                 <div className={styles.sidebarContainer}>
+                     <Sidebar
+-                        results={data.resultados}
++                        results={codeResults}
+                         onNavigate={handleNavigate}
+                         isOpen={mobileMenuOpen}
+                         onClose={onCloseMobileMenu}
+diff --git a/client/src/hooks/useSearch.ts b/client/src/hooks/useSearch.ts
+index e661758..9b0d781 100644
+--- a/client/src/hooks/useSearch.ts
++++ b/client/src/hooks/useSearch.ts
+@@ -33,7 +33,15 @@ export function useSearch(
+ 
+     const updateResultsQuery = useCallback((results: SearchResponse, query: string): SearchResponse => {
+         if (results.query === query) return results;
+-        return { ...results, query };
++
++        const nextResults = { ...results, query } as SearchResponse;
++
++        // Preserve legacy alias when source came from non-enumerable getter.
++        if (isCodeSearchResponse(nextResults) && !(nextResults as any).resultados) {
++            (nextResults as any).resultados = (results as any).resultados ?? (results as any).results;
++        }
++
++        return nextResults;
+     }, []);
+ 
+     const executeSearchForTab = useCallback(async (tabId: string, doc: DocType, query: string, saveHistory: boolean = true) => {
+diff --git a/client/tests/unit/ResultDisplay.test.tsx b/client/tests/unit/ResultDisplay.test.tsx
+index 7816c28..53bf299 100644
+--- a/client/tests/unit/ResultDisplay.test.tsx
++++ b/client/tests/unit/ResultDisplay.test.tsx
+@@ -93,6 +93,47 @@ describe('ResultDisplay Component', () => {
+         });
+     });
+ 
++    it('renders code content from data.results when data.resultados is missing', async () => {
++        const mockData = {
++            type: 'code' as const,
++            query: '8422',
++            results: {
++                '84': {
++                    capitulo: '84',
++                    titulo: 'Capitulo 84',
++                    posicoes: [
++                        {
++                            codigo: '84.22',
++                            ncm: '8422',
++                            descricao: 'Maquina de lavar',
++                            anchor_id: 'pos-84-22',
++                            aliquota: '0'
++                        }
++                    ]
++                }
++            }
++        };
++
++        render(
++            <SettingsProvider>
++                <ResultDisplay
++                    data={mockData as any}
++                    mobileMenuOpen={false}
++                    onCloseMobileMenu={vi.fn()}
++                    isActive={true}
++                    tabId="tab-1"
++                    isNewSearch={false}
++                    onConsumeNewSearch={vi.fn()}
++                />
++            </SettingsProvider>
++        );
++
++        await waitFor(() => {
++            expect(screen.queryByText('Sem resultados para exibir.')).not.toBeInTheDocument();
++            expect(screen.getByText('Maquina de lavar')).toBeInTheDocument();
++        });
++    });
++
+     it('persists scroll position when tab becomes inactive', async () => {
+         const onPersistScroll = vi.fn();
+         const mockData = {
+diff --git a/client/tests/unit/useSearch.test.tsx b/client/tests/unit/useSearch.test.tsx
+index 4ac0c48..312b590 100644
+--- a/client/tests/unit/useSearch.test.tsx
++++ b/client/tests/unit/useSearch.test.tsx
+@@ -38,6 +38,28 @@ const createCodeResponse = (chapter: string, query: string): CodeSearchResponse
+     markdown: `<h3 id="pos-${chapter}-22">${chapter}.22</h3>`
+ });
+ 
++const createCodeResponseWithNonEnumerableAlias = (chapter: string, query: string): CodeSearchResponse => {
++    const response = {
++        success: true,
++        type: 'code',
++        query,
++        normalized: null,
++        results: { [chapter]: createChapterData(chapter) },
++        total_capitulos: 1,
++        markdown: `<h3 id="pos-${chapter}-22">${chapter}.22</h3>`
++    } as CodeSearchResponse;
++
++    Object.defineProperty(response, 'resultados', {
++        get() {
++            return this.results;
++        },
++        enumerable: false,
++        configurable: true
++    });
++
++    return response;
++};
++
+ describe('useSearch Hook', () => {
+     const searchNCMMock = vi.mocked(searchNCM);
+     const searchTipiMock = vi.mocked(searchTipi);
+@@ -143,4 +165,38 @@ describe('useSearch Hook', () => {
+             })
+         ]);
+     });
++
++    it('should preserve resultados alias when cloning code response with non-enumerable getter', async () => {
++        const updateTab = vi.fn();
++        const addToHistory = vi.fn();
++        const tabs: Tab[] = [
++            {
++                id: 'tab-1',
++                title: '8421',
++                document: 'nesh',
++                content: '<h3>84.21</h3>',
++                loading: false,
++                error: null,
++                ncm: '84.21',
++                results: createCodeResponseWithNonEnumerableAlias('84', '8421'),
++                loadedChaptersByDoc: { nesh: ['84'], tipi: [] }
++            }
++        ];
++        const tabsById = new Map(tabs.map(tab => [tab.id, tab]));
++
++        const { result } = renderHook(
++            () => useSearch(tabsById, updateTab, addToHistory),
++            { wrapper }
++        );
++
++        await act(async () => {
++            await result.current.executeSearchForTab('tab-1', 'nesh', '8422', true);
++        });
++
++        expect(updateTab).toHaveBeenCalledTimes(1);
++        const payload = updateTab.mock.calls[0][1] as { results: CodeSearchResponse };
++        expect(payload.results.query).toBe('8422');
++        expect(payload.results.resultados).toEqual(payload.results.results);
++        expect(Object.prototype.propertyIsEnumerable.call(payload.results, 'resultados')).toBe(true);
++    });
+ });
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 0dd1b7a..1311072 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -187,10 +187,14 @@ def _seed_nesh_db(db_path: Path) -> None:
+                 notas TEXT,
+                 consideracoes TEXT,
+                 definicoes TEXT,
++                parsed_notes_json TEXT,
+                 tenant_id TEXT
+             )
+             """
+         )
++        chapter_notes_columns = {row[1] for row in conn.execute("PRAGMA table_info(chapter_notes)").fetchall()}
++        if "parsed_notes_json" not in chapter_notes_columns:
++            conn.execute("ALTER TABLE chapter_notes ADD COLUMN parsed_notes_json TEXT")
+ 
+         # Billing/multi-tenant tables used by webhook integration tests.
+         conn.execute(
+diff --git a/tests/integration/test_search_route_contracts.py b/tests/integration/test_search_route_contracts.py
+index 80b32e3..37a76df 100644
+--- a/tests/integration/test_search_route_contracts.py
++++ b/tests/integration/test_search_route_contracts.py
+@@ -8,6 +8,11 @@ from backend.server.dependencies import get_nesh_service, get_tipi_service
+ pytestmark = pytest.mark.integration
+ 
+ 
++def _vary_tokens(response) -> set[str]:
++    vary = response.headers.get("Vary", "")
++    return {token.strip() for token in vary.split(",") if token.strip()}
++
++
+ class _FakeNeshServiceCode:
+     async def process_request(self, query: str):
+         return {
+@@ -81,7 +86,8 @@ def test_search_code_response_keeps_resultados_alias(client):
+     assert payload["total_capitulos"] == 1
+     assert response.headers["Cache-Control"].startswith("private")
+     assert "ETag" in response.headers
+-    assert response.headers["Vary"] == "Authorization, X-Tenant-Id"
++    vary_tokens = _vary_tokens(response)
++    assert {"Authorization", "X-Tenant-Id", "Accept-Encoding"}.issubset(vary_tokens)
+ 
+ 
+ def test_search_text_response_does_not_inject_resultados(client):
+@@ -107,7 +113,8 @@ def test_tipi_code_response_enforces_compatibility_fields(client):
+     assert payload["total_capitulos"] == 1
+     assert response.headers["Cache-Control"].startswith("private")
+     assert "ETag" in response.headers
+-    assert response.headers["Vary"] == "Authorization, X-Tenant-Id"
++    vary_tokens = _vary_tokens(response)
++    assert {"Authorization", "X-Tenant-Id", "Accept-Encoding"}.issubset(vary_tokens)
+ 
+ 
+ def test_tipi_text_response_sets_route_defaults(client):
