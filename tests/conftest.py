@@ -466,6 +466,11 @@ def ensure_test_databases():
     settings.database.filename = "database/nesh.db"
     settings.database.tipi_filename = "database/tipi.db"
 
+    # Disable Redis for unit/benchmark tests to avoid pool overhead in TestClient event loop.
+    # Redis warm-cache benchmarks use subprocess (test_bench_ncm_lookup_redis_warm_restart)
+    # which reads settings.json directly and is NOT affected by this override.
+    settings.cache.enable_redis = False
+
     try:
         from backend.infrastructure.db_engine import close_db
         asyncio.run(close_db())

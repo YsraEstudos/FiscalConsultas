@@ -191,6 +191,12 @@ export const searchNCM = async (query: string): Promise<any> => {
     const response = await api.get(`/search?ncm=${encodeURIComponent(query)}`);
     const data = response.data;
 
+    // Normalize: backend no longer sends 'resultados' (v4.3 — saves ~860KB per response).
+    // We add a JS reference so existing components (Sidebar, ResultDisplay) keep working.
+    if (data?.type === 'code' && data?.results) {
+        data.resultados = data.results; // JS ref copy, zero memory cost
+    }
+
     // Cache code search results (chapter data). Text search is not cached.
     if (data?.type === 'code' && data?.success) {
         setCache(cacheKey, data);
@@ -206,6 +212,11 @@ export const searchTipi = async (query: string, viewMode: 'chapter' | 'family' =
 
     const response = await api.get(`/tipi/search?ncm=${encodeURIComponent(query)}&view_mode=${viewMode}`);
     const data = response.data;
+
+    // Normalize: backend no longer sends 'resultados' (v4.3)
+    if (data?.type === 'code' && data?.results) {
+        data.resultados = data.results;
+    }
 
     // Cache code search results
     if (data?.type === 'code' && data?.success) {

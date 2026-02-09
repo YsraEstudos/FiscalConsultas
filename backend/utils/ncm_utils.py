@@ -100,8 +100,9 @@ def is_code_query(query: str) -> bool:
 
 def split_ncm_query(query: str) -> List[str]:
     """
-    Divide busca multi-NCM (separada por vírgula ou ponto-e-vírgula).
+    Divide busca multi-NCM (separada por vírgula, ponto-e-vírgula ou espaço).
     Ex: "8517, 8518" -> ["8517", "8518"]
+    Ex: "4903.90.00 8417" -> ["4903.90.00", "8417"]
     """
-    parts = [p.strip() for p in re.split(r"[;,]", (query or ""))]
+    parts = [p.strip() for p in re.split(r"[;,\s]+", (query or ""))]
     return [p for p in parts if p]

@@ -23,10 +23,11 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import aiosqlite
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.db_engine import get_session
-from backend.domain.sqlmodels import Chapter, Position, ChapterNotes, Glossary
+from backend.domain.sqlmodels import Chapter, Position, ChapterNotes, Glossary, TipiPosition
 from backend.config.settings import settings
 
 
@@ -62,20 +63,36 @@ async def migrate_positions(sqlite_path: str, pg_session: AsyncSession) -> int:
     count = 0
     async with aiosqlite.connect(sqlite_path) as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT codigo, descricao, chapter_num FROM positions") as cursor:
+        # Check if anchor_id exists
+        async with db.execute("PRAGMA table_info(positions)") as cursor:
+            columns = [row[1] async for row in cursor]
+        has_anchor = "anchor_id" in columns
+
+        query = "SELECT codigo, descricao, chapter_num" + (", anchor_id" if has_anchor else "") + " FROM positions"
+        batch = []
+        async with db.execute(query) as cursor:
             async for row in cursor:
-                position = Position(
-                    codigo=row["codigo"],
-                    descricao=row["descricao"],
-                    chapter_num=row["chapter_num"],
-                    tenant_id=None
+                batch.append(
+                    {
+                        "codigo": row["codigo"],
+                        "descricao": row["descricao"],
+                        "chapter_num": row["chapter_num"],
+                        "anchor_id": row["anchor_id"] if has_anchor else None,
+                        "tenant_id": None,
+                    }
                 )
-                pg_session.add(position)
                 count += 1
-                # Commit em batches para evitar memory issues
-                if count % 1000 == 0:
+                if len(batch) >= 1000:
+                    stmt = pg_insert(Position).values(batch)
+                    stmt = stmt.on_conflict_do_nothing(index_elements=["codigo"])
+                    await pg_session.execute(stmt)
                     await pg_session.commit()
-    await pg_session.commit()
+                    batch = []
+        if batch:
+            stmt = pg_insert(Position).values(batch)
+            stmt = stmt.on_conflict_do_nothing(index_elements=["codigo"])
+            await pg_session.execute(stmt)
+            await pg_session.commit()
     print(f"  ✅ {count} posições migradas")
     return count
 
@@ -86,10 +103,16 @@ async def migrate_chapter_notes(sqlite_path: str, pg_session: AsyncSession) -> i
     async with aiosqlite.connect(sqlite_path) as db:
         db.row_factory = aiosqlite.Row
         try:
-            async with db.execute("""
-                SELECT chapter_num, notes_content, titulo, notas, consideracoes, definicoes 
-                FROM chapter_notes
-            """) as cursor:
+            async with db.execute("PRAGMA table_info(chapter_notes)") as cursor:
+                columns = [row[1] async for row in cursor]
+            has_parsed = "parsed_notes_json" in columns
+
+            query = (
+                "SELECT chapter_num, notes_content, titulo, notas, consideracoes, definicoes" \
+                + (", parsed_notes_json" if has_parsed else "")
+                + " FROM chapter_notes"
+            )
+            async with db.execute(query) as cursor:
                 async for row in cursor:
                     notes = ChapterNotes(
                         chapter_num=row["chapter_num"],
@@ -98,6 +121,7 @@ async def migrate_chapter_notes(sqlite_path: str, pg_session: AsyncSession) -> i
                         notas=row["notas"],
                         consideracoes=row["consideracoes"],
                         definicoes=row["definicoes"],
+                        parsed_notes_json=row["parsed_notes_json"] if has_parsed else None,
                         tenant_id=None
                     )
                     pg_session.add(notes)
@@ -130,6 +154,47 @@ async def migrate_glossary(sqlite_path: str, pg_session: AsyncSession) -> int:
     return count
 
 
+async def migrate_tipi_positions(sqlite_path: str, pg_session: AsyncSession) -> int:
+    """Migra tabela TIPI do SQLite para PostgreSQL (catálogo global)."""
+    if not os.path.exists(sqlite_path):
+        print(f"  ⚠️ TIPI SQLite não encontrado: {sqlite_path} (pulando)")
+        return 0
+
+    count = 0
+    async with aiosqlite.connect(sqlite_path) as db:
+        db.row_factory = aiosqlite.Row
+        batch = []
+        async with db.execute(
+            "SELECT ncm, capitulo, descricao, aliquota, nivel, parent_ncm, ncm_sort FROM tipi_positions"
+        ) as cursor:
+            async for row in cursor:
+                batch.append(
+                    {
+                        "codigo": row["ncm"],
+                        "descricao": row["descricao"],
+                        "aliquota": row["aliquota"],
+                        "chapter_num": row["capitulo"],
+                        "nivel": row["nivel"],
+                        "parent_ncm": row["parent_ncm"],
+                        "ncm_sort": row["ncm_sort"],
+                    }
+                )
+                count += 1
+                if len(batch) >= 2000:
+                    stmt = pg_insert(TipiPosition).values(batch)
+                    stmt = stmt.on_conflict_do_nothing(index_elements=["codigo"])
+                    await pg_session.execute(stmt)
+                    await pg_session.commit()
+                    batch = []
+        if batch:
+            stmt = pg_insert(TipiPosition).values(batch)
+            stmt = stmt.on_conflict_do_nothing(index_elements=["codigo"])
+            await pg_session.execute(stmt)
+            await pg_session.commit()
+    print(f"  ✅ {count} posições TIPI migradas")
+    return count
+
+
 async def update_search_vectors(pg_session: AsyncSession):
     """
     Força atualização dos search_vectors em registros existentes.
@@ -146,6 +211,11 @@ async def update_search_vectors(pg_session: AsyncSession):
     
     await pg_session.execute(text("""
         UPDATE positions 
+        SET search_vector = to_tsvector('portuguese', COALESCE(descricao, ''))
+    """))
+
+    await pg_session.execute(text("""
+        UPDATE tipi_positions
         SET search_vector = to_tsvector('portuguese', COALESCE(descricao, ''))
     """))
     
@@ -185,6 +255,7 @@ async def main():
         await migrate_positions(settings.database.path, session)
         await migrate_chapter_notes(settings.database.path, session)
         await migrate_glossary(settings.database.path, session)
+        await migrate_tipi_positions(settings.database.tipi_path, session)
         
         # Atualizar search_vectors
         await update_search_vectors(session)

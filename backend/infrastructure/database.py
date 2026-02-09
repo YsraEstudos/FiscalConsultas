@@ -123,6 +123,9 @@ class DatabaseAdapter:
         self._chapter_notes_last_check_ts = 0.0
         self.pool_size = pool_size
         self.pool = None
+        # Cached SQL fragments for get_chapter_raw (rebuilt on schema change)
+        self._chapter_sql_cache: Optional[str] = None
+        self._chapter_sql_has_sections: Optional[bool] = None
         logger.debug(f"DatabaseAdapter inicializado: {db_path}")
 
     async def _ensure_pool(self):
@@ -324,6 +327,28 @@ class DatabaseAdapter:
             logger.error(f"Erro ao verificar DB: {e}")
             return None
 
+    def _build_chapter_sql(self, has_sections: bool) -> str:
+        """Build and cache chapter SQL query (avoids repeated string ops)."""
+        if self._chapter_sql_cache is not None and self._chapter_sql_has_sections == has_sections:
+            return self._chapter_sql_cache
+        section_select = ", ".join(f"cn.{col}" for col in CHAPTER_NOTES_SECTION_COLUMNS)
+        null_section_select = ", ".join(f"NULL AS {col}" for col in CHAPTER_NOTES_SECTION_COLUMNS)
+        notes_select = (
+            f"cn.notes_content, cn.parsed_notes_json, {section_select}"
+            if has_sections
+            else f"cn.notes_content, NULL AS parsed_notes_json, {null_section_select}"
+        )
+        sql = f'''SELECT 
+                    c.chapter_num,
+                    c.content,
+                    {notes_select}
+                FROM chapters c
+                LEFT JOIN chapter_notes cn ON c.chapter_num = cn.chapter_num
+                WHERE c.chapter_num = ?'''
+        self._chapter_sql_cache = sql
+        self._chapter_sql_has_sections = has_sections
+        return sql
+
     async def get_chapter_raw(self, chapter_num: str) -> Optional[Dict[str, Any]]:
         """
         Busca dados brutos de um capítulo (Async).
@@ -335,43 +360,29 @@ class DatabaseAdapter:
             notes_cols = await self._get_chapter_notes_columns_cached(conn)
             expected_sections = set(CHAPTER_NOTES_SECTION_COLUMNS)
             has_sections = expected_sections.issubset(notes_cols)
-            section_select = ", ".join(f"cn.{col}" for col in CHAPTER_NOTES_SECTION_COLUMNS)
-            null_section_select = ", ".join(f"NULL AS {col}" for col in CHAPTER_NOTES_SECTION_COLUMNS)
-            notes_select = (
-                f"cn.notes_content, {section_select}"
-                if has_sections
-                else f"cn.notes_content, {null_section_select}"
-            )
-            cursor = await conn.execute('''
-                SELECT 
-                    c.chapter_num,
-                    c.content,
-                    {notes_select},
-                    p.codigo,
-                    p.descricao
-                FROM chapters c
-                LEFT JOIN chapter_notes cn ON c.chapter_num = cn.chapter_num
-                LEFT JOIN positions p ON c.chapter_num = p.chapter_num
-                WHERE c.chapter_num = ?
-                ORDER BY p.codigo
-            '''.format(notes_select=notes_select), (chapter_num,))
-            
-            rows = await cursor.fetchall()
-            if not rows:
+            chapter_sql = self._build_chapter_sql(has_sections)
+            cursor = await conn.execute(chapter_sql, (chapter_num,))
+
+            first_row = await cursor.fetchone()
+            if not first_row:
                 logger.debug(f"Capítulo {chapter_num} não encontrado")
                 return None
-            
-            first_row = rows[0]
-            positions = []
-            
-            for r in rows:
-                if r['codigo'] is not None:
-                    positions.append({
-                        'codigo': r['codigo'],
-                        'descricao': r['descricao']
-                    })
-            
-            logger.debug(f"Capítulo {chapter_num}: {len(positions)} posições (1 query)")
+
+            cursor = await conn.execute('''
+                SELECT codigo, descricao, anchor_id
+                FROM positions
+                WHERE chapter_num = ?
+                ORDER BY codigo
+            ''', (chapter_num,))
+            pos_rows = await cursor.fetchall()
+
+            positions = [
+                {'codigo': r['codigo'], 'descricao': r['descricao'], 'anchor_id': r['anchor_id']}
+                for r in pos_rows
+                if r['codigo'] is not None
+            ]
+
+            logger.debug(f"Capítulo {chapter_num}: {len(positions)} posições (2 queries)")
             sections = {col: first_row[col] for col in CHAPTER_NOTES_SECTION_COLUMNS}
             if not self._has_section_content(sections):
                 sections = None
@@ -381,6 +392,7 @@ class DatabaseAdapter:
                 'content': first_row['content'],
                 'positions': positions,
                 'notes': first_row['notes_content'],
+                'parsed_notes_json': first_row['parsed_notes_json'],
                 'sections': sections
             }
 
