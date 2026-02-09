@@ -112,10 +112,12 @@ async def tipi_search(
     if tipi_service.is_code_query(ncm):
         result = await tipi_service.search_by_code(ncm, view_mode=view_mode.value)
 
-        # Normalizar: manter apenas 'results' como chave canônica (v4.3)
-        result['results'] = result.get('results') or result.get('resultados') or {}
-        result.pop('resultados', None)
-        result['total_capitulos'] = result.get('total_capitulos') or len(result['results'])
+        # Compatibilidade de contrato:
+        # manter 'results' como canônica e preservar alias legado 'resultados'.
+        results = result.get("results") or result.get("resultados") or {}
+        result["results"] = results
+        result["resultados"] = results
+        result["total_capitulos"] = result.get("total_capitulos") or len(results)
     else:
         result = await tipi_service.search_text(ncm)
         result.setdefault('normalized', result.get('query', ''))
