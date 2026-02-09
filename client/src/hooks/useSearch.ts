@@ -29,7 +29,7 @@ export function useSearch(
         tabId: string,
         updates: Partial<Pick<
             Tab,
-            'ncm' | 'title' | 'results' | 'loading' | 'error' | 'isNewSearch' | 'loadedChaptersByDoc' | 'content'
+            'ncm' | 'title' | 'results' | 'loading' | 'error' | 'isNewSearch' | 'loadedChaptersByDoc' | 'content' | 'isContentReady'
         >>
     ) => {
         updateTab(tabId, updates);
@@ -67,7 +67,13 @@ export function useSearch(
         }
 
         // Fluxo normal: buscar novos dados
-        updateTabSearchState(tabId, { loading: true, error: null, ncm: query, title: query });
+        updateTabSearchState(tabId, {
+            loading: true,
+            error: null,
+            ncm: query,
+            title: query,
+            isContentReady: false
+        });
 
         try {
             const data = doc === 'nesh'
@@ -87,6 +93,7 @@ export function useSearch(
                 content: data.markdown || data.resultados || '',
                 loading: false,
                 isNewSearch: true,
+                isContentReady: false,
                 // Atualiza capitulos carregados apenas do documento atual
                 loadedChaptersByDoc: {
                     ...loadedChaptersByDoc,

@@ -71,6 +71,13 @@ class FeatureSettings(BaseModel):
     enable_ai: bool = False
     debug_mode: bool = False
 
+
+class CacheSettings(BaseModel):
+    enable_redis: bool = False
+    redis_url: str = "redis://localhost:6379/0"
+    chapter_cache_ttl: int = 3600
+    fts_cache_ttl: int = 600
+
 class AuthSettings(BaseModel):
     # Valores devem vir de env/JSON. Evita credenciais hardcoded.
     admin_password: str = ""
@@ -104,6 +111,7 @@ class AppSettings(BaseSettings):
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     search: SearchSettings = Field(default_factory=SearchSettings)
     features: FeatureSettings = Field(default_factory=FeatureSettings)
+    cache: CacheSettings = Field(default_factory=CacheSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
     billing: BillingSettings = Field(default_factory=BillingSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)

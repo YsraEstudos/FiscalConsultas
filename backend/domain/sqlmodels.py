@@ -123,6 +123,7 @@ class Position(PositionBase, table=True):
     codigo: str = Field(primary_key=True, max_length=20)
     chapter_num: str = Field(foreign_key="chapters.chapter_num", max_length=10)
     tenant_id: Optional[str] = Field(default=None, foreign_key="tenants.id", index=True)
+    anchor_id: Optional[str] = Field(default=None, max_length=40, description="Precomputed HTML anchor id")
     
     search_vector: Optional[str] = Field(
         default=None,
@@ -144,6 +145,7 @@ class ChapterNotes(SQLModel, table=True):
     notas: Optional[str] = Field(default=None, sa_column=Column(Text))
     consideracoes: Optional[str] = Field(default=None, sa_column=Column(Text))
     definicoes: Optional[str] = Field(default=None, sa_column=Column(Text))
+    parsed_notes_json: Optional[str] = Field(default=None, sa_column=Column(Text), description="Precomputed parsed notes as JSON")
     
     chapter: Optional[Chapter] = Relationship(back_populates="notes")
 
@@ -167,6 +169,9 @@ class TipiPosition(SQLModel, table=True):
     descricao: str = Field(sa_column=Column(Text))
     aliquota: Optional[str] = Field(default=None, max_length=20)
     chapter_num: str = Field(max_length=10)
+    nivel: Optional[int] = Field(default=None)
+    parent_ncm: Optional[str] = Field(default=None, max_length=20)
+    ncm_sort: Optional[str] = Field(default=None, max_length=32)
     
     search_vector: Optional[str] = Field(
         default=None,

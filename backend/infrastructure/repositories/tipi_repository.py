@@ -54,10 +54,11 @@ class TipiRepository:
         Returns:
             Lista de dicts com ncm, descricao, aliquota, nivel
         """
+        order_primary = TipiPosition.ncm_sort if hasattr(TipiPosition, "ncm_sort") else TipiPosition.codigo
         stmt = (
             select(TipiPosition)
             .where(TipiPosition.chapter_num == chapter_num)
-            .order_by(TipiPosition.codigo)
+            .order_by(order_primary, TipiPosition.codigo)
         )
         result = await self.session.execute(stmt)
         positions = result.scalars().all()
@@ -69,6 +70,8 @@ class TipiRepository:
                 'capitulo': p.chapter_num,
                 'descricao': p.descricao,
                 'aliquota': p.aliquota or '0',
+                'nivel': p.nivel or 0,
+                'parent_ncm': p.parent_ncm,
                 'anchor_id': generate_anchor_id(p.codigo)
             }
             for p in positions
@@ -99,10 +102,10 @@ class TipiRepository:
             
             where_clause = " OR ".join(conditions)
             stmt = text(f"""
-                SELECT codigo, chapter_num, descricao, aliquota
+                SELECT codigo, chapter_num, descricao, aliquota, nivel, parent_ncm, ncm_sort
                 FROM tipi_positions
                 WHERE chapter_num = :chapter_num AND ({where_clause})
-                ORDER BY codigo
+                ORDER BY ncm_sort, codigo
             """)
         else:
             # SQLite: mesma lógica
@@ -115,10 +118,10 @@ class TipiRepository:
             
             where_clause = " OR ".join(conditions)
             stmt = text(f"""
-                SELECT ncm as codigo, capitulo as chapter_num, descricao, aliquota
+                SELECT ncm as codigo, capitulo as chapter_num, descricao, aliquota, nivel, parent_ncm, ncm_sort
                 FROM tipi_positions
                 WHERE capitulo = ? AND ({where_clause})
-                ORDER BY ncm
+                ORDER BY ncm_sort, ncm
             """)
             params = tuple(params_list)
         
@@ -131,6 +134,8 @@ class TipiRepository:
                 'capitulo': row.chapter_num,
                 'descricao': row.descricao,
                 'aliquota': row.aliquota or '0',
+                'nivel': getattr(row, 'nivel', 0) or 0,
+                'parent_ncm': getattr(row, 'parent_ncm', None),
                 'anchor_id': generate_anchor_id(row.codigo)
             }
             for row in result
