@@ -53,6 +53,18 @@ export const api = axios.create({
  * mas o getToken() vem do hook useAuth que só existe dentro de componentes React.
  */
 let clerkGetToken: (() => Promise<string | null>) | null = null;
+const PUBLIC_ROUTES = ['/status', '/glossary'];
+
+function getRequestPath(url?: string): string {
+    if (!url) return '';
+    if (!/^https?:\/\//i.test(url)) return url;
+
+    try {
+        return new URL(url).pathname;
+    } catch {
+        return url;
+    }
+}
 
 /**
  * Registra a função getToken do Clerk para uso no interceptor.
@@ -72,8 +84,12 @@ export function unregisterClerkTokenGetter() {
 // Request interceptor para adicionar o token JWT
 api.interceptors.request.use(
     async (config: InternalAxiosRequestConfig) => {
+        const path = getRequestPath(config.url);
+        const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+        const isPublicRoute = PUBLIC_ROUTES.some(route => normalizedPath.startsWith(route));
+
         // Se temos um getter de token registrado, busca o token
-        if (clerkGetToken) {
+        if (clerkGetToken && !isPublicRoute) {
             try {
                 const token = await clerkGetToken();
                 if (token) {
@@ -112,36 +128,118 @@ api.interceptors.response.use(
 // PERFORMANCE: In-memory + localStorage cache for chapter data
 // ============================================================
 const CACHE_PREFIX = 'nesh_cache_';
+const CACHE_INDEX_KEY = 'nesh_cache_index_v1';
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 const CACHE_MAX_ENTRIES = 30;
+const CACHE_EVICT_BATCH_SIZE = 10;
+const MEMORY_CACHE_MAX = 50;
 
 interface CacheEntry<T> {
     data: T;
     timestamp: number;
 }
 
+interface CacheIndex {
+    [key: string]: number;
+}
+
 // In-memory cache (fastest - survives within session)
 const memoryCache = new Map<string, CacheEntry<any>>();
+const inFlightRequests = new Map<string, Promise<any>>();
+
+function getCacheIndex(): CacheIndex {
+    try {
+        const raw = localStorage.getItem(CACHE_INDEX_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return {};
+        return parsed as CacheIndex;
+    } catch {
+        return {};
+    }
+}
+
+function saveCacheIndex(index: CacheIndex): void {
+    try {
+        localStorage.setItem(CACHE_INDEX_KEY, JSON.stringify(index));
+    } catch {
+        // Ignore storage errors
+    }
+}
+
+function removeLocalStorageCacheEntry(key: string, index?: CacheIndex): void {
+    localStorage.removeItem(CACHE_PREFIX + key);
+    if (index) delete index[key];
+}
+
+function setMemoryCacheEntry<T>(key: string, entry: CacheEntry<T>): void {
+    if (memoryCache.has(key)) {
+        memoryCache.delete(key);
+    } else if (memoryCache.size >= MEMORY_CACHE_MAX) {
+        const oldestKey = memoryCache.keys().next().value as string | undefined;
+        if (oldestKey !== undefined) {
+            memoryCache.delete(oldestKey);
+        }
+    }
+
+    memoryCache.set(key, entry);
+}
+
+function normalizeCodeResponseAliases<T>(data: T): T {
+    if (!data || typeof data !== 'object') return data;
+
+    const candidate = data as {
+        type?: string;
+        results?: unknown;
+        resultados?: unknown;
+    };
+
+    if (candidate.type !== 'code' || !candidate.results || candidate.resultados) {
+        return data;
+    }
+
+    Object.defineProperty(candidate, 'resultados', {
+        get() {
+            return this.results;
+        },
+        enumerable: false,
+        configurable: true
+    });
+
+    return data;
+}
 
 function getCached<T>(key: string): T | null {
     // 1. Check memory cache first (fastest)
     const memEntry = memoryCache.get(key);
     if (memEntry && Date.now() - memEntry.timestamp < CACHE_TTL_MS) {
-        return memEntry.data;
+        // Refresh insertion order (simple LRU behavior)
+        memoryCache.delete(key);
+        memoryCache.set(key, memEntry);
+        return normalizeCodeResponseAliases(memEntry.data);
     }
     if (memEntry) memoryCache.delete(key);
 
     // 2. Check localStorage (survives page reloads)
     try {
+        const index = getCacheIndex();
         const raw = localStorage.getItem(CACHE_PREFIX + key);
         if (raw) {
             const entry: CacheEntry<T> = JSON.parse(raw);
             if (Date.now() - entry.timestamp < CACHE_TTL_MS) {
                 // Promote to memory cache
-                memoryCache.set(key, entry);
-                return entry.data;
+                setMemoryCacheEntry(key, entry);
+                if (index[key] !== entry.timestamp) {
+                    index[key] = entry.timestamp;
+                    saveCacheIndex(index);
+                }
+                return normalizeCodeResponseAliases(entry.data);
             }
-            localStorage.removeItem(CACHE_PREFIX + key);
+            removeLocalStorageCacheEntry(key, index);
+            saveCacheIndex(index);
+        } else if (index[key]) {
+            delete index[key];
+            saveCacheIndex(index);
         }
     } catch {
         // localStorage unavailable or corrupt - ignore
@@ -150,36 +248,54 @@ function getCached<T>(key: string): T | null {
 }
 
 function setCache<T>(key: string, data: T): void {
-    const entry: CacheEntry<T> = { data, timestamp: Date.now() };
+    const normalizedData = normalizeCodeResponseAliases(data);
+    const entry: CacheEntry<T> = { data: normalizedData, timestamp: Date.now() };
 
     // Memory cache
-    memoryCache.set(key, entry);
+    setMemoryCacheEntry(key, entry);
 
     // localStorage (with eviction)
     try {
-        // Evict old entries if too many
-        const keys: string[] = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const k = localStorage.key(i);
-            if (k?.startsWith(CACHE_PREFIX)) keys.push(k);
-        }
-        if (keys.length >= CACHE_MAX_ENTRIES) {
-            // Remove oldest entries
-            const entries = keys.map(k => {
-                try {
-                    const v = JSON.parse(localStorage.getItem(k) || '{}');
-                    return { key: k, ts: v.timestamp || 0 };
-                } catch { return { key: k, ts: 0 }; }
-            });
-            entries.sort((a, b) => a.ts - b.ts);
-            for (let i = 0; i < Math.min(10, entries.length); i++) {
-                localStorage.removeItem(entries[i].key);
+        const index = getCacheIndex();
+
+        // Cleanup stale index entries without parsing full payloads
+        for (const indexedKey of Object.keys(index)) {
+            if (!localStorage.getItem(CACHE_PREFIX + indexedKey)) {
+                delete index[indexedKey];
             }
         }
+
+        const isNewKey = !Object.prototype.hasOwnProperty.call(index, key);
+        if (isNewKey && Object.keys(index).length >= CACHE_MAX_ENTRIES) {
+            const oldestKeys = Object.keys(index)
+                .sort((a, b) => index[a] - index[b])
+                .slice(0, CACHE_EVICT_BATCH_SIZE);
+
+            for (const oldestKey of oldestKeys) {
+                removeLocalStorageCacheEntry(oldestKey, index);
+            }
+        }
+
+        index[key] = entry.timestamp;
         localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(entry));
+        saveCacheIndex(index);
     } catch {
         // localStorage full or unavailable - memory cache still works
     }
+}
+
+function withInFlightDedup<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    const existing = inFlightRequests.get(key);
+    if (existing) {
+        return existing as Promise<T>;
+    }
+
+    const request = factory().finally(() => {
+        inFlightRequests.delete(key);
+    });
+
+    inFlightRequests.set(key, request as Promise<any>);
+    return request;
 }
 
 export const searchNCM = async (query: string): Promise<any> => {
@@ -188,20 +304,16 @@ export const searchNCM = async (query: string): Promise<any> => {
     const cached = getCached<any>(cacheKey);
     if (cached) return cached;
 
-    const response = await api.get(`/search?ncm=${encodeURIComponent(query)}`);
-    const data = response.data;
+    return withInFlightDedup(`ncm:${query}`, async () => {
+        const response = await api.get(`/search?ncm=${encodeURIComponent(query)}`);
+        const data = normalizeCodeResponseAliases(response.data);
 
-    // Normalize: backend no longer sends 'resultados' (v4.3 — saves ~860KB per response).
-    // We add a JS reference so existing components (Sidebar, ResultDisplay) keep working.
-    if (data?.type === 'code' && data?.results) {
-        data.resultados = data.results; // JS ref copy, zero memory cost
-    }
-
-    // Cache code search results (chapter data). Text search is not cached.
-    if (data?.type === 'code' && data?.success) {
-        setCache(cacheKey, data);
-    }
-    return data;
+        // Cache code search results (chapter data). Text search is not cached.
+        if (data?.type === 'code' && data?.success) {
+            setCache(cacheKey, data);
+        }
+        return data;
+    });
 };
 
 export const searchTipi = async (query: string, viewMode: 'chapter' | 'family' = 'family'): Promise<any> => {
@@ -210,19 +322,16 @@ export const searchTipi = async (query: string, viewMode: 'chapter' | 'family' =
     const cached = getCached<any>(cacheKey);
     if (cached) return cached;
 
-    const response = await api.get(`/tipi/search?ncm=${encodeURIComponent(query)}&view_mode=${viewMode}`);
-    const data = response.data;
+    return withInFlightDedup(`tipi:${query}:${viewMode}`, async () => {
+        const response = await api.get(`/tipi/search?ncm=${encodeURIComponent(query)}&view_mode=${viewMode}`);
+        const data = normalizeCodeResponseAliases(response.data);
 
-    // Normalize: backend no longer sends 'resultados' (v4.3)
-    if (data?.type === 'code' && data?.results) {
-        data.resultados = data.results;
-    }
-
-    // Cache code search results
-    if (data?.type === 'code' && data?.success) {
-        setCache(cacheKey, data);
-    }
-    return data;
+        // Cache code search results
+        if (data?.type === 'code' && data?.success) {
+            setCache(cacheKey, data);
+        }
+        return data;
+    });
 };
 
 export const getGlossaryTerm = async (term: string): Promise<any> => {

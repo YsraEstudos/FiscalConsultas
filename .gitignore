@@ -38,3 +38,16 @@ coverage.xml
 .env
 .env.local
 
+
+# Backups
+*.bak
+
+# Benchmarks
+benchmark_results.txt
+test_output.txt
+
+# Scripts
+verify_redis.py
+scripts/god_module_guardrail.py
+Scripts results/consolidated_code.txt
+Scripts results/ncm_loading_flow.txt
