@@ -9,8 +9,7 @@ import styles from './ResultDisplay.module.css';
 import { debug } from '../utils/debug';
 import { NeshRenderer } from '../utils/NeshRenderer';
 import { useSettings } from '../context/SettingsContext';
-
-const Sidebar = React.lazy(() => import('./Sidebar').then(module => ({ default: module.Sidebar })));
+import { Sidebar } from './Sidebar';
 
 const sanitizeHtml = (html: string) => DOMPurify.sanitize(html, {
     ALLOW_DATA_ATTR: true,
@@ -133,7 +132,6 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     const [isContentReady, setIsContentReady] = useState(false);
     const [activeAnchorId, setActiveAnchorId] = useState<string | null>(null);
     const containerId = `results-content-${tabId}`;
-    const renderTaskRef = useRef<number | null>(null);
     const lastMarkupRef = useRef<string | null>(null);
     const lastHtmlRef = useRef<string | null>(null);
     const onContentReadyRef = useRef(onContentReady);
@@ -453,59 +451,32 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             return;
         }
 
-        if (renderTaskRef.current !== null) {
-            if ('cancelIdleCallback' in window) {
-                window.cancelIdleCallback(renderTaskRef.current);
+        try {
+            // If we generated fallback markup (TIPI), it is pure HTML.
+            // If it came from backend.markdown, it is Mixed (Markdown + HTML injections).
+            // We should run marked() on backend content to process **bold** and # headers.
+            const isPureHtml = isTipi || !rawMarkdown;
+            const isTrustedNeshHtml = !rawMarkdown && !isTipi && !!data?.resultados;
+
+            let rawMarkup: string;
+            if (lastMarkupRef.current === markupToRender && lastHtmlRef.current) {
+                rawMarkup = lastHtmlRef.current;
             } else {
-                clearTimeout(renderTaskRef.current);
+                // @ts-ignore - marked types might mismatch slightly depending on version
+                rawMarkup = isPureHtml ? markupToRender : (marked.parse(markupToRender, { renderer }) as string);
+                lastMarkupRef.current = markupToRender;
+                lastHtmlRef.current = rawMarkup;
             }
-            renderTaskRef.current = null;
+
+            containerRef.current.innerHTML = isTrustedNeshHtml
+                ? rawMarkup
+                : sanitizeHtml(rawMarkup);
+            setIsContentReady(true); // Content injected, now safe to show sidebar
+        } catch (e) {
+            console.error("Markdown parse error:", e);
+            containerRef.current.innerText = "Error parsing content.";
+            setIsContentReady(true);
         }
-
-        const renderContent = () => {
-            if (!containerRef.current) return;
-            try {
-                // If we generated fallback markup (TIPI), it is pure HTML. 
-                // If it came from backend.markdown, it is Mixed (Markdown + HTML injections).
-                // We should run marked() on backend content to process the **bold** and # headers.
-                const isPureHtml = isTipi || !rawMarkdown;
-
-                let rawMarkup: string;
-                if (lastMarkupRef.current === markupToRender && lastHtmlRef.current) {
-                    rawMarkup = lastHtmlRef.current;
-                } else {
-                    // @ts-ignore - marked types might mismatch slightly depending on version
-                    rawMarkup = isPureHtml ? markupToRender : (marked.parse(markupToRender, { renderer }) as string);
-                    lastMarkupRef.current = markupToRender;
-                    lastHtmlRef.current = rawMarkup;
-                }
-
-                containerRef.current.innerHTML = sanitizeHtml(rawMarkup);
-                setIsContentReady(true); // Content injected, now safe to show sidebar
-            } catch (e) {
-                console.error("Markdown parse error:", e);
-                containerRef.current.innerText = "Error parsing content.";
-                setIsContentReady(true);
-            }
-        };
-
-        // Schedule parsing in idle time to keep UI responsive on large markdown
-        if ('requestIdleCallback' in window) {
-            renderTaskRef.current = window.requestIdleCallback(renderContent, { timeout: 600 });
-        } else {
-            renderTaskRef.current = window.setTimeout(renderContent, 0);
-        }
-
-        return () => {
-            if (renderTaskRef.current !== null) {
-                if ('cancelIdleCallback' in window) {
-                    window.cancelIdleCallback(renderTaskRef.current);
-                } else {
-                    clearTimeout(renderTaskRef.current);
-                }
-                renderTaskRef.current = null;
-            }
-        };
     }, [data?.type, data?.markdown, data?.resultados, renderer]);
 
     // Ensure target anchor exists by using data-ncm as fallback
@@ -623,16 +594,14 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             {/* Sidebar Container - Coluna 2 */}
             {isContentReady && (
                 <div className={styles.sidebarContainer}>
-                    <React.Suspense fallback={<div className={styles.sidebarSkeleton} />}>
-                        <Sidebar
-                            results={data.resultados}
-                            onNavigate={handleNavigate}
-                            isOpen={mobileMenuOpen}
-                            onClose={onCloseMobileMenu}
-                            searchQuery={data.query || data.ncm}
-                            activeAnchorId={activeAnchorId}
-                        />
-                    </React.Suspense>
+                    <Sidebar
+                        results={data.resultados}
+                        onNavigate={handleNavigate}
+                        isOpen={mobileMenuOpen}
+                        onClose={onCloseMobileMenu}
+                        searchQuery={data.query || data.ncm}
+                        activeAnchorId={activeAnchorId}
+                    />
                 </div>
             )}
         </div>

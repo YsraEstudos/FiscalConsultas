@@ -616,7 +616,7 @@ class HtmlRenderer:
         # and require the line to be a heading (has dash/colon separator).
         # ---------------------------------------------------------------------------
         posicoes = data.get("posicoes") or []
-        logger.info(f"[RENDERER] Checking {len(posicoes)} positions for ID injection fallback in Cap {data['capitulo']}")
+        logger.debug(f"[RENDERER] Checking {len(posicoes)} positions for ID injection fallback in Cap {data['capitulo']}")
 
         for pos in posicoes:
             if not isinstance(pos, dict):
@@ -709,7 +709,7 @@ class HtmlRenderer:
         Returns:
             Markdown completo com todos os capítulos ordenados
         """
-        logger.info(f"Renderizando {len(results_map)} capítulos")
+        logger.debug(f"Renderizando {len(results_map)} capítulos")
         
         full_markdown = ""
         for _, res_data in sorted(results_map.items()):
