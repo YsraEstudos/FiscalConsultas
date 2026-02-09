@@ -111,9 +111,14 @@ async def search(
     # Service Layer (ASYNC) - Exceções propagam para o handler global
     response_data = await service.process_request(ncm)
     
-    # NOTE: 'resultados' alias removed from backend response (v4.3).
-    # The duplication added ~862KB to every code response, doubling GZip cost.
-    # Frontend normalizes in api.ts: data.resultados = data.results (JS ref, zero cost).
+    # Compatibilidade de contrato:
+    # manter 'results' como chave canônica e preservar alias legado 'resultados'
+    # para respostas de código (consumidores antigos e testes de integração).
+    if response_data.get("type") == "code":
+        results = response_data.get("results") or response_data.get("resultados") or {}
+        response_data["results"] = results
+        response_data["resultados"] = results
+        response_data["total_capitulos"] = response_data.get("total_capitulos") or len(results)
     
     # Performance: orjson serialization + caching headers (catalog data rarely changes)
     cache_key = cache_scope_key(request)

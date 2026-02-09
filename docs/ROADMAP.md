@@ -97,6 +97,13 @@ Transformar a busca de palavras-chave em **busca de intenção**, integrando mú
 - [x] **[Frontend] Componentes de Login (SignIn, SignUp, UserButton, OrganizationSwitcher)**
 - [x] **[Backend] Descontinuar login legado (`/api/login`, `/api/logout`) e proteger APIs de auth com JWT Clerk**
 
+## 🆕 Fase 6.1: Refino de Frontend (Tabs & Context)
+
+- [ ] **[Frontend] Extrair `tabs.map()` para `TabContent` memoizado**
+  - Pode exigir ajuste fino no `TabPanel`/keep-alive para ganho real de performance.
+- [ ] **[Frontend] Split do `CrossChapterNoteContext` em dois contextos (dados/ações)**
+  - Por enquanto, ficou com `useMemo` + cache limitado.
+
 ## 🆕 Fase 7: Billing Profissional (Asaas) 💰
 
 *Automatizar pagamentos e emissão de NFS-e para clientes B2B.*

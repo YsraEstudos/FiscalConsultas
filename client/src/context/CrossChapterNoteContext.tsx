@@ -5,7 +5,7 @@
  * Permite acessar notas de qualquer capítulo sem precisar carregar o capítulo inteiro.
  */
 
-import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, useMemo, ReactNode } from 'react';
 import { fetchChapterNotes } from '../services/api';
 
 // Tipos
@@ -28,6 +28,8 @@ interface CrossChapterNoteProviderProps {
     children: ReactNode;
 }
 
+const MAX_CACHED_CHAPTERS = 20;
+
 /**
  * Provider que gerencia cache de notas cross-chapter.
  * 
@@ -39,11 +41,8 @@ interface CrossChapterNoteProviderProps {
 export function CrossChapterNoteProvider({ children }: CrossChapterNoteProviderProps) {
     const [cache, setCache] = useState<NotesCache>({});
     const cacheRef = useRef<NotesCache>({});
+    const cacheOrderRef = useRef<string[]>([]);
     const inFlightRef = useRef<Map<string, Promise<Record<string, string>>>>(new Map());
-
-    useEffect(() => {
-        cacheRef.current = cache;
-    }, [cache]);
 
     /**
      * Busca notas de um capítulo específico.
@@ -63,8 +62,23 @@ export function CrossChapterNoteProvider({ children }: CrossChapterNoteProviderP
         const request = fetchChapterNotes(chapter)
             .then(response => {
                 const notesData = response?.notas_parseadas || {};
-                cacheRef.current = { ...cacheRef.current, [chapter]: notesData };
-                setCache(prev => (prev[chapter] ? prev : { ...prev, [chapter]: notesData }));
+                if (cacheRef.current[chapter]) {
+                    return cacheRef.current[chapter];
+                }
+
+                const nextCache: NotesCache = { ...cacheRef.current, [chapter]: notesData };
+                const nextOrder = [...cacheOrderRef.current.filter(id => id !== chapter), chapter];
+
+                while (nextOrder.length > MAX_CACHED_CHAPTERS) {
+                    const oldest = nextOrder.shift();
+                    if (oldest) {
+                        delete nextCache[oldest];
+                    }
+                }
+
+                cacheOrderRef.current = nextOrder;
+                cacheRef.current = nextCache;
+                setCache(nextCache);
                 return notesData;
             })
             .catch(error => {
@@ -94,12 +108,12 @@ export function CrossChapterNoteProvider({ children }: CrossChapterNoteProviderP
         return inFlightRef.current.has(chapter);
     }, []);
 
-    const value: CrossChapterNoteContextValue = {
+    const value = useMemo<CrossChapterNoteContextValue>(() => ({
         cache,
         fetchNotes,
         getNote,
         isLoading
-    };
+    }), [cache, fetchNotes, getNote, isLoading]);
 
     return (
         <CrossChapterNoteContext.Provider value={value}>
