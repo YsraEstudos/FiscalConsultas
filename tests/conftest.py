@@ -51,6 +51,9 @@ def _is_nesh_db_ready(db_path: Path) -> bool:
                 return False
             if _count_rows(conn, "search_index") < 1:
                 return False
+            positions_columns = {row[1] for row in conn.execute("PRAGMA table_info(positions)").fetchall()}
+            if "anchor_id" not in positions_columns:
+                return False
             return True
         finally:
             conn.close()
@@ -151,7 +154,8 @@ def _seed_nesh_db(db_path: Path) -> None:
             [(f"{chapter}.01", f"Item generico do capitulo {chapter}")],
         )
         for codigo, descricao in rows:
-            position_rows.append((codigo, chapter, descricao))
+            anchor_id = f"pos-{codigo.replace('.', '-')}"
+            position_rows.append((codigo, chapter, descricao, anchor_id))
 
     conn = sqlite3.connect(db_path)
     try:
@@ -172,11 +176,15 @@ def _seed_nesh_db(db_path: Path) -> None:
                 codigo TEXT PRIMARY KEY,
                 chapter_num TEXT NOT NULL,
                 descricao TEXT,
+                anchor_id TEXT,
                 tenant_id TEXT,
                 search_vector TEXT
             )
             """
         )
+        positions_columns = {row[1] for row in conn.execute("PRAGMA table_info(positions)").fetchall()}
+        if "anchor_id" not in positions_columns:
+            conn.execute("ALTER TABLE positions ADD COLUMN anchor_id TEXT")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS chapter_notes (
@@ -276,8 +284,15 @@ def _seed_nesh_db(db_path: Path) -> None:
             note_rows,
         )
         conn.executemany(
-            "INSERT OR IGNORE INTO positions (codigo, chapter_num, descricao) VALUES (?, ?, ?)",
+            "INSERT OR IGNORE INTO positions (codigo, chapter_num, descricao, anchor_id) VALUES (?, ?, ?, ?)",
             position_rows,
+        )
+        conn.execute(
+            """
+            UPDATE positions
+            SET anchor_id = 'pos-' || REPLACE(codigo, '.', '-')
+            WHERE anchor_id IS NULL OR anchor_id = ''
+            """
         )
 
         for chapter_num, content in chapter_rows:
@@ -307,7 +322,7 @@ def _seed_nesh_db(db_path: Path) -> None:
                     (ncm, display_text, "chapter", text_for_search, ncm, "chapter"),
                 )
 
-        for codigo, chapter_num, descricao in position_rows:
+        for codigo, chapter_num, descricao, _anchor_id in position_rows:
             ncm = codigo
             display_text = f"{codigo} - {descricao}"
             text_for_search = processor.process(descricao)

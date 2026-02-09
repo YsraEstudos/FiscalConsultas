@@ -121,6 +121,9 @@ class DatabaseAdapter:
         self._chapter_notes_schema_cache: Optional[Dict[str, Any]] = None
         self._chapter_notes_schema_cache_lock = asyncio.Lock()
         self._chapter_notes_last_check_ts = 0.0
+        self._positions_schema_cache: Optional[Dict[str, Any]] = None
+        self._positions_schema_cache_lock = asyncio.Lock()
+        self._positions_last_check_ts = 0.0
         self.pool_size = pool_size
         self.pool = None
         # Cached SQL fragments for get_chapter_raw (rebuilt on schema change)
@@ -262,6 +265,40 @@ class DatabaseAdapter:
             self._chapter_notes_last_check_ts = now
             return columns
 
+    async def _get_positions_columns(self, conn: aiosqlite.Connection) -> set:
+        """Lê colunas disponíveis na tabela positions."""
+        try:
+            cursor = await conn.execute("PRAGMA table_info(positions)")
+            rows = await cursor.fetchall()
+            return {row['name'] for row in rows}
+        except Exception as e:
+            logger.warning(f"Falha ao inspecionar positions: {e}")
+            return set()
+
+    async def _get_positions_columns_cached(self, conn: aiosqlite.Connection) -> set:
+        """Cache simples de colunas de positions (TTL 60s, invalida por mudança no DB)."""
+        now = time.time()
+
+        async with self._positions_schema_cache_lock:
+            if self._positions_schema_cache and (now - self._positions_last_check_ts < 60):
+                return self._positions_schema_cache["columns"]
+
+            signature = self._get_db_signature()
+            if (
+                self._positions_schema_cache
+                and self._positions_schema_cache.get("db_signature") == signature
+            ):
+                self._positions_last_check_ts = now
+                return self._positions_schema_cache["columns"]
+
+            columns = await self._get_positions_columns(conn)
+            self._positions_schema_cache = {
+                "db_signature": signature,
+                "columns": columns,
+            }
+            self._positions_last_check_ts = now
+            return columns
+
     @staticmethod
     def _has_section_content(sections: Dict[str, Optional[str]]) -> bool:
         """Verifica se há conteúdo real em alguma seção (ignora vazios/whitespace)."""
@@ -373,8 +410,12 @@ class DatabaseAdapter:
                 logger.debug(f"Capítulo {chapter_num} não encontrado")
                 return None
 
-            cursor = await conn.execute('''
-                SELECT codigo, descricao, anchor_id
+            position_cols = await self._get_positions_columns_cached(conn)
+            has_anchor_id = "anchor_id" in position_cols
+            anchor_projection = "anchor_id" if has_anchor_id else "NULL AS anchor_id"
+
+            cursor = await conn.execute(f'''
+                SELECT codigo, descricao, {anchor_projection}
                 FROM positions
                 WHERE chapter_num = ?
                 ORDER BY codigo
