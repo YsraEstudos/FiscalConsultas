@@ -1,8 +1,8 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 import { searchNCM, searchTipi } from '../services/api';
-import { useTabs, type Tab, type DocType } from './useTabs';
+import { useTabs, type DocType } from './useTabs';
 import { useHistory } from './useHistory';
 import { useSettings } from '../context/SettingsContext';
 import { extractChapter, isSameChapter } from '../utils/chapterDetection';
@@ -20,20 +20,21 @@ export function useSearch(
     addToHistory: ReturnType<typeof useHistory>['addToHistory']
 ) {
     const { tipiViewMode } = useSettings();
+    const tabsByIdRef = useRef(tabsById);
+    const tipiViewModeRef = useRef(tipiViewMode);
+
+    useEffect(() => {
+        tabsByIdRef.current = tabsById;
+    }, [tabsById]);
+
+    useEffect(() => {
+        tipiViewModeRef.current = tipiViewMode;
+    }, [tipiViewMode]);
 
     const updateResultsQuery = useCallback((results: SearchResponse, query: string): SearchResponse => {
+        if (results.query === query) return results;
         return { ...results, query };
     }, []);
-
-    const updateTabSearchState = useCallback((
-        tabId: string,
-        updates: Partial<Pick<
-            Tab,
-            'ncm' | 'title' | 'results' | 'loading' | 'error' | 'isNewSearch' | 'loadedChaptersByDoc' | 'content' | 'isContentReady'
-        >>
-    ) => {
-        updateTab(tabId, updates);
-    }, [updateTab]);
 
     const executeSearchForTab = useCallback(async (tabId: string, doc: DocType, query: string, saveHistory: boolean = true) => {
         if (!query) return;
@@ -41,7 +42,7 @@ export function useSearch(
         if (saveHistory) addToHistory(query);
 
         // Localiza a aba atual para consultar capítulos carregados
-        const currentTab = tabsById.get(tabId);
+        const currentTab = tabsByIdRef.current.get(tabId);
         const loadedChaptersByDoc = buildLoadedChaptersByDoc(currentTab?.loadedChaptersByDoc);
         const loadedChaptersForDoc = loadedChaptersByDoc[doc];
         const targetChapter = extractChapter(query);
@@ -56,7 +57,7 @@ export function useSearch(
             currentTab?.results // Precisa ter resultados existentes para atualizar
         ) {
             // Pula o fetch - atualiza results.query e dispara auto-scroll
-            updateTabSearchState(tabId, {
+            updateTab(tabId, {
                 ncm: query,
                 title: query,
                 // CRITICO: Atualiza results.query para manter sincronizado com o ResultDisplay
@@ -67,7 +68,7 @@ export function useSearch(
         }
 
         // Fluxo normal: buscar novos dados
-        updateTabSearchState(tabId, {
+        updateTab(tabId, {
             loading: true,
             error: null,
             ncm: query,
@@ -78,17 +79,20 @@ export function useSearch(
         try {
             const data = doc === 'nesh'
                 ? await searchNCM(query)
-                : await searchTipi(query, tipiViewMode);
+                : await searchTipi(query, tipiViewModeRef.current);
 
             // Extrai capitulos apenas para respostas do tipo code
-            const chaptersInResponse = isCodeSearchResponse(data) && data.resultados
-                ? Object.keys(data.resultados)
+            const codeResults = isCodeSearchResponse(data)
+                ? (data.resultados || data.results)
+                : null;
+            const chaptersInResponse = codeResults
+                ? Object.keys(codeResults)
                 : [];
             const nextLoadedChaptersForDoc = chaptersInResponse.length > 0
                 ? [...new Set([...loadedChaptersForDoc, ...chaptersInResponse])]
                 : [];
 
-            updateTabSearchState(tabId, {
+            updateTab(tabId, {
                 results: updateResultsQuery(data, query),
                 content: data.markdown || data.resultados || '',
                 loading: false,
@@ -118,12 +122,12 @@ export function useSearch(
             }
 
             toast.error(message);
-            updateTabSearchState(tabId, {
+            updateTab(tabId, {
                 error: message,
                 loading: false
             });
         }
-    }, [addToHistory, tipiViewMode, tabsById, updateResultsQuery, updateTabSearchState]);
+    }, [addToHistory, updateResultsQuery, updateTab]);
 
     return { executeSearchForTab };
 }

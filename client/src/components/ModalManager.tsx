@@ -44,11 +44,13 @@ export const ModalManager: React.FC<ModalManagerProps> = ({
             <TutorialModal isOpen={modals.tutorial} onClose={onClose.tutorial} />
             <StatsModal isOpen={modals.stats} onClose={onClose.stats} />
 
-            <ComparatorModal
-                isOpen={modals.comparator}
-                onClose={onClose.comparator}
-                defaultDoc={currentDoc}
-            />
+            {modals.comparator && (
+                <ComparatorModal
+                    isOpen
+                    onClose={onClose.comparator}
+                    defaultDoc={currentDoc}
+                />
+            )}
 
             <CrossNavContextMenu
                 currentDoc={currentDoc}
