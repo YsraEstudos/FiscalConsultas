@@ -38,21 +38,24 @@ Transformar a busca de palavras-chave em **busca de intenção**, integrando mú
 
 ## Fase 1.5: Refatoração de Coesão (Dívida Técnica) 🧹
 
-*Unificação de lógicas fragmentadas para aumentar a confiabilidade e facilitar mudanças futuras.*
+*Unificação de lógicas fragmentadas para aumentar a confiabilidade e facilitar mudanças futuras. Baseado na [Análise de Coesão](file:///c:/Users/israe/OneDrive/Documentos/faz%20tudo/Fiscal/docs/analysis/cohesion_analysis.md).*
 
 - [ ] **[Backend] Unificar Lógica de Parsing (Core Lib) (#Refactor)**
   - Criar `backend/pkg/nesh_parser` como autoridade única para regex e parsing de NCMs/Notas.
+  - Implementar `regex.py` (patterns centralizados) e `parser.py` (text to domain objects).
   - Eliminar duplicação entre `setup_database.py`, `ingest_markdown.py`, `nesh_service.py` e `renderer.py`.
 - [ ] **[Backend] Modelos de Domínio Ricos (Pydantic)**
   - Substituir `TypedDict` por Pydantic Models em `backend/domain/models.py`.
   - Centralizar lógicas de validação e geração de IDs (ex: `anchor_id`) no modelo.
+  - Explorar geração automática de tipos TypeScript para o Frontend.
 - [ ] **[Scripts] Padronização de Scripts**
-  - Refatorar scripts em `scripts/` para importar lógica do backend em vez de duplicar código SQL e Path setups.
+  - Refatorar scripts em `scripts/` para importar lógica do backend (`backend.services.ingestion`) em vez de duplicar código.
+  - Eliminar hacks de `sys.path.append` centralizando a lógica de execução.
 - [ ] **[Backend] Unificação da Camada de Serviço (Engine Pattern)**
-  - Consolidar `NeshService` e `TipiService` (80% duplicado) em um `SearchEngine`.
-  - Abstrair Connection Pooling e Caching em decoradores reutilizáveis.
+  - Criar `backend/infrastructure/search_engine.py` para consolidar `NeshService` e `TipiService`.
+  - Abstrair FTS (SQLite/Postgres switch), Connection Pooling e Caching.
 - [ ] **[Frontend] Estratégia de Renderização (SSR)**
-  - Remover "Split Brain" (lógica duplicada em `NeshRenderer.ts`).
+  - Remover "Split Brain" (desativar fallback de renderização no `NeshRenderer.ts`).
   - Garantir que o Backend seja a única fonte de verdade para o HTML do conteúdo.
 
 ## Fase 2: Observabilidade e Qualidade
