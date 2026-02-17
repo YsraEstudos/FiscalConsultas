@@ -9,13 +9,40 @@ import styles from './ResultDisplay.module.css';
 import { debug } from '../utils/debug';
 import { NeshRenderer } from '../utils/NeshRenderer';
 import { useSettings } from '../context/SettingsContext';
-
-const Sidebar = React.lazy(() => import('./Sidebar').then(module => ({ default: module.Sidebar })));
+import { Sidebar } from './Sidebar';
 
 const sanitizeHtml = (html: string) => DOMPurify.sanitize(html, {
     ALLOW_DATA_ATTR: true,
     ADD_ATTR: ['data-ncm', 'data-note', 'data-chapter', 'aria-label', 'data-tooltip', 'role', 'tabindex']
 });
+
+const LEGACY_MARKDOWN_PATTERN = /(^|\n)\s{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+\.\s|---+\s*$)|\*\*[^*\n]+?\*\*/m;
+
+const isLikelyLegacyMarkdown = (value: string) => LEGACY_MARKDOWN_PATTERN.test(value);
+
+const SHARED_MARKUP_CACHE_MAX = 12;
+const sharedRawMarkupCache = new Map<string, string>();
+const sharedSanitizedMarkupCache = new Map<string, string>();
+
+function cacheGet(map: Map<string, string>, key: string): string | null {
+    const value = map.get(key);
+    if (value === undefined) return null;
+    map.delete(key);
+    map.set(key, value);
+    return value;
+}
+
+function cacheSet(map: Map<string, string>, key: string, value: string) {
+    if (map.has(key)) {
+        map.delete(key);
+    } else if (map.size >= SHARED_MARKUP_CACHE_MAX) {
+        const oldestKey = map.keys().next().value as string | undefined;
+        if (oldestKey !== undefined) {
+            map.delete(oldestKey);
+        }
+    }
+    map.set(key, value);
+}
 
 
 const getAliquotClass = (aliquota: string) => {
@@ -108,9 +135,9 @@ interface ResultDisplayProps {
     /** Flag indicando nova busca - ativa auto-scroll */
     isNewSearch: boolean;
     /** Callback para consumir flag após auto-scroll, recebendo opcionalmente o scroll final */
-    onConsumeNewSearch: (finalScrollTop?: number) => void;
+    onConsumeNewSearch: (tabId: string, finalScrollTop?: number) => void;
     /** Callback to notify parent when content is ready (for coordinated loading) */
-    onContentReady?: () => void;
+    onContentReady?: (tabId: string) => void;
 }
 
 export const ResultDisplay = React.memo(function ResultDisplay({
@@ -133,14 +160,26 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     const [isContentReady, setIsContentReady] = useState(false);
     const [activeAnchorId, setActiveAnchorId] = useState<string | null>(null);
     const containerId = `results-content-${tabId}`;
-    const renderTaskRef = useRef<number | null>(null);
     const lastMarkupRef = useRef<string | null>(null);
     const lastHtmlRef = useRef<string | null>(null);
+    const renderedMarkupKeyRef = useRef<string | null>(null);
+    const activeAnchorIdRef = useRef<string | null>(null);
+    const anchorRafRef = useRef<number | null>(null);
     const onContentReadyRef = useRef(onContentReady);
 
     // Sidebar collapsed state for lateral layout
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), []);
+    const codeResults = useMemo(() => {
+        if (!data || data.type === 'text') return null;
+        if (data.resultados && typeof data.resultados === 'object') {
+            return data.resultados as Record<string, any>;
+        }
+        if (data.results && !Array.isArray(data.results) && typeof data.results === 'object') {
+            return data.results as Record<string, any>;
+        }
+        return null;
+    }, [data?.type, data?.resultados, data?.results]);
 
     const findAnchorIdForQuery = useCallback((resultados: any, query: string) => {
         if (!resultados || typeof resultados !== 'object') return null;
@@ -202,40 +241,25 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
     // Sidebar Navigation Handler
     const handleNavigate = useCallback((targetId: string) => {
-        debug.log('=== [Navigate] START ===');
-        debug.log('[Navigate] Input targetId:', targetId);
-        debug.log('[Navigate] typeof targetId:', typeof targetId);
-
-        // List all IDs in current tab container for debugging
         const container = containerRef.current;
-        if (container) {
-            const allIds = Array.from(container.querySelectorAll('[id]')).map(el => el.id);
-            debug.log('[Navigate] All IDs in container (first 20):', allIds.slice(0, 20));
-        }
+        if (!container) return;
 
         // Try direct ID first (backend should provide correct anchor_id)
-        let element = container?.querySelector(`#${CSS.escape(targetId)}`) as HTMLElement | null;
-        debug.log('[Navigate] Direct getElementById result:', element ? 'FOUND' : 'NOT FOUND');
+        let element = container.querySelector(`#${CSS.escape(targetId)}`) as HTMLElement | null;
 
         // Fallback: generate anchor ID from codigo (e.g., "84.13" -> "pos-84-13")
         if (!element) {
             const generatedId = generateAnchorId(targetId);
-            debug.log('[Navigate] Fallback generateAnchorId:', targetId, '->', generatedId);
-            element = container?.querySelector(`#${CSS.escape(generatedId)}`) as HTMLElement | null;
-            debug.log('[Navigate] Fallback getElementById result:', element ? 'FOUND' : 'NOT FOUND');
+            element = container.querySelector(`#${CSS.escape(generatedId)}`) as HTMLElement | null;
         }
 
         if (element) {
-            debug.log('[Navigate] SUCCESS! Element found:', element.id, 'tag:', element.tagName);
-            debug.log('[Navigate] Element offsetTop:', element.offsetTop);
             element.scrollIntoView({ behavior: 'smooth', block: 'start' });
             element.classList.add('flash-highlight');
-            debug.log('[Navigate] Applied flash-highlight class');
             setTimeout(() => element.classList.remove('flash-highlight'), 2000);
         } else {
-            console.error('[Navigate] FAILED! Element not found for:', targetId);
+            debug.warn('[Navigate] target not found:', targetId);
         }
-        debug.log('=== [Navigate] END ===');
     }, []); // Empty dependency array as it only uses refs or DOM APIs
 
     // Calculate Target ID for Auto-Scroll
@@ -250,8 +274,8 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         }
 
         if (ncmToScroll) {
-            const posicaoAlvo = data?.resultados ? getPosicaoAlvoFromResultados(data.resultados) : null;
-            const anchorFromResultados = data?.resultados ? findAnchorIdForQuery(data.resultados, ncmToScroll) : null;
+            const posicaoAlvo = codeResults ? getPosicaoAlvoFromResultados(codeResults) : null;
+            const anchorFromResultados = codeResults ? findAnchorIdForQuery(codeResults, ncmToScroll) : null;
             const exactId = anchorFromResultados || (posicaoAlvo ? generateAnchorId(posicaoAlvo) : null) || generateAnchorId(ncmToScroll);
             const candidates = [exactId];
 
@@ -276,8 +300,6 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                 }
             }
 
-            debug.log('[ResultDisplay] Auto-scroll candidates:', candidates, 'from query:', ncmToScroll);
-
             // Prevent infinite loop: Only update if targets actually changed
             setTargetId(prev => {
                 const prevArray = Array.isArray(prev) ? prev : (prev ? [prev] : []);
@@ -292,7 +314,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         } else {
             setTargetId(prev => prev ? null : prev);
         }
-    }, [data]);
+    }, [codeResults, data, findAnchorIdForQuery, getPosicaoAlvoFromResultados]);
 
     // Stabilize onConsumeNewSearch callback to prevent AutoScroll effect loop
     const onConsumeNewSearchRef = useRef(onConsumeNewSearch);
@@ -308,10 +330,20 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         onContentReadyRef.current = onContentReady;
     }, [onContentReady]);
     useEffect(() => {
+        activeAnchorIdRef.current = activeAnchorId;
+    }, [activeAnchorId]);
+    useEffect(() => {
+        return () => {
+            if (anchorRafRef.current !== null) {
+                cancelAnimationFrame(anchorRafRef.current);
+            }
+        };
+    }, []);
+    useEffect(() => {
         if (isContentReady) {
-            onContentReadyRef.current?.();
+            onContentReadyRef.current?.(tabId);
         }
-    }, [isContentReady]);
+    }, [isContentReady, tabId]);
 
     const handleAutoScrollComplete = useCallback((success?: boolean) => {
         if (!success) return;
@@ -319,15 +351,14 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         // before we capture the final position and update app state.
         requestAnimationFrame(() => {
             const currentScroll = containerRef.current?.scrollTop || 0;
-            onConsumeNewSearchRef.current(currentScroll);
+            onConsumeNewSearchRef.current(tabId, currentScroll);
         });
-    }, []); // Empty deps = stable reference
+    }, [tabId]); // Empty deps = stable reference
 
     // Hook handles the heavy lifting (MutationObserver, retries, etc)
     // Only auto-scroll when:
     // 1. Tab is active
     // 2. This is a NEW search (not returning to existing tab)
-    // @ts-ignore
     const shouldAutoScroll = !!targetId && isActive && isNewSearch && isContentReady && data?.type !== 'text';
     useRobustScroll({
         targetId,
@@ -348,7 +379,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
         element.addEventListener('scroll', handleScroll, { passive: true });
         return () => element.removeEventListener('scroll', handleScroll);
-    }, [data?.type, data?.markdown, data?.resultados]);
+    }, [codeResults, data?.type, data?.markdown]);
 
     // Persist scroll when tab becomes inactive
     useEffect(() => {
@@ -382,131 +413,178 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             containerRef.current.scrollTop = targetScrollTop;
             latestScrollTopRef.current = targetScrollTop;
         });
-    }, [isActive, initialScrollTop, isNewSearch, data?.type, data?.markdown, data?.resultados]);
+    }, [codeResults, isActive, initialScrollTop, isNewSearch, data?.type, data?.markdown]);
 
 
 
-    // Custom Renderer to ensure IDs match autoscroll targets
-    // Memoize the renderer to prevent recreation on every render
-    const renderer = useMemo(() => {
-        const r = new marked.Renderer();
-
-        // Simplify: Just trust the backend's IDs or standard slugging
-        // FIXED: marked v17+ passes the token object which HAS 'text' property.
-        // We don't need to re-parse. Accessing token.text is safe and robust.
-        // @ts-ignore
-        r.heading = function ({ text, depth }) {
-            try {
-                // Fallback: Default slug behavior
-                const slug = (text || '')
-                    .toLowerCase()
-                    .replace(/<[^>]*>/g, '')
-                    .replace(/[^\w\u00C0-\u00FF]+/g, '-')
-                    .replace(/^-+|-+$/g, '');
-                return `<h${depth} id="${slug}">${text}</h${depth}>`;
-            } catch (e) {
-                console.error("Error rendering heading:", e);
-                return `<h${depth}>${text}</h${depth}>`;
-            }
-        };
-
-        // Paragraph: Default behavior (Backend already injects <span id="pos-...">)
-        // @ts-ignore
-        r.paragraph = function ({ text }) {
-            try {
-                return `<p>${text}</p>`;
-            } catch (e) {
-                return `<p>${text}</p>`;
-            }
-        };
-        return r;
-    }, []); // Empty deps ensuring singular creation
-
-    // Render Markdown
+    // Render backend content (prefer HTML; parse markdown only as legacy fallback)
     useEffect(() => {
         if (data?.type === 'text') {
+            renderedMarkupKeyRef.current = null;
             setIsContentReady(true);
             return;
         }
-        setIsContentReady(false); // Reset ready state on change
         if (!containerRef.current) return;
 
         const rawMarkdown = typeof data?.markdown === 'string' ? data.markdown.trim() : '';
-        const isTipi = isTipiResults(data?.resultados || null);
+        const isTipi = isTipiResults(codeResults || null);
 
         // Determine markup to render with fallbacks
         let markupToRender = rawMarkdown;
 
         if (!markupToRender) {
-            if (isTipi && data?.resultados) {
+            if (isTipi && codeResults) {
                 // TIPI fallback rendering
-                markupToRender = renderTipiFallback(data.resultados);
-            } else if (data?.resultados) {
+                markupToRender = renderTipiFallback(codeResults);
+            } else if (codeResults) {
                 // NESH client-side rendering
-                markupToRender = NeshRenderer.renderFullResponse(data.resultados);
+                console.warn('[ResultDisplay] Fallback NeshRenderer used - backend should send markdown');
+                markupToRender = NeshRenderer.renderFullResponse(codeResults);
             }
         }
 
         if (!markupToRender) {
             containerRef.current.innerHTML = '';
+            renderedMarkupKeyRef.current = null;
             setIsContentReady(true);
             return;
         }
 
-        if (renderTaskRef.current !== null) {
-            if ('cancelIdleCallback' in window) {
-                window.cancelIdleCallback(renderTaskRef.current);
-            } else {
-                clearTimeout(renderTaskRef.current);
+        try {
+            const shouldParseMarkdown = !!rawMarkdown && isLikelyLegacyMarkdown(markupToRender);
+            const cacheKey = `${shouldParseMarkdown ? 'md' : 'html'}:${markupToRender}`;
+            const container = containerRef.current;
+            const isAlreadyRendered = renderedMarkupKeyRef.current === cacheKey && container.childNodes.length > 0;
+
+            if (isAlreadyRendered) {
+                if (!isContentReady) {
+                    setIsContentReady(true);
+                }
+                return;
             }
-            renderTaskRef.current = null;
-        }
 
-        const renderContent = () => {
-            if (!containerRef.current) return;
-            try {
-                // If we generated fallback markup (TIPI), it is pure HTML. 
-                // If it came from backend.markdown, it is Mixed (Markdown + HTML injections).
-                // We should run marked() on backend content to process the **bold** and # headers.
-                const isPureHtml = isTipi || !rawMarkdown;
+            if (!isActive && !isAlreadyRendered) {
+                // Clear stale markup for this tab until it is activated.
+                container.innerHTML = '';
+                setIsContentReady(false);
+                return;
+            }
 
-                let rawMarkup: string;
-                if (lastMarkupRef.current === markupToRender && lastHtmlRef.current) {
+            setIsContentReady(false);
+
+            let rawMarkup = cacheGet(sharedRawMarkupCache, cacheKey);
+            if (!rawMarkup) {
+                if (lastMarkupRef.current === cacheKey && lastHtmlRef.current) {
                     rawMarkup = lastHtmlRef.current;
                 } else {
+                    // Legacy compatibility: parse markdown only when markdown tokens are detected.
+                    // Primary path expects backend pure HTML.
                     // @ts-ignore - marked types might mismatch slightly depending on version
-                    rawMarkup = isPureHtml ? markupToRender : (marked.parse(markupToRender, { renderer }) as string);
-                    lastMarkupRef.current = markupToRender;
-                    lastHtmlRef.current = rawMarkup;
+                    rawMarkup = shouldParseMarkdown ? (marked.parse(markupToRender) as string) : markupToRender;
+                }
+                // Legacy compatibility: parse markdown only when markdown tokens are detected.
+                // Primary path expects backend pure HTML.
+                cacheSet(sharedRawMarkupCache, cacheKey, rawMarkup);
+            }
+            lastMarkupRef.current = cacheKey;
+            lastHtmlRef.current = rawMarkup;
+
+            // Performance: Skip DOMPurify for trusted backend HTML (saves ~800ms on large NESH chapters).
+            // Only sanitize for fallback client-rendered content (NeshRenderer / renderTipiFallback).
+            let finalMarkup: string;
+            if (rawMarkdown) {
+                // Backend-served HTML: already safe from HtmlRenderer/TipiRenderer
+                finalMarkup = rawMarkup;
+            } else {
+                // Fallback client-rendered: sanitize for safety
+                let sanitizedMarkup = cacheGet(sharedSanitizedMarkupCache, cacheKey);
+                if (!sanitizedMarkup) {
+                    sanitizedMarkup = sanitizeHtml(rawMarkup);
+                    cacheSet(sharedSanitizedMarkupCache, cacheKey, sanitizedMarkup);
+                }
+                finalMarkup = sanitizedMarkup;
+            }
+
+            // ---------------------------------------------------------------
+            // Chunked rendering: split HTML at <hr> boundaries (chapter-level)
+            // to avoid a single massive DOM insertion that causes forced reflow.
+            // First chunk is rendered immediately for fast first paint; remaining
+            // chunks are queued via requestIdleCallback / setTimeout fallback.
+            // ---------------------------------------------------------------
+            const CHUNK_SIZE_THRESHOLD = 50_000; // Only chunk if > 50KB
+            const htmlLength = finalMarkup.length;
+
+            if (htmlLength <= CHUNK_SIZE_THRESHOLD) {
+                // Small payload: render in one shot (TIPI, small chapters)
+                const frameId = requestAnimationFrame(() => {
+                    if (!containerRef.current || containerRef.current !== container) return;
+                    const template = document.createElement('template');
+                    template.innerHTML = finalMarkup;
+                    containerRef.current.replaceChildren(template.content);
+                    renderedMarkupKeyRef.current = cacheKey;
+                    setIsContentReady(true);
+                });
+                return () => cancelAnimationFrame(frameId);
+            }
+
+            // Large payload: split at <hr> tags (chapter boundaries)
+            const chunks = finalMarkup.split(/(?=<hr\s*\/?>)/i);
+            const pendingIdleIds: number[] = [];
+            let cancelled = false;
+
+            const frameId = requestAnimationFrame(() => {
+                if (cancelled || !containerRef.current || containerRef.current !== container) return;
+
+                // Clear previous content and insert first chunk immediately
+                container.textContent = '';
+                if (chunks.length > 0) {
+                    const template = document.createElement('template');
+                    template.innerHTML = chunks[0];
+                    container.appendChild(template.content);
                 }
 
-                containerRef.current.innerHTML = sanitizeHtml(rawMarkup);
-                setIsContentReady(true); // Content injected, now safe to show sidebar
-            } catch (e) {
-                console.error("Markdown parse error:", e);
-                containerRef.current.innerText = "Error parsing content.";
+                renderedMarkupKeyRef.current = cacheKey;
+                // Signal contentReady after the first chunk so auto-scroll can begin
                 setIsContentReady(true);
-            }
-        };
 
-        // Schedule parsing in idle time to keep UI responsive on large markdown
-        if ('requestIdleCallback' in window) {
-            renderTaskRef.current = window.requestIdleCallback(renderContent, { timeout: 600 });
-        } else {
-            renderTaskRef.current = window.setTimeout(renderContent, 0);
+                // Queue remaining chunks via requestIdleCallback
+                const enqueueChunk = (index: number) => {
+                    if (index >= chunks.length) return;
+
+                    const scheduleFn = typeof requestIdleCallback === 'function'
+                        ? (cb: () => void) => requestIdleCallback(cb, { timeout: 100 })
+                        : (cb: () => void) => setTimeout(cb, 16) as unknown as number;
+
+                    const idleId = scheduleFn(() => {
+                        if (cancelled || !containerRef.current || containerRef.current !== container) return;
+                        const template = document.createElement('template');
+                        template.innerHTML = chunks[index];
+                        containerRef.current.appendChild(template.content);
+                        enqueueChunk(index + 1);
+                    });
+                    pendingIdleIds.push(idleId as number);
+                };
+
+                enqueueChunk(1);
+            });
+
+            return () => {
+                cancelled = true;
+                cancelAnimationFrame(frameId);
+                const cancelIdle = typeof cancelIdleCallback === 'function'
+                    ? cancelIdleCallback
+                    : (id: number) => clearTimeout(id);
+                pendingIdleIds.forEach(id => cancelIdle(id));
+            };
+
+
+        } catch (e) {
+            console.error("Content render error:", e);
+            containerRef.current.innerText = "Error rendering content.";
+            renderedMarkupKeyRef.current = null;
+            setIsContentReady(true);
         }
-
-        return () => {
-            if (renderTaskRef.current !== null) {
-                if ('cancelIdleCallback' in window) {
-                    window.cancelIdleCallback(renderTaskRef.current);
-                } else {
-                    clearTimeout(renderTaskRef.current);
-                }
-                renderTaskRef.current = null;
-            }
-        };
-    }, [data?.type, data?.markdown, data?.resultados, renderer]);
+    }, [codeResults, data?.type, data?.markdown, isActive]);
 
     // Ensure target anchor exists by using data-ncm as fallback
     useEffect(() => {
@@ -516,7 +594,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         const existing = targets.some(id => containerRef.current?.querySelector(`#${CSS.escape(id)}`));
         if (existing) return;
 
-        const posicaoAlvo = data?.resultados ? getPosicaoAlvoFromResultados(data.resultados) : null;
+        const posicaoAlvo = codeResults ? getPosicaoAlvoFromResultados(codeResults) : null;
         const candidateNcm = posicaoAlvo || (data?.ncm || data?.query || '');
         if (!candidateNcm) return;
 
@@ -533,13 +611,13 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             }
             setTargetId(id);
         }
-    }, [data?.ncm, data?.query, data?.resultados, getPosicaoAlvoFromResultados, isContentReady, targetId]);
+    }, [codeResults, data?.ncm, data?.query, getPosicaoAlvoFromResultados, isContentReady, targetId]);
 
     // Sync Sidebar to current visible anchor
     useEffect(() => {
-        if (!isActive || !isContentReady || !data?.resultados || !containerRef.current) return;
+        if (!isActive || !isContentReady || !codeResults || !containerRef.current) return;
 
-        const ids = getAnchorIdsFromResultados(data.resultados);
+        const ids = getAnchorIdsFromResultados(codeResults);
         if (ids.length === 0) return;
 
         const elements = ids
@@ -554,9 +632,18 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                     .filter(entry => entry.isIntersecting)
                     .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
 
-                if (visible[0]?.target?.id) {
-                    setActiveAnchorId(visible[0].target.id);
+                const nextAnchorId = visible[0]?.target?.id;
+                if (!nextAnchorId || nextAnchorId === activeAnchorIdRef.current) {
+                    return;
                 }
+
+                if (anchorRafRef.current !== null) {
+                    cancelAnimationFrame(anchorRafRef.current);
+                }
+                anchorRafRef.current = requestAnimationFrame(() => {
+                    anchorRafRef.current = null;
+                    setActiveAnchorId(prev => (prev === nextAnchorId ? prev : nextAnchorId));
+                });
             },
             {
                 root: containerRef.current,
@@ -568,7 +655,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         elements.forEach(el => observer.observe(el));
 
         return () => observer.disconnect();
-    }, [data?.resultados, getAnchorIdsFromResultados, isActive, isContentReady]);
+    }, [codeResults, getAnchorIdsFromResultados, isActive, isContentReady]);
 
 
     if (!data) {
@@ -597,6 +684,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         mobileMenuOpen ? styles.sidebarOpen : '',
         sidebarPosition === 'left' ? styles.sidebarLeft : ''
     ].filter(Boolean).join(' ');
+    const shouldRenderSidebar = isContentReady && isActive && !!codeResults;
 
     return (
         <div className={wrapperClasses}>
@@ -617,22 +705,20 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                 ref={containerRef}
                 id={containerId}
             >
-                {!data.markdown && !isTipiResults(data?.resultados || null) && <p>Sem resultados para exibir.</p>}
+                {!data.markdown && !isTipiResults(codeResults || null) && <p>Sem resultados para exibir.</p>}
             </div>
 
             {/* Sidebar Container - Coluna 2 */}
-            {isContentReady && (
+            {shouldRenderSidebar && (
                 <div className={styles.sidebarContainer}>
-                    <React.Suspense fallback={<div className={styles.sidebarSkeleton} />}>
-                        <Sidebar
-                            results={data.resultados}
-                            onNavigate={handleNavigate}
-                            isOpen={mobileMenuOpen}
-                            onClose={onCloseMobileMenu}
-                            searchQuery={data.query || data.ncm}
-                            activeAnchorId={activeAnchorId}
-                        />
-                    </React.Suspense>
+                    <Sidebar
+                        results={codeResults}
+                        onNavigate={handleNavigate}
+                        isOpen={mobileMenuOpen}
+                        onClose={onCloseMobileMenu}
+                        searchQuery={data.query || data.ncm}
+                        activeAnchorId={activeAnchorId}
+                    />
                 </div>
             )}
         </div>
