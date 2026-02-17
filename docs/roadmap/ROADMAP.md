@@ -69,6 +69,44 @@ Transformar a busca de palavras-chave em **busca de intenção**, integrando mú
   - Cobrir login, search e chat com mocks estáveis.
 - [ ] **[Frontend] Tipagem Forte do Nível de API (#11)**
 - [ ] **[Code] Remover Console Logs e Prints (#6, #12)**
+- [ ] **[CI/Quality] Padronizar análise Sonar no GitHub Actions**
+  - Desativar Auto Analysis no SonarCloud: `Administration` -> `Analysis Method` -> desligar `Automatic Analysis`.
+  - Adicionar secret no GitHub: `SONAR_TOKEN` (token do SonarCloud).
+  - Criar `.github/workflows/sonar.yml`:
+
+```yaml
+name: Sonar
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  sonar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Sonar scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=SEU_PROJECT_KEY
+            -Dsonar.organization=SUA_ORG
+            -Dsonar.python.version=3.13
+```
+
+  - Garantir `sonar-project.properties` na raiz com `sonar.python.version=3.13`.
+  - Fazer push e executar nova análise para validar remoção do warning.
 
 ## Fase 3: Arquitetura e Inteligência de Busca (IA)
 
