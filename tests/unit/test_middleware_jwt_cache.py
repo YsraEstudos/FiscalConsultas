@@ -7,8 +7,8 @@ pytestmark = pytest.mark.unit
 
 
 def test_cached_token_is_rejected_when_expired(monkeypatch):
-    token = "cached-expired-token"
-    token_hash = middleware._token_cache_key(token)
+    sample_jwt = "cached-expired-token"
+    token_hash = middleware._token_cache_key(sample_jwt)
 
     middleware._jwt_decode_cache.clear()
     middleware._jwt_decode_cache[token_hash] = (
@@ -20,13 +20,13 @@ def test_cached_token_is_rejected_when_expired(monkeypatch):
     monkeypatch.setattr(middleware.time, "monotonic", lambda: 10.1)
     monkeypatch.setattr(middleware.time, "time", lambda: 101.0)
 
-    assert middleware.decode_clerk_jwt(token) is None
+    assert middleware.decode_clerk_jwt(sample_jwt) is None
     assert token_hash not in middleware._jwt_decode_cache
 
 
 def test_expired_payload_is_not_cached_in_development(monkeypatch):
-    token = "expired-dev-token"
-    token_hash = middleware._token_cache_key(token)
+    sample_jwt = "expired-dev-token"
+    token_hash = middleware._token_cache_key(sample_jwt)
 
     middleware._jwt_decode_cache.clear()
     monkeypatch.setattr(middleware, "get_jwks_client", lambda: None)
@@ -40,7 +40,7 @@ def test_expired_payload_is_not_cached_in_development(monkeypatch):
     monkeypatch.setattr(middleware.time, "monotonic", lambda: 15.0)
     monkeypatch.setattr(middleware.time, "time", lambda: 121.0)
 
-    assert middleware.decode_clerk_jwt(token) is None
+    assert middleware.decode_clerk_jwt(sample_jwt) is None
     assert token_hash not in middleware._jwt_decode_cache
 
 
