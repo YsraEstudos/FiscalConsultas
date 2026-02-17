@@ -47,10 +47,16 @@ def test_is_valid_webhook_without_configured_token(monkeypatch):
 
 
 def test_is_valid_webhook_with_required_token(monkeypatch):
-    monkeypatch.setattr(settings.billing, "asaas_webhook_token", "secret-token")
+    monkeypatch.setattr(
+        settings.billing, "asaas_webhook_token", "webhook-signature-sample"
+    )
 
-    valid_request = _request_with_headers({"x-asaas-access-token": "secret-token"})
-    invalid_request = _request_with_headers({"x-asaas-access-token": "wrong-token"})
+    valid_request = _request_with_headers(
+        {"x-asaas-access-token": "webhook-signature-sample"}
+    )
+    invalid_request = _request_with_headers(
+        {"x-asaas-access-token": "invalid-signature-sample"}
+    )
     missing_request = _request_with_headers()
 
     assert webhooks._is_valid_asaas_webhook(valid_request) is True
