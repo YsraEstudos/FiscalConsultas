@@ -121,8 +121,18 @@ Em `.env`:
 
 ```env
 DATABASE__ENGINE=postgresql
-DATABASE__POSTGRES_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/nesh_db
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=sua_senha
+POSTGRES_DB=nesh_db
+PGADMIN_DEFAULT_EMAIL=admin@seudominio.com
+PGADMIN_DEFAULT_PASSWORD=uma_senha_forte
+DATABASE__POSTGRES_URL=postgresql+asyncpg://postgres:sua_senha_urlencoded@localhost:5432/nesh_db
 ```
+
+Observação importante:
+
+- se `POSTGRES_PASSWORD` tiver caractere `$`, escape como `$$` no `.env` para o Docker Compose não interpretar como interpolação de variável.
+- portas padrão: PostgreSQL `5432`, Redis `6379`, pgAdmin `8080`.
 
 Migrar schema:
 
@@ -135,6 +145,20 @@ Migrar dados SQLite para PostgreSQL:
 ```powershell
 python scripts/migrate_to_postgres.py
 ```
+
+## Performance NCM (estado atual)
+
+Baseline local mais recente para `/api/search?ncm=8481.30.00` (10 de fevereiro de 2026):
+
+- `first_load` (rota backend, processo já iniciado): ~`602ms` média
+- `warm_hit` (cache payload): ~`2.8ms` média
+
+Mudanças principais já aplicadas:
+
+- renderer backend otimizado (pipeline unificado de transformações)
+- resposta NESH em `markdown` agora com HTML puro (fallback markdown legado só no frontend)
+- short-circuit de cache na rota `/api/search` com header `X-Payload-Cache: MISS|HIT`
+- melhoria de responsividade em multi-busca no frontend (execução sequencial e render diferido em abas inativas)
 
 ## Configuração (env vars usadas)
 
