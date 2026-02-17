@@ -50,6 +50,8 @@
     align-items: start;
     border-bottom: 1px solid var(--border-color);
     transition: all 0.15s;
+    position: relative;
+    z-index: 0;
 }
 
 .tipi-position:hover {
@@ -239,6 +241,7 @@ article.tipi-position {
     will-change: transform;
     /* GPU acceleration for hover */
     position: relative;
+    z-index: 0;
     /* For pseudo-element flash */
 }
 
@@ -266,7 +269,13 @@ article.tipi-position::after {
     border: 2px solid rgba(251, 191, 36, 0.6);
     opacity: 0;
     pointer-events: none;
-    z-index: -1;
+    z-index: 0;
+}
+
+.tipi-position>*,
+article.tipi-position>* {
+    position: relative;
+    z-index: 1;
 }
 
 @keyframes tipi-flash-gpu {

@@ -3,7 +3,12 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .benchmarks/
+build/
+dist/
+*.egg-info/
 
 # Local databases
 *.db
@@ -31,8 +36,23 @@ Thumbs.db
 # Logs and Test results
 *.log
 test_results*.txt
+.coverage
+coverage.xml
 
 # Environment Variables
 .env
 .env.local
 
+
+# Backups
+*.bak
+
+# Benchmarks
+benchmark_results.txt
+test_output.txt
+
+# Scripts
+verify_redis.py
+scripts/god_module_guardrail.py
+Scripts results/consolidated_code.txt
+Scripts results/ncm_loading_flow.txt

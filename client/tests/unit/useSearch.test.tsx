@@ -38,6 +38,28 @@ const createCodeResponse = (chapter: string, query: string): CodeSearchResponse 
     markdown: `<h3 id="pos-${chapter}-22">${chapter}.22</h3>`
 });
 
+const createCodeResponseWithNonEnumerableAlias = (chapter: string, query: string): CodeSearchResponse => {
+    const response = {
+        success: true,
+        type: 'code',
+        query,
+        normalized: null,
+        results: { [chapter]: createChapterData(chapter) },
+        total_capitulos: 1,
+        markdown: `<h3 id="pos-${chapter}-22">${chapter}.22</h3>`
+    } as CodeSearchResponse;
+
+    Object.defineProperty(response, 'resultados', {
+        get() {
+            return this.results;
+        },
+        enumerable: false,
+        configurable: true
+    });
+
+    return response;
+};
+
 describe('useSearch Hook', () => {
     const searchNCMMock = vi.mocked(searchNCM);
     const searchTipiMock = vi.mocked(searchTipi);
@@ -142,5 +164,39 @@ describe('useSearch Hook', () => {
                 }
             })
         ]);
+    });
+
+    it('should preserve resultados alias when cloning code response with non-enumerable getter', async () => {
+        const updateTab = vi.fn();
+        const addToHistory = vi.fn();
+        const tabs: Tab[] = [
+            {
+                id: 'tab-1',
+                title: '8421',
+                document: 'nesh',
+                content: '<h3>84.21</h3>',
+                loading: false,
+                error: null,
+                ncm: '84.21',
+                results: createCodeResponseWithNonEnumerableAlias('84', '8421'),
+                loadedChaptersByDoc: { nesh: ['84'], tipi: [] }
+            }
+        ];
+        const tabsById = new Map(tabs.map(tab => [tab.id, tab]));
+
+        const { result } = renderHook(
+            () => useSearch(tabsById, updateTab, addToHistory),
+            { wrapper }
+        );
+
+        await act(async () => {
+            await result.current.executeSearchForTab('tab-1', 'nesh', '8422', true);
+        });
+
+        expect(updateTab).toHaveBeenCalledTimes(1);
+        const payload = updateTab.mock.calls[0][1] as { results: CodeSearchResponse };
+        expect(payload.results.query).toBe('8422');
+        expect(payload.results.resultados).toEqual(payload.results.results);
+        expect(Object.prototype.propertyIsEnumerable.call(payload.results, 'resultados')).toBe(true);
     });
 });

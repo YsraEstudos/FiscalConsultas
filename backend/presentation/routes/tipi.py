@@ -1,16 +1,83 @@
-from fastapi import APIRouter, Depends, Query
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Query, Request
+from starlette.responses import Response
+from collections import OrderedDict
+import gzip
+import threading
 from backend.services.tipi_service import TipiService
 from backend.server.dependencies import get_tipi_service
 from backend.config.constants import SearchConfig, ViewMode
 from backend.config.exceptions import ValidationError
 from backend.config.logging_config import server_logger as logger
-import hashlib
+from backend.utils.cache import cache_scope_key, weak_etag
+from backend.utils.payload_cache_metrics import tipi_payload_cache_metrics
+
+import orjson as _orjson
+
+
+_TIPI_CODE_PAYLOAD_CACHE_MAX = 16
+_tipi_code_payload_cache: OrderedDict[str, tuple[bytes, bytes]] = OrderedDict()
+_tipi_code_payload_cache_lock = threading.Lock()
+
+
+def _orjson_response(content: dict, headers: dict[str, str] | None = None) -> Response:
+    body = _orjson.dumps(content)
+    resp = Response(content=body, media_type="application/json")
+    if headers:
+        resp.headers.update(headers)
+    return resp
+
+
+def _tipi_payload_cache_get(key: str) -> tuple[bytes, bytes] | None:
+    with _tipi_code_payload_cache_lock:
+        payload = _tipi_code_payload_cache.get(key)
+        if payload is None:
+            tipi_payload_cache_metrics.record_miss()
+            return None
+        _tipi_code_payload_cache.move_to_end(key)
+        tipi_payload_cache_metrics.record_hit()
+        return payload
+
+
+def _tipi_payload_cache_set(key: str, payload: tuple[bytes, bytes]) -> None:
+    with _tipi_code_payload_cache_lock:
+        _tipi_code_payload_cache[key] = payload
+        _tipi_code_payload_cache.move_to_end(key)
+        tipi_payload_cache_metrics.record_set()
+        if len(_tipi_code_payload_cache) > _TIPI_CODE_PAYLOAD_CACHE_MAX:
+            _tipi_code_payload_cache.popitem(last=False)
+            tipi_payload_cache_metrics.record_eviction()
+
+
+def _accepts_gzip(request: Request) -> bool:
+    accept_encoding = (request.headers.get("Accept-Encoding") or "").lower()
+    return "gzip" in accept_encoding
+
+
+def get_payload_cache_metrics() -> dict[str, float | int]:
+    snapshot = tipi_payload_cache_metrics.snapshot(
+        current_size=len(_tipi_code_payload_cache),
+        max_size=_TIPI_CODE_PAYLOAD_CACHE_MAX,
+    )
+    return {
+        "name": tipi_payload_cache_metrics.name,
+        "hits": snapshot.hits,
+        "misses": snapshot.misses,
+        "sets": snapshot.sets,
+        "evictions": snapshot.evictions,
+        "served_gzip": snapshot.served_gzip,
+        "served_identity": snapshot.served_identity,
+        "current_size": snapshot.current_size,
+        "max_size": snapshot.max_size,
+        "hit_rate": snapshot.hit_rate,
+    }
+
 
 router = APIRouter()
 
+
 @router.get("/search")
 async def tipi_search(
+    request: Request,
     ncm: str = Query(..., description="Código NCM ou termo para busca na TIPI"),
     view_mode: ViewMode = Query(ViewMode.FAMILY, description="Modo de visualização: 'chapter' (completo) ou 'family' (apenas família NCM)"),
     tipi_service: TipiService = Depends(get_tipi_service)
@@ -38,28 +105,58 @@ async def tipi_search(
             field="ncm"
         )
     
-    logger.info(f"TIPI Busca: '{ncm}' (mode={view_mode})")
+    safe_ncm = ncm.replace("\r", "\\r").replace("\n", "\\n")
+    logger.debug("TIPI Busca: '%s' (mode=%s)", safe_ncm, view_mode)
     
     # Detectar tipo de busca - Exceções propagam para o handler global
     if tipi_service.is_code_query(ncm):
         result = await tipi_service.search_by_code(ncm, view_mode=view_mode.value)
 
-        # Compatibilidade
-        result['resultados'] = result.get('resultados') or result.get('results') or {}
-        result['results'] = result.get('results') or result['resultados']
-        result['total_capitulos'] = result.get('total_capitulos') or len(result['resultados'])
+        # Compatibilidade de contrato:
+        # manter 'results' como canônica e preservar alias legado 'resultados'.
+        results = result.get("results") or result.get("resultados") or {}
+        result["results"] = results
+        result["resultados"] = results
+        result["total_capitulos"] = result.get("total_capitulos") or len(results)
     else:
         result = await tipi_service.search_text(ncm)
         result.setdefault('normalized', result.get('query', ''))
         result.setdefault('warning', None)
         result.setdefault('match_type', 'text')
     
-    # Performance: Add caching headers for TIPI catalog data
-    response = JSONResponse(content=result)
-    etag = hashlib.md5(f"tipi:{ncm}:{view_mode.value}".encode()).hexdigest()[:16]
-    response.headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=86400"
-    response.headers["ETag"] = f'W/"{etag}"'
-    return response
+    cache_key = cache_scope_key(request)
+    headers = {
+        "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",
+        "ETag": weak_etag("tipi", cache_key, ncm, view_mode.value),
+        "Vary": "Authorization, X-Tenant-Id, Accept-Encoding",
+    }
+
+    # Same strategy used in /api/search: keep pre-serialized payloads for hot TIPI code lookups.
+    if result.get("type") == "code":
+        payload_key = f"{cache_key}:{view_mode.value}:{ncm}"
+        cache_status = "MISS"
+        cached_payload = _tipi_payload_cache_get(payload_key)
+        if cached_payload is None:
+            raw_body = _orjson.dumps(result)
+            gzip_body = gzip.compress(raw_body, compresslevel=1, mtime=0)
+            cached_payload = (raw_body, gzip_body)
+            _tipi_payload_cache_set(payload_key, cached_payload)
+        else:
+            cache_status = "HIT"
+
+        raw_body, gzip_body = cached_payload
+        common_headers = {**headers, "X-Payload-Cache": cache_status}
+        if _accepts_gzip(request):
+            tipi_payload_cache_metrics.record_served(gzip=True)
+            return Response(
+                content=gzip_body,
+                media_type="application/json",
+                headers={**common_headers, "Content-Encoding": "gzip"},
+            )
+        tipi_payload_cache_metrics.record_served(gzip=False)
+        return Response(content=raw_body, media_type="application/json", headers=common_headers)
+
+    return _orjson_response(result, headers=headers)
 
 @router.get("/chapters")
 async def get_tipi_chapters(tipi_service: TipiService = Depends(get_tipi_service)):

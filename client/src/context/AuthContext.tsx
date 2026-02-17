@@ -86,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
 
         // Legacy compatibility
-        isAdmin: !!isSignedIn, // For now, all signed-in users are "admins"
+        isAdmin: false, // Must come from backend/JWT roles, never from sign-in state alone
         authToken: null, // Use getToken() instead
         login: (_token?: string | null) => {
             // No-op: Clerk's <SignIn /> component handles login UI
