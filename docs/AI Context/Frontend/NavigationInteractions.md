@@ -1,107 +1,139 @@
-# Sistema de Navegação Cruzada e Menus Contextuais (Technical Reference)
+# Navegacao, Context Menu e Interacoes Cruzadas (estado real 2026-02-17)
 
-Este documento detalha os mecanismos de interação que permitem ao usuário transitar fluidamente entre os documentos TIPI e NESH, além de garantir a navegação interna via referências inteligentes.
+Este documento registra como a navegacao entre NESH/TIPI funciona hoje no frontend.
 
-## Visão Geral
+## 1) Componentes-chave
 
-A aplicação Fiscal foi desenhada para eliminar a barreira entre a Tabela TIPI e as Notas Explicativas (NESH). O sistema de navegação permite "pivos" instantâneos (Change Document Pivot) e "bifurcações" (New Tab Fork) através de cliques contextuais e links inteligentes.
+- `client/src/components/CrossNavContextMenu.tsx`
+- `client/src/components/ModalManager.tsx`
+- `client/src/App.tsx`
+- `client/src/components/ResultDisplay.tsx`
+- `client/src/components/Sidebar.tsx`
+- `client/src/context/CrossChapterNoteContext.tsx`
 
-### Objetivos do Sistema
+## 2) Context Menu Cross-Doc
 
-1. **Interconectividade Total**: Qualquer menção a um NCM, seja texto ou link, deve ser um portal para aquele código.
-2. **Contexto Documental**: Permitir troca rápida de contexto (Ex: "Onde isso fica na TIPI?") sem perder o código alvo.
-3. **Preservação de Trabalho**: Proteger abas ativas de sobrescrita acidental durante a navegação.
+### 2.1 Como abre
 
----
+- listener global de `contextmenu` por delegacao.
+- somente abre se alvo estiver na allowlist:
+  - `.smart-link`
+  - `.tipi-ncm`
+  - `.tipi-result-ncm`
+  - `.ncm-target`
+  - headings dentro de `.markdown-body`
 
-## Arquitetura de Componentes
+### 2.2 Como extrai NCM
 
-### 1. Menu de Contexto Cruzado (`CrossNavContextMenu`)
+Ordem de heuristica:
 
-Responsável por interceptar o clique direito e oferecer opções de transição de documento.
+1. `\d{4}(\.\d{2}){1,2}`
+2. `\d{2}(\.\d{2}){1,3}`
+3. `\d{2,8}`
 
-| Componente | Função | Localização |
-| :--- | :--- | :--- |
-| **CrossNavContextMenu** | Detecta clique direito, extrai NCM sob o cursor e renderiza menu flutuante. | `client/src/components/CrossNavContextMenu.tsx` |
-| **ModalManager** | Injeta o menu na árvore de componentes (via Portal/Suspense) e passa callbacks de navegação. | `client/src/components/ModalManager.tsx` |
-| **App** | Define a lógica de execução das ações (abrir na mesma aba vs nova aba). | `client/src/App.tsx` |
+Tambem usa `data-ncm` quando existir.
 
-**Fluxo de Detecção (Hit Testing):**
+### 2.3 Acoes do menu
 
-O menu não é anexado a cada elemento. Ele usa um listener global (`document.addEventListener('contextmenu')`) e verifica se o alvo pertence a classes específicas:
+- ver no outro documento (`onOpenInDoc`)
+- copiar NCM
+- abrir em nova aba no documento atual (`onOpenInNewTab`)
 
-- `.smart-link` (Links internos)
-- `.tipi-ncm`, `.tipi-result-ncm` (Tabelas TIPI)
-- `.ncm-target` (Highlight de NESH)
-- Headers do Markdown (`h2`, `h3`, etc.)
+## 3) Pivot entre documentos (App)
 
-**Extração de NCM (Regex Heurística):**
+### 3.1 `openInDocCurrentTab`
 
-Ao clicar em um elemento de texto (ex: título "84.71 - Máquinas..."), o sistema extrai o NCM usando prioridade de regex:
+- se aba atual estiver ocupada (loading/resultados/ncm), desvia para nova aba.
+- se estiver livre:
+  - troca documento
+  - limpa estado
+  - executa busca no mesmo tab id.
 
-1. Padrão com pontos e formatação completa (`8404.10.00`)
-2. Padrão curto com pontos (`84.71`)
-3. Sequência de dígitos crua (`845010`)
+### 3.2 `openInDocNewTab`
 
----
+- cria tab e executa busca no novo contexto.
 
-## Funcionalidades de Navegação
+## 4) Smart-links e note-ref por delegacao
 
-### 1. "Ver na [Outro Documento]" (Pivot)
+`App.tsx` registra click handler global:
 
-Permite alternar entre TIPI e NESH mantendo o foco no mesmo NCM.
+- clique em `a.smart-link` -> `handleSearch(ncm)`.
+- clique em `.note-ref` -> `handleOpenNote(note, chapter?)`.
 
-- **Trigger**: Opção no Menu de Contexto.
-- **Lógica (`App.tsx` -> `openInDocCurrentTab`)**:
-    1. Verifica se a aba atual está "Ocupada" (carregando ou com resultados não triviais).
-    2. **Se Ocupada**: Redireciona para fluxo de *Nova Aba* (Safety Fallback).
-    3. **Se Livre**:
-        - Atualiza o estado da aba: `document = otherDoc`.
-        - Reseta caches (`isContentReady: false`, limpa resultados).
-        - Dispara `executeSearchForTab` com o NCM alvo.
+Vantagem: evita listeners individuais por item renderizado.
 
-### 2. "Abrir em Nova Aba" (Fork)
+Nota:
 
-Permite investigar um NCM paralelo sem perder o contexto atual.
+- existe ponte global `window.nesh` para compatibilidade (`smartLinkSearch`, `openNote`, `openSettings`).
 
-- **Trigger**: Opção no Menu de Contexto.
-- **Lógica (`App.tsx` -> `openInDocNewTab`)**:
-    1. Cria nova aba via `createTab(docType)`.
-    2. Executa busca imediatamente na nova ID.
-    3. Interface foca automaticamente na nova aba.
+## 5) Notas Cross-Chapter
 
-### 3. Smart Links (Navegação Interna)
+Contexto: `CrossChapterNoteContext`.
 
-Links clicáveis dentro das Notas Explicativas (ex: "Ver Nota 2 de 84.50").
+- cache por capitulo (`MAX_CACHED_CHAPTERS=20`).
+- dedup de requests em voo por `inFlightRef`.
+- `handleOpenNote` no `App`:
+  - usa notas locais quando capitulo presente no resultado
+  - senao faz fetch via `/api/nesh/chapter/{chapter}/notes`
+  - abre modal (`NotePanel`) quando encontra conteudo
 
-- **Mecanismo**: Delegação global de eventos em `App.tsx`.
-- **Selector**: `a.smart-link` (Gerados pelo `NeshRenderer` ou Markdown parser).
-- **Ação**:
-  - Intercepta `click`.
-  - Lê `data-ncm`.
-  - Executa `handleSearch` na aba ativa (preservando o tipo de documento atual).
+## 6) Navegacao Lateral (Sidebar)
 
----
+### 6.1 Estrutura
 
-## Tratamento de Dados e Formatação
+- lista flatten virtualizada (`react-virtuoso`).
+- itens: header de capitulo, secoes, posicoes.
+- index maps:
+  - codigo -> indice
+  - anchor_id -> indice
 
-Para garantir que a navegação funcione entre sistemas diferentes (TIPI vs NESH), existe uma normalização de IDs.
+### 6.2 Navegar para alvo
 
-- **NESH para TIPI**: Ao ir da NESH (onde NCMs podem ser parciais "84.15") para TIPI, o sistema formata o ID para garantir match na tabela.
-- **Utils**: `client/src/utils/id_utils.ts` -> `formatNcmTipi`.
+- click em item chama `onNavigate(targetId)` do `ResultDisplay`.
+- `ResultDisplay` tenta:
+  1. `#targetId`
+  2. fallback `generateAnchorId(targetId)`
 
----
+### 6.3 Auto-follow da query
 
-## Debugging
+- sidebar tenta achar indice por match exato, normalizado, prefixo e fallback startsWith.
+- destaca item por tempo curto apos scroll programatico.
 
-Problemas comuns de navegação e como investigar:
+## 7) Estado de abas e navegacao
 
-1. **Menu não aparece**:
-   - Verifique se o elemento clicado possui uma das classes da *allowlist* em `CrossNavContextMenu.tsx`.
-   - Verifique se o elemento possui texto contendo números ou atributo `data-ncm`.
+`useTabs` guarda por aba:
 
-2. **NCM Errado extraído**:
-   - O regex prioriza formatos com ponto. Se o texto for ambíguo (ex: "Artigo 84"), verifique as regras de regex em `extractNcm`.
+- `document` (`nesh|tipi`)
+- `results`, `ncm`, `loading`, `error`
+- `isNewSearch`
+- `scrollTop`
+- `isContentReady`
+- `loadedChaptersByDoc`
 
-3. **Navegação sobrescreve trabalho**:
-   - Verifique a lógica de "Aba Ocupada" em `openInDocCurrentTab`. Ela deve detectar `activeTab.results` ou `loading`.
+`useSearch` usa `loadedChaptersByDoc` para otimizar busca no mesmo capitulo (skip fetch + apenas scroll).
+
+Detalhe critico:
+
+- quando ocorre skip fetch, `useSearch` atualiza `results.query` para manter `targetId` sincronizado no `ResultDisplay`.
+
+## 8) Integracao com Auth e API
+
+- `AuthProvider` registra `getToken` no interceptor axios.
+- chamadas de API enviam Bearer automaticamente quando rota nao e publica.
+- menu/context/navigation nao dependem de auth para abrir, mas algumas acoes backend podem falhar se sem token.
+
+## 9) Riscos atuais de navegacao
+
+1. concorrencia entre highlight de busca e highlight por `activeAnchorId` na sidebar (estado unico de highlight).
+2. dependencia de IDs de secao (`chapter-{cap}-...`) que nem sempre existem no HTML NESH backend.
+3. bug de callback de consumo de nova busca em `App` afeta ciclo de scroll/navegacao entre abas.
+4. pivot de documento abre nova aba quando a atual esta ocupada; sem UX clara, usuario pode achar que "sumiu" da aba original.
+
+## 10) Contrato de estabilidade
+
+Nao quebrar sem migracao coordenada:
+
+- classes `.smart-link` e `.note-ref`
+- atributos `data-ncm`, `data-note`, `data-chapter`
+- formato de IDs `pos-...` e `chapter-{cap}-{secao}`
+- shape de resposta com `results` + `resultados`
