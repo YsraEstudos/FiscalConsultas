@@ -110,11 +110,19 @@ async def search(
     safe_ncm = ncm.replace("\r", "\\r").replace("\n", "\\n")
     logger.debug("Busca: '%s'", safe_ncm)
 
+    # Normalize query for cache-key consistency:
+    # "85.17", "8517", " 85 17 " -> same cache key for code queries.
+    # Text queries: strip + lowercase to avoid trivial misses.
+    if ncm_utils.is_code_query(ncm):
+        ncm_normalized = ncm_utils.clean_ncm(ncm)
+    else:
+        ncm_normalized = ncm.strip().lower()
+
     # Common caching headers / scope key
     cache_key = cache_scope_key(request)
     headers = {
         "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",
-        "ETag": weak_etag("nesh", cache_key, ncm),
+        "ETag": weak_etag("nesh", cache_key, ncm_normalized),
         "Vary": "Authorization, X-Tenant-Id, Accept-Encoding",
     }
 
@@ -124,7 +132,7 @@ async def search(
     cached_payload: tuple[bytes, bytes] | None = None
     cache_checked = False
     if ncm_utils.is_code_query(ncm):
-        payload_key = f"{cache_key}:{ncm}"
+        payload_key = f"{cache_key}:{ncm_normalized}"
         cached_payload = _code_payload_cache_get(payload_key)
         cache_checked = True
         if cached_payload is not None:
@@ -154,7 +162,7 @@ async def search(
             if isinstance(chapter_data, dict):
                 chapter_data.pop("conteudo", None)
         response_data["results"] = results
-        response_data["resultados"] = results
+        response_data["resultados"] = results  # @deprecated: legacy alias, planned removal v2.0
         response_data["total_capitulos"] = response_data.get("total_capitulos") or len(results)
     
     # Hot path optimization:
@@ -162,7 +170,7 @@ async def search(
     # Cache both raw and gzip bodies to avoid serializing/compressing each request.
     if response_data.get("type") == "code":
         if not cache_checked:
-            payload_key = f"{cache_key}:{ncm}"
+            payload_key = f"{cache_key}:{ncm_normalized}"
             cached_payload = _code_payload_cache_get(payload_key)
             cache_checked = True
 
