@@ -11,6 +11,7 @@ NESH_SERVICE_PATH = "backend/services/nesh_service.py"
 TIPI_SERVICE_PATH = "backend/services/tipi_service.py"
 RENDERER_PATH = "backend/presentation/renderer.py"
 ID_UTILS_PATH = "backend/utils/id_utils.py"
+PYPROJECT_FILE = "pyproject.toml"
 
 
 @dataclass(frozen=True)
@@ -55,7 +56,7 @@ PROFILES: dict[str, Profile] = {
             "backend/infrastructure/repositories/tipi_repository.py",
             "client/src/types/api.types.ts",
             "client/package.json",
-            "pyproject.toml",
+            PYPROJECT_FILE,
         ],
         plan_doc=os.path.join(
             "docs", "roadmap", "MODELOS_DOMINIO_RICOS_PYDANTIC_DETALHADO.md"
@@ -104,7 +105,6 @@ def _extract_paths_from_plan(plan_abs_path: str, project_root: str) -> list[str]
         "scripts/",
         "tests/",
         "docs/",
-        "pyproject.toml",
     )
     allowed_ext = (".py", ".ts", ".tsx", ".json", ".toml", ".md", ".d.ts")
 
@@ -113,7 +113,7 @@ def _extract_paths_from_plan(plan_abs_path: str, project_root: str) -> list[str]
         c = candidate.strip()
         if not c:
             continue
-        if not (c.startswith(allowed_prefixes) or c in ("pyproject.toml",)):
+        if not (c.startswith(allowed_prefixes) or c == PYPROJECT_FILE):
             continue
         if "*" in c:
             # Expande glob e inclui apenas arquivos.
