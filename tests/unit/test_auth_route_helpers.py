@@ -21,8 +21,20 @@ def _build_request(headers: dict[str, str] | None = None, client_host: str | Non
 
 
 def test_extract_client_ip_prefers_forwarded_for_header():
+    from backend.config.settings import settings
+
+    original = list(settings.security.trusted_proxy_ips)
+    settings.security.trusted_proxy_ips = ["127.0.0.1"]
     request = _build_request(headers={"X-Forwarded-For": "198.51.100.7, 10.0.0.1"}, client_host="127.0.0.1")
-    assert auth._extract_client_ip(request) == "198.51.100.7"
+    try:
+        assert auth._extract_client_ip(request) == "198.51.100.7"
+    finally:
+        settings.security.trusted_proxy_ips = original
+
+
+def test_extract_client_ip_ignores_forwarded_for_when_proxy_not_trusted():
+    request = _build_request(headers={"X-Forwarded-For": "198.51.100.7"}, client_host="203.0.113.9")
+    assert auth._extract_client_ip(request) == "203.0.113.9"
 
 
 def test_extract_client_ip_falls_back_to_request_client():

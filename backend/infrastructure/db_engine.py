@@ -34,7 +34,7 @@ def _create_engine():
         return create_async_engine(
             db_url,
             echo=settings.features.debug_mode,
-            pool_pre_ping=False,  # Desabilitado: usa TCP keepalive ao invés de SELECT 1 por checkout
+            pool_pre_ping=True,
             pool_size=10,  # Aumentado de 5 para suportar mais concorrência
             max_overflow=20,  # Aumentado de 10
             pool_recycle=3600,  # Recicla conexões a cada 1h

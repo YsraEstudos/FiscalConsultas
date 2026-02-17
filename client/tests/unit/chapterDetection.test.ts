@@ -33,9 +33,7 @@ describe('chapterDetection', () => {
         });
 
         it('should handle null/undefined gracefully', () => {
-            // @ts-expect-error - testing runtime behavior
             expect(extractChapter(null)).toBe(null);
-            // @ts-expect-error - testing runtime behavior
             expect(extractChapter(undefined)).toBe(null);
         });
     });
@@ -62,9 +60,7 @@ describe('chapterDetection', () => {
         });
 
         it('should handle null/undefined gracefully', () => {
-            // @ts-expect-error - testing runtime behavior
             expect(isSameChapter(null, ['84'])).toBe(false);
-            // @ts-expect-error - testing runtime behavior
             expect(isSameChapter('8422', null)).toBe(false);
         });
     });
