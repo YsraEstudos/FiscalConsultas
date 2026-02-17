@@ -4,9 +4,14 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -19,9 +24,16 @@ jobs:
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
 
       - name: Install backend dependencies
         run: uv sync --group dev
+
+      - name: Lint with Ruff
+        run: |
+          uvx ruff format --check
+          uvx ruff check
 
       - name: Run backend tests
         run: uv run pytest -q --cov=backend --cov-report=xml --cov-report=term-missing
@@ -34,6 +46,7 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -49,6 +62,14 @@ jobs:
       - name: Install frontend dependencies
         working-directory: client
         run: npm ci
+
+      - name: Lint frontend
+        working-directory: client
+        run: npm run lint
+
+      - name: Type check frontend
+        working-directory: client
+        run: npm run type-check
 
       - name: Run frontend tests
         working-directory: client
