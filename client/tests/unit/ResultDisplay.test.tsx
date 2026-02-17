@@ -93,6 +93,47 @@ describe('ResultDisplay Component', () => {
         });
     });
 
+    it('renders code content from data.results when data.resultados is missing', async () => {
+        const mockData = {
+            type: 'code' as const,
+            query: '8422',
+            results: {
+                '84': {
+                    capitulo: '84',
+                    titulo: 'Capitulo 84',
+                    posicoes: [
+                        {
+                            codigo: '84.22',
+                            ncm: '8422',
+                            descricao: 'Maquina de lavar',
+                            anchor_id: 'pos-84-22',
+                            aliquota: '0'
+                        }
+                    ]
+                }
+            }
+        };
+
+        render(
+            <SettingsProvider>
+                <ResultDisplay
+                    data={mockData as any}
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={true}
+                    tabId="tab-1"
+                    isNewSearch={false}
+                    onConsumeNewSearch={vi.fn()}
+                />
+            </SettingsProvider>
+        );
+
+        await waitFor(() => {
+            expect(screen.queryByText('Sem resultados para exibir.')).not.toBeInTheDocument();
+            expect(screen.getByText('Maquina de lavar')).toBeInTheDocument();
+        });
+    });
+
     it('persists scroll position when tab becomes inactive', async () => {
         const onPersistScroll = vi.fn();
         const mockData = {

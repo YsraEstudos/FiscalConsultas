@@ -57,8 +57,6 @@ describe('Frontend Render Performance', () => {
         const end = performance.now();
         const duration = end - start;
 
-        console.log(`\n[PERF] Render Time for ${VISIBLE_ITEMS} of 50 items: ${duration.toFixed(2)}ms`);
-
         // 3. Assert Performance Threshold
         // Observação: em CI/Windows o JSDOM pode variar bastante.
         expect(duration).toBeLessThan(800);
