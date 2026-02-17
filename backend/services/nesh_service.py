@@ -5,9 +5,12 @@ Contém toda a lógica de negócio, isolada de I/O e apresentação.
 
 import re
 import asyncio
+import hashlib
 from contextlib import asynccontextmanager
 from collections import OrderedDict
 from typing import Dict, List, Optional, Any, Tuple, Callable, AsyncGenerator
+
+import orjson
 
 from ..config import CONFIG
 from ..utils import ncm_utils
@@ -16,6 +19,8 @@ from ..config.logging_config import service_logger as logger
 from ..config.exceptions import ChapterNotFoundError, DatabaseError
 from ..domain import SearchResult, ServiceResponse
 from ..infrastructure import DatabaseAdapter
+from ..infrastructure.redis_client import redis_cache
+from ..utils.payload_cache_metrics import PayloadCacheMetrics
 
 # SQLModel Repository imports (optional - for new code paths)
 try:
@@ -93,6 +98,8 @@ class NeshService:
         # Async-friendly manual cache for FTS results using OrderedDict as LRU
         self._fts_cache: OrderedDict = OrderedDict()
         self._chapter_cache: OrderedDict = OrderedDict()
+        self._fts_cache_metrics = PayloadCacheMetrics("nesh_fts_cache")
+        self._chapter_cache_metrics = PayloadCacheMetrics("nesh_chapter_cache")
         self._cache_lock: Optional[asyncio.Lock] = None  # Lazy init
         
         mode = "Repository" if self._use_repository else "DatabaseAdapter"
@@ -122,6 +129,11 @@ class NeshService:
         if self._cache_lock is None:
             self._cache_lock = asyncio.Lock()
         return self._cache_lock
+
+    @staticmethod
+    def _fts_cache_key(query: str, tier: int, limit: int, words_matched: int, total_words: int) -> str:
+        raw = f"{query}|{tier}|{limit}|{words_matched}|{total_words}"
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     @asynccontextmanager
     async def _get_repo(self):
@@ -193,7 +205,20 @@ class NeshService:
             # Check cache
             if chapter_num in self._chapter_cache:
                 self._chapter_cache.move_to_end(chapter_num)
+                self._chapter_cache_metrics.record_hit()
                 return self._chapter_cache[chapter_num]
+        self._chapter_cache_metrics.record_miss()
+
+        if redis_cache.available:
+            cached = await redis_cache.get_chapter(chapter_num)
+            if cached:
+                async with self._get_cache_lock():
+                    self._chapter_cache[chapter_num] = cached
+                    self._chapter_cache_metrics.record_set()
+                    if len(self._chapter_cache) > CacheConfig.CHAPTER_CACHE_SIZE:
+                        self._chapter_cache.popitem(last=False)
+                        self._chapter_cache_metrics.record_eviction()
+                return cached
 
         logger.debug(f"Fetching capítulo {chapter_num} (cache miss)")
         
@@ -210,8 +235,9 @@ class NeshService:
                     'chapter_num': chapter.chapter_num,
                     'content': chapter.content,
                     'notes': chapter.notes.notes_content if chapter.notes else None,
+                    'parsed_notes_json': getattr(chapter.notes, 'parsed_notes_json', None) if chapter.notes else None,
                     'positions': [
-                        {'codigo': p.codigo, 'descricao': p.descricao}
+                        {'codigo': p.codigo, 'descricao': p.descricao, 'anchor_id': p.anchor_id}
                         for p in chapter.positions
                     ],
                     'sections': {
@@ -227,21 +253,37 @@ class NeshService:
             raw_data = await self.db.get_chapter_raw(chapter_num)
             if not raw_data:
                 return None
-            
-        raw_data['parsed_notes'] = self.parse_chapter_notes(raw_data['notes'])
+
+        # Use precomputed parsed_notes if available, else fall back to runtime parsing
+        precomputed_json = raw_data.pop('parsed_notes_json', None)
+        if precomputed_json:
+            try:
+                raw_data['parsed_notes'] = orjson.loads(precomputed_json) if isinstance(precomputed_json, (str, bytes)) else precomputed_json
+            except Exception:
+                raw_data['parsed_notes'] = self.parse_chapter_notes(raw_data['notes'])
+        else:
+            raw_data['parsed_notes'] = self.parse_chapter_notes(raw_data['notes'])
+
         raw_data['positions'] = self._enrich_positions_with_id(raw_data.get('positions', []))
+
+        if redis_cache.available:
+            await redis_cache.set_chapter(chapter_num, raw_data)
         
         async with self._get_cache_lock():
             # Update cache
             self._chapter_cache[chapter_num] = raw_data
+            self._chapter_cache_metrics.record_set()
             if len(self._chapter_cache) > CacheConfig.CHAPTER_CACHE_SIZE:
                 self._chapter_cache.popitem(last=False)
+                self._chapter_cache_metrics.record_eviction()
             
         return raw_data
 
     def _enrich_positions_with_id(self, positions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Adiciona anchor_id a cada posição."""
+        """Adiciona anchor_id a cada posição (usa precomputed se disponível)."""
         for i, pos in enumerate(positions):
+            if pos.get('anchor_id'):
+                continue
             codigo = pos.get('codigo')
             anchor_id = generate_anchor_id(codigo)
             pos['anchor_id'] = anchor_id
@@ -264,6 +306,28 @@ class NeshService:
         
         return " ".join(unique)
 
+    def normalize_query_raw(self, text: str) -> str:
+        """
+        Normaliza query para FTS sem stemming agressivo.
+        Usado como fallback quando stemming não encontra resultados.
+        """
+        normalized = self.processor.normalize(text)
+        words = re.findall(r'\b\w+\b', normalized)
+
+        processed = []
+        for w in words:
+            if w in self.processor.stopwords:
+                continue
+            if len(w) < 2:
+                continue
+            processed.append(f"{w}*")
+
+        if not processed:
+            return ""
+
+        unique = list(dict.fromkeys(processed))[:20]
+        return " ".join(unique)
+
     async def _fts_scored_cached(self, query: str, tier: int, limit: int,
                            words_matched: int, total_words: int) -> List[Dict[str, Any]]:
         """
@@ -274,7 +338,21 @@ class NeshService:
         async with self._get_cache_lock():
             if key in self._fts_cache:
                 self._fts_cache.move_to_end(key)
+                self._fts_cache_metrics.record_hit()
                 return list(self._fts_cache[key])
+        self._fts_cache_metrics.record_miss()
+
+        if redis_cache.available:
+            redis_key = self._fts_cache_key(query, tier, limit, words_matched, total_words)
+            cached = await redis_cache.get_fts(redis_key)
+            if cached:
+                async with self._get_cache_lock():
+                    self._fts_cache[key] = cached
+                    self._fts_cache_metrics.record_set()
+                    if len(self._fts_cache) > _FTS_CACHE_SIZE:
+                        self._fts_cache.popitem(last=False)
+                        self._fts_cache_metrics.record_eviction()
+                return list(cached)
 
         # Use repository if available, otherwise fallback to legacy adapter
         if self._use_repository:
@@ -308,8 +386,14 @@ class NeshService:
         
         async with self._get_cache_lock():
             self._fts_cache[key] = results
+            self._fts_cache_metrics.record_set()
             if len(self._fts_cache) > _FTS_CACHE_SIZE:
                 self._fts_cache.popitem(last=False)
+                self._fts_cache_metrics.record_eviction()
+
+        if redis_cache.available:
+            redis_key = self._fts_cache_key(query, tier, limit, words_matched, total_words)
+            await redis_cache.set_fts(redis_key, results)
             
         return results
 
@@ -323,6 +407,7 @@ class NeshService:
         total_words = len(original_words)
         
         normalized_q = self.normalize_query(query)
+        normalized_raw_q = self.normalize_query_raw(query)
         
         if not normalized_q:
             logger.debug("Query vazia após normalização")
@@ -375,6 +460,14 @@ class NeshService:
             words_matched=total_words,
             total_words=total_words
         )
+        if not and_results and normalized_raw_q and normalized_raw_q != normalized_q:
+            and_results = await self._fts_scored_cached(
+                normalized_raw_q,
+                tier=2,
+                limit=SearchConfig.TIER2_LIMIT,
+                words_matched=total_words,
+                total_words=total_words
+            )
         if and_results:
             logger.info(f"FTS TIER2 (AND): {len(and_results)} resultados")
             add_results(and_results)
@@ -417,6 +510,16 @@ class NeshService:
                     words_matched=max(1, total_words // 2),
                     total_words=total_words
                 )
+                if (not partial_results) and normalized_raw_q:
+                    raw_or_query = " OR ".join(normalized_raw_q.split())
+                    if raw_or_query != or_query:
+                        partial_results = await self._fts_scored_cached(
+                            raw_or_query,
+                            tier=3,
+                            limit=SearchConfig.TIER3_LIMIT,
+                            words_matched=max(1, total_words // 2),
+                            total_words=total_words
+                        )
                 if partial_results:
                     logger.info(f"FTS TIER3 (OR): {len(partial_results)} resultados")
                     add_results(partial_results)
@@ -501,22 +604,29 @@ class NeshService:
         Returns:
             ServiceResponse com type='code' e dict de resultados
         """
-        logger.info(f"Busca por código: '{ncm_query}'")
+        logger.debug(f"Busca por código: '{ncm_query}'")
         
         results: Dict[str, SearchResult] = {}
         ncms = ncm_utils.split_ncm_query(ncm_query)
-        
+
+        chapter_targets: OrderedDict[str, Tuple[str, Optional[str]]] = OrderedDict()
         for ncm in ncms:
             chapter_num, target_pos = ncm_utils.extract_chapter_from_ncm(ncm)
-            
             if not chapter_num:
                 logger.debug(f"NCM inválido ignorado: '{ncm}'")
                 continue
-            
-            data = await self.fetch_chapter_data(chapter_num)
-            
-            if data:
-                if chapter_num not in results:
+            if chapter_num not in chapter_targets:
+                chapter_targets[chapter_num] = (ncm, target_pos)
+
+        if chapter_targets:
+            ordered_chapters = list(chapter_targets.keys())
+            chapter_payloads = await asyncio.gather(
+                *(self.fetch_chapter_data(chapter_num) for chapter_num in ordered_chapters)
+            )
+
+            for chapter_num, data in zip(ordered_chapters, chapter_payloads):
+                ncm_buscado, target_pos = chapter_targets[chapter_num]
+                if data:
                     sections = data.get('sections') or {}
                     has_sections = any(
                         (sections.get(key) or "").strip()
@@ -526,7 +636,7 @@ class NeshService:
                     if has_sections:
                         content = self._strip_chapter_preamble(content)
                     results[chapter_num] = {
-                        "ncm_buscado": ncm,
+                        "ncm_buscado": ncm_buscado,
                         "capitulo": chapter_num,
                         "posicao_alvo": target_pos,
                         "posicoes": data['positions'],
@@ -542,21 +652,21 @@ class NeshService:
                             "definicoes": sections.get('definicoes')
                         } if has_sections else None
                     }
-            else:
-                logger.warning(f"Capítulo não encontrado: {chapter_num}")
-                results[chapter_num] = {
-                    "ncm_buscado": ncm,
-                    "capitulo": chapter_num,
-                    "real_content_found": False,
-                    "erro": f"Capítulo {chapter_num} não encontrado",
-                    "conteudo": "",
-                    "posicoes": [],
-                    "notas_gerais": None,
-                    "notas_parseadas": {},
-                    "posicao_alvo": None
-                }
+                else:
+                    logger.warning(f"Capítulo não encontrado: {chapter_num}")
+                    results[chapter_num] = {
+                        "ncm_buscado": ncm_buscado,
+                        "capitulo": chapter_num,
+                        "real_content_found": False,
+                        "erro": f"Capítulo {chapter_num} não encontrado",
+                        "conteudo": "",
+                        "posicoes": [],
+                        "notas_gerais": None,
+                        "notas_parseadas": {},
+                        "posicao_alvo": None
+                    }
 
-        logger.info(f"Retornando {len(results)} capítulos")
+        logger.debug(f"Retornando {len(results)} capítulos")
         return {
             "success": True,
             "type": "code",
@@ -577,3 +687,74 @@ class NeshService:
             return await self.search_by_code(query)
         else:
             return await self.search_full_text(query)
+
+    async def prewarm_cache(self, chapter_nums: Optional[List[str]] = None, concurrency: int = 10) -> int:
+        """
+        Pre-warm chapter cache (L1/L2) to reduce cold latency.
+        """
+        if chapter_nums is None:
+            if self._use_repository:
+                async with self._get_repo() as repo:
+                    if not repo:
+                        return 0
+                    chapter_nums = await repo.get_all_nums()
+            else:
+                if not self.db:
+                    return 0
+                chapter_nums = await self.db.get_all_chapters_list()
+
+        if not chapter_nums:
+            return 0
+
+        sem = asyncio.Semaphore(concurrency)
+
+        async def _warm(chapter_num: str) -> None:
+            async with sem:
+                try:
+                    await self.fetch_chapter_data(chapter_num)
+                except Exception as exc:
+                    logger.debug("Prewarm failed for %s: %s", chapter_num, exc)
+
+        await asyncio.gather(*(_warm(num) for num in chapter_nums))
+        return len(chapter_nums)
+
+    async def get_internal_cache_metrics(self) -> Dict[str, Any]:
+        """
+        Snapshot dos caches internos (L1) do serviço.
+        """
+        async with self._get_cache_lock():
+            chapter_snapshot = self._chapter_cache_metrics.snapshot(
+                current_size=len(self._chapter_cache),
+                max_size=CacheConfig.CHAPTER_CACHE_SIZE,
+            )
+            fts_snapshot = self._fts_cache_metrics.snapshot(
+                current_size=len(self._fts_cache),
+                max_size=_FTS_CACHE_SIZE,
+            )
+
+        return {
+            "chapter_cache": {
+                "name": self._chapter_cache_metrics.name,
+                "hits": chapter_snapshot.hits,
+                "misses": chapter_snapshot.misses,
+                "sets": chapter_snapshot.sets,
+                "evictions": chapter_snapshot.evictions,
+                "served_gzip": chapter_snapshot.served_gzip,
+                "served_identity": chapter_snapshot.served_identity,
+                "current_size": chapter_snapshot.current_size,
+                "max_size": chapter_snapshot.max_size,
+                "hit_rate": chapter_snapshot.hit_rate,
+            },
+            "fts_cache": {
+                "name": self._fts_cache_metrics.name,
+                "hits": fts_snapshot.hits,
+                "misses": fts_snapshot.misses,
+                "sets": fts_snapshot.sets,
+                "evictions": fts_snapshot.evictions,
+                "served_gzip": fts_snapshot.served_gzip,
+                "served_identity": fts_snapshot.served_identity,
+                "current_size": fts_snapshot.current_size,
+                "max_size": fts_snapshot.max_size,
+                "hit_rate": fts_snapshot.hit_rate,
+            },
+        }

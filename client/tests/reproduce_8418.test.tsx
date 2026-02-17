@@ -118,16 +118,6 @@ describe('TDD: 84.18 Scroll Bug Reproduction', () => {
         // Verify scroll was called
         expect(scrollIntoViewMock).toHaveBeenCalled();
 
-        // Get ALL scroll calls
-        console.log('Total scroll calls:', scrollCalls.length);
-        scrollCalls.forEach((call, i) => {
-            console.log(`Scroll #${i + 1}:`, {
-                tagName: call.element.tagName,
-                id: call.element.id,
-                textPreview: call.element.textContent?.slice(0, 50)
-            });
-        });
-
         // The FIRST scroll call should be to an H3 element (the structural heading)
         // NOT to a paragraph or other impostor element
         const firstScrolledElement = scrollCalls[0]?.element;

@@ -7,6 +7,7 @@ CHAPTER_NOTES_COLUMNS = (
     "notas",
     "consideracoes",
     "definicoes",
+    "parsed_notes_json",
 )
 
 CHAPTER_NOTES_SECTION_COLUMNS = (
@@ -25,6 +26,7 @@ CHAPTER_NOTES_CREATE_SQL = f"""
         notas TEXT,
         consideracoes TEXT,
         definicoes TEXT,
+        parsed_notes_json TEXT,
         FOREIGN KEY (chapter_num) REFERENCES chapters(chapter_num)
     )
 """

@@ -18,7 +18,7 @@
  * extractChapter("7308.10.00") // "73"
  * extractChapter("invalid") // null
  */
-export function extractChapter(ncm: string): string | null {
+export function extractChapter(ncm: string | null | undefined): string | null {
     if (!ncm || typeof ncm !== 'string') return null;
 
     // Remove todos os caracteres nao numericos
@@ -44,7 +44,10 @@ export function extractChapter(ncm: string): string | null {
  * isSameChapter("9401", ["84", "73"]) // false
  * isSameChapter("", ["84"]) // false
  */
-export function isSameChapter(ncm: string, loadedChapters: string[]): boolean {
+export function isSameChapter(
+    ncm: string | null | undefined,
+    loadedChapters: string[] | null | undefined
+): boolean {
     const targetChapter = extractChapter(ncm);
 
     if (!targetChapter) return false;
