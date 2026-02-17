@@ -11,6 +11,8 @@ from backend.data.glossary_manager import glossary_manager
 from backend.config.logging_config import server_logger as logger
 from backend.utils.cache import cache_scope_key, weak_etag
 from backend.utils.payload_cache_metrics import search_payload_cache_metrics
+from backend.utils import ncm_utils
+from backend.presentation.renderer import HtmlRenderer
 
 import orjson as _orjson
 
@@ -107,20 +109,8 @@ async def search(
     
     safe_ncm = ncm.replace("\r", "\\r").replace("\n", "\\n")
     logger.debug("Busca: '%s'", safe_ncm)
-    
-    # Service Layer (ASYNC) - Exceções propagam para o handler global
-    response_data = await service.process_request(ncm)
-    
-    # Compatibilidade de contrato:
-    # manter 'results' como chave canônica e preservar alias legado 'resultados'
-    # para respostas de código (consumidores antigos e testes de integração).
-    if response_data.get("type") == "code":
-        results = response_data.get("results") or response_data.get("resultados") or {}
-        response_data["results"] = results
-        response_data["resultados"] = results
-        response_data["total_capitulos"] = response_data.get("total_capitulos") or len(results)
-    
-    # Performance: orjson serialization + caching headers (catalog data rarely changes)
+
+    # Common caching headers / scope key
     cache_key = cache_scope_key(request)
     headers = {
         "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",
@@ -128,20 +118,61 @@ async def search(
         "Vary": "Authorization, X-Tenant-Id, Accept-Encoding",
     }
 
+    # Hot-path short-circuit:
+    # for code queries, return cached payload before running service/renderer.
+    payload_key: str | None = None
+    cached_payload: tuple[bytes, bytes] | None = None
+    cache_checked = False
+    if ncm_utils.is_code_query(ncm):
+        payload_key = f"{cache_key}:{ncm}"
+        cached_payload = _code_payload_cache_get(payload_key)
+        cache_checked = True
+        if cached_payload is not None:
+            raw_body, gzip_body = cached_payload
+            common_headers = {**headers, "X-Payload-Cache": "HIT"}
+            if _accepts_gzip(request):
+                search_payload_cache_metrics.record_served(gzip=True)
+                return Response(
+                    content=gzip_body,
+                    media_type="application/json",
+                    headers={**common_headers, "Content-Encoding": "gzip"},
+                )
+            search_payload_cache_metrics.record_served(gzip=False)
+            return Response(content=raw_body, media_type="application/json", headers=common_headers)
+    
+    # Service Layer (ASYNC) - Exceções propagam para o handler global
+    response_data = await service.process_request(ncm)
+    
+    # Compatibilidade de contrato / performance:
+    # - manter 'results' como chave canônica e alias legado 'resultados'
+    # - pre-renderizar HTML no backend (campo `markdown` mantido por compatibilidade)
+    # - remover campos brutos pesados da serialização
+    if response_data.get("type") == "code":
+        results = response_data.get("results") or response_data.get("resultados") or {}
+        response_data["markdown"] = HtmlRenderer.render_full_response(results)
+        for chapter_data in results.values():
+            if isinstance(chapter_data, dict):
+                chapter_data.pop("conteudo", None)
+        response_data["results"] = results
+        response_data["resultados"] = results
+        response_data["total_capitulos"] = response_data.get("total_capitulos") or len(results)
+    
     # Hot path optimization:
     # code lookups are frequently repeated with very large payloads (~860KB+).
     # Cache both raw and gzip bodies to avoid serializing/compressing each request.
     if response_data.get("type") == "code":
-        payload_key = f"{cache_key}:{ncm}"
-        cache_status = "MISS"
-        cached_payload = _code_payload_cache_get(payload_key)
+        if not cache_checked:
+            payload_key = f"{cache_key}:{ncm}"
+            cached_payload = _code_payload_cache_get(payload_key)
+            cache_checked = True
+
+        cache_status = "HIT" if cached_payload is not None else "MISS"
         if cached_payload is None:
             raw_body = _orjson.dumps(response_data)
             gzip_body = gzip.compress(raw_body, compresslevel=1, mtime=0)
             cached_payload = (raw_body, gzip_body)
-            _code_payload_cache_set(payload_key, cached_payload)
-        else:
-            cache_status = "HIT"
+            if payload_key is not None:
+                _code_payload_cache_set(payload_key, cached_payload)
 
         raw_body, gzip_body = cached_payload
         common_headers = {**headers, "X-Payload-Cache": cache_status}
