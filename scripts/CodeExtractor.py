@@ -7,6 +7,10 @@ from dataclasses import dataclass
 
 SIZE_WARNING = 120000
 OUTPUT_DIR = "Scripts results"
+NESH_SERVICE_PATH = "backend/services/nesh_service.py"
+TIPI_SERVICE_PATH = "backend/services/tipi_service.py"
+RENDERER_PATH = "backend/presentation/renderer.py"
+ID_UTILS_PATH = "backend/utils/id_utils.py"
 
 
 @dataclass(frozen=True)
@@ -24,9 +28,9 @@ PROFILES: dict[str, Profile] = {
             "scripts/setup_database.py",
             "scripts/rebuild_index.py",
             "scripts/ingest_markdown.py",
-            "backend/services/nesh_service.py",
-            "backend/services/tipi_service.py",
-            "backend/presentation/renderer.py",
+            NESH_SERVICE_PATH,
+            TIPI_SERVICE_PATH,
+            RENDERER_PATH,
             "backend/utils/ncm_utils.py",
         ],
         plan_doc=os.path.join(
@@ -41,10 +45,10 @@ PROFILES: dict[str, Profile] = {
             "backend/domain/__init__.py",
             "backend/__init__.py",
             "backend/domain/sqlmodels.py",
-            "backend/utils/id_utils.py",
-            "backend/services/nesh_service.py",
-            "backend/services/tipi_service.py",
-            "backend/presentation/renderer.py",
+            ID_UTILS_PATH,
+            NESH_SERVICE_PATH,
+            TIPI_SERVICE_PATH,
+            RENDERER_PATH,
             "backend/presentation/routes/search.py",
             "backend/infrastructure/repositories/chapter_repository.py",
             "backend/infrastructure/repositories/position_repository.py",
@@ -66,9 +70,9 @@ PROFILES: dict[str, Profile] = {
             "client/src/components/ResultDisplay.tsx",
             "client/src/hooks/useRobustScroll.ts",
             "client/src/components/Sidebar.tsx",
-            "backend/utils/id_utils.py",
-            "backend/services/nesh_service.py",
-            "backend/presentation/renderer.py",
+            ID_UTILS_PATH,
+            NESH_SERVICE_PATH,
+            RENDERER_PATH,
             "backend/presentation/tipi_renderer.py",
             "client/src/utils/id_utils.ts",
             "client/src/utils/chapterDetection.ts",
