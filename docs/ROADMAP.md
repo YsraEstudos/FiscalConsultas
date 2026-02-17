@@ -40,10 +40,21 @@ Transformar a busca de palavras-chave em **busca de intenção**, integrando mú
 
 - [ ] **[Ops] Logging Estruturado**
 - [ ] **[Ops] Métricas Básicas (Healthcheck profundo, latência p95)**
+- [ ] **[Ops] Endpoint Prometheus `/api/metrics`**
+  - Exportar métricas (counters/gauges/histogram) para: latência por rota, p95/p99, tamanho/hit-rate dos caches (payload cache + caches internos), status do banco/Redis.
+  - Proteger com allowlist/rede interna ou token admin (não expor publicamente).
 - [ ] **[QA] Testes de Regressão Críticos**
   - Cobrir login, search e chat com mocks estáveis.
 - [ ] **[Frontend] Tipagem Forte do Nível de API (#11)**
 - [ ] **[Code] Remover Console Logs e Prints (#6, #12)**
+- [ ] **[Code] Analisar e reduzir módulos "God Module" (Guardrail)**
+  - Execução base (`--language auto --threshold 60`, 2026-02-08): 133 arquivos, 5 módulos sinalizados, status FAIL.
+  - Top 5 (base): `backend/services/nesh_service.py` (76.33), `scripts/god_module_guardrail.py` (76.08), `backend/services/tipi_service.py` (73.08), `backend/presentation/renderer.py` (72.33), `tests/conftest.py` (65.83).
+  - Execução React (`--language javascript --threshold 60`): 69 arquivos, 0 sinalizados, status PASS.
+  - Execução React sensível (`--language javascript --threshold 50`): 69 arquivos, 1 sinalizado (`client/src/App.tsx` 53.62), status FAIL.
+  - Execução focada em serviços (`--root backend/services --language python --threshold 60`): 4 arquivos, 2 sinalizados (`backend/services/nesh_service.py`, `backend/services/tipi_service.py`), status FAIL.
+  - Menores scores atuais (baixa prioridade, monitoramento): `backend/utils/__init__.py` (0.00), `backend/presentation/routes/__init__.py` (0.00), `backend/presentation/schemas/__init__.py` (0.00), `backend/infrastructure/repositories/__init__.py` (0.07), `backend/data/__init__.py` (0.13), `backend/domain/__init__.py` (0.13), `backend/infrastructure/__init__.py` (0.13), `backend/presentation/__init__.py` (0.13), `backend/server/__init__.py` (0.13), `backend/services/__init__.py` (0.13), `backend/__init__.py` (0.80), `backend/config/__init__.py` (0.87).
+  - Ação prática: abrir plano de refatoração incremental para `backend/services/nesh_service.py`, `backend/services/tipi_service.py` e `client/src/App.tsx`.
 
 ## Fase 3: Arquitetura e Inteligência de Busca (IA)
 
@@ -85,6 +96,13 @@ Transformar a busca de palavras-chave em **busca de intenção**, integrando mú
 - [x] **[Frontend] Adicionar interceptor no axios para enviar JWT no header `Authorization`**
 - [x] **[Frontend] Componentes de Login (SignIn, SignUp, UserButton, OrganizationSwitcher)**
 - [x] **[Backend] Descontinuar login legado (`/api/login`, `/api/logout`) e proteger APIs de auth com JWT Clerk**
+
+## 🆕 Fase 6.1: Refino de Frontend (Tabs & Context)
+
+- [ ] **[Frontend] Extrair `tabs.map()` para `TabContent` memoizado**
+  - Pode exigir ajuste fino no `TabPanel`/keep-alive para ganho real de performance.
+- [ ] **[Frontend] Split do `CrossChapterNoteContext` em dois contextos (dados/ações)**
+  - Por enquanto, ficou com `useMemo` + cache limitado.
 
 ## 🆕 Fase 7: Billing Profissional (Asaas) 💰
 

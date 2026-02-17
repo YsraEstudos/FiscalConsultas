@@ -1,7 +1,16 @@
 
+import os
+import socket
+import subprocess
+import sys
+import time
+from urllib.parse import urlparse
+
+import httpx
 import pytest
 import sqlite3
 from backend.config import CONFIG
+from backend.config.settings import settings
 
 # --- NCM Search Benchmarks ---
 
@@ -122,3 +131,118 @@ def test_bench_search_initial_cold(benchmark, client):
         
     # We run only 1 round to capture the 'Cold' behavior
     benchmark.pedantic(run_cold_search, rounds=1)
+
+
+def _redis_is_available() -> bool:
+    if not settings.cache.enable_redis:
+        return False
+    parsed = urlparse(settings.cache.redis_url)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 6379
+    try:
+        with socket.create_connection((host, port), timeout=1.5):
+            return True
+    except OSError:
+        return False
+
+
+def _start_server() -> subprocess.Popen:
+    env = os.environ.copy()
+    env["NESH_NO_BROWSER"] = "1"
+    env["PYTHONUNBUFFERED"] = "1"
+    env["NESH_RELOAD"] = "0"
+
+    proc = subprocess.Popen(
+        [sys.executable, "-u", "Nesh.py"],
+        cwd=os.getcwd(),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
+    )
+
+    deadline = time.time() + 30.0
+    while time.time() < deadline:
+        line = proc.stdout.readline() if proc.stdout else ""
+        if not line:
+            if proc.poll() is not None:
+                raise RuntimeError(f"Servidor encerrou no startup (exit={proc.returncode})")
+            continue
+
+        if (
+            "Application startup complete" in line
+            or "Uvicorn running on" in line
+        ):
+            _wait_server_http_ready(proc, timeout_s=max(1.0, deadline - time.time()))
+            return proc
+
+    try:
+        proc.terminate()
+    except Exception:
+        pass
+    raise RuntimeError("Timeout ao iniciar servidor")
+
+
+def _wait_server_http_ready(proc: subprocess.Popen, timeout_s: float = 15.0) -> None:
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            raise RuntimeError(f"Servidor encerrou antes de ficar pronto (exit={proc.returncode})")
+
+        try:
+            resp = httpx.get("http://127.0.0.1:8000/api/status", timeout=1.5)
+            if resp.status_code == 200:
+                return
+        except httpx.HTTPError:
+            pass
+
+        time.sleep(0.1)
+
+    raise RuntimeError("Timeout aguardando readiness HTTP em /api/status")
+
+
+def _stop_server(proc: subprocess.Popen) -> None:
+    try:
+        proc.terminate()
+    except Exception:
+        return
+    try:
+        proc.wait(timeout=5)
+    except Exception:
+        pass
+
+
+@pytest.mark.benchmark(group="caching_performance")
+def test_bench_ncm_lookup_redis_warm_restart(benchmark):
+    """
+    Benchmark NCM lookup com Redis warm e L1 vazio (via restart).
+    Warm Redis em um processo, reinicia o app e mede o primeiro hit.
+    """
+    if not _redis_is_available():
+        pytest.skip("Redis indisponivel ou desativado")
+
+    def warm_redis():
+        proc = _start_server()
+        try:
+            resp = httpx.get("http://127.0.0.1:8000/api/search?ncm=8517", timeout=10.0)
+            assert resp.status_code == 200
+        finally:
+            _stop_server(proc)
+
+    warm_redis()
+
+    def run_lookup():
+        proc = _start_server()
+        try:
+            start = time.perf_counter()
+            resp = httpx.get("http://127.0.0.1:8000/api/search?ncm=8517", timeout=10.0)
+            end = time.perf_counter()
+            assert resp.status_code == 200
+            return (end - start) * 1000.0
+        finally:
+            _stop_server(proc)
+
+    benchmark.pedantic(run_lookup, rounds=5, iterations=1)

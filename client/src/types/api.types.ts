@@ -136,7 +136,8 @@ export interface TipiCodeSearchResponse extends BaseApiResponse {
     type: 'code';
     query: string;
     results: Record<string, TipiChapterData>;
-    resultados: Record<string, TipiChapterData>;
+    /** @deprecated Use `results` */
+    resultados?: Record<string, TipiChapterData>;
     total: number;
     total_capitulos: number;
     markdown?: string;
@@ -240,11 +241,7 @@ export function isCodeSearchResponse(
 
 /** Verifica se a resposta é um erro da API */
 export function isApiError(response: unknown): response is ApiErrorResponse {
-    return (
-        typeof response === 'object' &&
-        response !== null &&
-        'success' in response &&
-        (response as BaseApiResponse).success === false &&
-        'error' in response
-    );
+    if (!response || typeof response !== 'object') return false;
+    const candidate = response as Partial<ApiErrorResponse>;
+    return candidate.success === false && candidate.error != null;
 }

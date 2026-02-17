@@ -14,6 +14,7 @@ from backend.services import NeshService
 from backend.services.ai_service import AiService
 from backend.services.tipi_service import TipiService
 from backend.server.error_handlers import nesh_exception_handler, generic_exception_handler
+from backend.infrastructure.redis_client import redis_cache
 
 from backend.data.glossary_manager import init_glossary
 from backend.utils.frontend_check import verify_frontend_build
@@ -59,9 +60,15 @@ async def lifespan(app: FastAPI):
             app.state.sqlmodel_enabled = True
             logger.info("SQLModel engine ready (Postgres migrations via Alembic)")
         else:
-            await init_db()
-            app.state.sqlmodel_enabled = True
-            logger.info("SQLModel engine initialized (SQLite)")
+            try:
+                await init_db()
+                app.state.sqlmodel_enabled = True
+                logger.info("SQLModel engine initialized (SQLite)")
+            except Exception as e:
+                # Alguns ambientes SQLite não suportam tipos específicos (ex: TSVECTOR).
+                # Nesses casos, seguimos com o adaptador legado sem interromper startup.
+                app.state.sqlmodel_enabled = False
+                logger.warning("SQLModel init skipped (SQLite incompatibility): %s", e)
     except ImportError:
         app.state.sqlmodel_enabled = False
         logger.debug("SQLModel not available, using legacy DatabaseAdapter")
@@ -78,6 +85,15 @@ async def lifespan(app: FastAPI):
     else:
         app.state.service = NeshService(app.state.db)
         logger.info("NeshService initialized in Legacy mode (SQLite)")
+
+    if settings.cache.enable_redis:
+        await redis_cache.connect()
+        if redis_cache.available:
+            try:
+                warmed = await app.state.service.prewarm_cache()
+                logger.info("Chapter cache prewarmed: %s capítulos", warmed)
+            except Exception as e:
+                logger.warning("Cache prewarm failed: %s", e)
 
     if settings.database.is_postgres:
         # Verificar se tipi_positions tem dados no PostgreSQL
@@ -117,6 +133,8 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down...")
     if hasattr(app.state, "db") and app.state.db:
         await app.state.db.close()
+
+    await redis_cache.close()
     
     # Close SQLModel engine if initialized
     if getattr(app.state, "sqlmodel_enabled", False):
@@ -139,7 +157,9 @@ app.add_exception_handler(Exception, generic_exception_handler)
 
 # --- Middleware ---
 # GZip (Architecture Improvement)
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+# compresslevel=1 →  ~5x faster than level 6 with only ~10% larger output.
+# Critical: chapter responses are ~860KB; level 6 costs ~72ms, level 1 costs ~12ms.
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=1)
 
 # Multi-tenant context middleware
 app.add_middleware(TenantMiddleware)
@@ -152,9 +172,15 @@ cors_origins = settings.server.cors_allowed_origins or [
     "http://127.0.0.1:5173",
 ]
 
+# Dev convenience: allow local-network Vite hosts on :5173 without opening broad CORS in production.
+cors_allow_origin_regex = None
+if settings.server.env == "development":
+    cors_allow_origin_regex = r"^https?://(?:localhost|127\.0\.0\.1|\d{1,3}(?:\.\d{1,3}){3})(?::5173)?$"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
+    allow_origin_regex=cors_allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

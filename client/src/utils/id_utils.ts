@@ -98,5 +98,9 @@ export function generateAnchorId(ncmCode: string | null | undefined): string {
 }
 
 export function generateChapterId(chapter: string | number): string {
-    return `cap-${chapter}`;
+    const value = String(chapter).trim();
+    if (!value) return "chapter-";
+    if (value.startsWith("chapter-")) return value;
+    if (value.startsWith("cap-")) return `chapter-${value.slice(4)}`;
+    return `chapter-${value}`;
 }
