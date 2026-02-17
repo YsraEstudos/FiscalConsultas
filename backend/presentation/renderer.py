@@ -409,10 +409,11 @@ class HtmlRenderer:
         """
         def replacer(match: re.Match) -> str:
             raw = match.group(0)
-            # Para padrões que permitem espaço (ex.: "37,5 W"), não queremos envolver o espaço.
-            m = re.match(r'^(\s+)(.+)$', raw)
-            if m:
-                return f'{m.group(1)}<span class="highlight-unit">{m.group(2)}</span>'
+            # Avoid regex-on-regex matching here; split leading whitespace safely.
+            stripped = raw.lstrip()
+            if stripped != raw:
+                leading = raw[: len(raw) - len(stripped)]
+                return f'{leading}<span class="highlight-unit">{stripped}</span>'
             return f'<span class="highlight-unit">{raw}</span>'
 
         class _UnitHighlighter(HTMLParser):
@@ -582,9 +583,10 @@ class HtmlRenderer:
 
         def unit_replacer(match: re.Match) -> str:
             raw = match.group(0)
-            ws_match = re.match(r"^(\s+)(.+)$", raw)
-            if ws_match:
-                return f'{ws_match.group(1)}<span class="highlight-unit">{ws_match.group(2)}</span>'
+            stripped = raw.lstrip()
+            if stripped != raw:
+                leading = raw[: len(raw) - len(stripped)]
+                return f'{leading}<span class="highlight-unit">{stripped}</span>'
             return f'<span class="highlight-unit">{raw}</span>'
 
         transforms: list[tuple[re.Pattern, Callable[[re.Match], str]]] = [
