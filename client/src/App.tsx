@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState, Suspense } from 'react';
+import { useEffect, useCallback, useRef, useState, Suspense } from 'react';
 
 import { Toaster, toast } from 'react-hot-toast';
 import { Layout } from './components/Layout';
@@ -19,6 +19,16 @@ import styles from './App.module.css';
 import { ModalManager } from './components/ModalManager';
 
 // Declaracao global movida para vite-env.d.ts
+type DocType = 'nesh' | 'tipi';
+
+function splitSearchTerms(raw: string): string[] {
+    return raw
+        .split(/[,\s]+/)
+        .map(term => term.trim())
+        .filter(Boolean);
+}
+
+const noop = () => { };
 
 function App() {
     const {
@@ -50,13 +60,17 @@ function App() {
     // Hooks customizados
     const { history, addToHistory, removeFromHistory, clearHistory } = useHistory();
     const { executeSearchForTab } = useSearch(tabsById, updateTab, addToHistory);
+    const activeTabRef = useRef(activeTab);
+    const handleSearchRef = useRef<(query: string) => void>(() => { });
+    const handleOpenNoteRef = useRef<(note: string, chapter?: string) => void>(() => { });
+
+    activeTabRef.current = activeTab;
 
     const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
-    const noop = useCallback(() => { }, []);
     const resetLoadedChaptersForDoc = useCallback((doc: DocType) => {
-        const current = activeTab.loadedChaptersByDoc || { nesh: [], tipi: [] };
+        const current = activeTabRef.current?.loadedChaptersByDoc || { nesh: [], tipi: [] };
         return { ...current, [doc]: [] };
-    }, [activeTab.loadedChaptersByDoc]);
+    }, []);
 
 
     // Atalhos globais de teclado
@@ -73,30 +87,20 @@ function App() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-
-    type DocType = 'nesh' | 'tipi';
-
-
-    const splitSearchTerms = useCallback((raw: string) => {
-        return raw
-            .split(/[,\s]+/)
-            .map(term => term.trim())
-            .filter(Boolean);
-    }, []);
-
     // Busca atua na aba ativa, mas suporta multiplos NCMs por virgula/espaco
     const handleSearch = useCallback((query: string) => {
         const terms = splitSearchTerms(query);
         if (terms.length === 0) return;
 
-        const doc = (activeTab?.document || 'nesh') as DocType;
+        const currentTab = activeTabRef.current;
+        const doc = (currentTab?.document || 'nesh') as DocType;
 
         if (terms.length === 1) {
             void executeSearchForTab(activeTabId, doc, terms[0], true);
             return;
         }
 
-        const canReuseActiveTab = !activeTab?.loading && !activeTab?.results && !activeTab?.ncm;
+        const canReuseActiveTab = !currentTab?.loading && !currentTab?.results && !currentTab?.ncm;
         let startIndex = 0;
 
         if (canReuseActiveTab) {
@@ -108,23 +112,14 @@ function App() {
             const tabId = createTab(doc);
             void executeSearchForTab(tabId, doc, terms[i], true);
         }
-    }, [
-        activeTab?.document,
-        activeTab?.loading,
-        activeTab?.ncm,
-        activeTab?.results,
-        activeTabId,
-        createTab,
-        executeSearchForTab,
-        splitSearchTerms
-    ]);
+    }, [activeTabId, createTab, executeSearchForTab]);
 
     const scrollToNotesSection = useCallback((chapter?: string) => {
         const container = document.getElementById(`results-content-${activeTabId}`);
         if (!container) return false;
 
         const selectors = [
-            ...(chapter ? [`#chapter-${chapter}-notas`, `#cap-${chapter}`] : []),
+            ...(chapter ? [`#chapter-${chapter}-notas`, `#chapter-${chapter}`, `#cap-${chapter}`] : []),
             '.section-notas',
             '.regras-gerais'
         ];
@@ -150,7 +145,8 @@ function App() {
     const { fetchNotes: fetchCrossChapterNotes } = useCrossChapterNotes();
 
     const handleOpenNote = useCallback(async (note: string, chapter?: string) => {
-        const results = activeTab?.results;
+        const currentTab = activeTabRef.current;
+        const results = currentTab?.results;
         if (!results || !isCodeSearchResponse(results)) {
             toast.error('Notas indisponíveis para esta aba.');
             return;
@@ -164,7 +160,7 @@ function App() {
 
         let targetChapter = chapter;
         if (!targetChapter) {
-            const fromQuery = extractChapter(activeTab?.ncm || results.query || '');
+            const fromQuery = extractChapter(currentTab?.ncm || results.query || '');
             if (fromQuery && resultsMap[fromQuery]) {
                 targetChapter = fromQuery;
             } else {
@@ -215,43 +211,43 @@ function App() {
         }
 
         setNoteModal({ note, chapter: targetChapter, content, isCrossChapter });
-    }, [activeTab?.ncm, activeTab?.results, fetchCrossChapterNotes, scrollToNotesSection]);
+    }, [fetchCrossChapterNotes, scrollToNotesSection]);
 
-    // Handler de clique em smart-link (delegacao)
     useEffect(() => {
-        const handleSmartLinkClick = (event: MouseEvent) => {
-            const target = event.target as HTMLElement;
-            const smartLink = target.closest('a.smart-link') as HTMLAnchorElement | null;
-            if (!smartLink) return;
-
-            event.preventDefault();
-            const ncm = smartLink.dataset.ncm;
-            if (ncm) {
-                handleSearch(ncm);
-            }
-        };
-
-        document.addEventListener('click', handleSmartLinkClick);
-        return () => document.removeEventListener('click', handleSmartLinkClick);
+        handleSearchRef.current = handleSearch;
     }, [handleSearch]);
 
-    // Handler de clique em note-ref (delegacao)
     useEffect(() => {
-        const handleNoteRefClick = (event: MouseEvent) => {
+        handleOpenNoteRef.current = handleOpenNote;
+    }, [handleOpenNote]);
+
+    // Handler único de clique com delegação (smart-link + note-ref)
+    useEffect(() => {
+        const handleDelegatedClick = (event: MouseEvent) => {
             const target = event.target as HTMLElement;
+
+            const smartLink = target.closest('a.smart-link') as HTMLAnchorElement | null;
+            if (smartLink) {
+                event.preventDefault();
+                const ncm = smartLink.dataset.ncm;
+                if (ncm) {
+                    handleSearchRef.current(ncm);
+                }
+                return;
+            }
+
             const noteRef = target.closest('.note-ref') as HTMLElement | null;
             if (!noteRef) return;
 
             const note = noteRef.dataset.note;
             if (!note) return;
 
-            const chapter = noteRef.dataset.chapter;
-            handleOpenNote(note, chapter);
+            handleOpenNoteRef.current(note, noteRef.dataset.chapter);
         };
 
-        document.addEventListener('click', handleNoteRefClick);
-        return () => document.removeEventListener('click', handleNoteRefClick);
-    }, [handleOpenNote]);
+        document.addEventListener('click', handleDelegatedClick);
+        return () => document.removeEventListener('click', handleDelegatedClick);
+    }, []);
 
     const openInDocNewTab = useCallback(async (doc: DocType, ncm: string) => {
         const tabId = createTab(doc);
@@ -259,8 +255,10 @@ function App() {
     }, [createTab, executeSearchForTab]);
 
     const openInDocCurrentTab = useCallback(async (doc: DocType, ncm: string) => {
+        const currentTab = activeTabRef.current;
+
         // Se a aba atual estiver ocupada, abre nova para evitar sobrescrever.
-        if (activeTab.results || activeTab.ncm || activeTab.loading) {
+        if (currentTab?.results || currentTab?.ncm || currentTab?.loading) {
             await openInDocNewTab(doc, ncm);
             return;
         }
@@ -275,12 +273,14 @@ function App() {
             loadedChaptersByDoc: resetLoadedChaptersForDoc(doc) // Reseta cache de capitulos por documento
         });
         await executeSearchForTab(activeTabId, doc, ncm, false);
-    }, [activeTab.loading, activeTab.ncm, activeTab.results, activeTabId, executeSearchForTab, openInDocNewTab, updateTab]);
+    }, [activeTabId, executeSearchForTab, openInDocNewTab, resetLoadedChaptersForDoc, updateTab]);
 
     // Define o documento na aba ativa (ou abre nova se ja houver conteudo)
-    const setDoc = (doc: string) => {
+    const setDoc = useCallback((doc: string) => {
+        const currentTab = activeTabRef.current;
+
         // Se a aba atual tem resultados ou busca em andamento, abre nova aba
-        if (activeTab.results || activeTab.ncm || activeTab.loading) {
+        if (currentTab?.results || currentTab?.ncm || currentTab?.loading) {
             createTab(doc as DocType);
         } else {
             // Se a aba atual esta vazia/inicial, apenas troca o documento
@@ -294,16 +294,16 @@ function App() {
                 loadedChaptersByDoc: resetLoadedChaptersForDoc(doc as DocType) // Reseta cache de capitulos por documento
             });
         }
-    };
+    }, [activeTabId, createTab, resetLoadedChaptersForDoc, updateTab]);
 
     // Ponte legado + ponte de configuracoes
     useEffect(() => {
         window.nesh = {
             smartLinkSearch: (ncm: string) => {
-                handleSearch(ncm);
+                handleSearchRef.current(ncm);
             },
             openNote: (note: string, chapter?: string) => {
-                handleOpenNote(note, chapter);
+                handleOpenNoteRef.current(note, chapter);
             },
             openSettings: () => {
                 setIsSettingsOpen(true);
@@ -312,7 +312,7 @@ function App() {
         return () => {
             (window as any).nesh = undefined;
         };
-    }, [handleOpenNote, handleSearch]);
+    }, []);
 
     return (
         <>

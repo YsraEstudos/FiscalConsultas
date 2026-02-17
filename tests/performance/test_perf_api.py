@@ -24,10 +24,10 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
-# Thresholds iniciais (ajuste com base no seu baseline real)
-WARM_P95_MS_CODE = _env_float("NESH_PERF_WARM_CODE_P95_MS", 400.0)
-WARM_P95_MS_FTS = _env_float("NESH_PERF_WARM_FTS_P95_MS", 120.0)
-WARM_P95_MS_TIPI = _env_float("NESH_PERF_WARM_TIPI_P95_MS", 150.0)
+# Thresholds (ajustados após otimização L1+L2 cache + split query)
+WARM_P95_MS_CODE = _env_float("NESH_PERF_WARM_CODE_P95_MS", 15.0)
+WARM_P95_MS_FTS = _env_float("NESH_PERF_WARM_FTS_P95_MS", 30.0)
+WARM_P95_MS_TIPI = _env_float("NESH_PERF_WARM_TIPI_P95_MS", 30.0)
 COLD_START_P95_MS = _env_float("NESH_PERF_COLD_START_P95_MS", 6000.0)
 
 

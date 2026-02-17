@@ -78,7 +78,6 @@ describe('Reproduction: 8417 Search Issue', () => {
         // Find the element instance from the mock call
         const scrolledElement = scrollIntoViewMock.mock.contexts[0] as HTMLElement;
 
-        console.log('Scrolled Tag:', scrolledElement.tagName);
         expect(scrolledElement.tagName).toBe('H3');
         expect(scrolledElement.getAttribute('data-impostor')).toBeNull();
     });

@@ -41,6 +41,12 @@
         "enable_fts": true,
         "debug_mode": false
     },
+    "cache": {
+        "enable_redis": true,
+        "redis_url": "redis://localhost:6379/0",
+        "chapter_cache_ttl": 3600,
+        "fts_cache_ttl": 600
+    },
     "security": {
         "ai_chat_requests_per_minute": 5
     }

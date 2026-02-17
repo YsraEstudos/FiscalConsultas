@@ -19,7 +19,7 @@ def main():
 
     # 2. Verifica search_index
     if "search_index" not in tables:
-        print("❌ Tabela 'search_index' NÃO existe. Rode: python scripts/rebuild_index.py")
+        print("❌ Tabela 'search_index' NÃO existe. Rode: uv run scripts/rebuild_index.py")
         return
 
     # 3. Conta entradas

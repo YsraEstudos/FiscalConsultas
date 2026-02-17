@@ -17,7 +17,7 @@ from backend.presentation.renderer import HtmlRenderer
 import orjson as _orjson
 
 
-_CODE_PAYLOAD_CACHE_MAX = 32
+_CODE_PAYLOAD_CACHE_MAX = 16
 _code_payload_cache: OrderedDict[str, tuple[bytes, bytes]] = OrderedDict()
 _code_payload_cache_lock = threading.Lock()
 
@@ -144,7 +144,7 @@ async def search(
     response_data = await service.process_request(ncm)
     
     # Compatibilidade de contrato / performance:
-    # - manter 'results' como chave canônica
+    # - manter 'results' como chave canônica e alias legado 'resultados'
     # - pre-renderizar HTML no backend (campo `markdown` mantido por compatibilidade)
     # - remover campos brutos pesados da serialização
     if response_data.get("type") == "code":
@@ -154,7 +154,7 @@ async def search(
             if isinstance(chapter_data, dict):
                 chapter_data.pop("conteudo", None)
         response_data["results"] = results
-        response_data.pop("resultados", None)
+        response_data["resultados"] = results
         response_data["total_capitulos"] = response_data.get("total_capitulos") or len(results)
     
     # Hot path optimization:

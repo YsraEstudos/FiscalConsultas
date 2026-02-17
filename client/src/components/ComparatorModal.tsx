@@ -15,14 +15,12 @@ interface ComparatorModalProps {
 }
 
 type PanelState = {
-    ncm: string;
     title: string;
     markdown: string | null;
     loading: boolean;
 };
 
 const emptyPanel = (title: string): PanelState => ({
-    ncm: '',
     title,
     markdown: null,
     loading: false
@@ -32,14 +30,20 @@ export function ComparatorModal({ isOpen, onClose, defaultDoc = 'nesh' }: Compar
     const { tipiViewMode } = useSettings();
 
     const [doc, setDoc] = useState<DocType>(defaultDoc);
-    const [left, setLeft] = useState<PanelState>(() => emptyPanel('Esquerda'));
-    const [right, setRight] = useState<PanelState>(() => emptyPanel('Direita'));
+    const [leftQuery, setLeftQuery] = useState('');
+    const [rightQuery, setRightQuery] = useState('');
+    const [leftPanel, setLeftPanel] = useState<PanelState>(() => emptyPanel('Esquerda'));
+    const [rightPanel, setRightPanel] = useState<PanelState>(() => emptyPanel('Direita'));
 
-    // Keep doc in sync when opening (so it follows current UI context)
+    // Keep modal state in sync when opening
     useEffect(() => {
-        if (isOpen) setDoc(defaultDoc);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOpen]);
+        if (!isOpen) return;
+        setDoc(defaultDoc);
+        setLeftQuery('');
+        setRightQuery('');
+        setLeftPanel(emptyPanel('Esquerda'));
+        setRightPanel(emptyPanel('Direita'));
+    }, [isOpen, defaultDoc]);
 
     // Body scroll lock
     useEffect(() => {
@@ -62,14 +66,14 @@ export function ComparatorModal({ isOpen, onClose, defaultDoc = 'nesh' }: Compar
     }, [isOpen, onClose]);
 
     const canCompare = useMemo(() => {
-        return left.ncm.trim().length > 0 && right.ncm.trim().length > 0;
-    }, [left.ncm, right.ncm]);
+        return leftQuery.trim().length > 0 && rightQuery.trim().length > 0;
+    }, [leftQuery, rightQuery]);
 
     const fetchSide = useCallback(async (ncm: string, side: 'left' | 'right') => {
         const clean = ncm.trim();
         if (!clean) return;
 
-        const setPanel = side === 'left' ? setLeft : setRight;
+        const setPanel = side === 'left' ? setLeftPanel : setRightPanel;
         setPanel(prev => ({ ...prev, loading: true, title: `Buscando ${clean}...` }));
 
         try {
@@ -79,7 +83,6 @@ export function ComparatorModal({ isOpen, onClose, defaultDoc = 'nesh' }: Compar
 
             const markdown = data?.markdown || data?.resultados || null;
             setPanel({
-                ncm: clean,
                 title: `${doc.toUpperCase()} ${clean}`,
                 markdown,
                 loading: false
@@ -102,10 +105,10 @@ export function ComparatorModal({ isOpen, onClose, defaultDoc = 'nesh' }: Compar
             return;
         }
         await Promise.all([
-            fetchSide(left.ncm, 'left'),
-            fetchSide(right.ncm, 'right')
+            fetchSide(leftQuery, 'left'),
+            fetchSide(rightQuery, 'right')
         ]);
-    }, [canCompare, fetchSide, left.ncm, right.ncm]);
+    }, [canCompare, fetchSide, leftQuery, rightQuery]);
 
     const onSubmit = useCallback((e: React.FormEvent) => {
         e.preventDefault();
@@ -146,8 +149,8 @@ export function ComparatorModal({ isOpen, onClose, defaultDoc = 'nesh' }: Compar
                         <input
                             id="compareLeft"
                             className={styles.input}
-                            value={left.ncm}
-                            onChange={(e) => setLeft(prev => ({ ...prev, ncm: e.target.value }))}
+                            value={leftQuery}
+                            onChange={(e) => setLeftQuery(e.target.value)}
                             placeholder="Ex: 8517"
                         />
                     </div>
@@ -157,8 +160,8 @@ export function ComparatorModal({ isOpen, onClose, defaultDoc = 'nesh' }: Compar
                         <input
                             id="compareRight"
                             className={styles.input}
-                            value={right.ncm}
-                            onChange={(e) => setRight(prev => ({ ...prev, ncm: e.target.value }))}
+                            value={rightQuery}
+                            onChange={(e) => setRightQuery(e.target.value)}
                             placeholder="Ex: 8471"
                         />
                     </div>
@@ -175,26 +178,26 @@ export function ComparatorModal({ isOpen, onClose, defaultDoc = 'nesh' }: Compar
 
                 <div className={styles.body}>
                     <div className={styles.panel}>
-                        <div className={styles.panelHeader}>{left.title}</div>
+                        <div className={styles.panelHeader}>{leftPanel.title}</div>
                         <div className={styles.panelContent}>
-                            {left.loading ? (
+                            {leftPanel.loading ? (
                                 <Loading />
-                            ) : (
-                                <MarkdownPane markdown={left.markdown} className="markdown-body" />
-                            )}
+                            ) : leftPanel.markdown ? (
+                                <MarkdownPane markdown={leftPanel.markdown} className="markdown-body" />
+                            ) : null}
                         </div>
                     </div>
 
                     <div className={styles.divider} />
 
                     <div className={styles.panel}>
-                        <div className={styles.panelHeader}>{right.title}</div>
+                        <div className={styles.panelHeader}>{rightPanel.title}</div>
                         <div className={styles.panelContent}>
-                            {right.loading ? (
+                            {rightPanel.loading ? (
                                 <Loading />
-                            ) : (
-                                <MarkdownPane markdown={right.markdown} className="markdown-body" />
-                            )}
+                            ) : rightPanel.markdown ? (
+                                <MarkdownPane markdown={rightPanel.markdown} className="markdown-body" />
+                            ) : null}
                         </div>
                     </div>
                 </div>
