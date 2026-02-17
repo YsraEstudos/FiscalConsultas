@@ -30,7 +30,7 @@ def test_js_import_pattern():
         else:
             print(f"❌ [FAIL] {desc}: '{text}' (Expected {expected}, got {match})")
             # If it failed, let's see what the buggy pattern would have done
-            buggy = re.compile(r"^\s*import\s+|\brequire\(")
+            buggy = re.compile(r"(?:^\s*import\s+)|(?:\brequire\()")
             buggy_match = bool(buggy.match(text))
             print(f"   (Buggy pattern would have returned: {buggy_match})")
             success = False
