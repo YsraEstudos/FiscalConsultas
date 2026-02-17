@@ -52,15 +52,17 @@ def test_webhook_ignores_non_confirmed_event(client):
 
 
 def test_webhook_requires_configured_token_when_present(client, monkeypatch):
-    monkeypatch.setattr(settings.billing, "asaas_webhook_token", "expected-token")
+    monkeypatch.setattr(settings.billing, "asaas_webhook_token", "expected-signature")
 
     response = client.post("/api/webhooks/asaas", json={"event": "PAYMENT_RECEIVED"})
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid Asaas webhook token"
 
 
-def test_webhook_payment_confirmed_calls_processor(client, monkeypatch, asaas_payment_confirmed_payload):
-    monkeypatch.setattr(settings.billing, "asaas_webhook_token", "expected-token")
+def test_webhook_payment_confirmed_calls_processor(
+    client, monkeypatch, asaas_payment_confirmed_payload
+):
+    monkeypatch.setattr(settings.billing, "asaas_webhook_token", "expected-signature")
 
     async def fake_processor(payload):
         assert payload["event"] == "PAYMENT_CONFIRMED"
@@ -76,7 +78,7 @@ def test_webhook_payment_confirmed_calls_processor(client, monkeypatch, asaas_pa
     response = client.post(
         "/api/webhooks/asaas",
         json=asaas_payment_confirmed_payload,
-        headers={"x-asaas-access-token": "expected-token"},
+        headers={"x-asaas-access-token": "expected-signature"},
     )
 
     assert response.status_code == 200
