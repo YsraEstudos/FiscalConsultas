@@ -40,14 +40,18 @@ def test_ai_chat_requires_authentication(client):
 
 
 def test_ai_chat_success_response_with_dependency_override(client, monkeypatch):
-    monkeypatch.setattr(auth, "_is_authenticated", lambda _token: True)
-    monkeypatch.setattr(auth.ai_chat_rate_limiter, "consume", lambda key, limit: (True, 0))
+    monkeypatch.setattr(auth, "decode_clerk_jwt", lambda _token: {"sub": "user_1"})
+
+    async def _allow_consume(key, limit):
+        return True, 0
+
+    monkeypatch.setattr(auth.ai_chat_rate_limiter, "consume", _allow_consume)
     app.dependency_overrides[get_ai_service] = lambda: _FakeAiService()
 
     response = client.post(
         "/api/ai/chat",
         json={"message": "hello"},
-        headers={"Authorization": "Bearer mock-auth-header"},
+        headers={"Authorization": "Bearer fake-token"},
     )
 
     assert response.status_code == 200
@@ -55,14 +59,18 @@ def test_ai_chat_success_response_with_dependency_override(client, monkeypatch):
 
 
 def test_ai_chat_returns_retry_after_when_rate_limited(client, monkeypatch):
-    monkeypatch.setattr(auth, "_is_authenticated", lambda _token: True)
-    monkeypatch.setattr(auth.ai_chat_rate_limiter, "consume", lambda key, limit: (False, 17))
+    monkeypatch.setattr(auth, "decode_clerk_jwt", lambda _token: {"sub": "user_1"})
+
+    async def _deny_consume(key, limit):
+        return False, 17
+
+    monkeypatch.setattr(auth.ai_chat_rate_limiter, "consume", _deny_consume)
     app.dependency_overrides[get_ai_service] = lambda: _FakeAiService()
 
     response = client.post(
         "/api/ai/chat",
         json={"message": "hello"},
-        headers={"Authorization": "Bearer mock-auth-header"},
+        headers={"Authorization": "Bearer fake-token"},
     )
 
     assert response.status_code == 429

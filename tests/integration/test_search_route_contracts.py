@@ -8,6 +8,11 @@ from backend.server.dependencies import get_nesh_service, get_tipi_service
 pytestmark = pytest.mark.integration
 
 
+def _vary_tokens(response) -> set[str]:
+    vary = response.headers.get("Vary", "")
+    return {token.strip() for token in vary.split(",") if token.strip()}
+
+
 class _FakeNeshServiceCode:
     async def process_request(self, query: str):
         return {
@@ -79,6 +84,10 @@ def test_search_code_response_keeps_resultados_alias(client):
     assert payload["type"] == "code"
     assert payload["resultados"] == payload["results"]
     assert payload["total_capitulos"] == 1
+    assert response.headers["Cache-Control"].startswith("private")
+    assert "ETag" in response.headers
+    vary_tokens = _vary_tokens(response)
+    assert {"Authorization", "X-Tenant-Id", "Accept-Encoding"}.issubset(vary_tokens)
 
 
 def test_search_text_response_does_not_inject_resultados(client):
@@ -102,6 +111,10 @@ def test_tipi_code_response_enforces_compatibility_fields(client):
     assert payload["type"] == "code"
     assert payload["results"] == payload["resultados"]
     assert payload["total_capitulos"] == 1
+    assert response.headers["Cache-Control"].startswith("private")
+    assert "ETag" in response.headers
+    vary_tokens = _vary_tokens(response)
+    assert {"Authorization", "X-Tenant-Id", "Accept-Encoding"}.issubset(vary_tokens)
 
 
 def test_tipi_text_response_sets_route_defaults(client):

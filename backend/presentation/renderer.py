@@ -1,16 +1,15 @@
 """
-Renderizador HTML/Markdown para o Nesh.
+Renderizador HTML para o Nesh.
 Transforma dados brutos em conteúdo formatado para o frontend.
 """
 
 import re
 from html.parser import HTMLParser
 from functools import lru_cache
-from typing import Dict
+from typing import Callable, Dict
 
 from ..config.constants import RegexPatterns
 from ..config.logging_config import renderer_logger as logger
-from ..domain import SearchResult
 from ..domain import SearchResult
 from ..data.glossary_manager import glossary_manager
 from ..utils.id_utils import generate_anchor_id
@@ -34,16 +33,82 @@ def _get_position_pattern(pos_code: str) -> re.Pattern:
     return re.compile(fr'^\s*(?:\*\*|\*)?{safe_code}(?:\*\*|\*)?\s*(?:[-\u2013\u2014:])\s*', re.MULTILINE)
 
 
+class _MultiTransformParser(HTMLParser):
+    """Single-pass HTML parser that applies multiple text transforms."""
+
+    def __init__(
+        self,
+        transforms: list[tuple[re.Pattern, Callable[[re.Match], str]]],
+        *,
+        text_post_processor: Callable[[str], str] | None = None,
+        skip_inside_tags: set[str] | None = None,
+    ):
+        super().__init__(convert_charrefs=False)
+        self.out: list[str] = []
+        self._skip_depth = 0
+        self._transforms = transforms
+        self._text_post_processor = text_post_processor
+        self._skip_tags = {tag.lower() for tag in (skip_inside_tags or set())}
+
+    @staticmethod
+    def _has_class(attrs, cls_name: str) -> bool:
+        for key, val in (attrs or []):
+            if key.lower() == "class" and val:
+                classes = {c.strip() for c in val.split() if c.strip()}
+                if cls_name in classes:
+                    return True
+        return False
+
+    def handle_starttag(self, tag, attrs):
+        raw_tag = self.get_starttag_text() or ""
+        if self._skip_depth > 0:
+            self._skip_depth += 1
+        elif tag.lower() in self._skip_tags or self._has_class(attrs, "smart-link"):
+            self._skip_depth = 1
+        self.out.append(raw_tag)
+
+    def handle_endtag(self, tag):
+        self.out.append(f"</{tag}>")
+        if self._skip_depth > 0:
+            self._skip_depth -= 1
+
+    def handle_startendtag(self, tag, attrs):
+        self.out.append(self.get_starttag_text() or "")
+
+    def handle_data(self, data):
+        if not data:
+            return
+        if self._skip_depth > 0:
+            self.out.append(data)
+            return
+
+        result = data
+        for pattern, replacer in self._transforms:
+            result = pattern.sub(replacer, result)
+        if self._text_post_processor is not None:
+            result = self._text_post_processor(result)
+        self.out.append(result)
+
+    def handle_entityref(self, name):
+        self.out.append(f"&{name};")
+
+    def handle_charref(self, name):
+        self.out.append(f"&#{name};")
+
+    def get_html(self) -> str:
+        return "".join(self.out)
+
+
 class HtmlRenderer:
     """
-    Responsável por transformar DataObjects em HTML/Markdown rico.
+    Responsável por transformar DataObjects em HTML rico.
     
     Responsabilidades:
     - Limpar conteúdo (remover páginas, espaços extras)
     - Injetar links clicáveis para notas
     - Injetar smart links para NCMs
     - Gerar anchors para navegação
-    - Renderizar capítulos em Markdown
+    - Renderizar capítulos em HTML
     """
 
     # Regex compilados para performance
@@ -489,9 +554,79 @@ class HtmlRenderer:
             return cls.RE_BOLD_MARKDOWN.sub(replacer, text)
 
     @classmethod
+    def _apply_smart_links_outside_tags(cls, text: str) -> str:
+        def smart_replacer(match: re.Match) -> str:
+            ncm = match.group(1)
+            clean_ncm = ncm.replace(".", "")
+            return f'<a href="#" class="smart-link" data-ncm="{clean_ncm}">{ncm}</a>'
+
+        segments = re.split(r"(<[^>]+>)", text)
+        for idx, segment in enumerate(segments):
+            if not segment or segment.startswith("<"):
+                continue
+            segments[idx] = cls.RE_NCM_LINK.sub(smart_replacer, segment)
+        return "".join(segments)
+
+    @classmethod
+    def apply_post_transforms(cls, text: str, current_chapter: str) -> str:
+        """
+        Apply bold, exclusion, unit, glossary and smart-link transforms in one HTML pass.
+        """
+        del current_chapter  # Mantido por compatibilidade de assinatura.
+
+        def bold_replacer(match: re.Match) -> str:
+            return f"<strong>{match.group(1)}</strong>"
+
+        def exclusion_replacer(match: re.Match) -> str:
+            return f'<span class="highlight-exclusion">{match.group(0)}</span>'
+
+        def unit_replacer(match: re.Match) -> str:
+            raw = match.group(0)
+            ws_match = re.match(r"^(\s+)(.+)$", raw)
+            if ws_match:
+                return f'{ws_match.group(1)}<span class="highlight-unit">{ws_match.group(2)}</span>'
+            return f'<span class="highlight-unit">{raw}</span>'
+
+        transforms: list[tuple[re.Pattern, Callable[[re.Match], str]]] = [
+            (cls.RE_BOLD_MARKDOWN, bold_replacer),
+            (cls.RE_EXCLUSION, exclusion_replacer),
+            (cls.RE_UNIT, unit_replacer),
+        ]
+
+        glossary_regex = glossary_manager.get_regex_pattern() if glossary_manager else None
+        if glossary_regex:
+            def glossary_replacer(match: re.Match) -> str:
+                term = match.group(0)
+                return f'<span class="glossary-term" data-term="{term}">{term}</span>'
+
+            transforms.append((glossary_regex, glossary_replacer))
+
+        def _run_inline(raw_text: str) -> str:
+            result = raw_text
+            for pattern, replacer in transforms:
+                result = pattern.sub(replacer, result)
+            # Smart links need to run after all other transforms and only on text segments.
+            return cls._apply_smart_links_outside_tags(result)
+
+        if "<" not in text and ">" not in text:
+            return _run_inline(text)
+
+        parser = _MultiTransformParser(
+            transforms,
+            text_post_processor=cls._apply_smart_links_outside_tags,
+            skip_inside_tags={"a"},
+        )
+        try:
+            parser.feed(text)
+            parser.close()
+            return parser.get_html()
+        except Exception:
+            return _run_inline(text)
+
+    @classmethod
     def render_chapter(cls, data: SearchResult) -> str:
         """
-        Gera Markdown formatado para um único capítulo.
+        Gera HTML formatado para um único capítulo.
         
         Inclui:
             - Header do capítulo
@@ -504,14 +639,19 @@ class HtmlRenderer:
             data: SearchResult com dados do capítulo
             
         Returns:
-            String Markdown/HTML misto formatado
+            String HTML formatada
         """
-        markdown = ""
+        html = ""
         
         # Capítulo não encontrado
         if not data.get("real_content_found", True):
             logger.warning(f"Renderizando erro: Capítulo {data['capitulo']} não encontrado")
-            return f"\n---\n\n## Capítulo {data['capitulo']}\n\n> **Erro:** Capítulo não encontrado.\n\n"
+            return (
+                "<hr>\n\n"
+                f'<span id="cap-{data["capitulo"]}"></span>\n\n'
+                f'<h2>Capítulo {data["capitulo"]}</h2>\n\n'
+                "<blockquote><p><strong>Erro:</strong> Capítulo não encontrado.</p></blockquote>\n\n"
+            )
 
         logger.debug(f"Renderizando capítulo {data['capitulo']}")
         
@@ -616,87 +756,87 @@ class HtmlRenderer:
         # and require the line to be a heading (has dash/colon separator).
         # ---------------------------------------------------------------------------
         posicoes = data.get("posicoes") or []
-        logger.info(f"[RENDERER] Checking {len(posicoes)} positions for ID injection fallback in Cap {data['capitulo']}")
+        logger.debug(f"[RENDERER] Checking {len(posicoes)} positions for ID injection fallback in Cap {data['capitulo']}")
+        existing_ids = set(re.findall(r'id="(pos-[^"]+)"', content))
+        re_main_pos = re.compile(r"^\d{2}\.\d{2}$")
 
+        pending: list[tuple[str, str]] = []
         for pos in posicoes:
             if not isinstance(pos, dict):
                 continue
             pos_code = (pos.get("codigo") or "").strip()
-            if not pos_code:
+            if not pos_code or not re_main_pos.match(pos_code):
                 continue
-            
-            # CRITICAL: Skip subpositions (e.g., 8417.10) - only process main positions (84.17)
-            # Main positions have format XX.XX (exactly 2 digits before and after dot)
-            if not re.match(r'^\d{2}\.\d{2}$', pos_code):
-                logger.debug(f"[RENDERER] Skipping non-main position: {pos_code}")
-                continue
-
             anchor_id = generate_anchor_id(pos_code)
-            if f'id="{anchor_id}"' in content:
-                # Log only if verbose, otherwise it spams
-                # logger.debug(f"[RENDERER] ID {anchor_id} already exists via RE_NCM_HEADING")
+            if anchor_id in existing_ids:
                 continue
+            pending.append((pos_code, anchor_id))
 
-            pattern = _get_position_pattern(pos_code)
-            
-            # Check if match found before sub (for debugging)
-            match = pattern.search(content)
-            if not match:
-                logger.warning(f"[RENDERER] Failed to find content match for position {pos_code} using pattern {pattern.pattern}")
-                continue
-            
-            # VALIDATION: Ensure we're matching the heading line, not random text
-            # The heading should contain a separator (dash/colon) after the code
-            matched_text = match.group(0)
-            if not any(sep in matched_text for sep in ['-', '–', '—', ':']):
-                logger.warning(f"[RENDERER] Skipping non-heading match for {pos_code}: '{matched_text[:50]}'")
-                continue
-                
-            logger.debug(f"[RENDERER] Injecting fallback anchor for {pos_code}")
+        if pending:
+            code_to_anchor = {pos_code: anchor_id for pos_code, anchor_id in pending}
+            escaped_codes = "|".join(re.escape(pos_code) for pos_code in code_to_anchor.keys())
+            combined_pattern = re.compile(
+                rf"^\s*(?:\*\*|\*)?(?P<code>{escaped_codes})(?:\*\*|\*)?\s*(?:[-\u2013\u2014:])\s*",
+                re.MULTILINE,
+            )
+            injected: set[str] = set()
 
-            # Fallback: Wrap the matched text in a span with the ID
-            content = pattern.sub(
-                lambda m, anchor_id=anchor_id: f'<span id="{anchor_id}" class="ncm-target ncm-position-title">{m.group(0)}</span>',
-                content,
-                count=1,
+            def _anchor_replacer(match: re.Match) -> str:
+                code = match.group("code")
+                if code in injected:
+                    return match.group(0)
+                anchor_id = code_to_anchor.get(code)
+                if not anchor_id:
+                    return match.group(0)
+                injected.add(code)
+                return (
+                    f'<span id="{anchor_id}" class="ncm-target ncm-position-title">'
+                    f"{match.group(0)}</span>"
+                )
+
+            content = combined_pattern.sub(_anchor_replacer, content)
+
+            not_found = len(code_to_anchor) - len(injected)
+            logger.debug(
+                "[RENDERER] Injected %s/%s fallback anchors for Cap %s (missing=%s)",
+                len(injected),
+                len(code_to_anchor),
+                data["capitulo"],
+                not_found,
             )
         # ---------------------------------------------------------------------------
-        
-        # Convert markdown bold markers before smart links
-        content = cls.convert_bold_markdown(content)
 
-        # Now apply smart links and highlights (after structure is in place)
-        content = cls.inject_smart_links(content, data['capitulo'])
-        
-        # Phase 8: Highlights
-        content = cls.inject_exclusion_highlights(content)
-        content = cls.inject_unit_highlights(content)
-        
-        # Phase 9: Glossary
-        content = cls.inject_glossary_highlights(content)
+        # Single-pass transform: bold + exclusion + unit + glossary + smart links.
+        content = cls.apply_post_transforms(content, data["capitulo"])
 
-        markdown += f"\n---\n\n"
-        markdown += f'<span id="cap-{data["capitulo"]}"></span>\n\n'
-        markdown += f"## Capítulo {data['capitulo']}\n\n"
+        html += "<hr>\n\n"
+        html += f'<span id="cap-{data["capitulo"]}"></span>\n\n'
+        html += f'<h2>Capítulo {data["capitulo"]}</h2>\n\n'
         
         # Render General Notes
         notas = data.get("notas_gerais")
         if notas:
             notas_processed = cls.inject_note_links(notas)
             notas_processed = cls.inject_smart_links(notas_processed, data['capitulo'])
-            markdown += f'<div class="regras-gerais">\n\n### Regras Gerais do Capítulo\n\n'
-            for line in notas_processed.split('\n'):
+            lines = []
+            for line in notas_processed.split("\n"):
                 if line.strip():
-                    markdown += f"> {line}\n"
+                    lines.append(f"<p>{line}</p>")
                 else:
-                    markdown += ">\n"
-            markdown += f'\n</div>\n\n'
-            markdown += "---\n\n"
-            
-        markdown += content + "\n\n"
+                    lines.append("<p><br></p>")
+            blockquote_content = "\n".join(lines)
+            html += (
+                '<div class="regras-gerais">\n'
+                "<h3>Regras Gerais do Capítulo</h3>\n"
+                f"<blockquote>\n{blockquote_content}\n</blockquote>\n"
+                "</div>\n\n"
+                "<hr>\n\n"
+            )
+
+        html += content + "\n\n"
         
         logger.debug(f"Capítulo {data['capitulo']}: {state['injected_count']} seções estruturadas")
-        return markdown
+        return html
 
     @classmethod
     def render_full_response(cls, results_map: Dict[str, SearchResult]) -> str:
@@ -707,15 +847,19 @@ class HtmlRenderer:
             results_map: Dict {chapter_num: SearchResult}
             
         Returns:
-            Markdown completo com todos os capítulos ordenados
+            HTML completo com todos os capítulos ordenados
         """
-        logger.info(f"Renderizando {len(results_map)} capítulos")
+        logger.debug(f"Renderizando {len(results_map)} capítulos")
         
-        full_markdown = ""
+        full_html = ""
         for _, res_data in sorted(results_map.items()):
             try:
-                full_markdown += cls.render_chapter(res_data)
+                full_html += cls.render_chapter(res_data)
             except Exception as e:
                 logger.error(f"Error rendering chapter {res_data.get('capitulo')}: {e}", exc_info=True)
-                full_markdown += f"\n\n> **Erro:** Falha ao renderizar Capítulo {res_data.get('capitulo')}.\n\n"
-        return full_markdown
+                full_html += (
+                    "<blockquote>"
+                    f"<p><strong>Erro:</strong> Falha ao renderizar Capítulo {res_data.get('capitulo')}.</p>"
+                    "</blockquote>\n\n"
+                )
+        return full_html

@@ -70,8 +70,8 @@ def cold_start_measure():
 
                 output_lines.append(line)
 
-                # Check for either our custom print or Uvicorn's standard startup message
-                if ("Starting Nesh Server" in line) or ("Application startup complete" in line) or ("Uvicorn running on" in line):
+                # Consider startup complete only when Uvicorn reports app ready.
+                if ("Application startup complete" in line) or ("Uvicorn running on" in line):
                     return (time.perf_counter() - start) * 1000.0
 
                 if "Banco de dados não encontrado" in line or "DB_NOT_FOUND" in line:

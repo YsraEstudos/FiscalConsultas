@@ -8,6 +8,7 @@ import re
 import os
 import time
 import hashlib
+import json
 import zipfile
 import shutil
 import sys
@@ -21,6 +22,31 @@ from backend.config.db_schema import (
     CHAPTER_NOTES_CREATE_SQL,
     CHAPTER_NOTES_INSERT_SQL,
 )
+
+
+def _parse_notes_for_precompute(notes_content: str) -> dict:
+    """Parse notes at ingestion time to avoid runtime regex."""
+    if not notes_content:
+        return {}
+    import re as _re
+    pattern = _re.compile(r'^(\d+)\s*[\-–—.):]\s*')
+    notes: dict[str, str] = {}
+    current_num = None
+    buffer: list[str] = []
+    for line in notes_content.split('\n'):
+        cleaned = line.strip()
+        match = pattern.match(cleaned)
+        if match:
+            if current_num:
+                notes[current_num] = '\n'.join(buffer).strip()
+            current_num = match.group(1)
+            buffer = [cleaned]
+        else:
+            if current_num:
+                buffer.append(cleaned)
+    if current_num:
+        notes[current_num] = '\n'.join(buffer).strip()
+    return notes
 
 # Caminhos dos arquivos
 SCRIPT_DIR = os.path.dirname(__file__)
@@ -236,6 +262,7 @@ def create_database(chapters: dict, content_hash: str):
             chapter_num TEXT NOT NULL,
             codigo TEXT NOT NULL,
             descricao TEXT,
+            anchor_id TEXT,
             FOREIGN KEY (chapter_num) REFERENCES chapters(chapter_num)
         )
     ''')
@@ -272,9 +299,10 @@ def create_database(chapters: dict, content_hash: str):
         # Extrai e insere posições
         positions = extract_positions_from_chapter(content)
         for pos in positions:
+            anchor_id = 'pos-' + pos['codigo'].replace('.', '-')
             cursor.execute(
-                'INSERT INTO positions (chapter_num, codigo, descricao) VALUES (?, ?, ?)',
-                (chapter_num, pos['codigo'], pos['descricao'])
+                'INSERT INTO positions (chapter_num, codigo, descricao, anchor_id) VALUES (?, ?, ?, ?)',
+                (chapter_num, pos['codigo'], pos['descricao'], anchor_id)
             )
         total_positions += len(positions)
         
@@ -282,6 +310,9 @@ def create_database(chapters: dict, content_hash: str):
         sections = extract_chapter_sections(content)
         notes = extract_chapter_notes(content)
         if notes or any(sections.values()):
+            # Precompute parsed notes as JSON for runtime performance
+            parsed_notes = _parse_notes_for_precompute(notes)
+            parsed_json = json.dumps(parsed_notes, ensure_ascii=False) if parsed_notes else None
             values_map = {
                 "chapter_num": chapter_num,
                 "notes_content": notes,
@@ -289,6 +320,7 @@ def create_database(chapters: dict, content_hash: str):
                 "notas": sections.get("notas"),
                 "consideracoes": sections.get("consideracoes"),
                 "definicoes": sections.get("definicoes"),
+                "parsed_notes_json": parsed_json,
             }
             cursor.execute(
                 CHAPTER_NOTES_INSERT_SQL,
