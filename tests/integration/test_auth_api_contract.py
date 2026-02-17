@@ -51,7 +51,7 @@ def test_ai_chat_success_response_with_dependency_override(client, monkeypatch):
     response = client.post(
         "/api/ai/chat",
         json={"message": "hello"},
-        headers={"Authorization": "Bearer fake-token"},
+        headers={"Authorization": "Bearer mock-auth-header"},
     )
 
     assert response.status_code == 200
@@ -70,7 +70,7 @@ def test_ai_chat_returns_retry_after_when_rate_limited(client, monkeypatch):
     response = client.post(
         "/api/ai/chat",
         json={"message": "hello"},
-        headers={"Authorization": "Bearer fake-token"},
+        headers={"Authorization": "Bearer mock-auth-header"},
     )
 
     assert response.status_code == 429
