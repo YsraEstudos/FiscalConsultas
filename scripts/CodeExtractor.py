@@ -12,6 +12,14 @@ TIPI_SERVICE_PATH = "backend/services/tipi_service.py"
 RENDERER_PATH = "backend/presentation/renderer.py"
 ID_UTILS_PATH = "backend/utils/id_utils.py"
 PYPROJECT_FILE = "pyproject.toml"
+ALLOWED_PREFIXES = (
+    "backend/",
+    "client/",
+    "scripts/",
+    "tests/",
+    "docs/",
+)
+ALLOWED_EXTENSIONS = (".py", ".ts", ".tsx", ".json", ".toml", ".md", ".d.ts")
 
 
 @dataclass(frozen=True)
@@ -86,6 +94,42 @@ PROFILES: dict[str, Profile] = {
 }
 
 
+def _is_allowed_candidate(path: str) -> bool:
+    return path.startswith(ALLOWED_PREFIXES) or path == PYPROJECT_FILE
+
+
+def _expand_glob_candidate(pattern: str, project_root: str) -> list[str]:
+    abs_pattern = os.path.join(project_root, pattern.replace("/", os.sep))
+    matches = sorted(glob.glob(abs_pattern))
+    return [
+        os.path.relpath(match, project_root).replace("\\", "/")
+        for match in matches
+        if os.path.isfile(match)
+    ]
+
+
+def _resolve_candidate_paths(candidate: str, project_root: str) -> list[str]:
+    if not _is_allowed_candidate(candidate):
+        return []
+    if "*" in candidate:
+        return _expand_glob_candidate(candidate, project_root)
+    if not candidate.endswith(ALLOWED_EXTENSIONS):
+        return []
+    abs_path = os.path.join(project_root, candidate.replace("/", os.sep))
+    return [candidate] if os.path.exists(abs_path) else []
+
+
+def _deduplicate_paths(paths: list[str]) -> list[str]:
+    dedup: list[str] = []
+    seen: set[str] = set()
+    for path in paths:
+        if path in seen:
+            continue
+        seen.add(path)
+        dedup.append(path)
+    return dedup
+
+
 def _extract_paths_from_plan(plan_abs_path: str, project_root: str) -> list[str]:
     """
     Extrai caminhos em backticks do plano e retorna paths relativos existentes.
@@ -97,48 +141,14 @@ def _extract_paths_from_plan(plan_abs_path: str, project_root: str) -> list[str]
     with open(plan_abs_path, "r", encoding="utf-8") as infile:
         text = infile.read()
 
-    # Captura textos em backticks que parecem caminhos de arquivo.
     raw_candidates = re.findall(r"`([^`\n]+)`", text)
-    allowed_prefixes = (
-        "backend/",
-        "client/",
-        "scripts/",
-        "tests/",
-        "docs/",
-    )
-    allowed_ext = (".py", ".ts", ".tsx", ".json", ".toml", ".md", ".d.ts")
-
     found: list[str] = []
     for candidate in raw_candidates:
-        c = candidate.strip()
-        if not c:
+        normalized = candidate.strip()
+        if not normalized:
             continue
-        if not (c.startswith(allowed_prefixes) or c == PYPROJECT_FILE):
-            continue
-        if "*" in c:
-            # Expande glob e inclui apenas arquivos.
-            abs_pattern = os.path.join(project_root, c.replace("/", os.sep))
-            for match in sorted(glob.glob(abs_pattern)):
-                if os.path.isfile(match):
-                    found.append(
-                        os.path.relpath(match, project_root).replace("\\", "/")
-                    )
-            continue
-        if not c.endswith(allowed_ext):
-            continue
-        abs_path = os.path.join(project_root, c.replace("/", os.sep))
-        if os.path.exists(abs_path):
-            found.append(c)
-
-    # Remove duplicados preservando ordem.
-    dedup: list[str] = []
-    seen: set[str] = set()
-    for path in found:
-        if path in seen:
-            continue
-        seen.add(path)
-        dedup.append(path)
-    return dedup
+        found.extend(_resolve_candidate_paths(normalized, project_root))
+    return _deduplicate_paths(found)
 
 
 def _resolve_files(
