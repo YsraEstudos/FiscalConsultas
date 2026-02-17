@@ -36,6 +36,25 @@ Transformar a busca de palavras-chave em **busca de intenção**, integrando mú
 - [ ] **[Infra] Backup e Recuperação (Postgres)**
   - Procedimento de backup contínuo (ex: WAL-G ou backups gerenciados).
 
+## Fase 1.5: Refatoração de Coesão (Dívida Técnica) 🧹
+
+*Unificação de lógicas fragmentadas para aumentar a confiabilidade e facilitar mudanças futuras.*
+
+- [ ] **[Backend] Unificar Lógica de Parsing (Core Lib) (#Refactor)**
+  - Criar `backend/pkg/nesh_parser` como autoridade única para regex e parsing de NCMs/Notas.
+  - Eliminar duplicação entre `setup_database.py`, `ingest_markdown.py`, `nesh_service.py` e `renderer.py`.
+- [ ] **[Backend] Modelos de Domínio Ricos (Pydantic)**
+  - Substituir `TypedDict` por Pydantic Models em `backend/domain/models.py`.
+  - Centralizar lógicas de validação e geração de IDs (ex: `anchor_id`) no modelo.
+- [ ] **[Scripts] Padronização de Scripts**
+  - Refatorar scripts em `scripts/` para importar lógica do backend em vez de duplicar código SQL e Path setups.
+- [ ] **[Backend] Unificação da Camada de Serviço (Engine Pattern)**
+  - Consolidar `NeshService` e `TipiService` (80% duplicado) em um `SearchEngine`.
+  - Abstrair Connection Pooling e Caching em decoradores reutilizáveis.
+- [ ] **[Frontend] Estratégia de Renderização (SSR)**
+  - Remover "Split Brain" (lógica duplicada em `NeshRenderer.ts`).
+  - Garantir que o Backend seja a única fonte de verdade para o HTML do conteúdo.
+
 ## Fase 2: Observabilidade e Qualidade
 
 - [ ] **[Ops] Logging Estruturado**
@@ -47,14 +66,6 @@ Transformar a busca de palavras-chave em **busca de intenção**, integrando mú
   - Cobrir login, search e chat com mocks estáveis.
 - [ ] **[Frontend] Tipagem Forte do Nível de API (#11)**
 - [ ] **[Code] Remover Console Logs e Prints (#6, #12)**
-- [ ] **[Code] Analisar e reduzir módulos "God Module" (Guardrail)**
-  - Execução base (`--language auto --threshold 60`, 2026-02-08): 133 arquivos, 5 módulos sinalizados, status FAIL.
-  - Top 5 (base): `backend/services/nesh_service.py` (76.33), `scripts/god_module_guardrail.py` (76.08), `backend/services/tipi_service.py` (73.08), `backend/presentation/renderer.py` (72.33), `tests/conftest.py` (65.83).
-  - Execução React (`--language javascript --threshold 60`): 69 arquivos, 0 sinalizados, status PASS.
-  - Execução React sensível (`--language javascript --threshold 50`): 69 arquivos, 1 sinalizado (`client/src/App.tsx` 53.62), status FAIL.
-  - Execução focada em serviços (`--root backend/services --language python --threshold 60`): 4 arquivos, 2 sinalizados (`backend/services/nesh_service.py`, `backend/services/tipi_service.py`), status FAIL.
-  - Menores scores atuais (baixa prioridade, monitoramento): `backend/utils/__init__.py` (0.00), `backend/presentation/routes/__init__.py` (0.00), `backend/presentation/schemas/__init__.py` (0.00), `backend/infrastructure/repositories/__init__.py` (0.07), `backend/data/__init__.py` (0.13), `backend/domain/__init__.py` (0.13), `backend/infrastructure/__init__.py` (0.13), `backend/presentation/__init__.py` (0.13), `backend/server/__init__.py` (0.13), `backend/services/__init__.py` (0.13), `backend/__init__.py` (0.80), `backend/config/__init__.py` (0.87).
-  - Ação prática: abrir plano de refatoração incremental para `backend/services/nesh_service.py`, `backend/services/tipi_service.py` e `client/src/App.tsx`.
 
 ## Fase 3: Arquitetura e Inteligência de Busca (IA)
 
