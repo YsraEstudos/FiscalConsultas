@@ -9,6 +9,8 @@ Este middleware:
 """
 import logging
 import time
+import hashlib
+import asyncio
 from typing import Optional, Any, Dict
 import jwt
 from jwt import PyJWKClient
@@ -16,8 +18,8 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from backend.infrastructure.db_engine import tenant_context
 from backend.config.settings import settings
+from backend.infrastructure.db_engine import tenant_context
 
 logger = logging.getLogger("middleware.tenant")
 
@@ -25,7 +27,7 @@ logger = logging.getLogger("middleware.tenant")
 _jwks_client: Optional[PyJWKClient] = None
 
 # JWT decode cache
-_jwt_decode_cache: dict[int, tuple[dict, float]] = {}
+_jwt_decode_cache: dict[str, tuple[dict, float, Optional[float]]] = {}
 _JWT_CACHE_TTL = 60.0
 _JWT_CACHE_MAX_SIZE = 1000
 
@@ -49,6 +51,30 @@ def get_jwks_client() -> Optional[PyJWKClient]:
     return _jwks_client
 
 
+def _get_payload_exp(payload: dict) -> Optional[float]:
+    exp = payload.get("exp")
+    if exp is None:
+        return None
+    try:
+        return float(exp)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_payload_expired(payload: dict) -> bool:
+    exp = payload.get("exp")
+    if exp is None:
+        return False
+    exp_value = _get_payload_exp(payload)
+    if exp_value is None:
+        return True
+    return time.time() >= exp_value
+
+
+def _token_cache_key(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def decode_clerk_jwt(token: str) -> Optional[dict]:
     """
     Valida e decodifica JWT do Clerk.
@@ -59,13 +85,16 @@ def decode_clerk_jwt(token: str) -> Optional[dict]:
     """
     # Performance: Check cache first
     global _jwt_decode_cache
-    token_hash = hash(token)
-    now = time.monotonic()
+    token_hash = _token_cache_key(token)
+    now_monotonic = time.monotonic()
     cached = _jwt_decode_cache.get(token_hash)
     if cached:
-        payload, cached_at = cached
-        if now - cached_at < _JWT_CACHE_TTL:
-            return payload
+        payload, cached_at, exp_epoch = cached
+        if now_monotonic - cached_at < _JWT_CACHE_TTL:
+            if exp_epoch is not None and time.time() >= exp_epoch:
+                del _jwt_decode_cache[token_hash]
+                return None
+            return payload.copy()
         else:
             del _jwt_decode_cache[token_hash]
 
@@ -84,9 +113,16 @@ def decode_clerk_jwt(token: str) -> Optional[dict]:
         elif settings.server.env != "development":
             logger.error("Clerk domain não configurado; JWT não pode ser validado")
             return None
+        elif not settings.features.debug_mode:
+            logger.error("JWT sem assinatura só é permitido em development com debug_mode=true")
+            return None
         else:
             # Desenvolvimento: Decodificar sem validar assinatura
             payload = jwt.decode(token, options={"verify_signature": False})
+
+        if _is_payload_expired(payload):
+            logger.warning("JWT expirado")
+            return None
 
         # Cache the result
         if len(_jwt_decode_cache) >= _JWT_CACHE_MAX_SIZE:
@@ -94,8 +130,8 @@ def decode_clerk_jwt(token: str) -> Optional[dict]:
             oldest_keys = sorted(_jwt_decode_cache, key=lambda k: _jwt_decode_cache[k][1])[:50]
             for k in oldest_keys:
                 del _jwt_decode_cache[k]
-        _jwt_decode_cache[token_hash] = (payload, now)
-        return payload
+        _jwt_decode_cache[token_hash] = (payload.copy(), now_monotonic, _get_payload_exp(payload))
+        return payload.copy()
 
     except jwt.ExpiredSignatureError:
         logger.warning("JWT expirado")
@@ -211,9 +247,21 @@ class TenantMiddleware(BaseHTTPMiddleware):
     """
     
     # Rotas de API que não precisam de tenant
-    PUBLIC_PATHS = {
-        "/api/auth/me", "/api/status", "/api/webhooks",
+    PUBLIC_EXACT_PATHS = {
+        "/api/auth/me",
+        "/api/status",
+        "/api/webhooks",
     }
+    PUBLIC_PREFIX_PATHS = ("/api/webhooks/",)
+
+    @classmethod
+    def _is_public_path(cls, path: str) -> bool:
+        if path in cls.PUBLIC_EXACT_PATHS:
+            return True
+        for prefix in cls.PUBLIC_PREFIX_PATHS:
+            if path.startswith(prefix):
+                return True
+        return False
     
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
@@ -223,7 +271,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # 1. Ignorar rotas públicas
-        if any(path.startswith(p) for p in self.PUBLIC_PATHS):
+        if self._is_public_path(path):
             return await call_next(request)
 
         # 2. Tentar extrair org_id de diferentes fontes
@@ -243,7 +291,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
             org_id = request.query_params.get("_tenant")
         
         # 3. Fallback para desenvolvimento
-        if not org_id and settings.server.env == "development":
+        if not org_id and settings.server.env == "development" and settings.features.debug_mode:
             org_id = "org_default"  # Tenant padrão criado na migração
 
         # 3b. Em produção com Postgres, tenant é obrigatório
@@ -266,7 +314,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
             
         try:
             if jwt_payload and org_id:
-                await ensure_clerk_entities(jwt_payload, org_id)
+                asyncio.create_task(ensure_clerk_entities(jwt_payload.copy(), org_id))
             return await call_next(request)
         finally:
             if token_var:

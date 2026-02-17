@@ -10,7 +10,7 @@ from typing import Optional, List
 
 from sqlalchemy import select, text, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from ...domain.sqlmodels import (
     Chapter, Position, ChapterNotes,
@@ -51,7 +51,7 @@ class ChapterRepository:
         stmt = (
             select(Chapter)
             .options(
-                joinedload(Chapter.positions),
+                selectinload(Chapter.positions),
                 joinedload(Chapter.notes)
             )
             .where(Chapter.chapter_num == chapter_num)
@@ -88,7 +88,7 @@ class ChapterRepository:
             PositionRead(
                 codigo=p.codigo,
                 descricao=p.descricao,
-                anchor_id=generate_anchor_id(p.codigo)
+                anchor_id=p.anchor_id or generate_anchor_id(p.codigo)
             )
             for p in chapter.positions
         ]

@@ -92,7 +92,7 @@ def ingest_markdown():
     # Re-populate positions table from the new clean content
     print("Re-populating positions table...")
     cursor.execute("DROP TABLE IF EXISTS positions")
-    cursor.execute("CREATE TABLE positions (codigo TEXT PRIMARY KEY, descricao TEXT, chapter_num TEXT)")
+    cursor.execute("CREATE TABLE positions (codigo TEXT PRIMARY KEY, descricao TEXT, chapter_num TEXT, anchor_id TEXT)")
     
     # Select all chapters and parse them
     cursor.execute("SELECT chapter_num, content FROM chapters")
@@ -119,7 +119,8 @@ def ingest_markdown():
             try:
                 # Ensure chapter_num is string formatted '01', '85', etc.
                 chap_str = str(num).zfill(2)
-                cursor.execute("INSERT OR IGNORE INTO positions (codigo, descricao, chapter_num) VALUES (?, ?, ?)", (code, desc, chap_str))
+                anchor_id = 'pos-' + code.replace('.', '-')
+                cursor.execute("INSERT OR IGNORE INTO positions (codigo, descricao, chapter_num, anchor_id) VALUES (?, ?, ?, ?)", (code, desc, chap_str, anchor_id))
                 pos_count += 1
             except sqlite3.Error as e:
                 print(f"Error inserting {code}: {e}")
