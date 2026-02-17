@@ -21,6 +21,7 @@ from ..config.exceptions import DatabaseError
 from ..config.constants import CacheConfig
 from ..utils.id_utils import generate_anchor_id
 from ..utils import ncm_utils
+from ..utils.payload_cache_metrics import PayloadCacheMetrics
 
 # Caminho do banco de dados TIPI
 TIPI_DB_PATH = Path(__file__).parent.parent.parent / "database" / "tipi.db"
@@ -69,6 +70,8 @@ class TipiService:
         # Performance: LRU caches for search results
         self._code_search_cache: OrderedDict = OrderedDict()  # key: (ncm_query, view_mode) -> result
         self._chapter_positions_cache: OrderedDict = OrderedDict()  # key: chapter_num -> positions
+        self._code_search_cache_metrics = PayloadCacheMetrics("tipi_code_search_cache")
+        self._chapter_positions_cache_metrics = PayloadCacheMetrics("tipi_chapter_positions_cache")
         self._cache_lock: Optional[asyncio.Lock] = None  # Lazy init
         
         mode = "Repository" if self._use_repository else "aiosqlite"
@@ -219,7 +222,9 @@ class TipiService:
         async with self._get_cache_lock():
             if cap_num in self._chapter_positions_cache:
                 self._chapter_positions_cache.move_to_end(cap_num)
+                self._chapter_positions_cache_metrics.record_hit()
                 return self._chapter_positions_cache[cap_num]
+        self._chapter_positions_cache_metrics.record_miss()
 
         if self._use_repository:
             async with self._get_repo() as repo:
@@ -233,8 +238,10 @@ class TipiService:
                     # Cache result
                     async with self._get_cache_lock():
                         self._chapter_positions_cache[cap_num] = rows
+                        self._chapter_positions_cache_metrics.record_set()
                         if len(self._chapter_positions_cache) > CacheConfig.TIPI_CHAPTER_CACHE_SIZE:
                             self._chapter_positions_cache.popitem(last=False)
+                            self._chapter_positions_cache_metrics.record_eviction()
                     return rows
 
         conn = await self._get_connection()
@@ -258,8 +265,10 @@ class TipiService:
             # Cache result
             async with self._get_cache_lock():
                 self._chapter_positions_cache[cap_num] = result
+                self._chapter_positions_cache_metrics.record_set()
                 if len(self._chapter_positions_cache) > CacheConfig.TIPI_CHAPTER_CACHE_SIZE:
                     self._chapter_positions_cache.popitem(last=False)
+                    self._chapter_positions_cache_metrics.record_eviction()
             return result
         finally:
             await self._release_connection(conn)
@@ -330,7 +339,9 @@ class TipiService:
         async with self._get_cache_lock():
             if cache_key in self._code_search_cache:
                 self._code_search_cache.move_to_end(cache_key)
+                self._code_search_cache_metrics.record_hit()
                 return self._code_search_cache[cache_key]
+        self._code_search_cache_metrics.record_miss()
         # Suporta múltiplos NCMs via vírgula/;
         parts = ncm_utils.split_ncm_query(ncm_query)
         if len(parts) > 1:
@@ -435,8 +446,10 @@ class TipiService:
         # Performance: Store in LRU cache
         async with self._get_cache_lock():
             self._code_search_cache[cache_key] = result
+            self._code_search_cache_metrics.record_set()
             if len(self._code_search_cache) > CacheConfig.TIPI_RESULT_CACHE_SIZE:
                 self._code_search_cache.popitem(last=False)
+                self._code_search_cache_metrics.record_eviction()
 
         return result
     
@@ -526,3 +539,44 @@ class TipiService:
             return [dict(row) for row in rows]
         finally:
             await self._release_connection(conn)
+
+    async def get_internal_cache_metrics(self) -> Dict[str, Any]:
+        """
+        Snapshot dos caches internos (L1) do serviço TIPI.
+        """
+        async with self._get_cache_lock():
+            code_snapshot = self._code_search_cache_metrics.snapshot(
+                current_size=len(self._code_search_cache),
+                max_size=CacheConfig.TIPI_RESULT_CACHE_SIZE,
+            )
+            chapter_snapshot = self._chapter_positions_cache_metrics.snapshot(
+                current_size=len(self._chapter_positions_cache),
+                max_size=CacheConfig.TIPI_CHAPTER_CACHE_SIZE,
+            )
+
+        return {
+            "code_search_cache": {
+                "name": self._code_search_cache_metrics.name,
+                "hits": code_snapshot.hits,
+                "misses": code_snapshot.misses,
+                "sets": code_snapshot.sets,
+                "evictions": code_snapshot.evictions,
+                "served_gzip": code_snapshot.served_gzip,
+                "served_identity": code_snapshot.served_identity,
+                "current_size": code_snapshot.current_size,
+                "max_size": code_snapshot.max_size,
+                "hit_rate": code_snapshot.hit_rate,
+            },
+            "chapter_positions_cache": {
+                "name": self._chapter_positions_cache_metrics.name,
+                "hits": chapter_snapshot.hits,
+                "misses": chapter_snapshot.misses,
+                "sets": chapter_snapshot.sets,
+                "evictions": chapter_snapshot.evictions,
+                "served_gzip": chapter_snapshot.served_gzip,
+                "served_identity": chapter_snapshot.served_identity,
+                "current_size": chapter_snapshot.current_size,
+                "max_size": chapter_snapshot.max_size,
+                "hit_rate": chapter_snapshot.hit_rate,
+            },
+        }
