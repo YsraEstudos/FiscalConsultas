@@ -32,8 +32,8 @@ jobs:
 
       - name: Lint with Ruff
         run: |
-          uv run ruff format --check
-          uv run ruff check
+          uvx ruff format --check
+          uvx ruff check
 
       - name: Run backend tests
         run: uv run pytest -q --cov=backend --cov-report=xml --cov-report=term-missing
