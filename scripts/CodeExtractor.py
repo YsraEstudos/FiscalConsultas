@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 
 SIZE_WARNING = 120000
+OUTPUT_DIR = "Scripts results"
 
 
 @dataclass(frozen=True)
@@ -18,7 +19,7 @@ class Profile:
 PROFILES: dict[str, Profile] = {
     # Legacy profile (plano de parsing)
     "parsing": Profile(
-        output_file=os.path.join("Scripts results", "parsing_migration_dump.txt"),
+        output_file=os.path.join(OUTPUT_DIR, "parsing_migration_dump.txt"),
         static_files=[
             "scripts/setup_database.py",
             "scripts/rebuild_index.py",
@@ -34,7 +35,7 @@ PROFILES: dict[str, Profile] = {
     ),
     # Novo profile (ultimo plano criado: Pydantic em dominio)
     "pydantic": Profile(
-        output_file=os.path.join("Scripts results", "domain_models_pydantic_dump.txt"),
+        output_file=os.path.join(OUTPUT_DIR, "domain_models_pydantic_dump.txt"),
         static_files=[
             "backend/domain/models.py",
             "backend/domain/__init__.py",
@@ -58,7 +59,7 @@ PROFILES: dict[str, Profile] = {
     ),
     # Architecture Overview: Navigation & Scroll Sync
     "navigation": Profile(
-        output_file=os.path.join("Scripts results", "navigation_architecture_dump.txt"),
+        output_file=os.path.join(OUTPUT_DIR, "navigation_architecture_dump.txt"),
         static_files=[
             "client/src/App.tsx",
             "client/src/hooks/useSearch.ts",
