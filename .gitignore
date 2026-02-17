@@ -47,12 +47,13 @@ coverage.xml
 # Backups
 *.bak
 
-# Benchmarks
+# Benchmarks & test artifacts
 benchmark_results.txt
 test_output.txt
 
-# Scripts
-verify_redis.py
-scripts/god_module_guardrail.py
-Scripts results/consolidated_code.txt
-Scripts results/ncm_loading_flow.txt
+# Generated results / snapshots (local-only)
+Scripts results/
+snapshots/
+
+# Coverage HTML report
+htmlcov/
