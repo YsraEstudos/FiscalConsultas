@@ -102,36 +102,66 @@ class RegexPatterns:
     # NOTE: Evitamos \b porque falha com símbolos não-\w (ex.: °C, m², m³/h).
     # Para evitar falsos positivos, unidades de 1 letra só casam quando vêm após um número.
     # Importante: não usamos "um" como alias de micrômetro (colide com o artigo "um").
+    # "bar" também exige dígito antes para evitar falso positivo com "bar" (estabelecimento).
     MEASUREMENT_UNITS = (
         r'(?i)'
         r'(?:'
+        # ── Grupo 1: unidades multi-letra (word-boundary via lookbehind/lookahead) ──
         r'(?<![A-Za-zÀ-ÿ_])'
         r'(?:'
+        # Energia / Potência / Elétrica
         r'kWh|MWh|Wh|'
         r'kVA|VA|'
         r'kW|MW|'
         r'mV|kV|'
         r'mA|kA|'
         r'Ah|mAh|'
+        # Frequência / Rotação
         r'Hz|kHz|MHz|GHz|'
         r'rpm|'
-        r'mbar|bar|MPa|kPa|Pa|'
+        # Pressão (bar movido para grupo 2 — exige dígito antes)
+        r'mbar|MPa|kPa|Pa|psi|'
+        # Temperatura
         r'°C|ºC|°F|Kelvin|'
+        # Massa
         r'kg|mg|'
         r'toneladas?|'
-        r'litros?|litro|ml|'
-        r'km|cm|mm|µm|nm|'
-        r'ha|'
+        # Volume líquido
+        r'litros?|ml|'
+        # Volume / Vazão / Área (ANTES dos base units para evitar match parcial: cm³ antes de cm)
         r'm³/h|m3/h|'
-        r'm³|m3|m²|m2|'
+        r'mm³|mm3|mm²|mm2|'
         r'cm³|cm3|cm²|cm2|'
-        r'mm³|mm3|mm²|mm2'
+        r'm³|m3|m²|m2|'
+        # Comprimento (DEPOIS dos compostos para não consumir cm antes de cm³)
+        r'km|cm|mm|µm|nm|'
+        # Área
+        r'ha|'
+        # Resistência elétrica
+        r'MΩ|kΩ|Ω|ohm|'
+        # Capacitância
+        r'µF|pF|nF|mF|'
+        # Indutância
+        r'µH|mH|'
+        # Força
+        r'kN|daN|'
+        # Energia (Joule)
+        r'MJ|kJ|'
+        # Iluminação
+        r'lux|lm|'
+        # Térmica
+        r'Btu|'
+        # Acústica
+        r'dB|'
+        # Medida brasileira
+        r'polegadas?|pol'
         r')'
         r'(?![A-Za-zÀ-ÿ_])'
         r'|'
-        # Unidades de 1 letra: aceitam 0-3 espaços após o número, mas o match começa na unidade
+        # ── Grupo 2: unidades curtas que EXIGEM dígito antes (0-3 espaços) ──
+        # Evita falsos positivos: "bar" (estabelecimento), "N" em "Não", "J" em "José", etc.
         r'(?:(?<=\d)|(?<=\d\s)|(?<=\d\s\s)|(?<=\d\s\s\s))'
-        r'(?:W|V|A|K|m|l|t|g)'
+        r'(?:W|V|A|K|m|l|t|g|N|J|bar)'
         r'(?![A-Za-zÀ-ÿ0-9_])'
         r')'
     )

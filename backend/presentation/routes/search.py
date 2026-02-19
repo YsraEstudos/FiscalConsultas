@@ -22,6 +22,24 @@ _code_payload_cache: OrderedDict[str, tuple[bytes, bytes]] = OrderedDict()
 _code_payload_cache_lock = threading.Lock()
 
 
+def _normalize_query_for_cache(ncm: str, *, is_code_query: bool) -> str:
+    """Normalize query while preserving multi-code intent for cache keys."""
+    raw_query = (ncm or "").strip()
+    if is_code_query:
+        # Normalize each code token independently, but keep token boundaries.
+        # Example:
+        # - "85.17"  -> "8517"
+        # - "85,17"  -> "85,17" (different intent from single code "8517")
+        normalized_parts = [
+            ncm_utils.clean_ncm(part) for part in ncm_utils.split_ncm_query(raw_query)
+        ]
+        normalized_parts = [part for part in normalized_parts if part]
+        if normalized_parts:
+            return ",".join(normalized_parts)
+        return ncm_utils.clean_ncm(raw_query)
+    return raw_query.lower()
+
+
 def _orjson_response(content: dict, headers: dict[str, str] | None = None) -> Response:
     """Build a Response pre-serialized with orjson (5-10x faster than stdlib json)."""
     body = _orjson.dumps(content)
@@ -111,12 +129,11 @@ async def search(
     logger.debug("Busca: '%s'", safe_ncm)
 
     # Normalize query for cache-key consistency:
-    # "85.17", "8517", " 85 17 " -> same cache key for code queries.
-    # Text queries: strip + lowercase to avoid trivial misses.
-    if ncm_utils.is_code_query(ncm):
-        ncm_normalized = ncm_utils.clean_ncm(ncm)
-    else:
-        ncm_normalized = ncm.strip().lower()
+    # - single-code variants converge (e.g. "85.17" == "8517")
+    # - multi-code token boundaries are preserved (e.g. "85,17" != "8517")
+    # - text queries use strip + lowercase
+    is_code_query = ncm_utils.is_code_query(ncm)
+    ncm_normalized = _normalize_query_for_cache(ncm, is_code_query=is_code_query)
 
     # Common caching headers / scope key
     cache_key = cache_scope_key(request)
@@ -131,7 +148,7 @@ async def search(
     payload_key: str | None = None
     cached_payload: tuple[bytes, bytes] | None = None
     cache_checked = False
-    if ncm_utils.is_code_query(ncm):
+    if is_code_query:
         payload_key = f"{cache_key}:{ncm_normalized}"
         cached_payload = _code_payload_cache_get(payload_key)
         cache_checked = True

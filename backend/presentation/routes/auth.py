@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from backend.services.ai_service import AiService
 from backend.config.settings import settings
@@ -44,7 +46,7 @@ async def auth_me(http_request: Request):
 async def chat_endpoint(
     request: ChatRequest,
     http_request: Request,
-    ai_service: AiService = Depends(get_ai_service),
+    ai_service: Annotated[AiService, Depends(get_ai_service)],
 ):
     """
     Endpoint de Chat com IA.

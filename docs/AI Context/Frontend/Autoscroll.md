@@ -1,154 +1,133 @@
-# Sistema de Autoscroll e Navegação (Technical Reference)
+# Autoscroll e Sincronizacao de Navegacao (estado real 2026-02-17)
 
-Este documento atua como a fonte única da verdade para todos os mecanismos de rolagem, posicionamento e sincronização de navegação da aplicação.
+Este documento descreve como o autoscroll funciona hoje no frontend e onde estao os riscos reais.
 
-## Visão Geral
+## 1) Componentes envolvidos
 
-O sistema "Autoscroll" não é um único script, mas um conjunto de subsistemas que garantem que o usuário sempre pouse no conteúdo exato que procura, eliminando a fricção de navegar em documentos fiscais de milhares de páginas.
+- `client/src/hooks/useRobustScroll.ts`
+- `client/src/components/ResultDisplay.tsx`
+- `client/src/hooks/useSearch.ts`
+- `client/src/components/Sidebar.tsx`
+- `client/src/App.tsx`
 
-### Objetivos do Sistema
+## 2) Fluxo atual de auto-scroll
 
-1. **Pulo Instantâneo**: Eliminar a busca manual após o carregamento.
-2. **Resiliência a Reflow**: Garantir o alvo mesmo em layouts instáveis (imagens carregando).
-3. **Sincronização Bidirecional**:
-    - Busca -> Rola Conteúdo (+) Rola Sidebar
-    - Rolagem Manual -> Atualiza Sidebar (Scroll Spy)
+1. Busca termina em `useSearch` e marca `isNewSearch=true` na aba.
+   - no caso "mesmo capitulo", `useSearch` pode pular fetch e atualizar so `results.query`.
+2. `ResultDisplay` renderiza/inyecta markup no container.
+3. Quando `isContentReady=true`, calcula candidatos de `targetId`.
+4. `useRobustScroll` roda se:
+   - aba ativa
+   - `isNewSearch=true`
+   - `isContentReady=true`
+   - resposta de `type!="text"`
+5. Em sucesso, callback deve consumir `isNewSearch` e persistir scroll final.
 
----
+## 3) Como `useRobustScroll` funciona hoje
 
-## Arquitetura de Componentes
+### 3.1 Localizacao do alvo
 
-### 1. Main Content Scroll (O "Pulo")
+- aceita `targetId` string ou lista de candidatos.
+- busca elementos por `#id` dentro do container.
+- escolhe melhor candidato por prioridade de tag.
 
-Responsável por levar o usuário ao NCM/Capítulo no texto principal.
+Prioridade atual no codigo:
 
-| Componente | Função | Localização |
-| :--- | :--- | :--- |
-| **useRobustScroll** | Engine que executa o scroll com retries e observação do DOM. | `client/src/hooks/useRobustScroll.ts` |
-| **ResultDisplay** | Orquestrador. Gerencia o estado de scroll (restauração/persistência) e aciona o hook. | `client/src/components/ResultDisplay.tsx` |
-| **NeshRenderer** | Gerador de HTML. Garante que headings (`H3/H4`) tenham `id` e `data-ncm`. | `client/src/utils/NeshRenderer.ts` |
-| **useSearch** | Gatilho. Define a flag `isNewSearch=true` e gerencia a transição de scroll inicial. | `client/src/hooks/useSearch.ts` |
+- `H6` (130), `H5` (120), `H4` (110), `H3` (100), `H2` (90), `H1` (80), `ARTICLE` (70), `SECTION` (60), `DIV` (50).
 
-**Fluxo de Execução:**
+### 3.2 Estrategia de scroll
 
-1. `useSearch` termina → `isNewSearch = true`.
-2. `ResultDisplay` renderiza o conteúdo (idle callback) e seta `isContentReady = true`.
-3. `ResultDisplay` calcula o `targetId` baseado na query.
-4. `useRobustScroll` tenta rolar (Tempo 0ms).
-5. Se falhar (elemento não existe), ativa `MutationObserver` por até 5s.
-6. Se houver reflow, re-tenta em 100ms, 400ms e 700ms.
-7. Ao sucesso, dispara callback e consome `isNewSearch` com o `scrollTop` final.
+- `scrollIntoView({ behavior: 'auto', block: 'start' })`
+- retries adicionais:
+  - `requestAnimationFrame`
+  - `setTimeout` 100ms
+  - `setTimeout` 400ms
+  - `setTimeout` 700ms
+- fallback com `MutationObserver` (ate 5s).
 
-### 2. Sidebar Scroll (Virtualizada)
+### 3.3 Observacao de DOM
 
-Responsável por destacar e centralizar o item na lista lateral.
+Observer monitora:
 
-| Componente | Função | Localização |
-| :--- | :--- | :--- |
-| **Sidebar** | Lista virtualizada. Gerencia scroll independente e highlights. | `client/src/components/Sidebar.tsx` |
-| **Virtuoso** | Lib externa (`react-virtuoso`) que gerencia a janela de renderização. | `npm:react-virtuoso` |
+- `childList`
+- `subtree`
+- `attributes` (`id`, `class`)
 
-**Lógica de Encontro (Matching):**
-A sidebar possui lógica própria de normalização para encontrar o índice correto na lista virtual:
+## 4) Papel de `ResultDisplay` no autoscroll
 
-1. Tenta Match Exato (Query vs Código).
-2. Tenta Match com/sem pontos (Query limpa vs Código limpo).
-3. Tenta Prefixo de 4 dígitos (para encontrar Posição quando a busca é específica, ex: `8417.10.00` → `84.17`).
-4. Tenta `startsWith` como último recurso.
+### 4.1 Calculo de alvo
 
-### 3. Text Search Scroll
+- tenta `anchor_id` vindo de `results/resultados`.
+- tenta `posicao_alvo`.
+- gera variacoes de ID por heuristica de digitos.
+- possui fallback que injeta `id` via elemento `data-ncm` se nenhum alvo for encontrado.
 
-Responsável pela lista de resultados textuais (não NCM).
+### 4.2 Persistencia/restauracao
 
-| Componente | Função | Localização |
-| :--- | :--- | :--- |
-| **TextSearchResults** | Renderiza lista de cartões. | `client/src/components/TextSearchResults.tsx` |
+- persiste `scrollTop` quando aba fica inativa.
+- restaura `initialScrollTop` quando aba volta ativa e `isNewSearch=false`.
+- ignora restauracao durante nova busca para priorizar autoscroll.
 
-**Comportamento:**
+### 4.3 Render chunked
 
-- Usa **Virtualização Condicional**: Se `results.length >= 60`, ativa `Virtuoso` para performance.
-- Recebe `scrollParentRef` para gerenciar o scroll do container pai se necessário.
+Para payloads grandes:
 
----
+- divide por `<hr>`.
+- renderiza primeiro chunk imediatamente.
+- chunks restantes via `requestIdleCallback`/`setTimeout`.
+- `isContentReady` sobe apos primeiro chunk.
+- se aba estiver inativa, o markup pode ser limpo e re-renderizado ao voltar ativa.
 
-## Mecanismos de Robustez e Fallback
+## 5) Sidebar e scroll spy
 
-O sistema assume que o DOM é hostil (pode conter notas de rodapé duplicadas, erros de formatação, IDs faltando).
+- `ResultDisplay` usa `IntersectionObserver` para calcular `activeAnchorId`.
+- `Sidebar` recebe `activeAnchorId` e destaca item correspondente.
+- sidebar tambem faz autoscroll proprio por query usando `react-virtuoso`.
 
-### Estratégias de IDs (Target Resolution)
+## 6) Problemas conhecidos (importante)
 
-O alvo é resolvido por **IDs candidatos** (gerados no `ResultDisplay`) e busca direta por `id` no DOM. Se o ID não existir, há um fallback que **cria** o ID usando `data-ncm` (quando disponível).
+### 6.1 Bug de callback entre `ResultDisplay` e `App`
 
-**Candidatos gerados (ordem):**
-1. `anchor_id` vindo do backend (quando existe).
-2. `generateAnchorId` baseado no `ncm/query` (ex.: `84.17` → `pos-84-17`).
-3. Variações por dígitos (ex.: `8517` → `pos-85-17`, `pos-8517`, `pos-8517-10`, `pos-8517-10-00`).
+- contrato esperado em `ResultDisplay`: `onConsumeNewSearch(tabId, finalScrollTop?)`.
+- implementacao em `App` trata callback como se recebesse apenas `_finalScroll`.
 
-**Fallback por `data-ncm`:**
-- Se nenhum ID existir, o `ResultDisplay` procura um elemento com `data-ncm` formatado (ex.: `84.17`) e **injeta** o `id` correspondente.
+Impacto:
 
-### Duplicidade de IDs (Seleção por Prioridade de Tag)
+- consumo de `isNewSearch` e persistencia de scroll podem ficar incorretos.
 
-Em casos raros podem existir múltiplos elementos com o mesmo `id`. O sistema **não remove** IDs do DOM; ele escolhe o melhor alvo por prioridade de tag.
+### 6.2 Estrategia agressiva de retries/timers
 
-- **Ação**: `useRobustScroll` escolhe o elemento com maior score de tag.
-- **Prioridade**: `H3` > `H2` > `H1` > `ARTICLE` > `SECTION` > `DIV`.
+- multiplos `setTimeout` e observer com `attributes` podem causar ruido em cenarios de DOM pesado.
 
-### Protocolo de Geração de IDs
+### 6.3 Fallback de injecao de `id` no DOM
 
-Para que o alinhamento funcione, Backend e Frontend devem concordar estritamente na geração de strings.
+- manipula DOM apos render para forcar target.
+- aumenta complexidade e pode mascarar problema de contrato de IDs na origem.
 
-- **Regra**: `[a-zA-Z0-9.-]` apenas. Pontos viram traços.
-- **Backend**: `backend/utils/id_utils.py` -> `generate_anchor_id`
-- **Frontend**: `client/src/utils/id_utils.ts` -> `generateAnchorId`
+### 6.4 Prioridade de tags invertida vs expectedTags
 
-**Exemplo:**
+- `TAG_PRIORITY` favorece `H6 > H5 > ... > H1`.
+- `expectedTags` passados por `ResultDisplay` favorecem heading alto nivel (`H1-H4`).
+- combinacao atual pode selecionar alvo menos intuitivo quando existem IDs duplicados.
 
-- Entrada: `84.17`
-- Saída: `pos-84-17`
+## 7) Contrato que nao pode quebrar
 
----
+1. IDs de anchor precisam permanecer estaveis (`pos-...`).
+2. `isNewSearch` deve ser consumido apenas apos scroll bem-sucedido.
+3. restauracao de scroll nao pode competir com auto-scroll da mesma busca.
+4. classe `.smart-link` e atributos `data-ncm`/`data-note` devem continuar consistentes.
 
-## Sincronização Inversa (Scroll Spy)
+## 8) Testes relacionados
 
-Quando o usuário rola manualmente o conteúdo principal, a Sidebar deve atualizar para mostrar onde ele está.
+- `client/tests/unit/useRobustScroll.test.tsx`
+- `client/tests/unit/ResultDisplay.test.tsx`
+- `client/tests/integration/NcmScroll.test.tsx`
+- `client/tests/integration/TabScrollPersistence.test.tsx`
+- `client/tests/integration/SameChapterNavigation.test.tsx`
 
-- **Tecnologia**: `IntersectionObserver` instanciado em `ResultDisplay.tsx`.
-- **Lógica**: Observa os IDs das posições (NCMs) presentes em `resultados`. O elemento visível mais próximo do topo define o `activeAnchorId`.
-- **Config**: `root = containerRef`, `rootMargin = '0px 0px -60% 0px'`, `threshold = 0.1`.
-- **Atualização**: `ResultDisplay` passa `activeAnchorId` para a `Sidebar`, que atualiza o highlight visual (mas *não* faz autoscroll da sidebar para evitar briga de scrolls).
+## 9) Refatoracao recomendada (ordem)
 
----
-
-## Persistência entre Abas (Cross-Tab Persistence)
-
-O sistema garante que a posição de rolagem seja mantida ao alternar rapidamente entre abas (ex: NESH vs TIPI), mesmo se o componente for desmontado ou otimizado.
-
-### Mecanismo de Salvamento
-
-- **Fluxo**: `ResultDisplay` captura o `scrollTop` através do evento de scroll.
-- **Callback**: Dispara `onPersistScroll`, que atualiza o `scrollTop` no estado global da aba em `App.tsx`.
-- **Restauração**: Ao retornar para a aba, o `App.tsx` passa o `initialScrollTop` de volta para o `ResultDisplay`.
-
-### Robustez em Pesquisas Rápidas
-
-Ao realizar uma nova pesquisa, a função `onConsumeNewSearch` agora aceita um parâmetro opcional `_finalScroll`. Se fornecido, ele limpa a flag `isNewSearch` e simultaneamente define a posição final de scroll, evitando "pulos" visuais ou resets indesejados para o topo.
-
----
-
-## Offset de Scroll (Header Fix)
-
-O offset é unificado via CSS variable e aplicado em dois pontos:
-
-- **Container**: `ResultDisplay.module.css` aplica `scroll-padding-top: var(--scroll-offset)`.
-- **Âncoras**: `nesh.css` e `tipi.css` aplicam `scroll-margin-top: var(--scroll-offset)` em headings e posições.
-
----
-
-## Debugging
-
-Para investigar problemas de scroll:
-
-1. **Logs**: O sistema emite logs detalhados via `utils/debug.ts` com prefixo `[RobustScroll]` ou `[Sidebar]`.
-2. **Verificar Renderização**: O elemento alvo possui `id="pos-..."` e `data-ncm="..."`? Se não, verifique o `NeshRenderer.ts` ou o Backend.
-3. **Sidebar Desalinhada**: Se a sidebar não rola, verifique se a query de busca está normalizada corretamente em `Sidebar.tsx`.
+1. corrigir assinatura de `onConsumeNewSearch` no `App.tsx`.
+2. simplificar `useRobustScroll` para uma estrategia unica de posicionamento + confirmacao curta.
+3. mover fallback `data-ncm` para contrato de render/anchor (evitar mutacao tardia).
+4. separar highlight temporario de busca e highlight de anchor ativa na `Sidebar`.
