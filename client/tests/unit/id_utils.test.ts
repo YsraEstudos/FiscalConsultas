@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateAnchorId, generateChapterId, normalizeNCMQuery } from '../../src/utils/id_utils';
+import { formatNcmTipi, generateAnchorId, generateChapterId, normalizeNCMQuery } from '../../src/utils/id_utils';
 
 describe('generateAnchorId', () => {
     it('should generate "pos-{code}" replacing dots with dashes', () => {
@@ -22,6 +22,10 @@ describe('generateAnchorId', () => {
         expect(generateAnchorId('')).toBe('');
         expect(generateAnchorId(null)).toBe('');
         expect(generateAnchorId(undefined)).toBe('');
+    });
+
+    it('should be idempotent for values already prefixed with pos-', () => {
+        expect(generateAnchorId('pos-84-13')).toBe('pos-84-13');
     });
 });
 
@@ -48,6 +52,11 @@ describe('normalizeNCMQuery', () => {
         expect(normalizeNCMQuery(null)).toBe('');
         expect(normalizeNCMQuery(undefined)).toBe('');
     });
+
+    it('should fallback to trimmed original query when digits are not chapter/position length', () => {
+        expect(normalizeNCMQuery('  a1b  ')).toBe('a1b');
+        expect(normalizeNCMQuery('abc')).toBe('abc');
+    });
 });
 
 describe('generateChapterId', () => {
@@ -62,5 +71,34 @@ describe('generateChapterId', () => {
 
     it('should normalize legacy cap- ids to chapter-', () => {
         expect(generateChapterId('cap-84')).toBe('chapter-84');
+    });
+
+    it('should return chapter- for empty-like values', () => {
+        expect(generateChapterId('')).toBe('chapter-');
+        expect(generateChapterId('   ')).toBe('chapter-');
+    });
+});
+
+describe('formatNcmTipi', () => {
+    it('formats by length from 8 to 2 digits', () => {
+        expect(formatNcmTipi('84139190')).toBe('8413.91.90');
+        expect(formatNcmTipi('8413919')).toBe('8413.91.9');
+        expect(formatNcmTipi('841391')).toBe('8413.91');
+        expect(formatNcmTipi('84139')).toBe('8413.9');
+        expect(formatNcmTipi('8404')).toBe('84.04');
+        expect(formatNcmTipi('84')).toBe('84');
+    });
+
+    it('keeps only digits for uncommon lengths', () => {
+        expect(formatNcmTipi('123')).toBe('123');
+        expect(formatNcmTipi('123456789')).toBe('123456789');
+    });
+
+    it('handles nullish and non-numeric input', () => {
+        expect(formatNcmTipi('')).toBe('');
+        expect(formatNcmTipi(null)).toBe('');
+        expect(formatNcmTipi(undefined)).toBe('');
+        expect(formatNcmTipi('abc')).toBe('abc');
+        expect(formatNcmTipi('  abc  ')).toBe('abc');
     });
 });

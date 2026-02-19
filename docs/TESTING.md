@@ -72,3 +72,76 @@
   - Backend critical modules touched by routes/services/helpers: >= 70%.
   - Frontend critical hooks/components/services under test: >= 60%.
 - Focus on meaningful contract coverage over raw percentage.
+
+## Fase 0 Report (2026-02-19)
+- Baseline interno no início da fase:
+  - Backend: ~90.8%
+  - Frontend: ~73.09% statements
+- Resultado consolidado ao final:
+  - Backend: **91%** (`429 passed`, `12 deselected`)
+  - Frontend: **89.66% statements**, **76.83% branches**, **89.92% functions**, **92.47% lines** (`167 passed`)
+
+### Principais entregas da fase
+- Expansão de testes de comportamento de `App` e `Header`.
+- Novas suítes para:
+  - `ResultDisplay` (fluxos avançados, fallback NESH/TIPI, auto-scroll, chunked render e tratamento de erro)
+  - `SettingsModal` (ESC, backdrop, opções de navegação/TIPI e visibilidade admin)
+  - `useTabs`, `NotePanel` e type guards de `api.types`.
+- Cobertura elevada de módulos críticos:
+  - `src/components/ResultDisplay.tsx`: **91.07% statements**
+  - `src/components/SettingsModal.tsx`: **100% statements**
+  - `src/hooks/useTabs.ts`: **100% statements**
+  - `src/types/api.types.ts`: **100% statements**
+
+## Fase 1 Report (2026-02-19)
+- Objetivo da fase:
+  - Aumentar cobertura de branches em `TabsBar`, `useSearch`, `id_utils` e `AuthContext`.
+- Resultado consolidado:
+  - Frontend: **92.12% statements**, **80.66% branches**, **91.21% functions**, **94.93% lines** (`191 passed`).
+
+### Entregas principais
+- Novas suítes:
+  - `tests/unit/TabsBar.test.tsx`
+  - `tests/unit/AuthContext.test.tsx`
+  - `tests/unit/useSearch.branches.test.tsx`
+- Expansão de suíte existente:
+  - `tests/unit/id_utils.test.ts`
+
+### Cobertura dos alvos da Fase 1
+- `src/components/TabsBar.tsx`: **100% statements**, **92.85% branches**, **100% functions**, **100% lines**
+- `src/hooks/useSearch.ts`: **100% statements**, **89.13% branches**, **100% functions**, **100% lines**
+- `src/utils/id_utils.ts`: **100% statements**, **97.05% branches**, **100% functions**, **100% lines**
+- `src/context/AuthContext.tsx`: **100% statements**, **100% branches**, **100% functions**, **100% lines**
+
+## Fase 2 Report (2026-02-19)
+- Objetivo da fase:
+  - Aumentar cobertura de branches em `SearchBar`, `SettingsContext`, `StatsModal` e `TextSearchResults`.
+- Resultado consolidado:
+  - Frontend: **93.95% statements**, **82.83% branches**, **94.30% functions**, **96.26% lines** (`211 passed`).
+
+### Entregas principais
+- Expansão de suíte existente:
+  - `tests/unit/SearchBar.test.tsx`
+  - `tests/unit/StatsTutorialModal.test.tsx`
+  - `tests/unit/TextSearchResults.test.tsx`
+- Novas suítes:
+  - `tests/unit/SettingsContext.test.tsx`
+  - `tests/unit/HighlightPopover.test.tsx`
+  - `tests/unit/useTextSelection.test.tsx`
+
+### Cobertura dos alvos da Fase 2
+- `src/components/SearchBar.tsx`: **100% statements**, **90.90% branches**, **100% functions**, **100% lines**
+- `src/context/SettingsContext.tsx`: **100% statements**, **100% branches**, **100% functions**, **100% lines**
+- `src/components/StatsModal.tsx`: **100% statements**, **100% branches**, **100% functions**, **100% lines**
+- `src/components/TextSearchResults.tsx`: **100% statements**, **96.87% branches**, **100% functions**, **100% lines**
+
+### Cobertura adicional estabilizada
+- `src/components/HighlightPopover.tsx`: **96.15% statements**, **94.11% branches**, **100% functions**, **100% lines**
+- `src/hooks/useTextSelection.ts`: **100% statements**, **100% branches**, **100% functions**, **100% lines**
+
+### Próximo foco recomendado (Fase 3)
+- Aumentar cobertura de branches em:
+  - `src/components/SettingsModal.tsx`
+  - `src/components/CrossNavContextMenu.tsx`
+  - `src/components/Sidebar.tsx`
+  - `src/hooks/useRobustScroll.ts`

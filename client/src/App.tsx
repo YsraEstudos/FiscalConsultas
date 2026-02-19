@@ -48,6 +48,7 @@ function App() {
     const [isStatsOpen, setIsStatsOpen] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [isComparatorOpen, setIsComparatorOpen] = useState(false);
+    const [isModerateOpen, setIsModerateOpen] = useState(false);
     const [noteModal, setNoteModal] = useState<{
         note: string;
         chapter: string;
@@ -323,13 +324,15 @@ function App() {
                         settings: _isSettingsOpen,
                         tutorial: _isTutorialOpen,
                         stats: isStatsOpen,
-                        comparator: isComparatorOpen
+                        comparator: isComparatorOpen,
+                        moderate: isModerateOpen,
                     }}
                     onClose={{
                         settings: () => setIsSettingsOpen(false),
                         tutorial: () => setIsTutorialOpen(false),
                         stats: () => setIsStatsOpen(false),
-                        comparator: () => setIsComparatorOpen(false)
+                        comparator: () => setIsComparatorOpen(false),
+                        moderate: () => setIsModerateOpen(false),
                     }}
                     currentDoc={(activeTab?.document || 'nesh') as DocType}
                     onOpenInDoc={openInDocCurrentTab}
@@ -355,6 +358,7 @@ function App() {
                 onOpenTutorial={() => setIsTutorialOpen(true)}
                 onOpenStats={() => setIsStatsOpen(true)}
                 onOpenComparator={() => setIsComparatorOpen(true)}
+                onOpenModerate={() => setIsModerateOpen(true)}
                 history={history}
                 onClearHistory={clearHistory}
                 onRemoveHistory={removeFromHistory}

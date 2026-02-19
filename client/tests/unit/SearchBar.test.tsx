@@ -139,4 +139,60 @@ describe('SearchBar Component', () => {
 
         expect(mockOnRemoveHistory).toHaveBeenCalledWith('0101');
     });
+
+    it('opens dropdown when focus is preceded by keyboard interaction', () => {
+        render(<SearchBar {...baseProps} history={mockHistory} />);
+        const input = screen.getByPlaceholderText(/Digite os NCMs/i);
+
+        fireEvent.keyDown(document, { key: 'Tab' });
+        fireEvent.focus(input);
+
+        expect(screen.getByText('Buscas Recentes')).toBeInTheDocument();
+    });
+
+    it('keeps dropdown closed after right-click interaction', () => {
+        render(<SearchBar {...baseProps} history={mockHistory} />);
+        const input = screen.getByPlaceholderText(/Digite os NCMs/i);
+
+        fireEvent.pointerDown(input, { button: 2 });
+        fireEvent.focus(input);
+
+        expect(screen.queryByText('Buscas Recentes')).not.toBeInTheDocument();
+    });
+
+    it('closes dropdown on contextmenu events', () => {
+        render(<SearchBar {...baseProps} history={mockHistory} />);
+        const input = screen.getByPlaceholderText(/Digite os NCMs/i);
+
+        act(() => {
+            fireEvent.pointerDown(input, { button: 0 });
+            fireEvent.focus(input);
+        });
+        expect(screen.getByText('Buscas Recentes')).toBeInTheDocument();
+
+        fireEvent.contextMenu(input);
+        expect(screen.queryByText('Buscas Recentes')).not.toBeInTheDocument();
+
+        act(() => {
+            fireEvent.pointerDown(input, { button: 0 });
+            fireEvent.focus(input);
+        });
+        expect(screen.getByText('Buscas Recentes')).toBeInTheDocument();
+
+        fireEvent.contextMenu(document);
+        expect(screen.queryByText('Buscas Recentes')).not.toBeInTheDocument();
+    });
+
+    it('does not trigger search while loading', () => {
+        render(<SearchBar {...baseProps} isLoading={true} />);
+        const input = screen.getByPlaceholderText(/Digite os NCMs/i);
+        const button = screen.getByRole('button', { name: /buscar/i });
+
+        fireEvent.change(input, { target: { value: '9999' } });
+        fireEvent.click(button);
+        fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+
+        expect(button).toBeDisabled();
+        expect(mockOnSearch).not.toHaveBeenCalled();
+    });
 });

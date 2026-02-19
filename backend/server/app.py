@@ -13,14 +13,17 @@ from backend.infrastructure import DatabaseAdapter
 from backend.services import NeshService
 from backend.services.ai_service import AiService
 from backend.services.tipi_service import TipiService
-from backend.server.error_handlers import nesh_exception_handler, generic_exception_handler
+from backend.server.error_handlers import (
+    nesh_exception_handler,
+    generic_exception_handler,
+)
 from backend.infrastructure.redis_client import redis_cache
 
 from backend.data.glossary_manager import init_glossary
 from backend.utils.frontend_check import verify_frontend_build
 
 # Import New Routers
-from backend.presentation.routes import auth, search, system, tipi, webhooks
+from backend.presentation.routes import auth, search, system, tipi, webhooks, comments
 from backend.server.middleware import TenantMiddleware
 
 """
@@ -42,8 +45,10 @@ logger = logging.getLogger("server")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+
     logger.info("Initializing Database...")
     if settings.database.is_postgres:
         app.state.db = None
@@ -51,10 +56,11 @@ async def lifespan(app: FastAPI):
         app.state.db = DatabaseAdapter(CONFIG.db_path)
         # Ensure pool is created (optional, but good for check)
         await app.state.db._ensure_pool()
-    
+
     # SQLModel engine init
     try:
         from backend.infrastructure.db_engine import init_db
+
         if settings.database.is_postgres:
             # Em Postgres, o schema deve ser gerenciado apenas por Alembic
             app.state.sqlmodel_enabled = True
@@ -72,12 +78,12 @@ async def lifespan(app: FastAPI):
     except ImportError:
         app.state.sqlmodel_enabled = False
         logger.debug("SQLModel not available, using legacy DatabaseAdapter")
-    
+
     logger.info("Initializing Services...")
     from backend.services.nesh_service import NeshService
     from backend.services.tipi_service import TipiService
     from backend.services.ai_service import AiService
-    
+
     if settings.database.is_postgres:
         # Criamos o serviço no modo Repository para suporte a RLS
         app.state.service = await NeshService.create_with_repository()
@@ -102,8 +108,11 @@ async def lifespan(app: FastAPI):
         try:
             from backend.infrastructure.db_engine import get_session
             from sqlalchemy import text
+
             async with get_session() as session:
-                result = await session.execute(text("SELECT COUNT(*) FROM tipi_positions"))
+                result = await session.execute(
+                    text("SELECT COUNT(*) FROM tipi_positions")
+                )
                 count = result.scalar()
                 tipi_has_data = count > 0
                 logger.info(f"TIPI PostgreSQL: {count} positions found")
@@ -115,41 +124,41 @@ async def lifespan(app: FastAPI):
             logger.info("TipiService initialized in Repository mode (Postgres)")
         else:
             app.state.tipi_service = TipiService()
-            logger.info("TipiService initialized in SQLite mode (tipi.db - TIPI data not in Postgres yet)")
+            logger.info(
+                "TipiService initialized in SQLite mode (tipi.db - TIPI data not in Postgres yet)"
+            )
     else:
         app.state.tipi_service = TipiService()
         logger.info("TipiService initialized in Legacy mode (SQLite)")
     app.state.ai_service = AiService()
-    
+
     logger.info("Initializing Glossary...")
     init_glossary(project_root)
 
     # Check Frontend Build
     verify_frontend_build(project_root)
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down...")
     if hasattr(app.state, "db") and app.state.db:
         await app.state.db.close()
 
     await redis_cache.close()
-    
+
     # Close SQLModel engine if initialized
     if getattr(app.state, "sqlmodel_enabled", False):
         try:
             from backend.infrastructure.db_engine import close_db
+
             await close_db()
             logger.info("SQLModel engine closed")
         except Exception as e:
             logger.warning(f"Error closing SQLModel engine: {e}")
 
-app = FastAPI(
-    title="Nesh API",
-    version="4.2",
-    lifespan=lifespan
-)
+
+app = FastAPI(title="Nesh API", version="4.2", lifespan=lifespan)
 
 # --- Global Exception Handlers ---
 app.add_exception_handler(NeshError, nesh_exception_handler)
@@ -175,7 +184,9 @@ cors_origins = settings.server.cors_allowed_origins or [
 # Dev convenience: allow local-network Vite hosts on :5173 without opening broad CORS in production.
 cors_allow_origin_regex = None
 if settings.server.env == "development":
-    cors_allow_origin_regex = r"^https?://(?:localhost|127\.0\.0\.1|\d{1,3}(?:\.\d{1,3}){3})(?::5173)?$"
+    cors_allow_origin_regex = (
+        r"^https?://(?:localhost|127\.0\.0\.1|\d{1,3}(?:\.\d{1,3}){3})(?::5173)?$"
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -186,34 +197,46 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.middleware("http")
 async def no_cache_html(request: Request, call_next):
     response = await call_next(request)
     path = request.url.path
     if path == "/" or path.endswith(".html"):
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Cache-Control"] = (
+            "no-store, no-cache, must-revalidate, max-age=0"
+        )
         response.headers["Pragma"] = "no-cache"
     return response
+
 
 # --- Routers ---
 # Prefixing to keep existing contract
 app.include_router(auth.router, prefix="/api", tags=["Auth"])
 app.include_router(search.router, prefix="/api", tags=["Search"])
-app.include_router(tipi.router, prefix="/api/tipi", tags=["TIPI"]) # Note: routes inside are /search, /chapters etc
+app.include_router(
+    tipi.router, prefix="/api/tipi", tags=["TIPI"]
+)  # Note: routes inside are /search, /chapters etc
 app.include_router(system.router, prefix="/api", tags=["System"])
 app.include_router(webhooks.router, prefix="/api/webhooks", tags=["Webhooks"])
+app.include_router(comments.router, prefix="/api", tags=["Comments"])
 
 
 # --- Static Files / Frontend ---
 # Serving Frontend (Production Build)
 # Mounts the Vite build directory to serve the React App
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_root = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 static_dir = os.path.join(project_root, "client", "dist")
 
 if os.path.exists(static_dir):
     app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 else:
     logger.warning(f"Frontend build not found at {static_dir}. Serving defaults.")
+
     @app.get("/")
     async def read_root():
-        return {"message": "Nesh API running. Frontend not found. Run 'npm run build' in client/ folder."}
+        return {
+            "message": "Nesh API running. Frontend not found. Run 'npm run build' in client/ folder."
+        }

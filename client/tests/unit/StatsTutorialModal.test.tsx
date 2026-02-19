@@ -54,6 +54,23 @@ describe('StatsModal', () => {
     expect(errSpy).toHaveBeenCalled();
   });
 
+  it('renders database error and TIPI online chapter count', async () => {
+    vi.mocked(getSystemStatus).mockResolvedValue({
+      status: 'online',
+      version: '4.3',
+      backend: 'FastAPI',
+      database: { status: 'error', chapters: 0, positions: 0 },
+      tipi: { status: 'online', chapters: 12, positions: 214 },
+    } as any);
+
+    render(<StatsModal isOpen={true} onClose={vi.fn()} />);
+
+    expect(await screen.findByText('Versão')).toBeInTheDocument();
+    expect(screen.getByText('Erro')).toBeInTheDocument();
+    expect(screen.getByText('Online')).toBeInTheDocument();
+    expect(screen.getByText('12 Capítulos')).toBeInTheDocument();
+  });
+
   it('does not request status when closed', () => {
     render(<StatsModal isOpen={false} onClose={vi.fn()} />);
     expect(getSystemStatus).not.toHaveBeenCalled();

@@ -203,7 +203,7 @@ def test_render_chapter_structures_sections_normalizes_lines_and_trims_other_cha
     assert 'class="nesh-inline-title">Resumo<' in out
     assert 'data-note="3"' in out
     assert 'data-chapter="84"' in out
-    assert "<div class=\"regras-gerais\">" in out
+    assert '<div class="regras-gerais" id="chapter-85-notas">' in out
     assert "<p><br></p>" in out
     assert "Trecho que deve ser removido" not in out
     assert "•" not in out
@@ -223,6 +223,30 @@ def test_render_chapter_trims_at_section_header():
     assert "Introdução útil" in out
     assert "SEÇÃO XI" not in out
     assert "Texto que não deve aparecer" not in out
+
+
+def test_render_chapter_renders_structured_sections_with_navigation_ids():
+    data = {
+        "capitulo": "84",
+        "conteudo": "84.13 - Bombas para liquidos",
+        "notas_gerais": "Nao deve aparecer quando secoes existem",
+        "secoes": {
+            "titulo": "Reatores nucleares",
+            "notas": "1.- Nota principal",
+            "consideracoes": "Consideracoes gerais da secao",
+            "definicoes": "1) Definicao tecnica",
+        },
+        "posicoes": [{"codigo": "84.13"}],
+        "real_content_found": True,
+    }
+
+    out = HtmlRenderer.render_chapter(data)
+
+    assert 'id="chapter-84-titulo"' in out
+    assert 'id="chapter-84-notas"' in out
+    assert 'id="chapter-84-consideracoes"' in out
+    assert 'id="chapter-84-definicoes"' in out
+    assert '<div class="regras-gerais"' not in out
 
 
 def test_render_full_response_continues_when_one_chapter_raises(monkeypatch):

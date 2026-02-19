@@ -33,6 +33,7 @@ const mockAxios = vi.hoisted(() => {
       },
     },
     get: vi.fn(),
+    request: vi.fn(),
   };
 
   const create = vi.fn(() => instance);
@@ -44,6 +45,7 @@ const mockAxios = vi.hoisted(() => {
     handlers.responseRejected = undefined;
     create.mockClear();
     instance.get.mockReset();
+    instance.request.mockReset();
     instance.interceptors.request.use.mockClear();
     instance.interceptors.response.use.mockClear();
   };
@@ -132,7 +134,106 @@ describe('api service', () => {
     await expect(mockAxios.handlers.responseRejected?.(unauthorizedError)).rejects.toBe(unauthorizedError);
     await expect(mockAxios.handlers.responseRejected?.(serverError)).rejects.toBe(serverError);
 
-    expect(warnSpy).toHaveBeenCalledWith('[API] 401 Unauthorized - Token may be expired');
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[API] 401 Unauthorized - Token missing, expired, or invalid',
+      expect.objectContaining({
+        path: undefined,
+        detail: undefined,
+      }),
+    );
+  });
+
+  it('deduplicates forced token refresh across concurrent 401 retries', async () => {
+    const apiModule = await loadApiModule();
+    const getter = vi.fn().mockResolvedValue('fresh-token');
+    const headers1 = { set: vi.fn() };
+    const headers2 = { set: vi.fn() };
+    const req1 = { url: '/comments/anchors', headers: headers1 } as any;
+    const req2 = { url: '/comments/', headers: headers2 } as any;
+    const err1 = { response: { status: 401, data: { detail: 'Token inválido ou expirado' } }, config: req1 } as any;
+    const err2 = { response: { status: 401, data: { detail: 'Token inválido ou expirado' } }, config: req2 } as any;
+
+    apiModule.registerClerkTokenGetter(getter);
+    mockAxios.instance.request.mockResolvedValue({ ok: true });
+
+    const [out1, out2] = await Promise.all([
+      mockAxios.handlers.responseRejected?.(err1),
+      mockAxios.handlers.responseRejected?.(err2),
+    ]);
+
+    expect(out1).toEqual({ ok: true });
+    expect(out2).toEqual({ ok: true });
+    expect(getter).toHaveBeenCalledTimes(1);
+    expect(getter).toHaveBeenCalledWith(expect.objectContaining({ skipCache: true }));
+    expect(headers1.set).toHaveBeenCalledWith('Authorization', 'Bearer fresh-token');
+    expect(headers2.set).toHaveBeenCalledWith('Authorization', 'Bearer fresh-token');
+    expect(mockAxios.instance.request).toHaveBeenCalledTimes(2);
+  });
+
+  it('applies cooldown to forced refresh to avoid token storm', async () => {
+    const apiModule = await loadApiModule();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const getter = vi.fn().mockResolvedValue('fresh-token');
+    const nowSpy = vi.spyOn(Date, 'now');
+    nowSpy.mockReturnValueOnce(1000).mockReturnValue(2000);
+
+    apiModule.registerClerkTokenGetter(getter);
+    mockAxios.instance.request.mockResolvedValue({ ok: true });
+
+    const firstHeaders = { set: vi.fn() };
+    const secondHeaders = { set: vi.fn() };
+    const firstErr = {
+      response: { status: 401, data: { detail: 'Token inválido ou expirado' } },
+      config: { url: '/comments/anchors', headers: firstHeaders },
+    } as any;
+    const secondErr = {
+      response: { status: 401, data: { detail: 'Token inválido ou expirado' } },
+      config: { url: '/comments/', headers: secondHeaders },
+    } as any;
+
+    await expect(mockAxios.handlers.responseRejected?.(firstErr)).resolves.toEqual({ ok: true });
+    await expect(mockAxios.handlers.responseRejected?.(secondErr)).rejects.toBe(secondErr);
+
+    expect(getter).toHaveBeenCalledTimes(1);
+    expect(mockAxios.instance.request).toHaveBeenCalledTimes(1);
+    expect(secondHeaders.set).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[API] 401 Unauthorized - Token missing, expired, or invalid',
+      expect.objectContaining({
+        path: '/comments/',
+        detail: 'Token inválido ou expirado',
+        refreshAttempt: 'attempted',
+        refreshMode: 'cooldown',
+      }),
+    );
+
+    nowSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
+  it('skips refresh for 401 with missing-token detail', async () => {
+    const apiModule = await loadApiModule();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const getter = vi.fn().mockResolvedValue('fresh-token');
+    const err = {
+      response: { status: 401, data: { detail: 'Token ausente' } },
+      config: { url: '/comments/anchors', headers: { set: vi.fn() } },
+    } as any;
+
+    apiModule.registerClerkTokenGetter(getter);
+    await expect(mockAxios.handlers.responseRejected?.(err)).rejects.toBe(err);
+
+    expect(getter).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[API] 401 Unauthorized - Token missing, expired, or invalid',
+      expect.objectContaining({
+        path: '/comments/anchors',
+        detail: 'Token ausente',
+        refreshAttempt: 'skipped',
+        refreshMode: 'not_applicable',
+      }),
+    );
+    warnSpy.mockRestore();
   });
 
   it('deduplicates in-flight searchNCM requests and caches successful code responses', async () => {

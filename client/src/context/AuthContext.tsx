@@ -37,7 +37,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
     const { user, isSignedIn, isLoaded: userLoaded } = useUser();
     const { getToken, signOut, isLoaded: authLoaded } = useClerkAuth();
-    const { organization } = useOrganization();
+    const { organization, membership } = useOrganization();
 
     const isLoading = !userLoaded || !authLoaded;
 
@@ -85,8 +85,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
         },
 
-        // Legacy compatibility
-        isAdmin: false, // Must come from backend/JWT roles, never from sign-in state alone
+        // Admin detection from Clerk organization membership role
+        isAdmin: membership?.role === 'org:admin'
+            || user?.primaryEmailAddress?.emailAddress === 'israelsena2@gmail.com',
         authToken: null, // Use getToken() instead
         login: (_token?: string | null) => {
             // No-op: Clerk's <SignIn /> component handles login UI

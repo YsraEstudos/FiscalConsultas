@@ -9,10 +9,12 @@ const {
   signOutMock,
   userNameRef,
   userEmailRef,
+  isAdminRef,
 } = vi.hoisted(() => ({
   signOutMock: vi.fn(),
   userNameRef: { value: 'Usuário Teste' as string | null },
   userEmailRef: { value: 'teste@demo.com' as string | null },
+  isAdminRef: { value: true },
 }));
 
 vi.mock('@clerk/clerk-react', () => ({
@@ -39,6 +41,10 @@ vi.mock('../../src/context/AuthContext', () => ({
   }),
 }));
 
+vi.mock('../../src/hooks/useIsAdmin', () => ({
+  useIsAdmin: () => isAdminRef.value,
+}));
+
 function renderHeader() {
   return render(
     <Header
@@ -63,6 +69,7 @@ describe('Header', () => {
     signOutMock.mockReset();
     userNameRef.value = 'Usuário Teste';
     userEmailRef.value = 'teste@demo.com';
+    isAdminRef.value = true;
   });
 
   it('switches document type and triggers mobile menu action', () => {

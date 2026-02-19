@@ -14,6 +14,7 @@ interface LayoutProps {
     onOpenTutorial: () => void;
     onOpenStats: () => void;
     onOpenComparator: () => void;
+    onOpenModerate: () => void;
     history: HistoryItem[];
     onClearHistory: () => void;
     onRemoveHistory: (term: string) => void;
@@ -31,6 +32,7 @@ export function Layout({
     onOpenTutorial,
     onOpenStats,
     onOpenComparator,
+    onOpenModerate,
     history,
     onClearHistory,
     onRemoveHistory,
@@ -48,6 +50,7 @@ export function Layout({
                 onOpenTutorial={onOpenTutorial}
                 onOpenStats={onOpenStats}
                 onOpenComparator={onOpenComparator}
+                onOpenModerate={onOpenModerate}
                 history={history}
                 onClearHistory={onClearHistory}
                 onRemoveHistory={onRemoveHistory}

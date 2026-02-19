@@ -8,6 +8,7 @@ import {
     clerkUserButtonAppearance
 } from '../config/clerkAppearance';
 import { useAuth } from '../context/AuthContext';
+import { useIsAdmin } from '../hooks/useIsAdmin';
 import { Modal } from './Modal';
 import styles from './Header.module.css';
 
@@ -20,6 +21,7 @@ interface HeaderProps {
     onOpenTutorial: () => void;
     onOpenStats: () => void;
     onOpenComparator: () => void;
+    onOpenModerate: () => void;
     history: HistoryItem[];
     onClearHistory: () => void;
     onRemoveHistory: (term: string) => void;
@@ -36,6 +38,7 @@ export function Header({
     onOpenTutorial,
     onOpenStats,
     onOpenComparator,
+    onOpenModerate,
     history,
     onClearHistory,
     onRemoveHistory,
@@ -49,6 +52,7 @@ export function Header({
     const menuRef = useRef<HTMLDivElement>(null);
     const { signOut } = useClerk();
     const { userName, userEmail } = useAuth();
+    const isAdmin = useIsAdmin();
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -154,9 +158,16 @@ export function Header({
                             <span>❓</span> Ajuda / Tutorial
                         </button>
                         <div className={styles.menuDivider}></div>
-                        <button onClick={() => { setIsMenuOpen(false); onOpenStats(); }}>
-                            <span>📊</span> Estatísticas
-                        </button>
+                        {isAdmin && (
+                            <button onClick={() => { setIsMenuOpen(false); onOpenStats(); }}>
+                                <span>📊</span> Estatísticas
+                            </button>
+                        )}
+                        {isAdmin && (
+                            <button onClick={() => { setIsMenuOpen(false); onOpenModerate(); }}>
+                                <span>🛡️</span> Moderar Comentários
+                            </button>
+                        )}
 
                         <div className={styles.menuDivider}></div>
 
@@ -172,12 +183,17 @@ export function Header({
                                 </SignedOut>
 
                                 <SignedIn>
-                                    <div className={styles.orgSwitcher}>
-                                        <OrganizationSwitcher appearance={clerkOrganizationSwitcherAppearance} />
-                                    </div>
-                                    <div className={styles.userSection}>
-                                        <UserButton appearance={clerkUserButtonAppearance} afterSignOutUrl="/" />
-                                    </div>
+                                    {/* Admin: apenas OrganizationSwitcher (dropdown já tem "Manage account") */}
+                                    {isAdmin ? (
+                                        <div className={styles.orgSwitcher}>
+                                            <OrganizationSwitcher appearance={clerkOrganizationSwitcherAppearance} />
+                                        </div>
+                                    ) : (
+                                        /* Usuário comum: apenas UserButton — sem avatar duplicado */
+                                        <div className={styles.userSection}>
+                                            <UserButton appearance={clerkUserButtonAppearance} afterSignOutUrl="/" />
+                                        </div>
+                                    )}
                                     <div className={styles.userSummary}>
                                         <strong>{userName || 'Usuário'}</strong>
                                         <span>{userEmail || 'Conta autenticada'}</span>

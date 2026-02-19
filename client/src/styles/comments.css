@@ -1,0 +1,20 @@
+/* ─── Indicador Visual de Texto com Comentário ───────────────────────────── */
+/*
+ * A classe .has-comment é injetada pelo backend no HTML renderizado
+ * em volta de trechos text que possuem comentários aprovados.
+ * Fornece uma dica visual sutil sem interromper a leitura.
+ */
+
+.has-comment {
+    /* Sublinhado pontilhado âmbar — discreto mas visível */
+    text-decoration: underline dotted rgba(245, 158, 11, 0.75);
+    text-underline-offset: 3px;
+    text-decoration-thickness: 2px;
+    cursor: pointer;
+    transition: background-color 0.18s ease;
+    border-radius: 2px;
+}
+
+.has-comment:hover {
+    background-color: rgba(245, 158, 11, 0.12);
+}
