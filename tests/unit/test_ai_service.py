@@ -40,7 +40,11 @@ def test_init_with_api_key_sets_model(monkeypatch):
 def test_init_with_api_key_handles_provider_error(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "k-test")
     monkeypatch.setattr(ai_mod.genai, "configure", lambda **_kwargs: None)
-    monkeypatch.setattr(ai_mod.genai, "GenerativeModel", lambda _name: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr(
+        ai_mod.genai,
+        "GenerativeModel",
+        lambda _name: (_ for _ in ()).throw(RuntimeError("x")),
+    )
     monkeypatch.setattr(ai_mod.logger, "error", lambda _msg: None)
 
     service = ai_mod.AiService()
@@ -81,4 +85,3 @@ async def test_get_chat_response_wraps_provider_exception(monkeypatch):
     with pytest.raises(ServiceError) as exc:
         await service.get_chat_response("hello")
     assert exc.value.service == "AI"
-

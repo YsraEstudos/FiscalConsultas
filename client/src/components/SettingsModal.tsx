@@ -33,7 +33,7 @@ export function SettingsModal({ isOpen, onClose }: Readonly<SettingsModalProps>)
 
     return (
         <div className={`${styles.modal} ${isOpen ? styles.active : ''}`} onClick={onClose} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClose(); }} role="presentation">
-            <div className={styles.content} onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()} role="presentation">
+            <div className={styles.content} onClick={e => e.stopPropagation()} role="presentation">
 
                 {/* Header */}
                 <div className={styles.header}>

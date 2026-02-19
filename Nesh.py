@@ -21,7 +21,6 @@ Arquitetura:
 Versão: 4.0 (Modular Architecture)
 """
 
-
 import uvicorn
 import os
 import sys
@@ -30,16 +29,17 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+
 def main():
     """
     Função principal que configura e inicia o servidor Uvicorn.
-    
+
     Adiciona o diretório raiz ao PYTHONPATH e inicia o servidor
     escutando em 127.0.0.1:8000 com reload automático ativado.
     """
     # Adiciona diretório atual ao path para garantir imports corretos
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    
+
     # Configurações do servidor (pode vir do config.py se necessário)
     HOST = "127.0.0.1"
     PORT = 8000
@@ -50,9 +50,9 @@ def main():
     # - Evita watcher global em todo o projeto (muito pesado no Windows/OneDrive)
     # - Pode ser desabilitado com NESH_RELOAD=0
     reload_enabled = os.getenv("NESH_RELOAD", "1").lower() not in {"0", "false", "no"}
-    
+
     print(f"Starting Nesh Server on http://{HOST}:{PORT}")
-    
+
     # Executa Uvicorn
     uvicorn.run(
         "backend.server.app:app",
@@ -72,6 +72,7 @@ def main():
             "__pycache__/*",
         ],
     )
+
 
 if __name__ == "__main__":
     main()

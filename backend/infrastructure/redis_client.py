@@ -1,6 +1,7 @@
 """
 Redis cache client for shared L2 caching.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -10,6 +11,7 @@ import orjson
 
 try:
     import redis.asyncio as aioredis  # type: ignore[import-untyped]
+
     _REDIS_AVAILABLE = True
 except Exception:  # pragma: no cover - optional dependency
     aioredis = None  # type: ignore[assignment]
@@ -53,7 +55,9 @@ class RedisCache:
         if self._client is None:
             return
         try:
-            await self._client.aclose()  # aclose() is the non-deprecated path since redis 5.0.1
+            await (
+                self._client.aclose()
+            )  # aclose() is the non-deprecated path since redis 5.0.1
         except Exception as exc:
             logger.warning("Redis close failed: %s", exc)
         finally:

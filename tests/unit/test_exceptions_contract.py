@@ -86,4 +86,3 @@ def test_not_found_error_without_identifier():
     exc = NotFoundError("Recurso")
     assert exc.identifier is None
     assert exc.message == "Recurso não encontrado"
-

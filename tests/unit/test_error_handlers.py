@@ -27,8 +27,12 @@ def _request(path: str = "/api/test") -> Request:
 @pytest.mark.asyncio
 async def test_nesh_exception_handler_uses_warning_for_4xx(monkeypatch):
     calls = []
-    monkeypatch.setattr(error_handlers.logger, "warning", lambda msg: calls.append(("warning", msg)))
-    monkeypatch.setattr(error_handlers.logger, "error", lambda msg: calls.append(("error", msg)))
+    monkeypatch.setattr(
+        error_handlers.logger, "warning", lambda msg: calls.append(("warning", msg))
+    )
+    monkeypatch.setattr(
+        error_handlers.logger, "error", lambda msg: calls.append(("error", msg))
+    )
 
     exc = ValidationError("invalid", field="ncm")
     response = await error_handlers.nesh_exception_handler(_request("/api/search"), exc)
@@ -43,8 +47,12 @@ async def test_nesh_exception_handler_uses_warning_for_4xx(monkeypatch):
 @pytest.mark.asyncio
 async def test_nesh_exception_handler_uses_error_for_5xx(monkeypatch):
     calls = []
-    monkeypatch.setattr(error_handlers.logger, "warning", lambda msg: calls.append(("warning", msg)))
-    monkeypatch.setattr(error_handlers.logger, "error", lambda msg: calls.append(("error", msg)))
+    monkeypatch.setattr(
+        error_handlers.logger, "warning", lambda msg: calls.append(("warning", msg))
+    )
+    monkeypatch.setattr(
+        error_handlers.logger, "error", lambda msg: calls.append(("error", msg))
+    )
 
     exc = ValidationError("boom")
     exc.status_code = 500
@@ -57,7 +65,9 @@ async def test_nesh_exception_handler_uses_error_for_5xx(monkeypatch):
 @pytest.mark.asyncio
 async def test_generic_exception_handler_returns_sanitized_payload(monkeypatch):
     captured = []
-    monkeypatch.setattr(error_handlers.logger, "exception", lambda msg: captured.append(msg))
+    monkeypatch.setattr(
+        error_handlers.logger, "exception", lambda msg: captured.append(msg)
+    )
 
     response = await error_handlers.generic_exception_handler(
         _request("/api/unknown"),

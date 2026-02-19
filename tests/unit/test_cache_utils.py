@@ -11,7 +11,9 @@ pytestmark = pytest.mark.unit
 
 def _request(headers: dict[str, str] | None = None) -> Request:
     headers = headers or {}
-    scope_headers = [(k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in headers.items()]
+    scope_headers = [
+        (k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in headers.items()
+    ]
     scope = {
         "type": "http",
         "http_version": "1.1",
@@ -41,8 +43,13 @@ def test_cache_scope_key_fallbacks_without_middleware_import(monkeypatch):
         return original_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", _patched_import)
-    assert cache_scope_key(_request(headers={"X-Tenant-Id": " tenant_a "})) == "tenant:tenant_a"
-    assert cache_scope_key(_request(headers={"Authorization": "Bearer x"})) == "auth-user"
+    assert (
+        cache_scope_key(_request(headers={"X-Tenant-Id": " tenant_a "}))
+        == "tenant:tenant_a"
+    )
+    assert (
+        cache_scope_key(_request(headers={"Authorization": "Bearer x"})) == "auth-user"
+    )
     assert cache_scope_key(_request()) == "public"
 
 
@@ -54,4 +61,3 @@ def test_weak_etag_is_stable_and_namespaced():
     assert e1 == e2
     assert e1 != e3
     assert e1.startswith('W/"') and e1.endswith('"')
-

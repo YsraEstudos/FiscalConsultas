@@ -12,7 +12,9 @@ def test_cache_metrics_requires_admin(client):
 
 
 def test_cache_metrics_reports_payload_cache_activity(client, monkeypatch):
-    monkeypatch.setattr(system, "is_valid_admin_token", lambda token: token == "admin-ok")
+    monkeypatch.setattr(
+        system, "is_valid_admin_token", lambda token: token == "admin-ok"
+    )
 
     # Warm + hit for search payload cache
     first_search = client.get("/api/search?ncm=8517")

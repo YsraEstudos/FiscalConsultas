@@ -7,7 +7,9 @@ pytestmark = pytest.mark.unit
 
 def _build_request(headers: dict[str, str] | None = None) -> Request:
     headers = headers or {}
-    scope_headers = [(k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in headers.items()]
+    scope_headers = [
+        (k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in headers.items()
+    ]
     scope = {
         "type": "http",
         "method": "POST",
@@ -42,8 +44,12 @@ def test_normalize_db_status_with_valid_stats_coerces_values():
 
 
 def test_normalize_tipi_status_handles_online_and_error_states():
-    online_payload = system._normalize_tipi_status({"ok": True, "chapters": "3", "positions": "7"})
-    error_payload = system._normalize_tipi_status({"status": "error", "error": "db down"})
+    online_payload = system._normalize_tipi_status(
+        {"ok": True, "chapters": "3", "positions": "7"}
+    )
+    error_payload = system._normalize_tipi_status(
+        {"status": "error", "error": "db down"}
+    )
 
     assert online_payload == {
         "status": "online",
@@ -58,24 +64,37 @@ def test_normalize_tipi_status_handles_online_and_error_states():
     }
 
 
-def test_is_admin_request_accepts_valid_admin_token(monkeypatch):
+@pytest.mark.asyncio
+async def test_is_admin_request_accepts_valid_admin_token(monkeypatch):
     request = _build_request(headers={"X-Admin-Token": "token123"})
-    monkeypatch.setattr(system, "is_valid_admin_token", lambda token: token == "token123")
+    monkeypatch.setattr(
+        system, "is_valid_admin_token", lambda token: token == "token123"
+    )
 
-    assert system._is_admin_request(request) is True
+    assert (await system._is_admin_request(request)) is True
 
 
-def test_is_admin_request_accepts_admin_role_in_jwt(monkeypatch):
+@pytest.mark.asyncio
+async def test_is_admin_request_accepts_admin_role_in_jwt(monkeypatch):
     request = _build_request(headers={"Authorization": "Bearer jwt-token"})
     monkeypatch.setattr(system, "is_valid_admin_token", lambda _token: False)
-    monkeypatch.setattr(system, "decode_clerk_jwt", lambda _token: {"role": "admin"})
 
-    assert system._is_admin_request(request) is True
+    async def _mock_decode(_t):
+        return {"role": "admin"}
+
+    monkeypatch.setattr(system, "decode_clerk_jwt", _mock_decode)
+
+    assert (await system._is_admin_request(request)) is True
 
 
-def test_is_admin_request_rejects_non_admin_user(monkeypatch):
+@pytest.mark.asyncio
+async def test_is_admin_request_rejects_non_admin_user(monkeypatch):
     request = _build_request(headers={"Authorization": "Bearer jwt-token"})
     monkeypatch.setattr(system, "is_valid_admin_token", lambda _token: False)
-    monkeypatch.setattr(system, "decode_clerk_jwt", lambda _token: {"role": "user"})
 
-    assert system._is_admin_request(request) is False
+    async def _mock_decode(_t):
+        return {"role": "user"}
+
+    monkeypatch.setattr(system, "decode_clerk_jwt", _mock_decode)
+
+    assert (await system._is_admin_request(request)) is False
