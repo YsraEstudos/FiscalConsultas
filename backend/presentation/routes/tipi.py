@@ -10,6 +10,7 @@ from backend.config.exceptions import ValidationError
 from backend.config.logging_config import server_logger as logger
 from backend.utils.cache import cache_scope_key, weak_etag
 from backend.utils.payload_cache_metrics import tipi_payload_cache_metrics
+from backend.presentation.renderer import HtmlRenderer
 
 import orjson as _orjson
 
@@ -51,6 +52,40 @@ def _tipi_payload_cache_set(key: str, payload: tuple[bytes, bytes]) -> None:
 def _accepts_gzip(request: Request) -> bool:
     accept_encoding = (request.headers.get("Accept-Encoding") or "").lower()
     return "gzip" in accept_encoding
+
+
+def _apply_highlights_to_descriptions(result: dict) -> dict:
+    """Aplica highlights de unidades e exclusões nas descrições TIPI antes de serializar.
+
+    Percorre as duas estruturas possíveis de resposta:
+    - code search: result["results"][cap]["posicoes"][i]["descricao"]
+    - text search: result["results"][i]["descricao"]
+    """
+    results = result.get("results") or result.get("resultados")
+    if not results:
+        return result
+
+    if isinstance(results, dict):
+        # Code search: results é {cap: {posicoes: [...]}}
+        for cap_data in results.values():
+            if not isinstance(cap_data, dict):
+                continue
+            for pos in cap_data.get("posicoes") or []:
+                desc = pos.get("descricao", "")
+                if desc:
+                    desc = HtmlRenderer.inject_exclusion_highlights(desc)
+                    desc = HtmlRenderer.inject_unit_highlights(desc)
+                    pos["descricao"] = desc
+    elif isinstance(results, list):
+        # Text search: results é [{descricao: ...}, ...]
+        for item in results:
+            desc = item.get("descricao", "")
+            if desc:
+                desc = HtmlRenderer.inject_exclusion_highlights(desc)
+                desc = HtmlRenderer.inject_unit_highlights(desc)
+                item["descricao"] = desc
+
+    return result
 
 
 def get_payload_cache_metrics() -> dict[str, float | int]:
@@ -124,6 +159,9 @@ async def tipi_search(
         result.setdefault('warning', None)
         result.setdefault('match_type', 'text')
     
+    # Aplicar highlights de unidades e exclusões nas descrições antes de serializar
+    _apply_highlights_to_descriptions(result)
+
     cache_key = cache_scope_key(request)
     headers = {
         "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",

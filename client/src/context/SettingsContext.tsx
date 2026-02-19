@@ -75,6 +75,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         localStorage.setItem(STORAGE_KEYS.HIGHLIGHT, highlightEnabled.toString());
+        // Ativar/desativar classes CSS no body para controlar visibilidade dos destaques
+        const classes = ['disable-unit-highlights', 'disable-exclusion-highlights', 'disable-smart-links'];
+        if (highlightEnabled) {
+            document.body.classList.remove(...classes);
+        } else {
+            document.body.classList.add(...classes);
+        }
     }, [highlightEnabled]);
 
     useEffect(() => {

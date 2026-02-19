@@ -10,7 +10,7 @@ Sistema híbrido de consulta fiscal (NESH + TIPI) com backend FastAPI e frontend
 
 ## Requisitos
 
-- Python 3.10+ (validado localmente com Python 3.13.5)
+- Python 3.13+ (alinhado com `pyproject.toml`)
 - Node.js 18+ (validado localmente com Node 22.17.0)
 - npm (validado localmente com npm 10.9.2)
 - Opcional para modo PostgreSQL: Docker + Docker Compose
@@ -20,13 +20,20 @@ Sistema híbrido de consulta fiscal (NESH + TIPI) com backend FastAPI e frontend
 ### 1) Instalar dependências
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt -r requirements-dev.txt
+uv sync --group dev
 
 cd client
-npm install
+npm ci
 cd ..
+```
+
+Opcional sem `uv` (manual):
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -e .
+pip install pytest pytest-cov pytest-benchmark httpx
 ```
 
 ### 2) Configurar ambiente
@@ -91,12 +98,12 @@ Resposta esperada: JSON com `status`, `database` e `tipi`.
 
 | Ação | Comando |
 | :--- | :--- |
-| Backend tests (suite principal) | `pytest -q` |
+| Backend tests (suite principal) | `.\.venv\Scripts\python -m pytest -q` |
 | Frontend lint | `cd client && npm run lint` |
 | Frontend tests | `cd client && npm run test` |
 | Frontend tests (todos, inclui perf) | `cd client && npm run test:all` |
 | Frontend cobertura | `cd client && npm run test:coverage` |
-| Backend cobertura | `pytest -q --cov=backend --cov-report=term-missing` |
+| Backend cobertura | `.\.venv\Scripts\python -m pytest -q --cov=backend --cov-report=term-missing` |
 | Frontend build | `cd client && npm run build` |
 
 Status observado em **2026-02-07**:

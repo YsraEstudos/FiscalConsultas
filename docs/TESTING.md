@@ -63,6 +63,9 @@
 - Run backend unit+integration (no perf/snapshot) on push/PR.
 - Run frontend stable tests on push/PR.
 - Publish coverage artifacts for backend and frontend.
+- Enforce minimum coverage gates:
+  - Backend: `--cov-fail-under=70` in CI.
+  - Frontend: Vitest `coverage.thresholds` (lines/statements 60, functions 58, branches 50).
 
 ## Coverage Targets
 - Initial baseline target:
