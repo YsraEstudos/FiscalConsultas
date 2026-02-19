@@ -48,7 +48,9 @@ def _cache() -> redis_mod.RedisCache:
 
 @pytest.mark.asyncio
 async def test_connect_skips_when_disabled():
-    cache = redis_mod.RedisCache("redis://localhost", enabled=False, chapter_ttl=1, fts_ttl=1)
+    cache = redis_mod.RedisCache(
+        "redis://localhost", enabled=False, chapter_ttl=1, fts_ttl=1
+    )
     await cache.connect()
     assert cache.available is False
 
@@ -143,7 +145,11 @@ async def test_set_json_handles_serialize_or_write_errors(monkeypatch):
     await cache.set_json("k1", {"x": 1}, 10)
     assert fake.set_calls == []
 
-    monkeypatch.setattr(redis_mod.orjson, "dumps", lambda _value: (_ for _ in ()).throw(TypeError("bad")))
+    monkeypatch.setattr(
+        redis_mod.orjson,
+        "dumps",
+        lambda _value: (_ for _ in ()).throw(TypeError("bad")),
+    )
     await cache.set_json("k2", {"x": 1}, 10)
 
 

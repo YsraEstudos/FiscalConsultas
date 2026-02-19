@@ -3,6 +3,7 @@ Alembic env.py configurado para SQLModel + Async.
 
 Este arquivo gerencia migrations para PostgreSQL e SQLite.
 """
+
 import asyncio
 from logging.config import fileConfig
 
@@ -16,9 +17,17 @@ from alembic import context
 # Importar todos os modelos para que Alembic os detecte
 import sys
 import os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.domain.sqlmodels import Chapter, Position, ChapterNotes, Glossary, TipiPosition, Subscription
+from backend.domain.sqlmodels import (
+    Chapter,
+    Position,
+    ChapterNotes,
+    Glossary,
+    TipiPosition,
+    Subscription,
+)
 from backend.domain.comment_models import Comment  # noqa: F401 — Alembic autogenerate
 from backend.config.settings import settings
 
@@ -43,7 +52,7 @@ def get_url() -> str:
 def run_migrations_offline() -> None:
     """
     Run migrations in 'offline' mode.
-    
+
     Generates SQL script without connecting to database.
     """
     url = get_url()
@@ -61,7 +70,7 @@ def run_migrations_offline() -> None:
 def do_run_migrations(connection: Connection) -> None:
     """Execute migrations with a connection."""
     context.configure(
-        connection=connection, 
+        connection=connection,
         target_metadata=target_metadata,
         compare_type=True,  # Detecta mudanças de tipo de coluna
     )
@@ -73,12 +82,12 @@ def do_run_migrations(connection: Connection) -> None:
 async def run_async_migrations() -> None:
     """
     Run migrations in async mode.
-    
+
     Creates an async engine and runs migrations.
     """
     configuration = config.get_section(config.config_ini_section, {})
     configuration["sqlalchemy.url"] = get_url()
-    
+
     connectable = async_engine_from_config(
         configuration,
         prefix="sqlalchemy.",

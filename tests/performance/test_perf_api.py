@@ -3,6 +3,7 @@ import os
 import time
 import pytest
 
+
 def _percentile(values_ms: list[float], percentile: float) -> float:
     if not values_ms:
         raise ValueError("empty values")
@@ -88,14 +89,18 @@ async def test_perf_warm_tipi_code_render_p95(tipi_service):
     for _ in range(3):
         warm = await tipi_service.search_by_code("8517")
         assert warm.get("success") is True
-        TipiRenderer.render_full_response(warm.get("resultados") or warm.get("results") or {})
+        TipiRenderer.render_full_response(
+            warm.get("resultados") or warm.get("results") or {}
+        )
 
     samples_ms = []
     for _ in range(20):
         start = time.perf_counter()
         data = await tipi_service.search_by_code("8517")
         assert data.get("success") is True
-        TipiRenderer.render_full_response(data.get("resultados") or data.get("results") or {})
+        TipiRenderer.render_full_response(
+            data.get("resultados") or data.get("results") or {}
+        )
         end = time.perf_counter()
         samples_ms.append((end - start) * 1000.0)
 
@@ -114,4 +119,6 @@ def test_perf_cold_start_p95(benchmark, cold_start_measure):
 
     samples_ms = [v * 1000.0 for v in benchmark.stats.stats.data]
     p95 = _percentile(samples_ms, 95)
-    assert p95 <= COLD_START_P95_MS, f"cold-start p95={p95:.0f}ms > {COLD_START_P95_MS:.0f}ms"
+    assert p95 <= COLD_START_P95_MS, (
+        f"cold-start p95={p95:.0f}ms > {COLD_START_P95_MS:.0f}ms"
+    )

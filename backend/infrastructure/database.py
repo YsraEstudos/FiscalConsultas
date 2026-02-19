@@ -22,15 +22,15 @@ from ..config.settings import settings
 class ConnectionPool:
     """
     Pool de conexões SQLite thread-safe e async.
-    
+
     Mantém conexões reutilizáveis para evitar overhead
     de criar nova conexão a cada request.
-    
+
     Attributes:
         db_path: Caminho para o arquivo SQLite
         max_size: Tamanho máximo do pool
     """
-    
+
     def __init__(self, db_path: str, max_size: int = 5):
         self.db_path = db_path
         self.max_size = max_size
@@ -38,7 +38,7 @@ class ConnectionPool:
         self._lock = asyncio.Lock()
         self._created = 0
         logger.info(f"ConnectionPool inicializado (max={max_size})")
-    
+
     async def _create_connection(self) -> aiosqlite.Connection:
         """Cria nova conexão configurada."""
         try:
@@ -54,16 +54,18 @@ class ConnectionPool:
         except Exception as e:
             logger.error(f"Falha ao criar conexão: {e}")
             raise DatabaseError(f"Falha ao conectar ao banco: {e}")
-    
+
     async def get(self) -> aiosqlite.Connection:
         """Obtém conexão do pool ou cria nova."""
         async with self._lock:
             if self._pool:
                 conn = self._pool.pop()
-                logger.debug(f"Conexão reutilizada do pool ({len(self._pool)} restantes)")
+                logger.debug(
+                    f"Conexão reutilizada do pool ({len(self._pool)} restantes)"
+                )
                 return conn
         return await self._create_connection()
-    
+
     async def release(self, conn: aiosqlite.Connection) -> None:
         """Devolve conexão ao pool."""
         async with self._lock:
@@ -76,7 +78,7 @@ class ConnectionPool:
                 except Exception as e:
                     logger.warning(f"Erro ao fechar conexão excedente: {e}")
                 logger.debug("Pool cheio, conexão fechada")
-    
+
     async def close_all(self) -> None:
         """Fecha todas as conexões do pool."""
         async with self._lock:
@@ -92,23 +94,23 @@ class ConnectionPool:
 class DatabaseAdapter:
     """
     Gerencia conexões e queries com o banco de dados SQLite de forma assíncrona.
-    
+
     Attributes:
         db_path: Caminho absoluto para o arquivo .db
         pool: Pool de conexões reutilizáveis
     """
-    
+
     # Pool compartilhado (singleton por db_path)
     _pools: Dict[str, ConnectionPool] = {}
     _pools_lock: Optional[asyncio.Lock] = None
-    
+
     @classmethod
     def _get_pools_lock(cls) -> asyncio.Lock:
         """Lazy initialization do lock para evitar criação fora do event loop."""
         if cls._pools_lock is None:
             cls._pools_lock = asyncio.Lock()
         return cls._pools_lock
-    
+
     def __init__(self, db_path: str, pool_size: int = 5):
         """
         Inicializa o adapter com pool de conexões.
@@ -169,13 +171,13 @@ class DatabaseAdapter:
             if not await cursor.fetchone():
                 return {
                     "available": False,
-                    "reason": "Tabela FTS 'search_index' não encontrada"
+                    "reason": "Tabela FTS 'search_index' não encontrada",
                 }
 
             cursor = await conn.execute("PRAGMA table_info(search_index)")
             rows = await cursor.fetchall()
-            cols = {row['name'] for row in rows}
-            
+            cols = {row["name"] for row in rows}
+
             if "indexed_content" in cols:
                 content_column = "indexed_content"
             elif "description" in cols:
@@ -183,14 +185,14 @@ class DatabaseAdapter:
             else:
                 return {
                     "available": False,
-                    "reason": "FTS sem coluna de conteúdo (esperado: indexed_content ou description)"
+                    "reason": "FTS sem coluna de conteúdo (esperado: indexed_content ou description)",
                 }
 
             supports_rank = True
             try:
                 await conn.execute(
                     f"SELECT rank FROM search_index WHERE {content_column} MATCH ? LIMIT 1",
-                    ("probe",)
+                    ("probe",),
                 )
             except Exception:
                 supports_rank = False
@@ -204,17 +206,19 @@ class DatabaseAdapter:
             logger.error(f"Erro ao detectar schema FTS: {e}")
             return {
                 "available": False,
-                "reason": f"Falha ao inspecionar schema FTS: {e}"
+                "reason": f"Falha ao inspecionar schema FTS: {e}",
             }
 
-    async def _get_fts_schema_cached(self, conn: aiosqlite.Connection) -> Dict[str, Any]:
+    async def _get_fts_schema_cached(
+        self, conn: aiosqlite.Connection
+    ) -> Dict[str, Any]:
         """Retorna schema FTS com cache invalidado por mudança no arquivo do DB (TTL 60s)."""
         now = time.time()
-        
+
         async with self._fts_schema_cache_lock:
             if self._fts_schema_cache and (now - self._last_check_ts < 60):
                 return self._fts_schema_cache["schema"]
-                
+
             signature = self._get_db_signature()
             if (
                 self._fts_schema_cache
@@ -236,17 +240,21 @@ class DatabaseAdapter:
         try:
             cursor = await conn.execute("PRAGMA table_info(chapter_notes)")
             rows = await cursor.fetchall()
-            return {row['name'] for row in rows}
+            return {row["name"] for row in rows}
         except Exception as e:
             logger.warning(f"Falha ao inspecionar chapter_notes: {e}")
             return set()
 
-    async def _get_chapter_notes_columns_cached(self, conn: aiosqlite.Connection) -> set:
+    async def _get_chapter_notes_columns_cached(
+        self, conn: aiosqlite.Connection
+    ) -> set:
         """Cache simples de colunas de chapter_notes (TTL 60s, invalida por mudança no DB)."""
         now = time.time()
 
         async with self._chapter_notes_schema_cache_lock:
-            if self._chapter_notes_schema_cache and (now - self._chapter_notes_last_check_ts < 60):
+            if self._chapter_notes_schema_cache and (
+                now - self._chapter_notes_last_check_ts < 60
+            ):
                 return self._chapter_notes_schema_cache["columns"]
 
             signature = self._get_db_signature()
@@ -270,7 +278,7 @@ class DatabaseAdapter:
         try:
             cursor = await conn.execute("PRAGMA table_info(positions)")
             rows = await cursor.fetchall()
-            return {row['name'] for row in rows}
+            return {row["name"] for row in rows}
         except Exception as e:
             logger.warning(f"Falha ao inspecionar positions: {e}")
             return set()
@@ -280,7 +288,9 @@ class DatabaseAdapter:
         now = time.time()
 
         async with self._positions_schema_cache_lock:
-            if self._positions_schema_cache and (now - self._positions_last_check_ts < 60):
+            if self._positions_schema_cache and (
+                now - self._positions_last_check_ts < 60
+            ):
                 return self._positions_schema_cache["columns"]
 
             signature = self._get_db_signature()
@@ -344,28 +354,30 @@ class DatabaseAdapter:
         if not os.path.exists(self.db_path):
             logger.warning(f"Banco não encontrado: {self.db_path}")
             return None
-        
+
         try:
             async with self.get_connection() as conn:
-                cursor = await conn.execute('SELECT COUNT(*) FROM chapters')
+                cursor = await conn.execute("SELECT COUNT(*) FROM chapters")
                 num_chapters = (await cursor.fetchone())[0]
-                
-                cursor = await conn.execute('SELECT COUNT(*) FROM positions')
+
+                cursor = await conn.execute("SELECT COUNT(*) FROM positions")
                 num_positions = (await cursor.fetchone())[0]
-                
+
                 stats = {
-                    'chapters': num_chapters,
-                    'positions': num_positions,
-                    'size': os.path.getsize(self.db_path)
+                    "chapters": num_chapters,
+                    "positions": num_positions,
+                    "size": os.path.getsize(self.db_path),
                 }
                 logger.info(f"DB OK: {num_chapters} caps, {num_positions} pos")
                 return stats
-                
+
         except Exception as e:
             logger.error(f"Erro ao verificar DB: {e}")
             return None
 
-    def _build_chapter_sql(self, has_sections: bool, has_parsed_notes_json: bool) -> str:
+    def _build_chapter_sql(
+        self, has_sections: bool, has_parsed_notes_json: bool
+    ) -> str:
         """Build and cache chapter SQL query (avoids repeated string ops)."""
         if (
             self._chapter_sql_cache is not None
@@ -374,17 +386,23 @@ class DatabaseAdapter:
         ):
             return self._chapter_sql_cache
         section_select = ", ".join(f"cn.{col}" for col in CHAPTER_NOTES_SECTION_COLUMNS)
-        null_section_select = ", ".join(f"NULL AS {col}" for col in CHAPTER_NOTES_SECTION_COLUMNS)
-        parsed_notes_select = "cn.parsed_notes_json" if has_parsed_notes_json else "NULL AS parsed_notes_json"
+        null_section_select = ", ".join(
+            f"NULL AS {col}" for col in CHAPTER_NOTES_SECTION_COLUMNS
+        )
+        parsed_notes_select = (
+            "cn.parsed_notes_json"
+            if has_parsed_notes_json
+            else "NULL AS parsed_notes_json"
+        )
         section_projection = section_select if has_sections else null_section_select
         notes_select = f"cn.notes_content, {parsed_notes_select}, {section_projection}"
-        sql = f'''SELECT 
+        sql = f"""SELECT 
                     c.chapter_num,
                     c.content,
                     {notes_select}
                 FROM chapters c
                 LEFT JOIN chapter_notes cn ON c.chapter_num = cn.chapter_num
-                WHERE c.chapter_num = ?'''
+                WHERE c.chapter_num = ?"""
         self._chapter_sql_cache = sql
         self._chapter_sql_has_sections = has_sections
         self._chapter_sql_has_parsed_notes_json = has_parsed_notes_json
@@ -395,7 +413,7 @@ class DatabaseAdapter:
         Busca dados brutos de um capítulo (Async).
         """
         logger.debug(f"Buscando capítulo: {chapter_num}")
-        
+
         # get_connection já trata exceções e lança DatabaseError se falhar
         async with self.get_connection() as conn:
             notes_cols = await self._get_chapter_notes_columns_cached(conn)
@@ -414,32 +432,41 @@ class DatabaseAdapter:
             has_anchor_id = "anchor_id" in position_cols
             anchor_projection = "anchor_id" if has_anchor_id else "NULL AS anchor_id"
 
-            cursor = await conn.execute(f'''
+            cursor = await conn.execute(
+                f"""
                 SELECT codigo, descricao, {anchor_projection}
                 FROM positions
                 WHERE chapter_num = ?
                 ORDER BY codigo
-            ''', (chapter_num,))
+            """,
+                (chapter_num,),
+            )
             pos_rows = await cursor.fetchall()
 
             positions = [
-                {'codigo': r['codigo'], 'descricao': r['descricao'], 'anchor_id': r['anchor_id']}
+                {
+                    "codigo": r["codigo"],
+                    "descricao": r["descricao"],
+                    "anchor_id": r["anchor_id"],
+                }
                 for r in pos_rows
-                if r['codigo'] is not None
+                if r["codigo"] is not None
             ]
 
-            logger.debug(f"Capítulo {chapter_num}: {len(positions)} posições (2 queries)")
+            logger.debug(
+                f"Capítulo {chapter_num}: {len(positions)} posições (2 queries)"
+            )
             sections = {col: first_row[col] for col in CHAPTER_NOTES_SECTION_COLUMNS}
             if not self._has_section_content(sections):
                 sections = None
 
             return {
-                'chapter_num': first_row['chapter_num'],
-                'content': first_row['content'],
-                'positions': positions,
-                'notes': first_row['notes_content'],
-                'parsed_notes_json': first_row['parsed_notes_json'],
-                'sections': sections
+                "chapter_num": first_row["chapter_num"],
+                "content": first_row["content"],
+                "positions": positions,
+                "notes": first_row["notes_content"],
+                "parsed_notes_json": first_row["parsed_notes_json"],
+                "sections": sections,
             }
 
     async def get_all_chapters_list(self) -> List[str]:
@@ -447,9 +474,11 @@ class DatabaseAdapter:
         Retorna lista ordenada de números de capítulos (Async).
         """
         async with self.get_connection() as conn:
-            cursor = await conn.execute('SELECT chapter_num FROM chapters ORDER BY chapter_num')
+            cursor = await conn.execute(
+                "SELECT chapter_num FROM chapters ORDER BY chapter_num"
+            )
             rows = await cursor.fetchall()
-            chapters = [row['chapter_num'] for row in rows]
+            chapters = [row["chapter_num"] for row in rows]
             logger.debug(f"Listados {len(chapters)} capítulos")
             return chapters
 
@@ -459,7 +488,7 @@ class DatabaseAdapter:
         """
         logger.debug(f"FTS search: '{query}'")
         result_limit = limit if limit is not None else SearchConfig.MAX_FTS_RESULTS
-        
+
         async with self.get_connection() as conn:
             schema = await self._get_fts_schema_cached(conn)
             if not schema.get("available"):
@@ -472,36 +501,45 @@ class DatabaseAdapter:
 
             content_col = schema["content_column"]
             rank_sql = self._fts_rank_sql(schema)
-            
-            cursor = await conn.execute(f"""
-                SELECT ncm, display_text, type, description, {rank_sql['select']} 
+
+            cursor = await conn.execute(
+                f"""
+                SELECT ncm, display_text, type, description, {rank_sql["select"]} 
                 FROM search_index 
                 WHERE {content_col} MATCH ? 
-                ORDER BY {rank_sql['order']} 
+                ORDER BY {rank_sql["order"]} 
                 LIMIT ?
-            """, (query, result_limit))
-            
+            """,
+                (query, result_limit),
+            )
+
             rows = await cursor.fetchall()
             results = [dict(row) for row in rows]
-            
+
             logger.debug(f"FTS retornou {len(results)} resultados")
             return results
 
-    async def fts_search_scored(self, query: str, tier: int, limit: int, 
-                          words_matched: int = 0, total_words: int = 1) -> List[Dict[str, Any]]:
+    async def fts_search_scored(
+        self,
+        query: str,
+        tier: int,
+        limit: int,
+        words_matched: int = 0,
+        total_words: int = 1,
+    ) -> List[Dict[str, Any]]:
         """
         Executa busca FTS com score calculado por tier (Async).
         """
         tier_bases = {
             1: SearchConfig.TIER1_BASE_SCORE,
             2: SearchConfig.TIER2_BASE_SCORE,
-            3: SearchConfig.TIER3_BASE_SCORE
+            3: SearchConfig.TIER3_BASE_SCORE,
         }
         base = tier_bases.get(tier, 0)
         coverage_bonus = (words_matched / total_words * 100) if total_words > 0 else 0
-        
+
         logger.debug(f"FTS scored search tier {tier}: '{query}'")
-        
+
         async with self.get_connection() as conn:
             schema = await self._get_fts_schema_cached(conn)
             if not schema.get("available"):
@@ -514,38 +552,43 @@ class DatabaseAdapter:
 
             content_col = schema["content_column"]
             rank_sql = self._fts_rank_sql(schema)
-            
-            cursor = await conn.execute(f"""
+
+            cursor = await conn.execute(
+                f"""
                 SELECT 
-                    ncm, display_text, type, description, {rank_sql['select']}
+                    ncm, display_text, type, description, {rank_sql["select"]}
                 FROM search_index 
                 WHERE {content_col} MATCH ? 
-                ORDER BY {rank_sql['order']}
+                ORDER BY {rank_sql["order"]}
                 LIMIT ?
-            """, (query, limit))
-            
+            """,
+                (query, limit),
+            )
+
             rows = await cursor.fetchall()
             results = []
             for row in rows:
                 r = dict(row)
-                bm25_normalized = min(100, max(0, -r['rank'] * 10))
-                r['score'] = round(base + bm25_normalized + coverage_bonus, 1)
-                r['tier'] = tier
+                bm25_normalized = min(100, max(0, -r["rank"] * 10))
+                r["score"] = round(base + bm25_normalized + coverage_bonus, 1)
+                r["tier"] = tier
                 results.append(r)
-            
+
             logger.debug(f"FTS tier {tier} retornou {len(results)} resultados")
             return results
 
-    async def fts_search_near(self, words: List[str], distance: int, limit: int) -> List[Dict[str, Any]]:
+    async def fts_search_near(
+        self, words: List[str], distance: int, limit: int
+    ) -> List[Dict[str, Any]]:
         """
         Busca por proximidade usando NEAR do FTS5 (Async).
         """
         if len(words) < 2:
             return []
-        
-        near_query = f'NEAR({" ".join(words)}, {distance})'
+
+        near_query = f"NEAR({' '.join(words)}, {distance})"
         logger.debug(f"FTS NEAR search: '{near_query}'")
-        
+
         # NEAR pode falhar se o índice não suportar ou query for inválida
         # Neste caso, queremos engolir o erro e retornar vazio, pois é um bônus
         try:
@@ -556,15 +599,18 @@ class DatabaseAdapter:
 
                 content_col = schema["content_column"]
                 rank_sql = self._fts_rank_sql(schema)
-                
-                cursor = await conn.execute(f"""
-                    SELECT ncm, display_text, type, description, {rank_sql['select']}
+
+                cursor = await conn.execute(
+                    f"""
+                    SELECT ncm, display_text, type, description, {rank_sql["select"]}
                     FROM search_index 
                     WHERE {content_col} MATCH ? 
-                    ORDER BY {rank_sql['order']}
+                    ORDER BY {rank_sql["order"]}
                     LIMIT ?
-                """, (near_query, limit))
-                
+                """,
+                    (near_query, limit),
+                )
+
                 rows = await cursor.fetchall()
                 results = [dict(row) for row in rows]
                 logger.debug(f"FTS NEAR retornou {len(results)} resultados")

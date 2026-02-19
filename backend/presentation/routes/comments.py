@@ -34,13 +34,13 @@ router = APIRouter(prefix="/comments", tags=["Comments"])
 # ─── Dependências de Autenticação ──────────────────────────────────────────
 
 
-def _require_payload(request: Request) -> dict:
+async def _require_payload(request: Request) -> dict:
     """Valida JWT e retorna o payload; levanta 401 se inválido."""
     token = extract_bearer_token(request)
     if not token:
         raise HTTPException(status_code=401, detail="Token ausente")
 
-    payload = decode_clerk_jwt(token)
+    payload = await decode_clerk_jwt(token)
     if not payload:
         reason = get_last_jwt_failure_reason()
         if settings.server.env == "development" and reason:
@@ -51,9 +51,9 @@ def _require_payload(request: Request) -> dict:
     return payload
 
 
-def _require_admin_payload(request: Request) -> dict:
+async def _require_admin_payload(request: Request) -> dict:
     """Valida JWT e verifica papel de admin; levanta 403 se não for admin."""
-    payload = _require_payload(request)
+    payload = await _require_payload(request)
     if not is_admin_payload(payload):
         raise HTTPException(status_code=403, detail="Acesso restrito a administradores")
     return payload
@@ -73,7 +73,7 @@ async def create_comment(
     service: Annotated[CommentService, Depends(_get_service)],
 ):
     """Cria um novo comentário ancorado a um trecho de texto."""
-    auth_payload = _require_payload(request)
+    auth_payload = await _require_payload(request)
     tenant_id = get_current_tenant()
     if not tenant_id:
         raise HTTPException(status_code=400, detail="Tenant não identificado")
@@ -96,7 +96,7 @@ async def list_by_anchor(
     service: Annotated[CommentService, Depends(_get_service)],
 ):
     """Lista comentários aprovados + privados do usuário para um anchor."""
-    auth_payload = _require_payload(request)
+    auth_payload = await _require_payload(request)
     tenant_id = get_current_tenant()
     if not tenant_id:
         raise HTTPException(status_code=400, detail="Tenant não identificado")
@@ -114,7 +114,7 @@ async def update_comment(
     service: Annotated[CommentService, Depends(_get_service)],
 ):
     """Edita o corpo de um comentário (somente autor)."""
-    auth_payload = _require_payload(request)
+    auth_payload = await _require_payload(request)
     tenant_id = get_current_tenant()
     if not tenant_id:
         raise HTTPException(status_code=400, detail="Tenant não identificado")
@@ -139,7 +139,7 @@ async def delete_comment(
     service: Annotated[CommentService, Depends(_get_service)],
 ):
     """Remove permanentemente um comentário (somente autor)."""
-    auth_payload = _require_payload(request)
+    auth_payload = await _require_payload(request)
     tenant_id = get_current_tenant()
     if not tenant_id:
         raise HTTPException(status_code=400, detail="Tenant não identificado")
@@ -162,7 +162,7 @@ async def list_commented_anchors(
     service: Annotated[CommentService, Depends(_get_service)],
 ):
     """Lista anchor_keys que possuem comentários aprovados (para marcar no frontend)."""
-    _require_payload(request)
+    await _require_payload(request)
     tenant_id = get_current_tenant()
     if not tenant_id:
         raise HTTPException(status_code=400, detail="Tenant não identificado")
@@ -179,7 +179,7 @@ async def list_pending(
     service: Annotated[CommentService, Depends(_get_service)],
 ):
     """[Admin] Lista todos os comentários pendentes de moderação."""
-    _require_admin_payload(request)
+    await _require_admin_payload(request)
     tenant_id = get_current_tenant()
     if not tenant_id:
         raise HTTPException(status_code=400, detail="Tenant não identificado")
@@ -196,7 +196,7 @@ async def moderate_comment(
     service: Annotated[CommentService, Depends(_get_service)],
 ):
     """[Admin] Aprova ou rejeita um comentário."""
-    admin_info = _require_admin_payload(request)
+    admin_info = await _require_admin_payload(request)
     tenant_id = get_current_tenant()
     if not tenant_id:
         raise HTTPException(status_code=400, detail="Tenant não identificado")

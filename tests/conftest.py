@@ -51,7 +51,10 @@ def _is_nesh_db_ready(db_path: Path) -> bool:
                 return False
             if _count_rows(conn, "search_index") < 1:
                 return False
-            positions_columns = {row[1] for row in conn.execute("PRAGMA table_info(positions)").fetchall()}
+            positions_columns = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(positions)").fetchall()
+            }
             if "anchor_id" not in positions_columns:
                 return False
             return True
@@ -74,7 +77,10 @@ def _is_tipi_db_ready(db_path: Path) -> bool:
             if _count_rows(conn, "tipi_positions") < 6:
                 return False
 
-            columns = {row[1] for row in conn.execute("PRAGMA table_info(tipi_positions)").fetchall()}
+            columns = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(tipi_positions)").fetchall()
+            }
             return {"ncm_sort", "parent_ncm", "nivel"}.issubset(columns)
         finally:
             conn.close()
@@ -182,7 +188,9 @@ def _seed_nesh_db(db_path: Path) -> None:
             )
             """
         )
-        positions_columns = {row[1] for row in conn.execute("PRAGMA table_info(positions)").fetchall()}
+        positions_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(positions)").fetchall()
+        }
         if "anchor_id" not in positions_columns:
             conn.execute("ALTER TABLE positions ADD COLUMN anchor_id TEXT")
         conn.execute(
@@ -200,7 +208,10 @@ def _seed_nesh_db(db_path: Path) -> None:
             )
             """
         )
-        chapter_notes_columns = {row[1] for row in conn.execute("PRAGMA table_info(chapter_notes)").fetchall()}
+        chapter_notes_columns = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(chapter_notes)").fetchall()
+        }
         if "parsed_notes_json" not in chapter_notes_columns:
             conn.execute("ALTER TABLE chapter_notes ADD COLUMN parsed_notes_json TEXT")
 
@@ -248,13 +259,27 @@ def _seed_nesh_db(db_path: Path) -> None:
             )
             """
         )
-        conn.execute("CREATE INDEX IF NOT EXISTS ix_users_tenant_id ON users(tenant_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS ix_subscriptions_tenant_id ON subscriptions(tenant_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS ix_subscriptions_provider ON subscriptions(provider)")
-        conn.execute("CREATE INDEX IF NOT EXISTS ix_subscriptions_provider_customer_id ON subscriptions(provider_customer_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS ix_subscriptions_provider_subscription_id ON subscriptions(provider_subscription_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS ix_subscriptions_provider_payment_id ON subscriptions(provider_payment_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS ix_subscriptions_status ON subscriptions(status)")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS ix_users_tenant_id ON users(tenant_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS ix_subscriptions_tenant_id ON subscriptions(tenant_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS ix_subscriptions_provider ON subscriptions(provider)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS ix_subscriptions_provider_customer_id ON subscriptions(provider_customer_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS ix_subscriptions_provider_subscription_id ON subscriptions(provider_subscription_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS ix_subscriptions_provider_payment_id ON subscriptions(provider_payment_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS ix_subscriptions_status ON subscriptions(status)"
+        )
 
         if not _table_exists(conn, "search_index"):
             conn.execute(
@@ -268,7 +293,9 @@ def _seed_nesh_db(db_path: Path) -> None:
                 )
                 """
             )
-        fts_columns = {row[1] for row in conn.execute("PRAGMA table_info(search_index)").fetchall()}
+        fts_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(search_index)").fetchall()
+        }
         uses_indexed_content = "indexed_content" in fts_columns
 
         conn.executemany(
@@ -308,7 +335,15 @@ def _seed_nesh_db(db_path: Path) -> None:
                         SELECT 1 FROM search_index WHERE ncm = ? AND type = ? LIMIT 1
                     )
                     """,
-                    (ncm, display_text, "chapter", content[:200], text_for_search, ncm, "chapter"),
+                    (
+                        ncm,
+                        display_text,
+                        "chapter",
+                        content[:200],
+                        text_for_search,
+                        ncm,
+                        "chapter",
+                    ),
                 )
             else:
                 conn.execute(
@@ -335,7 +370,15 @@ def _seed_nesh_db(db_path: Path) -> None:
                         SELECT 1 FROM search_index WHERE ncm = ? AND type = ? LIMIT 1
                     )
                     """,
-                    (ncm, display_text, "position", descricao, text_for_search, ncm, "position"),
+                    (
+                        ncm,
+                        display_text,
+                        "position",
+                        descricao,
+                        text_for_search,
+                        ncm,
+                        "position",
+                    ),
                 )
             else:
                 conn.execute(
@@ -386,15 +429,22 @@ def _seed_tipi_db(db_path: Path) -> None:
             )
             """
         )
-        tipi_columns = {row[1] for row in conn.execute("PRAGMA table_info(tipi_positions)").fetchall()}
+        tipi_columns = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(tipi_positions)").fetchall()
+        }
         if "parent_ncm" not in tipi_columns:
             conn.execute("ALTER TABLE tipi_positions ADD COLUMN parent_ncm TEXT")
         if "ncm_sort" not in tipi_columns:
             conn.execute("ALTER TABLE tipi_positions ADD COLUMN ncm_sort TEXT")
         if "nivel" not in tipi_columns:
-            conn.execute("ALTER TABLE tipi_positions ADD COLUMN nivel INTEGER NOT NULL DEFAULT 0")
+            conn.execute(
+                "ALTER TABLE tipi_positions ADD COLUMN nivel INTEGER NOT NULL DEFAULT 0"
+            )
 
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_tipi_cap_sort ON tipi_positions(capitulo, ncm_sort)")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tipi_cap_sort ON tipi_positions(capitulo, ncm_sort)"
+        )
         conn.execute(
             """
             CREATE VIRTUAL TABLE IF NOT EXISTS tipi_fts USING fts5(
@@ -420,14 +470,35 @@ def _seed_tipi_db(db_path: Path) -> None:
 
         raw_positions = [
             ("01.01", "01", "Animais vivos da especie equina", "0", 1, None),
-            ("39.24", "39", "Servicos de mesa e artigos de uso domestico", "0", 1, None),
+            (
+                "39.24",
+                "39",
+                "Servicos de mesa e artigos de uso domestico",
+                "0",
+                1,
+                None,
+            ),
             ("3924.90", "39", "Outros artigos de plastico", "0", 2, "39.24"),
-            ("3924.90.00", "39", "Outros artigos de plastico - especificado", "6.5", 3, "3924.90"),
+            (
+                "3924.90.00",
+                "39",
+                "Outros artigos de plastico - especificado",
+                "6.5",
+                3,
+                "3924.90",
+            ),
             ("73.18", "73", "Parafusos, pinos e porcas", "5", 1, None),
             ("84.13", "84", "Bombas para liquidos", "0", 1, None),
             ("8413.11", "84", "Bombas para agua", "0", 2, "84.13"),
             ("8413.91", "84", "Partes de bombas", "0", 2, "84.13"),
-            ("8413.91.90", "84", "Outras partes de bombas submersiveis", "0", 3, "8413.91"),
+            (
+                "8413.91.90",
+                "84",
+                "Outras partes de bombas submersiveis",
+                "0",
+                3,
+                "8413.91",
+            ),
             ("84.14", "84", "Bombas de ar ou vacuo", "0", 1, None),
             ("85.17", "85", "Aparelhos de telefone e comunicacao", "0", 1, None),
             ("8517.13", "85", "Smartphones e telefones inteligentes", "0", 2, "85.17"),
@@ -492,6 +563,7 @@ def ensure_test_databases():
 
     try:
         from backend.infrastructure.db_engine import close_db
+
         asyncio.run(close_db())
     except Exception:
         pass

@@ -18,7 +18,9 @@ _TENANT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{3,128}$")
 
 
 def _extract_asaas_token(request: Request) -> str | None:
-    return request.headers.get("asaas-access-token") or request.headers.get("x-asaas-access-token")
+    return request.headers.get("asaas-access-token") or request.headers.get(
+        "x-asaas-access-token"
+    )
 
 
 def _is_valid_asaas_webhook(request: Request) -> bool:
@@ -68,7 +70,9 @@ async def process_asaas_payment_confirmed(payload: Dict[str, Any]) -> Dict[str, 
     """
     payment = payload.get("payment") if isinstance(payload.get("payment"), dict) else {}
 
-    external_reference = payment.get("externalReference") or payload.get("externalReference")
+    external_reference = payment.get("externalReference") or payload.get(
+        "externalReference"
+    )
     tenant_id = str(external_reference or "").strip()
     if not tenant_id:
         return {"processed": False, "reason": "missing_external_reference"}
@@ -147,7 +151,9 @@ async def process_asaas_payment_confirmed(payload: Dict[str, Any]) -> Dict[str, 
         raw_payload = json.dumps(payload, ensure_ascii=False)
         max_payload = max(1, int(settings.billing.asaas_max_payload_bytes))
         if len(raw_payload.encode("utf-8")) > max_payload:
-            raw_payload = raw_payload.encode("utf-8")[:max_payload].decode("utf-8", errors="ignore")
+            raw_payload = raw_payload.encode("utf-8")[:max_payload].decode(
+                "utf-8", errors="ignore"
+            )
         now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         if not subscription:
@@ -169,9 +175,15 @@ async def process_asaas_payment_confirmed(payload: Dict[str, Any]) -> Dict[str, 
             )
             session.add(subscription)
         else:
-            subscription.provider_customer_id = provider_customer_id or subscription.provider_customer_id
-            subscription.provider_subscription_id = provider_subscription_id or subscription.provider_subscription_id
-            subscription.provider_payment_id = provider_payment_id or subscription.provider_payment_id
+            subscription.provider_customer_id = (
+                provider_customer_id or subscription.provider_customer_id
+            )
+            subscription.provider_subscription_id = (
+                provider_subscription_id or subscription.provider_subscription_id
+            )
+            subscription.provider_payment_id = (
+                provider_payment_id or subscription.provider_payment_id
+            )
             subscription.plan_name = plan_name
             subscription.status = payment_status
             subscription.amount = amount

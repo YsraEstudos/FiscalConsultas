@@ -54,4 +54,3 @@ def test_setup_logging_adds_file_handler_when_log_file_provided(tmp_path, monkey
 def test_get_logger_uses_nesh_prefix():
     logger = logging_config.get_logger("database")
     assert logger.name == "nesh.database"
-

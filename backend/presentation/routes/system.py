@@ -13,7 +13,7 @@ from backend.utils.auth import extract_bearer_token, is_admin_payload
 router = APIRouter()
 
 
-def _is_admin_request(request: Request) -> bool:
+async def _is_admin_request(request: Request) -> bool:
     admin_token = request.headers.get("X-Admin-Token")
     if is_valid_admin_token(admin_token):
         return True
@@ -21,7 +21,7 @@ def _is_admin_request(request: Request) -> bool:
     token = extract_bearer_token(request)
     if not token:
         return False
-    payload = decode_clerk_jwt(token)
+    payload = await decode_clerk_jwt(token)
     return is_admin_payload(payload)
 
 
@@ -146,7 +146,7 @@ async def get_cache_metrics(request: Request):
     Métricas de hit/miss dos payload caches de /api/search e /api/tipi/search.
     Restrito a admins por conter dados operacionais internos.
     """
-    if not _is_admin_request(request):
+    if not await _is_admin_request(request):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     from backend.presentation.routes import search as search_route
@@ -184,7 +184,7 @@ async def debug_anchors(
     if not settings.features.debug_mode:
         raise HTTPException(status_code=404, detail="Not found")
 
-    if not _is_admin_request(request):
+    if not await _is_admin_request(request):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     response_data = await service.process_request(ncm)
@@ -213,7 +213,7 @@ async def reload_secrets(request: Request):
     """
     Recarrega secrets de env/.env sem reiniciar o servidor.
     """
-    if not _is_admin_request(request):
+    if not await _is_admin_request(request):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     reload_settings()

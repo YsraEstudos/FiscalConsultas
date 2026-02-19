@@ -44,7 +44,10 @@ class _FakeSession:
 
 
 def test_init_uses_tenant_context_when_tenant_not_passed(monkeypatch):
-    monkeypatch.setattr("backend.infrastructure.repositories.position_repository.settings.database.engine", "sqlite")
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.position_repository.settings.database.engine",
+        "sqlite",
+    )
     token = tenant_context.set("org_ctx")
     try:
         repo = PositionRepository(_FakeSession([]))
@@ -55,7 +58,10 @@ def test_init_uses_tenant_context_when_tenant_not_passed(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_by_codigo_returns_scalar_and_applies_tenant_filter(monkeypatch):
-    monkeypatch.setattr("backend.infrastructure.repositories.position_repository.settings.database.engine", "sqlite")
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.position_repository.settings.database.engine",
+        "sqlite",
+    )
     obj = object()
     session = _FakeSession([_FakeResult(scalar_one=obj)])
     repo = PositionRepository(session, tenant_id="org_x")
@@ -69,7 +75,10 @@ async def test_get_by_codigo_returns_scalar_and_applies_tenant_filter(monkeypatc
 
 @pytest.mark.asyncio
 async def test_get_by_chapter_maps_to_position_read(monkeypatch):
-    monkeypatch.setattr("backend.infrastructure.repositories.position_repository.settings.database.engine", "sqlite")
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.position_repository.settings.database.engine",
+        "sqlite",
+    )
     positions = [
         SimpleNamespace(codigo="85.17", descricao="Telefone"),
         SimpleNamespace(codigo="85.18", descricao="Microfone"),
@@ -86,8 +95,13 @@ async def test_get_by_chapter_maps_to_position_read(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_search_by_prefix_normalizes_prefix_and_respects_limit(monkeypatch):
-    monkeypatch.setattr("backend.infrastructure.repositories.position_repository.settings.database.engine", "sqlite")
-    session = _FakeSession([_FakeResult(scalars=[SimpleNamespace(codigo="8517.10.00", descricao="Desc")])])
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.position_repository.settings.database.engine",
+        "sqlite",
+    )
+    session = _FakeSession(
+        [_FakeResult(scalars=[SimpleNamespace(codigo="8517.10.00", descricao="Desc")])]
+    )
     repo = PositionRepository(session, tenant_id="org_x")
 
     items = await repo.search_by_prefix("85.17", limit=12)
@@ -102,7 +116,10 @@ async def test_search_by_prefix_normalizes_prefix_and_respects_limit(monkeypatch
 
 @pytest.mark.asyncio
 async def test_search_fulltext_dispatches_by_engine(monkeypatch):
-    monkeypatch.setattr("backend.infrastructure.repositories.position_repository.settings.database.engine", "postgresql")
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.position_repository.settings.database.engine",
+        "postgresql",
+    )
     repo = PositionRepository(_FakeSession([]))
 
     called = {}
@@ -120,7 +137,10 @@ async def test_search_fulltext_dispatches_by_engine(monkeypatch):
     await repo.search_fulltext("motor", 5)
     assert called == {"pg": True}
 
-    monkeypatch.setattr("backend.infrastructure.repositories.position_repository.settings.database.engine", "sqlite")
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.position_repository.settings.database.engine",
+        "sqlite",
+    )
     repo2 = PositionRepository(_FakeSession([]))
     called.clear()
     monkeypatch.setattr(repo2, "_fts_postgres", _pg)
@@ -131,8 +151,19 @@ async def test_search_fulltext_dispatches_by_engine(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fts_postgres_maps_score_and_sends_tenant_param(monkeypatch):
-    monkeypatch.setattr("backend.infrastructure.repositories.position_repository.settings.database.engine", "postgresql")
-    rows = [SimpleNamespace(ncm="8517", display_text="Display", type="position", description="Desc", score=0.42)]
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.position_repository.settings.database.engine",
+        "postgresql",
+    )
+    rows = [
+        SimpleNamespace(
+            ncm="8517",
+            display_text="Display",
+            type="position",
+            description="Desc",
+            score=0.42,
+        )
+    ]
     session = _FakeSession([_FakeResult(rows=rows)])
     repo = PositionRepository(session, tenant_id="org_pg")
 
@@ -146,8 +177,19 @@ async def test_fts_postgres_maps_score_and_sends_tenant_param(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fts_sqlite_maps_rank_to_positive_score(monkeypatch):
-    monkeypatch.setattr("backend.infrastructure.repositories.position_repository.settings.database.engine", "sqlite")
-    rows = [SimpleNamespace(ncm="8517", display_text="Display", type="position", description="Desc", rank=-2.5)]
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.position_repository.settings.database.engine",
+        "sqlite",
+    )
+    rows = [
+        SimpleNamespace(
+            ncm="8517",
+            display_text="Display",
+            type="position",
+            description="Desc",
+            rank=-2.5,
+        )
+    ]
     session = _FakeSession([_FakeResult(rows=rows)])
     repo = PositionRepository(session)
 
@@ -156,4 +198,3 @@ async def test_fts_sqlite_maps_rank_to_positive_score(monkeypatch):
     assert items[0].score == 25.0
     _stmt, params = session.calls[0]
     assert params == {"query": "motor", "limit": 3}
-

@@ -306,7 +306,7 @@ def _token_cache_key(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def decode_clerk_jwt(token: str) -> Optional[dict]:
+async def decode_clerk_jwt(token: str) -> Optional[dict]:
     """
     Valida e decodifica JWT do Clerk.
     Performance: Cacheia resultado por hash do token (TTL 60s).
@@ -351,7 +351,9 @@ def decode_clerk_jwt(token: str) -> Optional[dict]:
 
         if jwks_client:
             # Produção/Dev com Clerk domain configurado: validar assinatura via JWKS.
-            signing_key = jwks_client.get_signing_key_from_jwt(token)
+            signing_key = await asyncio.to_thread(
+                jwks_client.get_signing_key_from_jwt, token
+            )
 
             decode_kwargs: dict[str, Any] = {
                 "algorithms": ["RS256"],
@@ -566,14 +568,14 @@ def decode_clerk_jwt(token: str) -> Optional[dict]:
         return None
 
 
-def is_clerk_token_valid(token: str) -> bool:
-    """Retorna True se o JWT do Clerk for válido."""
-    return decode_clerk_jwt(token) is not None
-
-
 def get_last_jwt_failure_reason() -> Optional[str]:
     """Retorna o último motivo de falha de validação JWT no contexto da request."""
     return _jwt_failure_reason_ctx.get()
+
+
+async def is_clerk_token_valid(token: str) -> bool:
+    """Retorna True se o JWT do Clerk for válido."""
+    return (await decode_clerk_jwt(token)) is not None
 
 
 async def ensure_clerk_entities(payload: Dict[str, Any], org_id: str) -> None:
@@ -652,14 +654,14 @@ async def ensure_clerk_entities(payload: Dict[str, Any], org_id: str) -> None:
         logger.warning(f"Provisioning Clerk entities falhou (org={org_id}): {e}")
 
 
-def extract_org_from_jwt(token: str) -> Optional[str]:
+async def extract_org_from_jwt(token: str) -> Optional[str]:
     """
     Extrai org_id do JWT do Clerk.
 
     Returns:
         org_id ou None se não encontrado/inválido
     """
-    payload = decode_clerk_jwt(token)
+    payload = await decode_clerk_jwt(token)
     if not payload:
         return None
 
@@ -724,7 +726,7 @@ class TenantMiddleware:
 
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
-            jwt_payload = decode_clerk_jwt(token)
+            jwt_payload = await decode_clerk_jwt(token)
             if jwt_payload:
                 org_id = jwt_payload.get("org_id")
 
