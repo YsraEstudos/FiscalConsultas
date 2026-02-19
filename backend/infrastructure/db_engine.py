@@ -6,6 +6,7 @@ Este módulo fornece:
 - AsyncSession factory para injeção de dependência
 - Context managers para uso em services e routes
 """
+
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 from contextvars import ContextVar
@@ -24,12 +25,12 @@ tenant_context: ContextVar[str] = ContextVar("tenant_context", default="")
 def _create_engine():
     """
     Cria engine assíncrono baseado na configuração.
-    
+
     SQLite: Usa aiosqlite com pool básico
     PostgreSQL: Usa asyncpg com pool otimizado
     """
     db_url = settings.database.async_url
-    
+
     if settings.database.is_postgres:
         return create_async_engine(
             db_url,
@@ -93,7 +94,7 @@ async def close_db():
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """
     Context manager para sessão do banco.
-    
+
     Uso:
         async with get_session() as session:
             result = await session.execute(...)
@@ -106,9 +107,9 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
             # check_function_bodies=off evita overhead de validação em cada set
             await session.execute(
                 text("SELECT set_config('app.current_tenant', :tid, true)"),
-                {"tid": tid}
+                {"tid": tid},
             )
-            
+
         try:
             yield session
             await session.commit()
@@ -120,10 +121,10 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     FastAPI Depends para injeção de sessão.
-    
+
     Uso em routes:
         @router.get("/items")
-        async def get_items(session: AsyncSession = Depends(get_db)):
+        async def get_items(session: Annotated[AsyncSession, Depends(get_db)]):
             ...
     """
     async with get_session() as session:

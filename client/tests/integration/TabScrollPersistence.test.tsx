@@ -3,6 +3,7 @@ import { render, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { ResultDisplay } from '../../src/components/ResultDisplay';
 import { SettingsProvider } from '../../src/context/SettingsContext';
+import { AuthProvider } from '../../src/context/AuthContext';
 
 type TabState = {
     id: string;
@@ -63,9 +64,11 @@ describe('Tab scroll persistence (integration)', () => {
         };
 
         const { container, getByText } = render(
-            <SettingsProvider>
-                <TestTabs />
-            </SettingsProvider>
+            <AuthProvider>
+                <SettingsProvider>
+                    <TestTabs />
+                </SettingsProvider>
+            </AuthProvider>
         );
 
         const tab1Scroll = container.querySelector('#results-content-tab-1') as HTMLDivElement | null;
@@ -164,9 +167,11 @@ describe('Tab scroll persistence (integration)', () => {
         };
 
         const { container, getByText } = render(
-            <SettingsProvider>
-                <TestTabs />
-            </SettingsProvider>
+            <AuthProvider>
+                <SettingsProvider>
+                    <TestTabs />
+                </SettingsProvider>
+            </AuthProvider>
         );
 
         const tab1Scroll = container.querySelector('#results-content-tab-1') as HTMLDivElement | null;

@@ -52,21 +52,29 @@ def test_convert_text_to_html_builds_heading_lists_and_paragraph_blocks():
     out = HtmlRenderer._convert_text_to_html(text)
 
     assert '<h3 class="nesh-heading" data-ncm="8517">' in out
-    assert '<ol class="nesh-list"><li>Primeiro item</li><li>Segundo item</li></ol>' in out
-    assert '<ol type="I" class="nesh-list"><li>Item romano</li><li>Outro romano</li></ol>' in out
+    assert (
+        '<ol class="nesh-list"><li>Primeiro item</li><li>Segundo item</li></ol>' in out
+    )
+    assert (
+        '<ol type="I" class="nesh-list"><li>Item romano</li><li>Outro romano</li></ol>'
+        in out
+    )
     assert '<ol type="a" class="nesh-list"><li>Alfa</li><li>Beta</li></ol>' in out
-    assert '<p class="nesh-paragraph">a) Item A<br>\nb) Item B<br>\ntexto livre</p>' in out
+    assert '<ol type="a" class="nesh-list"><li>Item A</li><li>Item B</li></ol>' in out
+    assert '<p class="nesh-paragraph">texto livre</p>' in out
 
 
 def test_inject_smart_links_handles_plain_text_and_html_skip_zones():
     plain = HtmlRenderer.inject_smart_links("Veja 85.17 e 8419.8", "85")
     assert plain.count('class="smart-link"') == 2
 
-    html = 'fora 85.17 <a href="#">dentro 84.13</a> <span class="smart-link">8419.8</span>'
+    html = (
+        'fora 85.17 <a href="#">dentro 84.13</a> <span class="smart-link">8419.8</span>'
+    )
     out = HtmlRenderer.inject_smart_links(html, "85")
 
     assert 'data-ncm="8517"' in out
-    assert "<a href=\"#\">dentro 84.13</a>" in out
+    assert '<a href="#">dentro 84.13</a>' in out
     assert '<span class="smart-link">8419.8</span>' in out
 
 
@@ -94,7 +102,9 @@ def test_inject_unit_highlights_falls_back_when_parser_raises(monkeypatch):
     assert "highlight-unit" in out
 
 
-def test_inject_glossary_highlights_returns_original_when_regex_unavailable(monkeypatch):
+def test_inject_glossary_highlights_returns_original_when_regex_unavailable(
+    monkeypatch,
+):
     monkeypatch.setattr(glossary_module, "glossary_manager", _FakeGlossaryManager(None))
     text = "texto sem termo técnico"
     assert HtmlRenderer.inject_glossary_highlights(text) == text
@@ -111,7 +121,9 @@ def test_inject_glossary_highlights_wraps_terms_when_regex_exists(monkeypatch):
 
 
 def test_convert_bold_markdown_supports_plain_and_html_text():
-    assert HtmlRenderer.convert_bold_markdown("**negrito**") == "<strong>negrito</strong>"
+    assert (
+        HtmlRenderer.convert_bold_markdown("**negrito**") == "<strong>negrito</strong>"
+    )
 
     out = HtmlRenderer.convert_bold_markdown("<p>**a** <span>**b**</span></p>")
     assert "<strong>a</strong>" in out
@@ -128,8 +140,12 @@ def test_convert_bold_markdown_falls_back_when_parser_raises(monkeypatch):
 
 
 def test_apply_post_transforms_plain_text_applies_all_layers(monkeypatch):
-    monkeypatch.setattr(renderer, "glossary_manager", _FakeGlossaryManager(re.compile(r"\bRotor\b")))
-    out = HtmlRenderer.apply_post_transforms("**Importante** exceto 10 W e 85.17 Rotor", "85")
+    monkeypatch.setattr(
+        renderer, "glossary_manager", _FakeGlossaryManager(re.compile(r"\bRotor\b"))
+    )
+    out = HtmlRenderer.apply_post_transforms(
+        "**Importante** exceto 10 W e 85.17 Rotor", "85"
+    )
 
     assert "<strong>Importante</strong>" in out
     assert '<span class="highlight-exclusion">exceto</span>' in out
@@ -140,7 +156,7 @@ def test_apply_post_transforms_plain_text_applies_all_layers(monkeypatch):
 
 def test_apply_post_transforms_html_skips_existing_links(monkeypatch):
     monkeypatch.setattr(renderer, "glossary_manager", _FakeGlossaryManager(None))
-    html = "<p>fora 85.17 e 10 W <a href=\"#\">dentro 84.13 e 20 W</a></p>"
+    html = '<p>fora 85.17 e 10 W <a href="#">dentro 84.13 e 20 W</a></p>'
 
     out = HtmlRenderer.apply_post_transforms(html, "85")
 
@@ -255,7 +271,9 @@ def test_render_full_response_continues_when_one_chapter_raises(monkeypatch):
             raise RuntimeError("boom")
         return f"<h2>{data['capitulo']}</h2>"
 
-    monkeypatch.setattr(HtmlRenderer, "render_chapter", classmethod(_fake_render_chapter))
+    monkeypatch.setattr(
+        HtmlRenderer, "render_chapter", classmethod(_fake_render_chapter)
+    )
 
     out = HtmlRenderer.render_full_response(
         {

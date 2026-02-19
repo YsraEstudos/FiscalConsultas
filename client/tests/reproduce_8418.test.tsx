@@ -2,6 +2,7 @@ import { render, act, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ResultDisplay } from '../src/components/ResultDisplay';
 import { SettingsProvider } from '../src/context/SettingsContext';
+import { AuthProvider } from '../src/context/AuthContext';
 
 // Mock dependencies
 vi.mock('../src/components/TextSearchResults', () => ({ TextSearchResults: () => null }));
@@ -97,17 +98,19 @@ describe('TDD: 84.18 Scroll Bug Reproduction', () => {
         };
 
         render(
-            <SettingsProvider>
-                <ResultDisplay
-                    data={mockData}
-                    mobileMenuOpen={false}
-                    onCloseMobileMenu={vi.fn()}
-                    isActive={true}
-                    tabId="tab-8418-bug"
-                    isNewSearch={true}
-                    onConsumeNewSearch={vi.fn()}
-                />
-            </SettingsProvider>
+            <AuthProvider>
+                <SettingsProvider>
+                    <ResultDisplay
+                        data={mockData}
+                        mobileMenuOpen={false}
+                        onCloseMobileMenu={vi.fn()}
+                        isActive={true}
+                        tabId="tab-8418-bug"
+                        isNewSearch={true}
+                        onConsumeNewSearch={vi.fn()}
+                    />
+                </SettingsProvider>
+            </AuthProvider>
         );
 
         // Wait for all async operations
@@ -156,17 +159,19 @@ describe('TDD: 84.18 Scroll Bug Reproduction', () => {
         };
 
         render(
-            <SettingsProvider>
-                <ResultDisplay
-                    data={mockData}
-                    mobileMenuOpen={false}
-                    onCloseMobileMenu={vi.fn()}
-                    isActive={true}
-                    tabId="tab-duplicate-id"
-                    isNewSearch={true}
-                    onConsumeNewSearch={vi.fn()}
-                />
-            </SettingsProvider>
+            <AuthProvider>
+                <SettingsProvider>
+                    <ResultDisplay
+                        data={mockData}
+                        mobileMenuOpen={false}
+                        onCloseMobileMenu={vi.fn()}
+                        isActive={true}
+                        tabId="tab-duplicate-id"
+                        isNewSearch={true}
+                        onConsumeNewSearch={vi.fn()}
+                    />
+                </SettingsProvider>
+            </AuthProvider>
         );
 
         await act(async () => {
@@ -209,17 +214,19 @@ describe('TDD: 84.18 Scroll Bug Reproduction', () => {
         };
 
         render(
-            <SettingsProvider>
-                <ResultDisplay
-                    data={mockData}
-                    mobileMenuOpen={false}
-                    onCloseMobileMenu={vi.fn()}
-                    isActive={true}
-                    tabId="tab-smart-link"
-                    isNewSearch={true}
-                    onConsumeNewSearch={vi.fn()}
-                />
-            </SettingsProvider>
+            <AuthProvider>
+                <SettingsProvider>
+                    <ResultDisplay
+                        data={mockData}
+                        mobileMenuOpen={false}
+                        onCloseMobileMenu={vi.fn()}
+                        isActive={true}
+                        tabId="tab-smart-link"
+                        isNewSearch={true}
+                        onConsumeNewSearch={vi.fn()}
+                    />
+                </SettingsProvider>
+            </AuthProvider>
         );
 
         await act(async () => {

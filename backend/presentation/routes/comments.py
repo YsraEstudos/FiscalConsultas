@@ -6,6 +6,7 @@ autenticação via decode_clerk_jwt e verificação de admin via is_admin_payloa
 """
 
 import logging
+from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +18,11 @@ from backend.presentation.schemas.comment_schemas import (
     CommentApproveIn,
     CommentUpdate,
 )
-from backend.server.middleware import get_current_tenant, decode_clerk_jwt, get_last_jwt_failure_reason
+from backend.server.middleware import (
+    get_current_tenant,
+    decode_clerk_jwt,
+    get_last_jwt_failure_reason,
+)
 from backend.config.settings import settings
 from backend.utils.auth import extract_bearer_token, is_admin_payload
 
@@ -39,7 +44,9 @@ def _require_payload(request: Request) -> dict:
     if not payload:
         reason = get_last_jwt_failure_reason()
         if settings.server.env == "development" and reason:
-            raise HTTPException(status_code=401, detail=f"Token inválido ou expirado ({reason})")
+            raise HTTPException(
+                status_code=401, detail=f"Token inválido ou expirado ({reason})"
+            )
         raise HTTPException(status_code=401, detail="Token inválido ou expirado")
     return payload
 
@@ -52,7 +59,7 @@ def _require_admin_payload(request: Request) -> dict:
     return payload
 
 
-def _get_service(session: AsyncSession = Depends(get_db)) -> CommentService:
+def _get_service(session: Annotated[AsyncSession, Depends(get_db)]) -> CommentService:
     return CommentService(session)
 
 
@@ -63,7 +70,7 @@ def _get_service(session: AsyncSession = Depends(get_db)) -> CommentService:
 async def create_comment(
     payload: CommentCreate,
     request: Request,
-    service: CommentService = Depends(_get_service),
+    service: Annotated[CommentService, Depends(_get_service)],
 ):
     """Cria um novo comentário ancorado a um trecho de texto."""
     auth_payload = _require_payload(request)
@@ -86,7 +93,7 @@ async def create_comment(
 async def list_by_anchor(
     anchor_key: str,
     request: Request,
-    service: CommentService = Depends(_get_service),
+    service: Annotated[CommentService, Depends(_get_service)],
 ):
     """Lista comentários aprovados + privados do usuário para um anchor."""
     auth_payload = _require_payload(request)
@@ -104,7 +111,7 @@ async def update_comment(
     comment_id: int,
     payload: CommentUpdate,
     request: Request,
-    service: CommentService = Depends(_get_service),
+    service: Annotated[CommentService, Depends(_get_service)],
 ):
     """Edita o corpo de um comentário (somente autor)."""
     auth_payload = _require_payload(request)
@@ -129,7 +136,7 @@ async def update_comment(
 async def delete_comment(
     comment_id: int,
     request: Request,
-    service: CommentService = Depends(_get_service),
+    service: Annotated[CommentService, Depends(_get_service)],
 ):
     """Remove permanentemente um comentário (somente autor)."""
     auth_payload = _require_payload(request)
@@ -152,7 +159,7 @@ async def delete_comment(
 @router.get("/anchors", response_model=list[str])
 async def list_commented_anchors(
     request: Request,
-    service: CommentService = Depends(_get_service),
+    service: Annotated[CommentService, Depends(_get_service)],
 ):
     """Lista anchor_keys que possuem comentários aprovados (para marcar no frontend)."""
     _require_payload(request)
@@ -169,7 +176,7 @@ async def list_commented_anchors(
 @router.get("/admin/pending", response_model=list[CommentOut])
 async def list_pending(
     request: Request,
-    service: CommentService = Depends(_get_service),
+    service: Annotated[CommentService, Depends(_get_service)],
 ):
     """[Admin] Lista todos os comentários pendentes de moderação."""
     _require_admin_payload(request)
@@ -186,7 +193,7 @@ async def moderate_comment(
     comment_id: int,
     payload: CommentApproveIn,
     request: Request,
-    service: CommentService = Depends(_get_service),
+    service: Annotated[CommentService, Depends(_get_service)],
 ):
     """[Admin] Aprova ou rejeita um comentário."""
     admin_info = _require_admin_payload(request)
