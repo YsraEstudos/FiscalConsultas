@@ -22,6 +22,13 @@ def test_cache_metrics_reports_payload_cache_activity(client, monkeypatch):
     assert first_search.headers.get("X-Payload-Cache") == "MISS"
     assert second_search.headers.get("X-Payload-Cache") == "HIT"
 
+    # Force NESH internal chapter cache activity with two distinct code queries
+    # in the same chapter. Distinct queries avoid route payload-cache short-circuit.
+    warm_nesh_chapter = client.get("/api/search?ncm=85")
+    hit_nesh_chapter = client.get("/api/search?ncm=8517")
+    assert warm_nesh_chapter.status_code == 200
+    assert hit_nesh_chapter.status_code == 200
+
     # Warm + hit for TIPI payload cache
     first_tipi = client.get("/api/tipi/search?ncm=8517")
     second_tipi = client.get("/api/tipi/search?ncm=8517")
