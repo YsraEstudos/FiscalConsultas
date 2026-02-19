@@ -1,6 +1,7 @@
 import { render, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ResultDisplay } from '../../src/../src/components/ResultDisplay';
+import { AuthProvider } from '../../src/context/AuthContext';
 
 // Mock dependencies
 vi.mock('../../src/components/TextSearchResults', () => ({ TextSearchResults: () => null }));
@@ -53,15 +54,17 @@ describe('ResultDisplay Auto-Scroll', () => {
         };
 
         render(
-            <ResultDisplay
-                data={mockData}
-                mobileMenuOpen={false}
-                onCloseMobileMenu={vi.fn()}
-                tabId="tab-1"
-                isActive={true}
-                isNewSearch={true}
-                onConsumeNewSearch={vi.fn()}
-            />
+            <AuthProvider>
+                <ResultDisplay
+                    data={mockData}
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    tabId="tab-1"
+                    isActive={true}
+                    isNewSearch={true}
+                    onConsumeNewSearch={vi.fn()}
+                />
+            </AuthProvider>
         );
 
         // Flush timers to trigger render + retry logic
@@ -90,15 +93,17 @@ describe('ResultDisplay Auto-Scroll', () => {
         };
 
         render(
-            <ResultDisplay
-                data={mockData}
-                mobileMenuOpen={false}
-                onCloseMobileMenu={vi.fn()}
-                tabId="tab-1"
-                isActive={true}
-                isNewSearch={true}
-                onConsumeNewSearch={vi.fn()}
-            />
+            <AuthProvider>
+                <ResultDisplay
+                    data={mockData}
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    tabId="tab-1"
+                    isActive={true}
+                    isNewSearch={true}
+                    onConsumeNewSearch={vi.fn()}
+                />
+            </AuthProvider>
         );
 
         await act(async () => {
@@ -118,15 +123,17 @@ describe('ResultDisplay Auto-Scroll', () => {
         };
 
         render(
-            <ResultDisplay
-                data={mockData}
-                mobileMenuOpen={false}
-                onCloseMobileMenu={vi.fn()}
-                tabId="tab-1"
-                isActive={true}
-                isNewSearch={true}
-                onConsumeNewSearch={vi.fn()}
-            />
+            <AuthProvider>
+                <ResultDisplay
+                    data={mockData}
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    tabId="tab-1"
+                    isActive={true}
+                    isNewSearch={true}
+                    onConsumeNewSearch={vi.fn()}
+                />
+            </AuthProvider>
         );
 
         await act(async () => {
@@ -166,15 +173,17 @@ describe('ResultDisplay Auto-Scroll', () => {
         };
 
         render(
-            <ResultDisplay
-                data={mockData}
-                mobileMenuOpen={false}
-                onCloseMobileMenu={vi.fn()}
-                tabId="tab-1"
-                isActive={true}
-                isNewSearch={true}
-                onConsumeNewSearch={vi.fn()}
-            />
+            <AuthProvider>
+                <ResultDisplay
+                    data={mockData}
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    tabId="tab-1"
+                    isActive={true}
+                    isNewSearch={true}
+                    onConsumeNewSearch={vi.fn()}
+                />
+            </AuthProvider>
         );
 
         await act(async () => {
@@ -218,15 +227,17 @@ describe('ResultDisplay Auto-Scroll', () => {
         };
 
         render(
-            <ResultDisplay
-                data={mockData}
-                mobileMenuOpen={false}
-                onCloseMobileMenu={vi.fn()}
-                tabId="tab-1"
-                isActive={true}
-                isNewSearch={true}
-                onConsumeNewSearch={vi.fn()}
-            />
+            <AuthProvider>
+                <ResultDisplay
+                    data={mockData}
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    tabId="tab-1"
+                    isActive={true}
+                    isNewSearch={true}
+                    onConsumeNewSearch={vi.fn()}
+                />
+            </AuthProvider>
         );
 
         await act(async () => {
