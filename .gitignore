@@ -62,15 +62,19 @@ client/.env.*
 # Backups
 *.bak
 
-# Benchmarks
+# Benchmarks & test artifacts
 benchmark_results.txt
 test_output.txt
 
 # Scripts
 verify_redis.py
 scripts/god_module_guardrail.py
-Scripts results/consolidated_code.txt
-Scripts results/ncm_loading_flow.txt
-Scripts results/*.txt
-Scripts results/**/*.json
 pull request pendences.md
+
+# Generated results / snapshots (local-only)
+Scripts results/
+snapshots/
+
+# Coverage HTML report
+htmlcov/
+

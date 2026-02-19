@@ -406,12 +406,12 @@ function App() {
                                     isActive={tab.id === activeTabId}
                                     tabId={tab.id}
                                     isNewSearch={tab.isNewSearch || false}
-                                    onConsumeNewSearch={(_finalScroll) => {
-                                        const updates: Partial<any> = { isNewSearch: false };
-                                        if (typeof _finalScroll === 'number') {
-                                            updates.scrollTop = _finalScroll;
+                                    onConsumeNewSearch={(incomingTabId, finalScrollTop) => {
+                                        const updates: any = { isNewSearch: false };
+                                        if (typeof finalScrollTop === 'number') {
+                                            updates.scrollTop = finalScrollTop;
                                         }
-                                        updateTab(tab.id, updates);
+                                        updateTab(incomingTabId, updates);
                                     }}
                                     // Persistencia explicita do scroll para robustez em unmounts/otimizacoes
                                     initialScrollTop={tab.scrollTop}
