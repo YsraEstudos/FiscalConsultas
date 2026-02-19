@@ -6,14 +6,19 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .benchmarks/
+.tox/
+.nox/
 build/
 dist/
 *.egg-info/
+htmlcov/
 
 # Local databases
 *.db
 *.db-shm
 *.db-wal
+*.db-journal
+*.sqlite3
 
 # Data and Heavy Files
 data/
@@ -27,21 +32,31 @@ raw_data/nesh.md
 client/node_modules/
 client/dist/
 client/.vite/
+client/coverage/
+.eslintcache
 
 # OS / Editor
 .DS_Store
 Thumbs.db
 .vscode/
+.idea/
+*.swp
+*.swo
 
 # Logs and Test results
 *.log
 test_results*.txt
 .coverage
+.coverage.*
 coverage.xml
 
 # Environment Variables
 .env
 .env.local
+.env.*
+!.env.example
+client/.env.*
+!client/.env.example
 
 
 # Backups
@@ -51,9 +66,15 @@ coverage.xml
 benchmark_results.txt
 test_output.txt
 
+# Scripts
+verify_redis.py
+scripts/god_module_guardrail.py
+pull request pendences.md
+
 # Generated results / snapshots (local-only)
 Scripts results/
 snapshots/
 
 # Coverage HTML report
 htmlcov/
+
