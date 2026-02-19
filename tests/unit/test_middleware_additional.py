@@ -3,7 +3,6 @@ from types import SimpleNamespace
 
 import jwt
 import pytest
-from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from backend.infrastructure.db_engine import tenant_context
@@ -13,10 +12,10 @@ from backend.server import middleware
 pytestmark = pytest.mark.unit
 
 
-def _build_request(path: str, headers: dict[str, str] | None = None, query: str = "") -> Request:
+def _build_scope(path: str, headers: dict[str, str] | None = None, query: str = "") -> dict:
     headers = headers or {}
     scope_headers = [(k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in headers.items()]
-    scope = {
+    return {
         "type": "http",
         "method": "GET",
         "path": path,
@@ -24,9 +23,24 @@ def _build_request(path: str, headers: dict[str, str] | None = None, query: str 
         "query_string": query.encode("latin-1"),
         "scheme": "http",
         "client": ("127.0.0.1", 12345),
-        "server": ("testserver", 80),
+        "server": ("testserver", 80)
     }
-    return Request(scope)
+
+
+async def _invoke_middleware(mw: middleware.TenantMiddleware, scope: dict) -> tuple[int, list[dict]]:
+    sent_messages: list[dict] = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent_messages.append(message)
+
+    await mw(scope, receive, send)
+    start_message = next(
+        msg for msg in sent_messages if msg.get("type") == "http.response.start"
+    )
+    return int(start_message["status"]), sent_messages
 
 
 def test_get_payload_exp_variants():
@@ -76,6 +90,9 @@ def test_decode_clerk_jwt_jwks_path_and_cache(monkeypatch):
             return _SigningKey()
 
     middleware._jwt_decode_cache.clear()
+    monkeypatch.setattr(middleware.settings.auth, "clerk_issuer", "", raising=False)
+    monkeypatch.setattr(middleware.settings.auth, "clerk_audience", "", raising=False)
+    monkeypatch.setattr(middleware.settings.auth, "clerk_authorized_parties", [], raising=False)
     monkeypatch.setattr(middleware, "get_jwks_client", lambda: _FakeJWKS())
     monkeypatch.setattr(
         middleware.jwt,
@@ -89,6 +106,183 @@ def test_decode_clerk_jwt_jwks_path_and_cache(monkeypatch):
     cached = middleware.decode_clerk_jwt("token-ok")
     assert cached == payload
     assert cached is not payload
+
+
+def test_decode_clerk_jwt_validates_issuer_audience_and_azp(monkeypatch):
+    class _SigningKey:
+        key = "pub-key"
+
+    class _FakeJWKS:
+        def get_signing_key_from_jwt(self, _token):
+            return _SigningKey()
+
+    middleware._jwt_decode_cache.clear()
+    monkeypatch.setattr(middleware, "get_jwks_client", lambda: _FakeJWKS())
+    monkeypatch.setattr(
+        middleware.jwt,
+        "decode",
+        lambda *_args, **_kwargs: {
+            "sub": "user_ok",
+            "org_id": "org_ok",
+            "iss": "https://demo.clerk.accounts.dev",
+            "aud": "fiscal-api",
+            "azp": "http://localhost:5173",
+            "exp": 9999999999,
+        },
+    )
+    monkeypatch.setattr(middleware.settings.auth, "clerk_issuer", "https://demo.clerk.accounts.dev", raising=False)
+    monkeypatch.setattr(middleware.settings.auth, "clerk_audience", "fiscal-api", raising=False)
+    monkeypatch.setattr(
+        middleware.settings.auth,
+        "clerk_authorized_parties",
+        ["http://localhost:5173"],
+        raising=False,
+    )
+
+    payload = middleware.decode_clerk_jwt("token-claims-ok")
+    assert payload is not None
+    assert payload["sub"] == "user_ok"
+
+
+def test_decode_clerk_jwt_rejects_audience_mismatch(monkeypatch):
+    class _SigningKey:
+        key = "pub-key"
+
+    class _FakeJWKS:
+        def get_signing_key_from_jwt(self, _token):
+            return _SigningKey()
+
+    middleware._jwt_decode_cache.clear()
+    monkeypatch.setattr(middleware, "get_jwks_client", lambda: _FakeJWKS())
+    monkeypatch.setattr(
+        middleware.jwt,
+        "decode",
+        lambda *_args, **_kwargs: {
+            "sub": "user_bad_aud",
+            "org_id": "org_1",
+            "iss": "https://demo.clerk.accounts.dev",
+            "aud": "wrong-aud",
+            "azp": "http://localhost:5173",
+            "exp": 9999999999,
+        },
+    )
+    monkeypatch.setattr(middleware.settings.auth, "clerk_issuer", "https://demo.clerk.accounts.dev", raising=False)
+    monkeypatch.setattr(middleware.settings.auth, "clerk_audience", "fiscal-api", raising=False)
+    monkeypatch.setattr(
+        middleware.settings.auth,
+        "clerk_authorized_parties",
+        ["http://localhost:5173"],
+        raising=False,
+    )
+
+    warned: list[str] = []
+    monkeypatch.setattr(middleware.logger, "warning", lambda msg: warned.append(msg))
+
+    assert middleware.decode_clerk_jwt("token-bad-aud") is None
+    assert any('"reason": "audience_mismatch"' in msg for msg in warned)
+
+
+def test_decode_clerk_jwt_rejects_issuer_and_azp_mismatch(monkeypatch):
+    class _SigningKey:
+        key = "pub-key"
+
+    class _FakeJWKS:
+        def get_signing_key_from_jwt(self, _token):
+            return _SigningKey()
+
+    middleware._jwt_decode_cache.clear()
+    monkeypatch.setattr(middleware, "get_jwks_client", lambda: _FakeJWKS())
+    monkeypatch.setattr(
+        middleware.jwt,
+        "decode",
+        lambda *_args, **_kwargs: {
+            "sub": "user_bad_issuer_azp",
+            "org_id": "org_1",
+            "iss": "https://other-instance.clerk.accounts.dev",
+            "aud": "fiscal-api",
+            "azp": "http://192.168.0.10:5173",
+            "exp": 9999999999,
+        },
+    )
+    monkeypatch.setattr(middleware.settings.auth, "clerk_issuer", "https://demo.clerk.accounts.dev", raising=False)
+    monkeypatch.setattr(middleware.settings.auth, "clerk_audience", "fiscal-api", raising=False)
+    monkeypatch.setattr(
+        middleware.settings.auth,
+        "clerk_authorized_parties",
+        ["http://localhost:5173"],
+        raising=False,
+    )
+
+    warned: list[str] = []
+    monkeypatch.setattr(middleware.logger, "warning", lambda msg: warned.append(msg))
+
+    assert middleware.decode_clerk_jwt("token-bad-issuer-azp") is None
+    assert any('"reason": "invalid_issuer"' in msg for msg in warned)
+
+    monkeypatch.setattr(
+        middleware.jwt,
+        "decode",
+        lambda *_args, **_kwargs: {
+            "sub": "user_bad_azp",
+            "org_id": "org_1",
+            "iss": "https://demo.clerk.accounts.dev",
+            "aud": "fiscal-api",
+            "azp": "http://192.168.0.10:5173",
+            "exp": 9999999999,
+        },
+    )
+    warned.clear()
+    assert middleware.decode_clerk_jwt("token-bad-azp") is None
+    assert any('"reason": "invalid_token"' in msg for msg in warned)
+
+
+def test_decode_clerk_jwt_applies_min_clock_skew_in_development(monkeypatch):
+    class _SigningKey:
+        key = "pub-key"
+
+    class _FakeJWKS:
+        def get_signing_key_from_jwt(self, _token):
+            return _SigningKey()
+
+    middleware._jwt_decode_cache.clear()
+    monkeypatch.setattr(middleware, "get_jwks_client", lambda: _FakeJWKS())
+    monkeypatch.setattr(middleware.settings.server, "env", "development", raising=False)
+    monkeypatch.setattr(middleware.settings.auth, "clerk_clock_skew_seconds", 30, raising=False)
+    monkeypatch.setattr(middleware.settings.auth, "clerk_issuer", "", raising=False)
+    monkeypatch.setattr(middleware.settings.auth, "clerk_audience", "", raising=False)
+    monkeypatch.setattr(middleware.settings.auth, "clerk_authorized_parties", [], raising=False)
+
+    now = 1_000.0
+    monkeypatch.setattr(middleware.time, "time", lambda: now)
+
+    monkeypatch.setattr(
+        middleware.jwt,
+        "decode",
+        lambda *_args, **_kwargs: {
+            "sub": "user_clock_ok",
+            "org_id": "org_1",
+            "iat": now + 90,
+            "nbf": now + 90,
+            "exp": now + 600,
+        },
+    )
+    assert middleware.decode_clerk_jwt("token-clock-ok") is not None
+
+    warned: list[str] = []
+    monkeypatch.setattr(middleware.logger, "warning", lambda msg: warned.append(msg))
+    monkeypatch.setattr(
+        middleware.jwt,
+        "decode",
+        lambda *_args, **_kwargs: {
+            "sub": "user_clock_bad",
+            "org_id": "org_1",
+            "iat": now + 200,
+            "nbf": now + 200,
+            "exp": now + 600,
+        },
+    )
+    assert middleware.decode_clerk_jwt("token-clock-bad") is None
+    assert any('"reason": "nbf_in_future"' in msg for msg in warned)
 
 
 def test_decode_clerk_jwt_drops_stale_cache_entry(monkeypatch):
@@ -108,6 +302,9 @@ def test_decode_clerk_jwt_drops_stale_cache_entry(monkeypatch):
 def test_decode_clerk_jwt_evicts_old_entries_when_cache_is_full(monkeypatch):
     middleware._jwt_decode_cache.clear()
     monkeypatch.setattr(middleware, "_JWT_CACHE_MAX_SIZE", 1)
+    monkeypatch.setattr(middleware.settings.auth, "clerk_issuer", "", raising=False)
+    monkeypatch.setattr(middleware.settings.auth, "clerk_audience", "", raising=False)
+    monkeypatch.setattr(middleware.settings.auth, "clerk_authorized_parties", [], raising=False)
 
     class _SigningKey:
         key = "pub-key"
@@ -205,59 +402,62 @@ def test_is_clerk_token_valid_delegates_to_decode(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_dispatch_skips_non_api_and_public_paths(monkeypatch):
-    mw = middleware.TenantMiddleware(app=lambda scope, receive, send: None)
     monkeypatch.setattr(middleware.settings.server, "env", "production", raising=False)
     monkeypatch.setattr(middleware.settings.database, "engine", "postgresql", raising=False)
 
     called = []
 
-    async def call_next(_request):
-        called.append("ok")
-        return JSONResponse({"ok": True})
+    async def app(scope, receive, send):
+        called.append(scope["path"])
+        response = JSONResponse({"ok": True})
+        await response(scope, receive, send)
 
-    resp1 = await mw.dispatch(_build_request("/"), call_next)
-    resp2 = await mw.dispatch(_build_request("/api/status"), call_next)
-    assert resp1.status_code == 200
-    assert resp2.status_code == 200
-    assert called == ["ok", "ok"]
+    mw = middleware.TenantMiddleware(app=app)
+
+    status1, _ = await _invoke_middleware(mw, _build_scope("/"))
+    status2, _ = await _invoke_middleware(mw, _build_scope("/api/status"))
+    assert status1 == 200
+    assert status2 == 200
+    assert called == ["/", "/api/status"]
 
 
 @pytest.mark.asyncio
 async def test_dispatch_returns_401_in_prod_postgres_without_tenant(monkeypatch):
-    mw = middleware.TenantMiddleware(app=lambda scope, receive, send: None)
     monkeypatch.setattr(middleware.settings.server, "env", "production", raising=False)
     monkeypatch.setattr(middleware.settings.database, "engine", "postgresql", raising=False)
-    monkeypatch.setattr(middleware, "decode_clerk_jwt", lambda _token: None)
+    called = []
 
-    async def call_next(_request):
-        return JSONResponse({"ok": True})
+    async def app(_scope, _receive, _send):
+        called.append("called")
 
-    resp = await mw.dispatch(_build_request("/api/search"), call_next)
-    assert resp.status_code == 401
+    mw = middleware.TenantMiddleware(app=app)
+    status, _ = await _invoke_middleware(mw, _build_scope("/api/search"))
+    assert status == 401
+    assert called == []
 
 
 @pytest.mark.asyncio
 async def test_dispatch_sets_tenant_from_debug_fallback_and_resets(monkeypatch):
-    mw = middleware.TenantMiddleware(app=lambda scope, receive, send: None)
     monkeypatch.setattr(middleware.settings.server, "env", "development", raising=False)
     monkeypatch.setattr(middleware.settings.features, "debug_mode", True, raising=False)
     monkeypatch.setattr(middleware.settings.database, "engine", "postgresql", raising=False)
 
     seen = []
 
-    async def call_next(_request):
+    async def app(scope, receive, send):
         seen.append(tenant_context.get())
-        return JSONResponse({"ok": True})
+        response = JSONResponse({"ok": True})
+        await response(scope, receive, send)
 
-    resp = await mw.dispatch(_build_request("/api/search"), call_next)
-    assert resp.status_code == 200
+    mw = middleware.TenantMiddleware(app=app)
+    status, _ = await _invoke_middleware(mw, _build_scope("/api/search"))
+    assert status == 200
     assert seen == ["org_default"]
     assert tenant_context.get() == ""
 
 
 @pytest.mark.asyncio
 async def test_dispatch_sets_tenant_from_bearer_and_schedules_provision(monkeypatch):
-    mw = middleware.TenantMiddleware(app=lambda scope, receive, send: None)
     monkeypatch.setattr(middleware.settings.server, "env", "production", raising=False)
     monkeypatch.setattr(middleware.settings.database, "engine", "postgresql", raising=False)
     monkeypatch.setattr(
@@ -268,12 +468,12 @@ async def test_dispatch_sets_tenant_from_bearer_and_schedules_provision(monkeypa
 
     created = []
 
-    def _fake_create_task(coro):
+    def _fake_ensure_future(coro):
         created.append(coro)
         coro.close()
         return None
 
-    monkeypatch.setattr(asyncio, "create_task", _fake_create_task)
+    monkeypatch.setattr(middleware.asyncio, "ensure_future", _fake_ensure_future)
 
     async def _ensure(*_args, **_kwargs):
         return None
@@ -282,15 +482,17 @@ async def test_dispatch_sets_tenant_from_bearer_and_schedules_provision(monkeypa
 
     seen = []
 
-    async def call_next(_request):
+    async def app(scope, receive, send):
         seen.append(tenant_context.get())
-        return JSONResponse({"ok": True})
+        response = JSONResponse({"ok": True})
+        await response(scope, receive, send)
 
-    resp = await mw.dispatch(
-        _build_request("/api/search", headers={"Authorization": "Bearer tkn"}),
-        call_next,
+    mw = middleware.TenantMiddleware(app=app)
+    status, _ = await _invoke_middleware(
+        mw,
+        _build_scope("/api/search", headers={"Authorization": "Bearer tkn"}),
     )
-    assert resp.status_code == 200
+    assert status == 200
     assert seen == ["org_bearer"]
     assert len(created) == 1
 

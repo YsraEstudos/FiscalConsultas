@@ -86,6 +86,10 @@ class AuthSettings(BaseModel):
     admin_token_previous: str = ""
     secret_key: str = ""
     clerk_domain: Optional[str] = None # ex: your-app.clerk.accounts.dev
+    clerk_issuer: Optional[str] = None  # ex: https://your-app.clerk.accounts.dev
+    clerk_audience: Optional[str] = None  # opcional; exige match em "aud"
+    clerk_authorized_parties: List[str] = Field(default_factory=list)  # valida "azp"
+    clerk_clock_skew_seconds: int = 120  # tolerancia para exp/nbf/iat
 
 
 class BillingSettings(BaseModel):

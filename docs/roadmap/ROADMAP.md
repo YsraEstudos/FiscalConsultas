@@ -17,10 +17,10 @@ Transformar a busca de palavras-chave em **busca de intenção**, integrando mú
   - Definir formato/escopo, prazo de rotação e processo com janela de coexistência.
 - [x] **[Seguranca] Autenticação Profissional (JWT)**
   - Migrar para JWT assinado com expiração e suporte a múltiplos usuários (Essencial para Assinaturas).
-- [ ] **[Seguranca] Rate Limiting e Proteção Anti-Abuso**
+- [x] **[Seguranca] Rate Limiting e Proteção Anti-Abuso**
   - Limitar tentativas de login e chamadas de IA por IP/usuário.
-- [ ] **[Seguranca] Hardening de HTTP**
-  - CORS estrito, cabeçalhos de segurança e limitação de métodos.
+- [x] **[Seguranca] Hardening de HTTP**
+  - CORS estrito, cabeçalhos de segurança (cache) e limitação de métodos.
 
 ## Fase 1: Modernização da Infraestrutura (Crítico) ✅
 
@@ -105,8 +105,8 @@ jobs:
             -Dsonar.python.version=3.13
 ```
 
-  - Garantir `sonar-project.properties` na raiz com `sonar.python.version=3.13`.
-  - Fazer push e executar nova análise para validar remoção do warning.
+- Garantir `sonar-project.properties` na raiz com `sonar.python.version=3.13`.
+- Fazer push e executar nova análise para validar remoção do warning.
 
 ## Fase 3: Arquitetura e Inteligência de Busca (IA)
 

@@ -19,6 +19,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.domain.sqlmodels import Chapter, Position, ChapterNotes, Glossary, TipiPosition, Subscription
+from backend.domain.comment_models import Comment  # noqa: F401 — Alembic autogenerate
 from backend.config.settings import settings
 
 # this is the Alembic Config object

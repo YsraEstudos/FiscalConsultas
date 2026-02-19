@@ -1,0 +1,378 @@
+/* ─── Painel de Comentários (Google Docs Style) ──────────────────────────── */
+
+/*
+ * O .panel ocupa toda a altura do scroll container (align-self: stretch).
+ * É position: relative. Cada card usa position: absolute + top calculado
+ * via algoritmo anti-colisão em JS.
+ * Como está dentro do mesmo overflow-y:auto, scrolla automaticamente com o conteúdo.
+ */
+.panel {
+    width: 300px;
+    flex-shrink: 0;
+    position: relative;
+    align-self: stretch;
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 0 12px;
+    overflow: visible;
+}
+
+/* ─── Linha conectora (âncora → card deslocado) ───────────────────────────── */
+.connector {
+    position: absolute;
+    left: 0;
+    width: 2px;
+    background: rgba(99, 102, 241, 0.25);
+    border-radius: 1px;
+    pointer-events: none;
+    z-index: 5;
+}
+
+/* ─── Card compartilhado (form + comentário existente) ────────────────────── */
+.formCard,
+.commentCard {
+    position: absolute;
+    left: 12px;
+    right: 8px;
+    border-radius: 10px;
+    background: var(--surface-elevated, #1e1e2e);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+    z-index: 10;
+    transition: top 0.2s ease;
+    will-change: top;
+}
+
+/* Indicador visual em cards deslocados pela anti-colisão */
+.formCard.displaced,
+.commentCard.displaced {
+    border-left: 3px solid rgba(99, 102, 241, 0.45);
+}
+
+/* ─── Formulário de novo comentário ─────────────────────────────────────── */
+.formCard {
+    border-color: rgba(99, 102, 241, 0.45);
+    animation: slideIn 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* ─── Preview do texto selecionado ───────────────────────────────────────── */
+.selectedPreview {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px 8px;
+    background: rgba(99, 102, 241, 0.07);
+}
+
+.quoteBar {
+    display: block;
+    width: 3px;
+    min-height: 14px;
+    background: var(--color-primary, #6366f1);
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.quoteText {
+    margin: 0;
+    font-size: 11px;
+    color: var(--text-muted, #9ca3af);
+    font-style: italic;
+    line-height: 1.45;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+}
+
+/* ─── Textarea ────────────────────────────────────────────────────────────── */
+.textarea {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--surface-base, #13131f);
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    color: var(--text-primary, #e2e8f0);
+    font-size: 12.5px;
+    font-family: inherit;
+    padding: 10px 12px;
+    resize: none;
+    min-height: 72px;
+    outline: none;
+    line-height: 1.5;
+    transition: background 0.15s ease;
+}
+
+.textarea:focus {
+    background: rgba(99, 102, 241, 0.05);
+}
+
+.textarea::placeholder {
+    color: var(--text-muted, #6b7280);
+}
+
+/* ─── Rodapé de Ação ─────────────────────────────────────────────────────── */
+.footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.12);
+}
+
+.toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-secondary, #94a3b8);
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.toggle input[type='checkbox'] {
+    accent-color: var(--color-primary, #6366f1);
+    width: 13px;
+    height: 13px;
+}
+
+.actions {
+    display: flex;
+    gap: 6px;
+}
+
+.cancelBtn,
+.submitBtn {
+    border: none;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 500;
+    font-family: inherit;
+    padding: 4px 11px;
+    cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.cancelBtn {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text-secondary, #94a3b8);
+}
+
+.cancelBtn:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.submitBtn {
+    background: var(--color-primary, #6366f1);
+    color: #fff;
+}
+
+.submitBtn:hover:not(:disabled) {
+    opacity: 0.88;
+    transform: translateY(-1px);
+}
+
+.submitBtn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ─── Card de Comentário Existente ───────────────────────────────────────── */
+.commentCard {
+    padding: 0;
+    animation: fadeIn 0.28s ease forwards;
+    cursor: default;
+}
+
+.commentCard.private {
+    border-color: rgba(168, 85, 247, 0.3);
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* ─── Header: Avatar + Nome + Data + Badge ────────────────────────────────── */
+.commentHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 10px 12px 6px;
+    gap: 8px;
+}
+
+.authorInfo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+}
+
+.avatar,
+.avatarFallback {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.avatar {
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.avatarFallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.authorMeta {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.authorName {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-primary, #e2e8f0);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.commentDate {
+    font-size: 10px;
+    color: var(--text-muted, #9ca3af);
+    white-space: nowrap;
+}
+
+.commentBadge {
+    font-size: 12px;
+    flex-shrink: 0;
+    line-height: 1;
+    margin-top: 2px;
+}
+
+/* ─── Header Actions (badge + edit/delete) ─────────────────────────────── */
+.headerActions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.actionMenu {
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.commentCard:hover .actionMenu {
+    opacity: 1;
+}
+
+.actionBtn {
+    background: none;
+    border: none;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    line-height: 1;
+    opacity: 0.7;
+    transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.actionBtn:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* ─── Edição inline ────────────────────────────────────────────────────── */
+.editSection {
+    padding: 6px 12px 8px;
+}
+
+/* ─── Confirmação de exclusão ──────────────────────────────────────────── */
+.deleteConfirm {
+    padding: 8px 12px;
+    background: rgba(239, 68, 68, 0.08);
+    border-top: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.deleteConfirm p {
+    margin: 0 0 6px;
+    font-size: 11.5px;
+    color: var(--text-secondary, #94a3b8);
+}
+
+.deleteBtn {
+    border: none;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 500;
+    font-family: inherit;
+    padding: 4px 11px;
+    cursor: pointer;
+    background: rgba(239, 68, 68, 0.8);
+    color: #fff;
+    transition: opacity 0.15s ease;
+}
+
+.deleteBtn:hover {
+    opacity: 0.88;
+}
+
+.commentBody {
+    margin: 0;
+    padding: 6px 12px 12px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-primary, #e2e8f0);
+    white-space: pre-wrap;
+}
+
+/* ─── Responsivo: oculta painel lateral em telas estreitas ────────────────── */
+/* Em telas < 1280px o painel lateral é substituído pelo CommentDrawer.
+   O CommentDrawer é renderizado condicionalmente em ResultDisplay.tsx. */
+@media (max-width: 1280px) {
+    .panel {
+        display: none;
+    }
+}

@@ -8,6 +8,7 @@ const StatsModal = lazy(() => import('./StatsModal').then(module => ({ default: 
 const AIChat = lazy(() => import('./AIChat').then(module => ({ default: module.AIChat })));
 const ComparatorModal = lazy(() => import('./ComparatorModal').then(module => ({ default: module.ComparatorModal })));
 const CrossNavContextMenu = lazy(() => import('./CrossNavContextMenu').then(module => ({ default: module.CrossNavContextMenu })));
+const AdminCommentModal = lazy(() => import('./AdminCommentModal').then(module => ({ default: module.AdminCommentModal })));
 
 type DocType = 'nesh' | 'tipi';
 
@@ -17,12 +18,14 @@ interface ModalManagerProps {
         tutorial: boolean;
         stats: boolean;
         comparator: boolean;
+        moderate: boolean;
     };
     onClose: {
         settings: () => void;
         tutorial: () => void;
         stats: () => void;
         comparator: () => void;
+        moderate: () => void;
     };
     currentDoc: DocType;
     onOpenInDoc: (doc: DocType, ncm: string) => void;
@@ -60,6 +63,10 @@ export const ModalManager: React.FC<ModalManagerProps> = ({
 
             {/* AI Chat is now available for signed-in users (Clerk handles auth) */}
             {isSignedIn && <AIChat />}
+
+            {modals.moderate && (
+                <AdminCommentModal isOpen onClose={onClose.moderate} />
+            )}
         </Suspense>
     );
 };

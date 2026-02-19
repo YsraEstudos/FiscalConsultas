@@ -1,6 +1,7 @@
 import { useSettings } from '../context/SettingsContext';
 import { ChangeEvent, useEffect } from 'react';
 import { VIEW_MODE, SIDEBAR_POSITION } from '../constants';
+import { useIsAdmin } from '../hooks/useIsAdmin';
 import styles from './SettingsModal.module.css';
 
 interface SettingsModalProps {
@@ -13,6 +14,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         theme, fontSize, highlightEnabled, adminMode, tipiViewMode, sidebarPosition,
         updateTheme, updateFontSize, toggleHighlight, toggleAdminMode, updateTipiViewMode, updateSidebarPosition, restoreDefaults
     } = useSettings();
+    const isAdmin = useIsAdmin();
 
     // Close on ESC
     useEffect(() => {
@@ -105,21 +107,23 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 </label>
                             </div>
 
-                            <div className={styles.item}>
-                                <div className={styles.label}>
-                                    <span>Modo Desenvolvedor</span>
-                                    <span className={styles.hint}>Logs de IA e Admin</span>
+                            {isAdmin && (
+                                <div className={styles.item}>
+                                    <div className={styles.label}>
+                                        <span>Modo Desenvolvedor</span>
+                                        <span className={styles.hint}>Logs de IA e Admin</span>
+                                    </div>
+                                    <label className={styles.switch}>
+                                        <input
+                                            type="checkbox"
+                                            checked={adminMode}
+                                            onChange={toggleAdminMode}
+                                            data-testid="admin-toggle"
+                                        />
+                                        <span className={styles.sliderRound}></span>
+                                    </label>
                                 </div>
-                                <label className={styles.switch}>
-                                    <input
-                                        type="checkbox"
-                                        checked={adminMode}
-                                        onChange={toggleAdminMode}
-                                        data-testid="admin-toggle"
-                                    />
-                                    <span className={styles.sliderRound}></span>
-                                </label>
-                            </div>
+                            )}
                         </div>
 
                         {/* CARD 3: NAVEGAÇÃO */}

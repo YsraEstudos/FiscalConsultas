@@ -144,10 +144,10 @@ vi.mock('../../src/components/ResultDisplay', () => ({
       data-mobile-open={String(Boolean(mobileMenuOpen))}
       data-active={String(Boolean(isActive))}
     >
-      <button data-testid={`result-consume-scroll-${tabId}`} onClick={() => onConsumeNewSearch(321)}>
+      <button data-testid={`result-consume-scroll-${tabId}`} onClick={() => onConsumeNewSearch(tabId, 321)}>
         consume-scroll
       </button>
-      <button data-testid={`result-consume-no-scroll-${tabId}`} onClick={() => onConsumeNewSearch(undefined)}>
+      <button data-testid={`result-consume-no-scroll-${tabId}`} onClick={() => onConsumeNewSearch(tabId, undefined)}>
         consume-no-scroll
       </button>
       <button data-testid={`result-persist-${tabId}`} onClick={() => onPersistScroll(tabId, 77)}>
@@ -335,7 +335,7 @@ describe('App behavior', () => {
     document.body.innerHTML = '';
   });
 
-  it('handles split search terms and skips blank searches', () => {
+  it('handles split search terms and skips blank searches', async () => {
     render(<App />);
 
     fireEvent.click(screen.getByTestId('layout-search-empty'));
@@ -345,12 +345,14 @@ describe('App behavior', () => {
     expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(1, 'tab-1', 'nesh', '8517', true);
 
     fireEvent.click(screen.getByTestId('layout-search-multi'));
-    expect(mocks.createTabMock).toHaveBeenCalledWith('nesh');
-    expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(2, 'tab-1', 'nesh', '8517', true);
-    expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(3, 'new-nesh-1', 'nesh', '9401', true);
+    await waitFor(() => {
+      expect(mocks.createTabMock).toHaveBeenCalledWith('nesh');
+      expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(2, 'tab-1', 'nesh', '8517', true);
+      expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(3, 'new-nesh-1', 'nesh', '9401', true);
+    });
   });
 
-  it('creates a new tab for every split term when active tab is occupied', () => {
+  it('creates a new tab for every split term when active tab is occupied', async () => {
     setTabsState([
       buildTab({
         id: 'tab-1',
@@ -364,10 +366,12 @@ describe('App behavior', () => {
     render(<App />);
     fireEvent.click(screen.getByTestId('layout-search-multi'));
 
-    expect(mocks.createTabMock).toHaveBeenNthCalledWith(1, 'nesh');
-    expect(mocks.createTabMock).toHaveBeenNthCalledWith(2, 'nesh');
-    expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(1, 'new-nesh-1', 'nesh', '8517', true);
-    expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(2, 'new-nesh-2', 'nesh', '9401', true);
+    await waitFor(() => {
+      expect(mocks.createTabMock).toHaveBeenNthCalledWith(1, 'nesh');
+      expect(mocks.createTabMock).toHaveBeenNthCalledWith(2, 'nesh');
+      expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(1, 'new-nesh-1', 'nesh', '8517', true);
+      expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(2, 'new-nesh-2', 'nesh', '9401', true);
+    });
   });
 
   it('switches document in-place for empty tab and opens a new tab for populated tab', () => {

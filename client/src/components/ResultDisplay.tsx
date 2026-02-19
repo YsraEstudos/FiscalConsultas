@@ -10,6 +10,14 @@ import { debug } from '../utils/debug';
 import { NeshRenderer } from '../utils/NeshRenderer';
 import { useSettings } from '../context/SettingsContext';
 import { Sidebar } from './Sidebar';
+import { useTextSelection } from '../hooks/useTextSelection';
+import { HighlightPopover } from './HighlightPopover';
+import { CommentPanel } from './CommentPanel';
+import { CommentDrawer } from './CommentDrawer';
+import type { PendingCommentEntry } from './CommentPanel';
+import { useAuth } from '../context/AuthContext';
+import { useComments } from '../hooks/useComments';
+import toast from 'react-hot-toast';
 
 const sanitizeHtml = (html: string) => DOMPurify.sanitize(html, {
     ALLOW_DATA_ATTR: true,
@@ -115,6 +123,91 @@ const renderTipiFallback = (resultados: Record<string, any>) => {
     }).join('\n');
 };
 
+type ChapterSectionType = 'titulo' | 'notas' | 'consideracoes' | 'definicoes';
+
+const SECTION_TARGET_PATTERN = /^chapter-([^-]+)-(titulo|notas|consideracoes|definicoes)$/i;
+
+const SECTION_SELECTOR_FALLBACKS: Record<ChapterSectionType, string[]> = {
+    titulo: ['.section-titulo'],
+    notas: ['.section-notas', '.regras-gerais'],
+    consideracoes: ['.section-consideracoes'],
+    definicoes: ['.section-definicoes']
+};
+
+const SECTION_TEXT_FALLBACKS: Record<ChapterSectionType, RegExp> = {
+    titulo: /t[ií]tulo do cap[ií]tulo/i,
+    notas: /notas do cap[ií]tulo|regras gerais do cap[ií]tulo/i,
+    consideracoes: /considera[cç][oõ]es gerais/i,
+    definicoes: /defini[cç][oõ]es t[eé]cnicas/i
+};
+
+function getSectionTargetMeta(targetId: string): { capitulo: string; sectionType: ChapterSectionType } | null {
+    const match = targetId.match(SECTION_TARGET_PATTERN);
+    if (!match) return null;
+    return { capitulo: match[1], sectionType: match[2].toLowerCase() as ChapterSectionType };
+}
+
+function getChapterAnchors(container: HTMLElement): HTMLElement[] {
+    return Array.from(container.querySelectorAll('[id]'))
+        .filter((node) => /^(?:cap|chapter)-\d{1,2}$/.test((node as HTMLElement).id)) as HTMLElement[];
+}
+
+function getChapterBounds(container: HTMLElement, capitulo: string): { start: HTMLElement | null; next: HTMLElement | null } {
+    const startByCap = container.querySelector(`#${CSS.escape(`cap-${capitulo}`)}`) as HTMLElement | null;
+    const startByChapter = container.querySelector(`#${CSS.escape(`chapter-${capitulo}`)}`) as HTMLElement | null;
+    const start = startByCap || startByChapter;
+    if (!start) return { start: null, next: null };
+
+    const anchors = getChapterAnchors(container);
+    const idx = anchors.findIndex((el) => el === start);
+    if (idx < 0) return { start, next: null };
+
+    return { start, next: anchors[idx + 1] || null };
+}
+
+function isElementWithinBounds(element: HTMLElement, start: HTMLElement, next: HTMLElement | null): boolean {
+    const isAfterStart = start === element
+        || Boolean(start.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING);
+    if (!isAfterStart) return false;
+    if (!next) return true;
+    return Boolean(element.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
+function resolveSectionElement(container: HTMLElement, targetId: string): HTMLElement | null {
+    const sectionMeta = getSectionTargetMeta(targetId);
+    if (!sectionMeta) return null;
+
+    const { capitulo, sectionType } = sectionMeta;
+    const { start, next } = getChapterBounds(container, capitulo);
+    const isInChapter = (candidate: HTMLElement) =>
+        !start || isElementWithinBounds(candidate, start, next);
+
+    for (const selector of SECTION_SELECTOR_FALLBACKS[sectionType]) {
+        const candidate = Array.from(container.querySelectorAll(selector))
+            .find((node) => node instanceof HTMLElement && isInChapter(node as HTMLElement)) as HTMLElement | undefined;
+
+        if (candidate) {
+            if (!candidate.id) candidate.id = targetId;
+            return candidate;
+        }
+    }
+
+    const headingRegex = SECTION_TEXT_FALLBACKS[sectionType];
+    const heading = Array.from(container.querySelectorAll('h2, h3, h4, p, strong'))
+        .find((node) =>
+            node instanceof HTMLElement
+            && isInChapter(node as HTMLElement)
+            && headingRegex.test((node.textContent || '').trim())
+        ) as HTMLElement | undefined;
+
+    if (!heading) return null;
+
+    const sectionRoot = heading.closest('div, section, article, blockquote') as HTMLElement | null;
+    const resolved = sectionRoot || heading;
+    if (!resolved.id) resolved.id = targetId;
+    return resolved;
+}
+
 interface ResultData {
     type?: 'text' | 'code';
     markdown?: string;
@@ -153,6 +246,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     onContentReady
 }: ResultDisplayProps) {
     const { sidebarPosition } = useSettings();
+    const { userName, userImageUrl, isSignedIn, isLoading: isAuthLoading, userId } = useAuth();
     const containerRef = useRef<HTMLDivElement>(null);
     const [targetId, setTargetId] = useState<string | string[] | null>(null);
     const latestScrollTopRef = useRef(0);
@@ -170,6 +264,158 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     // Sidebar collapsed state for lateral layout
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), []);
+
+    // ── Sistema de Comentários (Google Docs Style) ─────────────────────────
+    const [commentsEnabled, setCommentsEnabled] = useState(false);
+    const toggleComments = useCallback(() => {
+        if (isAuthLoading) {
+            toast.error('Aguarde a autenticação carregar e tente novamente.');
+            return;
+        }
+        if (!isSignedIn) {
+            toast.error('Faça login para usar comentários.');
+            return;
+        }
+        if (import.meta.env.DEV && typeof window !== 'undefined') {
+            const host = window.location.hostname;
+            const isLanHost = host !== 'localhost' && host !== '127.0.0.1';
+            if (isLanHost) {
+                toast.error('Comentários exigem token Clerk válido. Em desenvolvimento, use http://localhost:5173.');
+                return;
+            }
+        }
+        setCommentsEnabled(prev => !prev);
+    }, [isSignedIn, isAuthLoading]);
+
+    const contentRef = useRef<HTMLDivElement>(null);
+    const { selection, clearSelection, onPopoverMouseDown } = useTextSelection(contentRef);
+
+    const [pendingComment, setPendingComment] = useState<PendingCommentEntry | null>(null);
+    const {
+        comments: localComments,
+        addComment,
+        editComment,
+        removeComment,
+        commentedAnchors,
+        loadCommentedAnchors,
+        loadComments,
+        resetFetchedAnchors,
+    } = useComments();
+    const commentedAnchorsLoadedRef = useRef(false);
+
+    // Drawer state for responsive screens < 1280px
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const toggleDrawer = useCallback(() => setDrawerOpen(prev => !prev), []);
+
+    /** Abre o formulário no painel direito ancorado ao trecho selecionado. */
+    const handleOpenComment = useCallback(() => {
+        if (!selection?.anchorKey) {
+            if (selection) toast.error('Selecione texto dentro de um elemento NCM para comentar.');
+            return;
+        }
+        if (!selection) return;
+        const container = containerRef.current;
+        if (!container) return;
+        const containerRect = container.getBoundingClientRect();
+        // anchorTop = posição Y relativa ao topo do scroll container
+        const anchorTop = selection.rect.top - containerRect.top + container.scrollTop;
+        setPendingComment({
+            anchorTop,
+            anchorKey: selection.anchorKey,
+            selectedText: selection.text,
+        });
+        clearSelection();
+        // Em telas estreitas, abre o drawer automaticamente
+        if (window.matchMedia('(max-width: 1280px)').matches) {
+            setDrawerOpen(true);
+        }
+    }, [selection, containerRef, clearSelection]);
+
+    /** Confirma o comentário via API (otimista). */
+    const handleCommentSubmit = useCallback(async (body: string, isPrivate: boolean): Promise<boolean> => {
+        if (!pendingComment) return false;
+        const success = await addComment(
+            pendingComment,
+            body,
+            isPrivate,
+            userName || 'Usuário',
+            userImageUrl || null,
+        );
+        if (success) {
+            setPendingComment(null);
+        }
+        return success;
+    }, [pendingComment, userName, userImageUrl, addComment]);
+
+    const handleDismissComment = useCallback(() => {
+        setPendingComment(null);
+    }, []);
+
+    // ── Carregar anchors com comentários quando ativado ────────────────────
+    useEffect(() => {
+        if (!commentsEnabled) {
+            commentedAnchorsLoadedRef.current = false;
+            return;
+        }
+
+        if (!isSignedIn || isAuthLoading) return;
+        if (commentedAnchorsLoadedRef.current) return;
+
+        commentedAnchorsLoadedRef.current = true;
+        void loadCommentedAnchors();
+    }, [commentsEnabled, loadCommentedAnchors, isSignedIn, isAuthLoading]);
+
+    // ── Aplicar/remover classe .has-comment nos elementos do DOM ──────────
+    useEffect(() => {
+        const container = contentRef.current;
+        if (!container) return;
+
+        // Sempre limpa marcações anteriores
+        container.querySelectorAll('.has-comment').forEach(el => {
+            el.classList.remove('has-comment');
+        });
+
+        // Só aplica quando comments estão ativos e há anchors
+        if (!commentsEnabled || commentedAnchors.length === 0) return;
+
+        commentedAnchors.forEach(anchorKey => {
+            const el = container.querySelector(`[id="${CSS.escape(anchorKey)}"]`);
+            if (el) {
+                el.classList.add('has-comment');
+            }
+        });
+    }, [commentsEnabled, commentedAnchors, isContentReady]);
+
+    // ── Carregar comentários ao clicar em elemento com .has-comment ───────
+    useEffect(() => {
+        const container = contentRef.current;
+        if (!container || !commentsEnabled) return;
+
+        const handleHasCommentClick = (e: Event) => {
+            const target = (e.target as HTMLElement).closest('.has-comment');
+            if (!target) return;
+            const anchorKey = target.id;
+            if (!anchorKey) return;
+
+            // Busca os comentários deste anchor
+            void loadComments(anchorKey, target.getBoundingClientRect().top);
+
+            // Em telas estreitas, abre o drawer
+            if (window.matchMedia('(max-width: 1280px)').matches) {
+                setDrawerOpen(true);
+            }
+        };
+
+        container.addEventListener('click', handleHasCommentClick);
+        return () => container.removeEventListener('click', handleHasCommentClick);
+    }, [commentsEnabled, loadComments]);
+
+    // ── Reset ao mudar de conteúdo ────────────────────────────────────────
+    useEffect(() => {
+        resetFetchedAnchors();
+    }, [data?.markdown, resetFetchedAnchors]);
+
+    // ───────────────────────────────────────────────────────────────────────
     const codeResults = useMemo(() => {
         if (!data || data.type === 'text') return null;
         if (data.resultados && typeof data.resultados === 'object') {
@@ -223,10 +469,40 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         return posicaoAlvo || null;
     }, []);
 
-    const getAnchorIdsFromResultados = useCallback((resultados: any) => {
+    const getSectionAnchorIdsFromResultados = useCallback((resultados: any) => {
         if (!resultados || typeof resultados !== 'object') return [] as string[];
 
         const ids: string[] = [];
+        const chapters = Object.values(resultados) as any[];
+        for (const chapter of chapters) {
+            const capitulo = (chapter?.capitulo || '').toString().trim();
+            if (!capitulo) continue;
+
+            const secoes = chapter?.secoes;
+            let hasStructuredSections = false;
+
+            if (secoes && typeof secoes === 'object') {
+                const sectionTypes: ChapterSectionType[] = ['titulo', 'notas', 'consideracoes', 'definicoes'];
+                for (const sectionType of sectionTypes) {
+                    const sectionContent = (secoes[sectionType] || '').toString().trim();
+                    if (!sectionContent) continue;
+                    hasStructuredSections = true;
+                    ids.push(`chapter-${capitulo}-${sectionType}`);
+                }
+            }
+
+            if (!hasStructuredSections && (chapter?.notas_gerais || '').toString().trim()) {
+                ids.push(`chapter-${capitulo}-notas`);
+            }
+        }
+
+        return ids;
+    }, []);
+
+    const getAnchorIdsFromResultados = useCallback((resultados: any) => {
+        if (!resultados || typeof resultados !== 'object') return [] as string[];
+
+        const ids = getSectionAnchorIdsFromResultados(resultados);
         const chapters = Object.values(resultados) as any[];
         for (const chapter of chapters) {
             const positions = Array.isArray(chapter?.posicoes) ? chapter.posicoes : [];
@@ -236,8 +512,17 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                 ids.push(pos?.anchor_id || generateAnchorId(codigo));
             }
         }
-        return ids;
-    }, []);
+        return Array.from(new Set(ids));
+    }, [getSectionAnchorIdsFromResultados]);
+
+    const ensureSectionAnchors = useCallback((resultados: any, container: HTMLElement) => {
+        const sectionIds = getSectionAnchorIdsFromResultados(resultados);
+        for (const sectionId of sectionIds) {
+            const existing = container.querySelector(`#${CSS.escape(sectionId)}`) as HTMLElement | null;
+            if (existing) continue;
+            resolveSectionElement(container, sectionId);
+        }
+    }, [getSectionAnchorIdsFromResultados]);
 
     // Sidebar Navigation Handler
     const handleNavigate = useCallback((targetId: string) => {
@@ -253,10 +538,17 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             element = container.querySelector(`#${CSS.escape(generatedId)}`) as HTMLElement | null;
         }
 
+        // Section fallback: backend HTML may provide section classes without stable IDs.
+        if (!element) {
+            element = resolveSectionElement(container, targetId);
+        }
+
         if (element) {
             element.scrollIntoView({ behavior: 'smooth', block: 'start' });
             element.classList.add('flash-highlight');
             setTimeout(() => element.classList.remove('flash-highlight'), 2000);
+            const nextAnchor = element.id || targetId;
+            setActiveAnchorId(prev => (prev === nextAnchor ? prev : nextAnchor));
         } else {
             debug.warn('[Navigate] target not found:', targetId);
         }
@@ -424,7 +716,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             setIsContentReady(true);
             return;
         }
-        if (!containerRef.current) return;
+        if (!contentRef.current) return;
 
         const rawMarkdown = typeof data?.markdown === 'string' ? data.markdown.trim() : '';
         const isTipi = isTipiResults(codeResults || null);
@@ -444,7 +736,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         }
 
         if (!markupToRender) {
-            containerRef.current.innerHTML = '';
+            if (contentRef.current) contentRef.current.textContent = '';
             renderedMarkupKeyRef.current = null;
             setIsContentReady(true);
             return;
@@ -453,7 +745,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         try {
             const shouldParseMarkdown = !!rawMarkdown && isLikelyLegacyMarkdown(markupToRender);
             const cacheKey = `${shouldParseMarkdown ? 'md' : 'html'}:${markupToRender}`;
-            const container = containerRef.current;
+            const container = contentRef.current!;
             const isAlreadyRendered = renderedMarkupKeyRef.current === cacheKey && container.childNodes.length > 0;
 
             if (isAlreadyRendered) {
@@ -465,7 +757,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
             if (!isActive && !isAlreadyRendered) {
                 // Clear stale markup for this tab until it is activated.
-                container.innerHTML = '';
+                container.textContent = '';
                 setIsContentReady(false);
                 return;
             }
@@ -517,10 +809,10 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             if (htmlLength <= CHUNK_SIZE_THRESHOLD) {
                 // Small payload: render in one shot (TIPI, small chapters)
                 const frameId = requestAnimationFrame(() => {
-                    if (!containerRef.current || containerRef.current !== container) return;
+                    if (!contentRef.current) return;
                     const template = document.createElement('template');
                     template.innerHTML = finalMarkup;
-                    containerRef.current.replaceChildren(template.content);
+                    contentRef.current.replaceChildren(template.content);
                     renderedMarkupKeyRef.current = cacheKey;
                     setIsContentReady(true);
                 });
@@ -533,14 +825,14 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             let cancelled = false;
 
             const frameId = requestAnimationFrame(() => {
-                if (cancelled || !containerRef.current || containerRef.current !== container) return;
+                if (cancelled || !contentRef.current) return;
 
                 // Clear previous content and insert first chunk immediately
-                container.textContent = '';
+                contentRef.current.textContent = '';
                 if (chunks.length > 0) {
                     const template = document.createElement('template');
                     template.innerHTML = chunks[0];
-                    container.appendChild(template.content);
+                    contentRef.current.appendChild(template.content);
                 }
 
                 renderedMarkupKeyRef.current = cacheKey;
@@ -556,10 +848,10 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                         : (cb: () => void) => setTimeout(cb, 16) as unknown as number;
 
                     const idleId = scheduleFn(() => {
-                        if (cancelled || !containerRef.current || containerRef.current !== container) return;
+                        if (cancelled || !contentRef.current) return;
                         const template = document.createElement('template');
                         template.innerHTML = chunks[index];
-                        containerRef.current.appendChild(template.content);
+                        contentRef.current.appendChild(template.content);
                         enqueueChunk(index + 1);
                     });
                     pendingIdleIds.push(idleId as number);
@@ -580,11 +872,11 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
         } catch (e) {
             console.error("Content render error:", e);
-            containerRef.current.innerText = "Error rendering content.";
+            if (contentRef.current) contentRef.current.innerText = 'Error rendering content.';
             renderedMarkupKeyRef.current = null;
             setIsContentReady(true);
         }
-    }, [codeResults, data?.type, data?.markdown, isActive]);
+    }, [codeResults, data?.type, data?.markdown, isActive, contentRef]);
 
     // Ensure target anchor exists by using data-ncm as fallback
     useEffect(() => {
@@ -612,6 +904,12 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             setTargetId(id);
         }
     }, [codeResults, data?.ncm, data?.query, getPosicaoAlvoFromResultados, isContentReady, targetId]);
+
+    // Ensure structured section anchors exist for sidebar navigation/highlight syncing.
+    useEffect(() => {
+        if (!isContentReady || !codeResults || !containerRef.current) return;
+        ensureSectionAnchors(codeResults, containerRef.current);
+    }, [codeResults, ensureSectionAnchors, isContentReady]);
 
     // Sync Sidebar to current visible anchor
     useEffect(() => {
@@ -699,14 +997,72 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                     : (sidebarCollapsed ? '◀' : '▶')}
             </button>
 
-            {/* Content - Coluna 1 */}
+            {/* Content scroll container - Coluna 1 */}
             <div
                 className={`${styles.content} ${isContentReady ? styles.contentVisible : styles.contentHidden} markdown-body`}
-                ref={containerRef}
+                ref={(el) => {
+                    // containerRef = scroll container (para scroll tracking e texto selection)
+                    (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+                }}
                 id={containerId}
             >
-                {!data.markdown && !isTipiResults(codeResults || null) && <p>Sem resultados para exibir.</p>}
+                {/* Texto renderizado via contentRef (innerHTML injection) */}
+                <div
+                    className={styles.contentText}
+                    ref={(el) => {
+                        (contentRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+                    }}
+                >
+                    {!data.markdown && !isTipiResults(codeResults || null) && <p>Sem resultados para exibir.</p>}
+                </div>
+
+                {/* Painel de Comentários (Google Docs style) — só exibido quando ativado */}
+                {commentsEnabled && (
+                    <CommentPanel
+                        pending={pendingComment}
+                        comments={localComments}
+                        onSubmit={handleCommentSubmit}
+                        onDismiss={handleDismissComment}
+                        onEdit={editComment}
+                        onDelete={removeComment}
+                        currentUserId={userId}
+                    />
+                )}
             </div>
+
+            {/* Toggle de Comentários */}
+            <button
+                className={`${styles.commentToggle} ${commentsEnabled ? styles.commentToggleActive : ''}`}
+                onClick={toggleComments}
+                aria-label={commentsEnabled ? 'Desativar comentários' : 'Ativar comentários'}
+                title={commentsEnabled ? 'Desativar comentários' : 'Ativar comentários'}
+            >
+                💬
+            </button>
+
+            {/* Botão bolha flutuante (aparece ao selecionar texto, se comentários ativos) */}
+            {commentsEnabled && selection && (
+                <HighlightPopover
+                    selection={selection}
+                    onRequestComment={handleOpenComment}
+                    onPopoverMouseDown={onPopoverMouseDown}
+                />
+            )}
+
+            {/* Drawer de Comentários — responsivo < 1280px */}
+            {commentsEnabled && (
+                <CommentDrawer
+                    open={drawerOpen}
+                    onClose={toggleDrawer}
+                    pending={pendingComment}
+                    comments={localComments}
+                    onSubmit={handleCommentSubmit}
+                    onDismiss={handleDismissComment}
+                    onEdit={editComment}
+                    onDelete={removeComment}
+                    currentUserId={userId}
+                />
+            )}
 
             {/* Sidebar Container - Coluna 2 */}
             {shouldRenderSidebar && (

@@ -53,6 +53,26 @@ VITE_CLERK_PUBLISHABLE_KEY=pk_test_sua_chave
 
 Sem `VITE_CLERK_PUBLISHABLE_KEY`, o frontend exibe apenas a tela de erro de configuração.
 
+Para comentários autenticados com Clerk (`/api/comments/*`), configure também:
+
+- Template no Clerk Dashboard: `backend_api` com `aud = "fiscal-api"`.
+- em `.env`:
+
+```env
+AUTH__CLERK_DOMAIN=your-instance.clerk.accounts.dev
+AUTH__CLERK_ISSUER=https://your-instance.clerk.accounts.dev
+AUTH__CLERK_AUDIENCE=fiscal-api
+AUTH__CLERK_AUTHORIZED_PARTIES=["http://localhost:5173","http://127.0.0.1:5173"]
+AUTH__CLERK_CLOCK_SKEW_SECONDS=120
+```
+
+- em `client/.env.local`:
+
+```env
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_sua_chave
+VITE_CLERK_TOKEN_TEMPLATE=backend_api
+```
+
 ### 3) Preparar dados locais (SQLite)
 
 ```powershell
@@ -84,6 +104,20 @@ npm run dev
 
 Acesse `http://127.0.0.1:5173`.
 
+Alternativa com script único (Windows):
+
+```powershell
+.\start_nesh_dev.bat
+```
+
+Para diagnóstico de autenticação Clerk no frontend:
+
+```powershell
+.\start_nesh_dev.bat --auth-debug
+```
+
+O script faz preflight, executa `docker compose up -d` automaticamente, espera os serviços (`db`, `redis`, `pgadmin`) e bloqueia startup se faltarem variáveis obrigatórias de auth em `.env` (`AUTH__CLERK_DOMAIN`, `AUTH__CLERK_ISSUER`, `AUTH__CLERK_AUDIENCE`, `AUTH__CLERK_AUTHORIZED_PARTIES`, `AUTH__CLERK_CLOCK_SKEW_SECONDS`) ou em `client/.env.local` (`VITE_CLERK_PUBLISHABLE_KEY`, `VITE_CLERK_TOKEN_TEMPLATE`). Em caso de falha, exibe checklist com ações manuais.
+
 Healthcheck backend:
 
 ```powershell
@@ -112,6 +146,59 @@ Status observado em **2026-02-07**:
 - `cd client && npm run lint`: OK
 - `cd client && npm run test`: OK (suite estável, sem perf)
 - `cd client && npm run build`: OK
+
+Status observado em **2026-02-19** (fechamento da Fase 0 de cobertura):
+
+- Backend:
+  - `.\.venv\Scripts\python -m pytest -q --cov=backend --cov-report=term`: **429 passed, 12 deselected**
+  - Cobertura backend total: **91%**
+- Frontend:
+  - `cd client && npm test -- --run`: **167 passed**
+  - `cd client && npm run test:coverage`:
+    - Statements: **89.66%**
+    - Branches: **76.83%**
+    - Functions: **89.92%**
+    - Lines: **92.47%**
+
+Ganhos relevantes na Fase 0:
+
+- `client/src/components/ResultDisplay.tsx`: **91.07% statements**
+- `client/src/components/SettingsModal.tsx`: **100% statements**
+- `client/src/hooks/useTabs.ts`: **100% statements**
+- `client/src/types/api.types.ts`: **100% statements**
+
+Status observado em **2026-02-19** (fechamento da Fase 1 de cobertura frontend):
+
+- Frontend:
+  - `cd client && npm test -- --run`: **191 passed**
+  - `cd client && npm run test:coverage`:
+    - Statements: **92.12%**
+    - Branches: **80.66%**
+    - Functions: **91.21%**
+    - Lines: **94.93%**
+- Módulos foco da Fase 1 (branches):
+  - `client/src/components/TabsBar.tsx`: **92.85% branches** (**100% statements**)
+  - `client/src/hooks/useSearch.ts`: **89.13% branches** (**100% statements**)
+  - `client/src/utils/id_utils.ts`: **97.05% branches** (**100% statements**)
+  - `client/src/context/AuthContext.tsx`: **100% branches** (**100% statements**)
+
+Status observado em **2026-02-19** (fechamento da Fase 2 de cobertura frontend):
+
+- Frontend:
+  - `cd client && npm test -- --run`: **211 passed**
+  - `cd client && npm run test:coverage`:
+    - Statements: **93.95%**
+    - Branches: **82.83%**
+    - Functions: **94.30%**
+    - Lines: **96.26%**
+- Módulos foco da Fase 2 (branches):
+  - `client/src/components/SearchBar.tsx`: **90.90% branches** (**100% statements**)
+  - `client/src/context/SettingsContext.tsx`: **100% branches** (**100% statements**)
+  - `client/src/components/StatsModal.tsx`: **100% branches** (**100% statements**)
+  - `client/src/components/TextSearchResults.tsx`: **96.87% branches** (**100% statements**)
+- Módulos novos estabilizados para evitar regressão global:
+  - `client/src/components/HighlightPopover.tsx`: **94.11% branches** (**96.15% statements**)
+  - `client/src/hooks/useTextSelection.ts`: **100% branches** (**100% statements**)
 
 Guia curto de estratégia, marcadores e escopo de testes: `docs/TESTING.md`.
 Observação: suites legadas/diagnóstico fora do contrato oficial ficam excluídas do fluxo padrão.
@@ -165,7 +252,6 @@ Mudanças principais já aplicadas:
 - renderer backend otimizado (pipeline unificado de transformações)
 - resposta NESH em `markdown` agora com HTML puro (fallback markdown legado só no frontend)
 - short-circuit de cache na rota `/api/search` com header `X-Payload-Cache: MISS|HIT`
-- melhoria de responsividade em multi-busca no frontend (execução sequencial e render diferido em abas inativas)
 
 ## Configuração (env vars usadas)
 
@@ -175,10 +261,16 @@ Mudanças principais já aplicadas:
 | `DATABASE__POSTGRES_URL` | URL asyncpg usada quando engine = `postgresql` |
 | `SERVER__ENV` | Comportamento de middleware/auth (`development` habilita fallbacks) |
 | `AUTH__CLERK_DOMAIN` | Validação JWT via JWKS do Clerk |
+| `AUTH__CLERK_ISSUER` | Valida `iss` explicitamente (`https://<seu-dominio-clerk>`) |
+| `AUTH__CLERK_AUDIENCE` | Valida `aud` no backend (ex: `fiscal-api`) |
+| `AUTH__CLERK_AUTHORIZED_PARTIES` | Valida `azp` (lista JSON; ex: `localhost` e `127.0.0.1`) |
+| `AUTH__CLERK_CLOCK_SKEW_SECONDS` | Tolerância de clock para `exp/iat/nbf` (recomendado `120` em dev local) |
 | `BILLING__ASAAS_WEBHOOK_TOKEN` | Validação de token no webhook `/api/webhooks/asaas` |
 | `SECURITY__AI_CHAT_REQUESTS_PER_MINUTE` | Rate limit do endpoint `/api/ai/chat` |
 | `GOOGLE_API_KEY` | Habilita integração Gemini no serviço de IA |
 | `VITE_CLERK_PUBLISHABLE_KEY` | Obrigatório para o frontend montar com Clerk |
+| `VITE_CLERK_TOKEN_TEMPLATE` | Template usado no `getToken()` do Clerk (recomendado: `backend_api`) |
+| `VITE_AUTH_DEBUG` | (Opcional) habilita logs de diagnóstico JWT no navegador |
 | `VITE_API_URL` / `VITE_API_FILTER_URL` | Base URL de API no frontend (normalizada em runtime) |
 
 ## Estrutura do projeto
