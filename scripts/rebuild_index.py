@@ -6,9 +6,7 @@ Recria o banco de dados incluindo a tabela FTS5 com textos processados.
 import sqlite3
 import re
 import os
-import time
 import json
-import unicodedata
 import sys
 
 # Adiciona diretório pai ao path para importar utils
@@ -33,7 +31,7 @@ try:
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
         config = json.load(f)
         stopwords = config.get("search", {}).get("stopwords", [])
-except:
+except Exception:
     stopwords = []
 
 processor = NeshTextProcessor(stopwords)
@@ -41,7 +39,7 @@ processor = NeshTextProcessor(stopwords)
 
 def extract_positions_from_chapter(chapter_content: str) -> list:
     # Match: 01.01 - or **01.01 -**
-    position_pattern = r"^\s*(?:\*\*|\*)?(\d{2}\.\d{2})(?:\*\*|\*)?\s*-"
+    position_pattern = r"^\s*\*{0,2}(\d{2}\.\d{2})\*{0,2}\s*-"
     positions = []
 
     for line in chapter_content.split("\n"):
@@ -50,7 +48,7 @@ def extract_positions_from_chapter(chapter_content: str) -> list:
             pos = match.group(1)
             # Handle description after dash, potentially removing trailing bold
             desc_match = re.match(
-                r"^\s*(?:\*\*|\*)?\d{2}\.\d{2}(?:\*\*|\*)?\s*-\s*(.+)", line.strip()
+                r"^\s*\*{0,2}\d{2}\.\d{2}\*{0,2}\s*-\s*(.+)", line.strip()
             )
             desc = (
                 desc_match.group(1).replace("**", "").replace("*", "").strip()
@@ -85,7 +83,7 @@ def parse_nesh_file():
         content = f.read()
 
     # Match: Capítulo 1 or **Capítulo 1** at start of line
-    chapter_pattern = r"(?m)^\s*(?:\*\*|\*)?Capítulo\s+(\d+)\s*(?:\*\*|\*)?\s*$"
+    chapter_pattern = r"(?m)^\s*\*{0,2}Capítulo\s+(\d+)\*{0,2}\s*$"
     matches = list(re.finditer(chapter_pattern, content))
     chapters = {}
 
@@ -101,7 +99,7 @@ def parse_nesh_file():
 def create_database(chapters: dict):
     if os.path.exists(DB_FILE):
         os.remove(DB_FILE)
-        print(f"🗑️  Banco anterior removido")
+        print("🗑️  Banco anterior removido")
 
     print(f"🔨 Reconstruindo {DB_FILE} com FTS Stemmed...")
 
@@ -230,7 +228,7 @@ def create_database(chapters: dict):
     fts_count = cursor.fetchone()[0]
 
     conn.close()
-    print(f"✅ Banco recriado com sucesso!")
+    print("✅ Banco recriado com sucesso!")
     print(f"   Capítulos: {count_ch}")
     print(f"   Posições: {count_pos}")
     print(f"   Entradas FTS: {fts_count}")
