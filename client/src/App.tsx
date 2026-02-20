@@ -127,7 +127,7 @@ function App() {
 
         let target: HTMLElement | null = null;
         for (const sel of selectors) {
-            const el = container.querySelector(sel);
+            const el = container.querySelector<HTMLElement>(sel);
             if (el) {
                 target = el;
                 break;
@@ -301,7 +301,7 @@ function App() {
 
     // Ponte legado + ponte de configuracoes
     useEffect(() => {
-        globalThis.nesh = {
+        (globalThis as any).nesh = {
             smartLinkSearch: (ncm: string) => {
                 handleSearchRef.current(ncm);
             },
