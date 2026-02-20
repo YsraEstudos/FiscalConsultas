@@ -1,6 +1,5 @@
 import os
 import logging
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +14,6 @@ def verify_frontend_build(project_root: str) -> None:
     client_dir = os.path.join(project_root, "client")
     dist_dir = os.path.join(client_dir, "dist")
     index_html = os.path.join(dist_dir, "index.html")
-    src_dir = os.path.join(client_dir, "src")
 
     # 1. Check existence
     if not os.path.exists(dist_dir) or not os.path.exists(index_html):

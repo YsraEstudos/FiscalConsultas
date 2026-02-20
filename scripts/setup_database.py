@@ -10,7 +10,6 @@ import time
 import hashlib
 import json
 import zipfile
-import shutil
 import sys
 
 # Adiciona diretório pai ao path para importar utils
@@ -139,7 +138,6 @@ def extract_chapter_notes(chapter_content: str) -> str:
     """
     lines = chapter_content.split("\n")
     notes_lines = []
-    in_notes = False
     notes_started = False
 
     for i, line in enumerate(lines):
@@ -152,7 +150,6 @@ def extract_chapter_notes(chapter_content: str) -> str:
 
         # Detecta início das notas
         if re.match(r"^Notas?\.?$", stripped, re.IGNORECASE):
-            in_notes = True
             notes_started = True
             notes_lines.append(stripped)
             continue
@@ -253,7 +250,7 @@ def create_database(chapters: dict, content_hash: str):
     if os.path.exists(DB_FILE):
         try:
             os.remove(DB_FILE)
-            print(f"🗑️  Banco anterior removido")
+            print("🗑️  Banco anterior removido")
         except PermissionError:
             print(
                 f"❌ Erro: Não foi possível remover {DB_FILE}. O arquivo pode estar em uso."
@@ -371,7 +368,7 @@ def create_database(chapters: dict, content_hash: str):
 
     conn.close()
 
-    print(f"\n✅ Banco de dados criado com sucesso!")
+    print("\n✅ Banco de dados criado com sucesso!")
     print(f"   📊 Capítulos: {num_chapters}")
     print(f"   📊 Posições NCM: {num_positions}")
     print(f"   📊 Regras Gerais: {num_notes} capítulos com notas")
@@ -434,7 +431,7 @@ def main():
 
         return
 
-    print(f"\n🔎 Alteração detectada ou banco inexistente.")
+    print("\n🔎 Alteração detectada ou banco inexistente.")
     print(f"   Hash Arquivo: {current_hash[:8]}...")
     print(f"   Hash Banco:   {db_hash[:8] if db_hash else 'Nenhum'}...")
 

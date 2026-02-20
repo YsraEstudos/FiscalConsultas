@@ -67,10 +67,6 @@ def test_search_regression(client, snapshot_data, query):
 
     # Validate count
     # Handle both 'results' list length and 'total_capitulos' depending on response structure
-    current_count = len(data.get("results", []))
-    if data.get("total_capitulos"):
-        current_count = data.get("total_capitulos")
-
     expected_count = expected.get("count")
 
     # Note: original script logic had a specific check:
