@@ -9,11 +9,12 @@ from typing import Dict, List, Optional, Any, Union, TypedDict
 class Position(TypedDict):
     """
     Representa uma posição NCM dentro de um capítulo.
-    
+
     Attributes:
         codigo: Código da posição (ex: "73.15", "85.07")
         descricao: Descrição resumida da posição
     """
+
     codigo: str
     descricao: str
     anchor_id: str  # ID único para navegação (ex: "pos-8517-10-00")
@@ -22,7 +23,7 @@ class Position(TypedDict):
 class ChapterData(TypedDict):
     """
     Dados brutos de um capítulo do banco de dados.
-    
+
     Attributes:
         chapter_num: Número do capítulo (ex: "73", "85")
         content: Conteúdo textual completo do capítulo
@@ -31,6 +32,7 @@ class ChapterData(TypedDict):
         parsed_notes: Dicionário de notas parseadas {numero: conteudo}
         sections: Seções estruturadas (titulo, notas, consideracoes, definicoes)
     """
+
     chapter_num: str
     content: str
     positions: List[Position]
@@ -42,7 +44,7 @@ class ChapterData(TypedDict):
 class SearchResult(TypedDict):
     """
     Resultado de busca por código NCM.
-    
+
     Attributes:
         ncm_buscado: NCM original da query
         capitulo: Número do capítulo encontrado
@@ -55,6 +57,7 @@ class SearchResult(TypedDict):
         erro: Mensagem de erro (se houver)
         secoes: Seções estruturadas (titulo, notas, consideracoes, definicoes)
     """
+
     ncm_buscado: str
     capitulo: str
     posicao_alvo: Optional[str]
@@ -70,7 +73,7 @@ class SearchResult(TypedDict):
 class ServiceResponse(TypedDict):
     """
     Resposta padronizada do serviço de busca.
-    
+
     Attributes:
         success: Se a operação foi bem-sucedida
         type: Tipo de busca ('code' ou 'text')
@@ -79,6 +82,7 @@ class ServiceResponse(TypedDict):
         results: Resultados da busca
         total_capitulos: Quantidade de capítulos retornados
     """
+
     success: bool
     type: str  # 'code' ou 'text'
     query: str

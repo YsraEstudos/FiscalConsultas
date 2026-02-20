@@ -2,6 +2,7 @@ import { render, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ResultDisplay } from '../src/components/ResultDisplay';
 import { SettingsProvider } from '../src/context/SettingsContext';
+import { AuthProvider } from '../src/context/AuthContext';
 
 // Mock dependencies
 vi.mock('../src/components/TextSearchResults', () => ({ TextSearchResults: () => null }));
@@ -50,17 +51,19 @@ describe('Reproduction: 8417 Search Issue', () => {
         };
 
         const { container } = render(
-            <SettingsProvider>
-                <ResultDisplay
-                    data={mockData}
-                    mobileMenuOpen={false}
-                    onCloseMobileMenu={vi.fn()}
-                    isActive={true}
-                    tabId="tab-bug-repro"
-                    isNewSearch={true}
-                    onConsumeNewSearch={vi.fn()}
-                />
-            </SettingsProvider>
+            <AuthProvider>
+                <SettingsProvider>
+                    <ResultDisplay
+                        data={mockData}
+                        mobileMenuOpen={false}
+                        onCloseMobileMenu={vi.fn()}
+                        isActive={true}
+                        tabId="tab-bug-repro"
+                        isNewSearch={true}
+                        onConsumeNewSearch={vi.fn()}
+                    />
+                </SettingsProvider>
+            </AuthProvider>
         );
 
         // Run logic

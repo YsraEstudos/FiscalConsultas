@@ -80,18 +80,20 @@ describe('Same-Chapter Navigation (integration)', () => {
         const onPersistScroll = vi.fn();
 
         const { container, rerender } = render(
-            <SettingsProvider>
-                <ResultDisplay
-                    data={chapter84Data}
-                    mobileMenuOpen={false}
-                    onCloseMobileMenu={vi.fn()}
-                    isActive={true}
-                    tabId="tab-1"
-                    isNewSearch={true}
-                    onConsumeNewSearch={onConsumeNewSearch}
-                    onPersistScroll={onPersistScroll}
-                />
-            </SettingsProvider>
+            <AuthProvider>
+                <SettingsProvider>
+                    <ResultDisplay
+                        data={chapter84Data}
+                        mobileMenuOpen={false}
+                        onCloseMobileMenu={vi.fn()}
+                        isActive={true}
+                        tabId="tab-1"
+                        isNewSearch={true}
+                        onConsumeNewSearch={onConsumeNewSearch}
+                        onPersistScroll={onPersistScroll}
+                    />
+                </SettingsProvider>
+            </AuthProvider>
         );
 
         // Wait for initial content to be ready
@@ -109,18 +111,20 @@ describe('Same-Chapter Navigation (integration)', () => {
         };
 
         rerender(
-            <SettingsProvider>
-                <ResultDisplay
-                    data={updatedData}
-                    mobileMenuOpen={false}
-                    onCloseMobileMenu={vi.fn()}
-                    isActive={true}
-                    tabId="tab-1"
-                    isNewSearch={true}
-                    onConsumeNewSearch={onConsumeNewSearch}
-                    onPersistScroll={onPersistScroll}
-                />
-            </SettingsProvider>
+            <AuthProvider>
+                <SettingsProvider>
+                    <ResultDisplay
+                        data={updatedData}
+                        mobileMenuOpen={false}
+                        onCloseMobileMenu={vi.fn()}
+                        isActive={true}
+                        tabId="tab-1"
+                        isNewSearch={true}
+                        onConsumeNewSearch={onConsumeNewSearch}
+                        onPersistScroll={onPersistScroll}
+                    />
+                </SettingsProvider>
+            </AuthProvider>
         );
 
         // Verify that the scroll target changed to 8422

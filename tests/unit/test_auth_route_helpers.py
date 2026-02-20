@@ -55,19 +55,29 @@ def test_extract_client_ip_returns_unknown_when_not_available():
     assert auth._extract_client_ip(request) == "unknown"
 
 
-def test_build_limiter_key_uses_user_id_when_token_has_sub(monkeypatch):
+@pytest.mark.asyncio
+async def test_build_limiter_key_uses_user_id_when_token_has_sub(monkeypatch):
     request = _build_request(client_host="203.0.113.12")
-    monkeypatch.setattr(auth, "decode_clerk_jwt", lambda _token: {"sub": "user_abc"})
+
+    async def _mock_decode(_token):
+        return {"sub": "user_abc"}
+
+    monkeypatch.setattr(auth, "decode_clerk_jwt", _mock_decode)
 
     sample_jwt = "token-value"
-    key = auth._build_limiter_key(request, token=sample_jwt)
+    key = await auth._build_limiter_key(request, token=sample_jwt)
     assert key == "ai:user:user_abc"
 
 
-def test_build_limiter_key_falls_back_to_ip_when_sub_missing(monkeypatch):
+@pytest.mark.asyncio
+async def test_build_limiter_key_falls_back_to_ip_when_sub_missing(monkeypatch):
     request = _build_request(client_host="203.0.113.12")
-    monkeypatch.setattr(auth, "decode_clerk_jwt", lambda _token: {"org_id": "org_123"})
+
+    async def _mock_decode(_token):
+        return {"org_id": "org_123"}
+
+    monkeypatch.setattr(auth, "decode_clerk_jwt", _mock_decode)
 
     sample_jwt = "token-value"
-    key = auth._build_limiter_key(request, token=sample_jwt)
+    key = await auth._build_limiter_key(request, token=sample_jwt)
     assert key == "ai:ip:203.0.113.12"

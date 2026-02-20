@@ -8,16 +8,16 @@ pytestmark = pytest.mark.unit
 
 def test_stemmer_plural_rules_cover_specific_suffixes():
     s = PortugueseStemmer()
-    assert s.step_plural("trens") == "trem"          # ns -> m
-    assert s.step_plural("animais") == "animal"      # ais -> al
-    assert s.step_plural("papeis") == "papel"        # eis -> el
-    assert s.step_plural("lencois") == "lencol"      # ois -> ol
-    assert s.step_plural("funis") == "funil"         # is -> il
-    assert s.step_plural("males") == "mal"           # les -> l
-    assert s.step_plural("motores") == "motor"       # res -> trim 2
-    assert s.step_plural("luzes") == "luz"           # es with s/z/r rule
-    assert s.step_plural("paredes") == "parede"      # generic es -> e
-    assert s.step_plural("carros") == "carro"        # generic s
+    assert s.step_plural("trens") == "trem"  # ns -> m
+    assert s.step_plural("animais") == "animal"  # ais -> al
+    assert s.step_plural("papeis") == "papel"  # eis -> el
+    assert s.step_plural("lencois") == "lencol"  # ois -> ol
+    assert s.step_plural("funis") == "funil"  # is -> il
+    assert s.step_plural("males") == "mal"  # les -> l
+    assert s.step_plural("motores") == "motor"  # res -> trim 2
+    assert s.step_plural("luzes") == "luz"  # es with s/z/r rule
+    assert s.step_plural("paredes") == "parede"  # generic es -> e
+    assert s.step_plural("carros") == "carro"  # generic s
 
 
 def test_stemmer_feminine_rules():

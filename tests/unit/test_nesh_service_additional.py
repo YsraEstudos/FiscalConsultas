@@ -82,7 +82,10 @@ def test_strip_chapter_preamble_and_parse_notes():
     assert stripped.startswith("85.17 -")
 
     assert NeshService._strip_chapter_preamble("") == ""
-    assert NeshService._strip_chapter_preamble("Sem posição NCM aqui") == "Sem posição NCM aqui"
+    assert (
+        NeshService._strip_chapter_preamble("Sem posição NCM aqui")
+        == "Sem posição NCM aqui"
+    )
 
     service = NeshService(db=_FakeDb())
     parsed = service.parse_chapter_notes("1 - Nota um\ncontinua\n2. Nota dois")
@@ -161,12 +164,16 @@ def test_normalize_query_and_normalize_query_raw_apply_filters(monkeypatch):
     service = NeshService(db=_FakeDb())
 
     tokens = " ".join(f"w{i}*" for i in range(30))
-    monkeypatch.setattr(service.processor, "process_query_for_fts", lambda _text: f"{tokens} w1*")
+    monkeypatch.setattr(
+        service.processor, "process_query_for_fts", lambda _text: f"{tokens} w1*"
+    )
     normalized = service.normalize_query("qualquer")
     assert len(normalized.split()) == 20
     assert normalized.split()[1] == "w1*"
 
-    monkeypatch.setattr(service.processor, "normalize", lambda _text: "de a x motor motor bomba")
+    monkeypatch.setattr(
+        service.processor, "normalize", lambda _text: "de a x motor motor bomba"
+    )
     monkeypatch.setattr(service.processor, "stopwords", {"de", "a"})
     normalized_raw = service.normalize_query_raw("qualquer")
     assert normalized_raw == "motor* bomba*"
@@ -188,8 +195,12 @@ async def test_fts_scored_cached_uses_db_once_and_then_hits_memory_cache(monkeyp
     )
     service = NeshService(db=db)
 
-    first = await service._fts_scored_cached("foo*", tier=2, limit=10, words_matched=1, total_words=1)
-    second = await service._fts_scored_cached("foo*", tier=2, limit=10, words_matched=1, total_words=1)
+    first = await service._fts_scored_cached(
+        "foo*", tier=2, limit=10, words_matched=1, total_words=1
+    )
+    second = await service._fts_scored_cached(
+        "foo*", tier=2, limit=10, words_matched=1, total_words=1
+    )
 
     assert db.fts_calls == 1
     assert first == second
@@ -197,11 +208,15 @@ async def test_fts_scored_cached_uses_db_once_and_then_hits_memory_cache(monkeyp
     service_without_db = NeshService(db=None)
     _disable_redis(monkeypatch)
     with pytest.raises(RuntimeError, match="DatabaseAdapter não configurado"):
-        await service_without_db._fts_scored_cached("foo*", tier=2, limit=10, words_matched=1, total_words=1)
+        await service_without_db._fts_scored_cached(
+            "foo*", tier=2, limit=10, words_matched=1, total_words=1
+        )
 
 
 @pytest.mark.asyncio
-async def test_search_full_text_returns_none_match_when_query_becomes_empty(monkeypatch):
+async def test_search_full_text_returns_none_match_when_query_becomes_empty(
+    monkeypatch,
+):
     service = NeshService(db=_FakeDb())
     monkeypatch.setattr(service, "normalize_query", lambda _query: "")
     monkeypatch.setattr(service, "normalize_query_raw", lambda _query: "")
@@ -223,8 +238,12 @@ async def test_search_full_text_combines_tiers_and_applies_near_bonus(monkeypatc
 
     monkeypatch.setattr(service, "normalize_query", lambda _query: "motor* bomba*")
     monkeypatch.setattr(service, "normalize_query_raw", lambda _query: "motor* bomba*")
-    monkeypatch.setattr(service.processor, "process_query_exact", lambda _query: "motor bomba")
-    monkeypatch.setattr(service.processor, "process_query_for_fts", lambda word: f"{word.lower()}*")
+    monkeypatch.setattr(
+        service.processor, "process_query_exact", lambda _query: "motor bomba"
+    )
+    monkeypatch.setattr(
+        service.processor, "process_query_for_fts", lambda word: f"{word.lower()}*"
+    )
 
     async def _fake_fts(query, tier, limit, words_matched, total_words):
         del limit, words_matched, total_words
@@ -331,7 +350,12 @@ async def test_search_by_code_builds_found_and_not_found_chapters(monkeypatch):
                 "positions": [{"codigo": "85.17", "descricao": "Telefone"}],
                 "notes": "1 - Nota",
                 "parsed_notes": {"1": "nota"},
-                "sections": {"titulo": "Titulo", "notas": "", "consideracoes": "", "definicoes": ""},
+                "sections": {
+                    "titulo": "Titulo",
+                    "notas": "",
+                    "consideracoes": "",
+                    "definicoes": "",
+                },
             }
         return None
 
@@ -360,10 +384,14 @@ async def test_process_request_dispatches_between_code_and_text(monkeypatch):
     monkeypatch.setattr(service, "search_by_code", _search_by_code)
     monkeypatch.setattr(service, "search_full_text", _search_full_text)
 
-    monkeypatch.setattr(nesh_service_module.ncm_utils, "is_code_query", lambda _query: True)
+    monkeypatch.setattr(
+        nesh_service_module.ncm_utils, "is_code_query", lambda _query: True
+    )
     assert await service.process_request("8517") == {"origin": "code"}
 
-    monkeypatch.setattr(nesh_service_module.ncm_utils, "is_code_query", lambda _query: False)
+    monkeypatch.setattr(
+        nesh_service_module.ncm_utils, "is_code_query", lambda _query: False
+    )
     assert await service.process_request("telefone") == {"origin": "text"}
 
 

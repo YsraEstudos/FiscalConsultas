@@ -1,3 +1,4 @@
+from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request, HTTPException
 import re
 import time
@@ -12,7 +13,7 @@ from backend.utils.auth import extract_bearer_token, is_admin_payload
 router = APIRouter()
 
 
-def _is_admin_request(request: Request) -> bool:
+async def _is_admin_request(request: Request) -> bool:
     admin_token = request.headers.get("X-Admin-Token")
     if is_valid_admin_token(admin_token):
         return True
@@ -20,7 +21,7 @@ def _is_admin_request(request: Request) -> bool:
     token = extract_bearer_token(request)
     if not token:
         return False
-    payload = decode_clerk_jwt(token)
+    payload = await decode_clerk_jwt(token)
     return is_admin_payload(payload)
 
 
@@ -59,10 +60,7 @@ def _normalize_db_status(raw_stats: dict | None, latency_ms: float) -> dict:
 def _normalize_tipi_status(raw_stats: dict | None) -> dict:
     """Normaliza payload de status da TIPI para o mesmo contrato do banco principal."""
     raw_stats = raw_stats or {}
-    is_online = bool(
-        raw_stats.get("ok") is True
-        or raw_stats.get("status") == "online"
-    )
+    is_online = bool(raw_stats.get("ok") is True or raw_stats.get("status") == "online")
 
     payload = {
         "status": "online" if is_online else "error",
@@ -73,21 +71,22 @@ def _normalize_tipi_status(raw_stats: dict | None) -> dict:
         payload["error"] = str(raw_stats.get("error"))
     return payload
 
+
 @router.get("/status")
 async def get_status(request: Request):
     """
     Healthcheck e Status do Sistema.
-    
+
     Verifica conectividade com:
     - Banco de dados Principal (nesh.db)
     - Banco de dados TIPI (tipi.db)
-    
+
     Retorna versão da API e estado atual dos serviços.
     """
     # Access state directly from request
     db = getattr(request.app.state, "db", None)
     tipi_service = getattr(request.app.state, "tipi_service", None)
-    
+
     start = time.perf_counter()
     if db:
         db_stats = await db.check_connection()
@@ -95,9 +94,14 @@ async def get_status(request: Request):
         try:
             from sqlalchemy import text
             from backend.infrastructure.db_engine import get_session
+
             async with get_session() as session:
-                chapters_count = await session.execute(text("SELECT COUNT(*) FROM chapters"))
-                positions_count = await session.execute(text("SELECT COUNT(*) FROM positions"))
+                chapters_count = await session.execute(
+                    text("SELECT COUNT(*) FROM chapters")
+                )
+                positions_count = await session.execute(
+                    text("SELECT COUNT(*) FROM positions")
+                )
             db_stats = {
                 "status": "online",
                 "chapters": int(chapters_count.scalar() or 0),
@@ -121,7 +125,8 @@ async def get_status(request: Request):
     normalized_tipi = _normalize_tipi_status(tipi_stats)
     overall_status = (
         "online"
-        if normalized_db.get("status") == "online" and normalized_tipi.get("status") == "online"
+        if normalized_db.get("status") == "online"
+        and normalized_tipi.get("status") == "online"
         else "error"
     )
 
@@ -141,7 +146,7 @@ async def get_cache_metrics(request: Request):
     Métricas de hit/miss dos payload caches de /api/search e /api/tipi/search.
     Restrito a admins por conter dados operacionais internos.
     """
-    if not _is_admin_request(request):
+    if not await _is_admin_request(request):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     from backend.presentation.routes import search as search_route
@@ -153,7 +158,9 @@ async def get_cache_metrics(request: Request):
 
     tipi_internal = None
     if hasattr(request.app.state, "tipi_service") and request.app.state.tipi_service:
-        tipi_internal = await request.app.state.tipi_service.get_internal_cache_metrics()
+        tipi_internal = (
+            await request.app.state.tipi_service.get_internal_cache_metrics()
+        )
 
     return {
         "status": "ok",
@@ -167,8 +174,8 @@ async def get_cache_metrics(request: Request):
 @router.get("/debug/anchors")
 async def debug_anchors(
     request: Request,
+    service: Annotated[NeshService, Depends(get_nesh_service)],
     ncm: str = Query(..., description="Código NCM para debug de anchors"),
-    service: NeshService = Depends(get_nesh_service)
 ):
     """
     DEBUG: Retorna o HTML renderizado e lista todos os IDs injetados.
@@ -177,27 +184,27 @@ async def debug_anchors(
     if not settings.features.debug_mode:
         raise HTTPException(status_code=404, detail="Not found")
 
-    if not _is_admin_request(request):
+    if not await _is_admin_request(request):
         raise HTTPException(status_code=403, detail="Forbidden")
-    
+
     response_data = await service.process_request(ncm)
-    
+
     # Collect all IDs from the rendered HTML
-    html_content = response_data.get('markdown', '') or ''
+    html_content = response_data.get("markdown", "") or ""
     id_pattern = re.compile(r'id="([^"]+)"')
     all_ids = id_pattern.findall(html_content)
-    
+
     # Filter to position-related IDs
-    pos_ids = [id for id in all_ids if id.startswith('pos-') or id.startswith('cap-')]
-    
+    pos_ids = [id for id in all_ids if id.startswith("pos-") or id.startswith("cap-")]
+
     return {
         "query": ncm,
-        "normalized": response_data.get('normalized', ncm),
-        "scroll_to_anchor": response_data.get('scroll_to_anchor'),
-        "posicao_alvo": response_data.get('posicao_alvo'),
+        "normalized": response_data.get("normalized", ncm),
+        "scroll_to_anchor": response_data.get("scroll_to_anchor"),
+        "posicao_alvo": response_data.get("posicao_alvo"),
         "all_position_ids": pos_ids,
         "total_ids": len(pos_ids),
-        "html_preview": html_content[:2000] if html_content else None
+        "html_preview": html_content[:2000] if html_content else None,
     }
 
 
@@ -206,7 +213,7 @@ async def reload_secrets(request: Request):
     """
     Recarrega secrets de env/.env sem reiniciar o servidor.
     """
-    if not _is_admin_request(request):
+    if not await _is_admin_request(request):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     reload_settings()

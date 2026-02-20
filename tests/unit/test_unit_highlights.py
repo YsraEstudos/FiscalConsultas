@@ -2,6 +2,7 @@
 Testes abrangentes para o sistema de destaque de unidades de medida.
 Validam a regex MEASUREMENT_UNITS e o método inject_unit_highlights.
 """
+
 import re
 import pytest
 
@@ -11,6 +12,7 @@ from backend.presentation.renderer import HtmlRenderer
 # ═══════════════════════════════════════════════════════════════════
 # Helpers
 # ═══════════════════════════════════════════════════════════════════
+
 
 def _has_highlight(html: str, unit: str) -> bool:
     """Verifica se a unidade está envolvida em <span class="highlight-unit">."""
@@ -26,46 +28,76 @@ def _no_highlight(html: str, word: str) -> bool:
 # 1. Unidades multi-letra tradicionais
 # ═══════════════════════════════════════════════════════════════════
 
+
 class TestMultiLetterUnits:
     """Unidades de 2+ letras que não exigem dígito antes."""
 
-    @pytest.mark.parametrize("unit", [
-        "kWh", "MWh", "Wh",
-        "kVA", "VA",
-        "kW", "MW",
-        "mV", "kV",
-        "mA", "kA",
-        "Ah", "mAh",
-        "Hz", "kHz", "MHz", "GHz",
-        "rpm",
-        "mbar", "MPa", "kPa", "Pa", "psi",
-        "kg", "mg",
-        "km", "cm", "mm",
-        "ml",
-        "ha",
-        "dB",
-        "lux", "lm",
-        "Btu",
-        "kN", "daN",
-        "MJ", "kJ",
-        "pol",
-    ])
+    @pytest.mark.parametrize(
+        "unit",
+        [
+            "kWh",
+            "MWh",
+            "Wh",
+            "kVA",
+            "VA",
+            "kW",
+            "MW",
+            "mV",
+            "kV",
+            "mA",
+            "kA",
+            "Ah",
+            "mAh",
+            "Hz",
+            "kHz",
+            "MHz",
+            "GHz",
+            "rpm",
+            "mbar",
+            "MPa",
+            "kPa",
+            "Pa",
+            "psi",
+            "kg",
+            "mg",
+            "km",
+            "cm",
+            "mm",
+            "ml",
+            "ha",
+            "dB",
+            "lux",
+            "lm",
+            "Btu",
+            "kN",
+            "daN",
+            "MJ",
+            "kJ",
+            "pol",
+        ],
+    )
     def test_multi_letter_unit_highlighted(self, unit: str):
         text = f"Valor de 100 {unit} no teste"
         out = HtmlRenderer.inject_unit_highlights(text)
-        assert _has_highlight(out, unit), f"Unidade '{unit}' deveria ser destacada em: {out}"
+        assert _has_highlight(out, unit), (
+            f"Unidade '{unit}' deveria ser destacada em: {out}"
+        )
 
     @pytest.mark.parametrize("unit", ["µm", "nm", "µF", "pF", "nF", "mF", "µH", "mH"])
     def test_unicode_prefix_units(self, unit: str):
         text = f"Componente de 100 {unit}"
         out = HtmlRenderer.inject_unit_highlights(text)
-        assert _has_highlight(out, unit), f"Unidade '{unit}' deveria ser destacada em: {out}"
+        assert _has_highlight(out, unit), (
+            f"Unidade '{unit}' deveria ser destacada em: {out}"
+        )
 
     @pytest.mark.parametrize("unit", ["Ω", "kΩ", "MΩ", "ohm"])
     def test_resistance_units(self, unit: str):
         text = f"Resistor de 10 {unit}"
         out = HtmlRenderer.inject_unit_highlights(text)
-        assert _has_highlight(out, unit), f"Unidade '{unit}' deveria ser destacada em: {out}"
+        assert _has_highlight(out, unit), (
+            f"Unidade '{unit}' deveria ser destacada em: {out}"
+        )
 
     def test_temperature_units(self):
         for unit in ["°C", "ºC", "°F", "Kelvin"]:
@@ -74,8 +106,22 @@ class TestMultiLetterUnits:
             assert _has_highlight(out, unit), f"'{unit}' deveria ser destacada"
 
     def test_volume_and_area_units(self):
-        for unit in ["m³", "m3", "m²", "m2", "cm³", "cm3", "cm²", "cm2",
-                      "mm³", "mm3", "mm²", "mm2", "m³/h", "m3/h"]:
+        for unit in [
+            "m³",
+            "m3",
+            "m²",
+            "m2",
+            "cm³",
+            "cm3",
+            "cm²",
+            "cm2",
+            "mm³",
+            "mm3",
+            "mm²",
+            "mm2",
+            "m³/h",
+            "m3/h",
+        ]:
             text = f"Capacidade de 50 {unit}"
             out = HtmlRenderer.inject_unit_highlights(text)
             assert _has_highlight(out, unit), f"'{unit}' deveria ser destacada"
@@ -103,6 +149,7 @@ class TestMultiLetterUnits:
 # 2. Unidades de 1 letra (exigem dígito antes)
 # ═══════════════════════════════════════════════════════════════════
 
+
 class TestSingleLetterUnits:
     """Unidades de 1 letra que só casam após um dígito."""
 
@@ -110,13 +157,17 @@ class TestSingleLetterUnits:
     def test_single_letter_after_digit(self, unit: str):
         text = f"Valor de 100 {unit} no componente"
         out = HtmlRenderer.inject_unit_highlights(text)
-        assert _has_highlight(out, unit), f"'{unit}' após dígito deveria ser destacada em: {out}"
+        assert _has_highlight(out, unit), (
+            f"'{unit}' após dígito deveria ser destacada em: {out}"
+        )
 
     @pytest.mark.parametrize("unit", ["W", "V", "A", "K", "m", "l", "t", "g", "N", "J"])
     def test_single_letter_without_digit_not_highlighted(self, unit: str):
         text = f"Texto {unit} sem contexto numérico"
         out = HtmlRenderer.inject_unit_highlights(text)
-        assert _no_highlight(out, unit), f"'{unit}' SEM dígito antes NÃO deveria ser destacada em: {out}"
+        assert _no_highlight(out, unit), (
+            f"'{unit}' SEM dígito antes NÃO deveria ser destacada em: {out}"
+        )
 
     def test_bar_after_digit_highlighted(self):
         out = HtmlRenderer.inject_unit_highlights("Pressão de 100 bar")
@@ -135,6 +186,7 @@ class TestSingleLetterUnits:
 # ═══════════════════════════════════════════════════════════════════
 # 3. Falsos positivos — NÃO devem ser destacados
 # ═══════════════════════════════════════════════════════════════════
+
 
 class TestFalsePositives:
     """Garantir que palavras comuns não sejam falsamente destacadas."""
@@ -192,6 +244,7 @@ class TestFalsePositives:
 # ═══════════════════════════════════════════════════════════════════
 # 4. Edge cases — formatação e pontuação
 # ═══════════════════════════════════════════════════════════════════
+
 
 class TestEdgeCases:
     """Cenários de borda: espaço, pontuação, parênteses, etc."""
@@ -258,23 +311,27 @@ class TestEdgeCases:
 # 5. HTML-aware — smart-links e tags
 # ═══════════════════════════════════════════════════════════════════
 
+
 class TestHtmlAwareness:
     """Garantir que unidades dentro de smart-links não sejam destacadas."""
 
     def test_ignores_units_inside_smart_links(self):
         html = (
-            'fora 37,5 W '
+            "fora 37,5 W "
             '<a href="#" class="smart-link" data-ncm="8516">dentro 10 kW</a> '
-            'fora 10 kW'
+            "fora 10 kW"
         )
         out = HtmlRenderer.inject_unit_highlights(html)
         # fora do link deve destacar
-        assert out.count('highlight-unit') >= 2
+        assert out.count("highlight-unit") >= 2
         # dentro do smart-link NÃO deve destacar
-        assert 'smart-link" data-ncm="8516">dentro 10 <span class="highlight-unit">kW</span>' not in out
+        assert (
+            'smart-link" data-ncm="8516">dentro 10 <span class="highlight-unit">kW</span>'
+            not in out
+        )
 
     def test_units_outside_tags_highlighted(self):
-        html = '<p>Motor de 10 kW</p>'
+        html = "<p>Motor de 10 kW</p>"
         out = HtmlRenderer.inject_unit_highlights(html)
         assert _has_highlight(out, "kW")
 
@@ -294,6 +351,7 @@ class TestHtmlAwareness:
 # ═══════════════════════════════════════════════════════════════════
 # 6. Novas unidades adicionadas
 # ═══════════════════════════════════════════════════════════════════
+
 
 class TestNewUnits:
     """Validar as novas unidades expandidas na regex."""

@@ -21,7 +21,9 @@ def _build_request(
     version: str = "4.2-test",
 ) -> Request:
     headers = headers or {}
-    scope_headers = [(k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in headers.items()]
+    scope_headers = [
+        (k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in headers.items()
+    ]
     app = SimpleNamespace(state=SimpleNamespace(**(state or {})), version=version)
     scope = {
         "type": "http",
@@ -62,7 +64,7 @@ class _FakeNeshService:
     async def get_internal_cache_metrics(self):
         return {"cache": "nesh"}
 
-    async def process_request(self, _ncm: str):
+    async def process_request(self, _ncm: str, **kwargs):
         return self.response
 
 
@@ -77,7 +79,9 @@ async def test_get_status_uses_app_state_services_when_available():
         "/api/status",
         state={
             "db": _FakeDb({"status": "online", "chapters": "5", "positions": "9"}),
-            "tipi_service": _FakeTipiService({"ok": True, "chapters": "3", "positions": "4"}),
+            "tipi_service": _FakeTipiService(
+                {"ok": True, "chapters": "3", "positions": "4"}
+            ),
         },
         version="9.9.9",
     )
@@ -151,7 +155,10 @@ async def test_get_status_handles_db_and_tipi_exceptions(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_cache_metrics_rejects_non_admin(monkeypatch):
-    monkeypatch.setattr(system, "_is_admin_request", lambda _request: False)
+    async def _mock_admin(_request):
+        return False
+
+    monkeypatch.setattr(system, "_is_admin_request", _mock_admin)
     request = _build_request("/api/cache-metrics")
 
     with pytest.raises(HTTPException) as exc:
@@ -165,9 +172,16 @@ async def test_get_cache_metrics_returns_payload_for_admin(monkeypatch):
     from backend.presentation.routes import search as search_route
     from backend.presentation.routes import tipi as tipi_route
 
-    monkeypatch.setattr(system, "_is_admin_request", lambda _request: True)
-    monkeypatch.setattr(search_route, "get_payload_cache_metrics", lambda: {"hits": 1, "misses": 2})
-    monkeypatch.setattr(tipi_route, "get_payload_cache_metrics", lambda: {"hits": 3, "misses": 4})
+    async def _mock_admin(_request):
+        return True
+
+    monkeypatch.setattr(system, "_is_admin_request", _mock_admin)
+    monkeypatch.setattr(
+        search_route, "get_payload_cache_metrics", lambda: {"hits": 1, "misses": 2}
+    )
+    monkeypatch.setattr(
+        tipi_route, "get_payload_cache_metrics", lambda: {"hits": 3, "misses": 4}
+    )
 
     request = _build_request(
         "/api/cache-metrics",
@@ -189,7 +203,11 @@ async def test_get_cache_metrics_returns_payload_for_admin(monkeypatch):
 @pytest.mark.asyncio
 async def test_debug_anchors_returns_404_when_debug_mode_is_disabled(monkeypatch):
     monkeypatch.setattr(system.settings.features, "debug_mode", False, raising=False)
-    monkeypatch.setattr(system, "_is_admin_request", lambda _request: True)
+
+    async def _mock_admin(_request):
+        return True
+
+    monkeypatch.setattr(system, "_is_admin_request", _mock_admin)
     request = _build_request("/api/debug/anchors")
 
     with pytest.raises(HTTPException) as exc:
@@ -201,7 +219,11 @@ async def test_debug_anchors_returns_404_when_debug_mode_is_disabled(monkeypatch
 @pytest.mark.asyncio
 async def test_debug_anchors_returns_403_for_non_admin(monkeypatch):
     monkeypatch.setattr(system.settings.features, "debug_mode", True, raising=False)
-    monkeypatch.setattr(system, "_is_admin_request", lambda _request: False)
+
+    async def _mock_admin(_request):
+        return False
+
+    monkeypatch.setattr(system, "_is_admin_request", _mock_admin)
     request = _build_request("/api/debug/anchors")
 
     with pytest.raises(HTTPException) as exc:
@@ -213,7 +235,11 @@ async def test_debug_anchors_returns_403_for_non_admin(monkeypatch):
 @pytest.mark.asyncio
 async def test_debug_anchors_filters_position_related_ids(monkeypatch):
     monkeypatch.setattr(system.settings.features, "debug_mode", True, raising=False)
-    monkeypatch.setattr(system, "_is_admin_request", lambda _request: True)
+
+    async def _mock_admin(_request):
+        return True
+
+    monkeypatch.setattr(system, "_is_admin_request", _mock_admin)
 
     service = _FakeNeshService(
         {
@@ -229,7 +255,7 @@ async def test_debug_anchors_filters_position_related_ids(monkeypatch):
     )
     request = _build_request("/api/debug/anchors")
 
-    payload = await system.debug_anchors(request, "8517", service)
+    payload = await system.debug_anchors(request=request, ncm="8517", service=service)
 
     assert payload["query"] == "8517"
     assert payload["normalized"] == "8517"
@@ -241,7 +267,10 @@ async def test_debug_anchors_filters_position_related_ids(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_reload_secrets_rejects_non_admin(monkeypatch):
-    monkeypatch.setattr(system, "_is_admin_request", lambda _request: False)
+    async def _mock_admin(_request):
+        return False
+
+    monkeypatch.setattr(system, "_is_admin_request", _mock_admin)
     request = _build_request("/api/admin/reload-secrets", method="POST")
 
     with pytest.raises(HTTPException) as exc:
@@ -257,7 +286,10 @@ async def test_reload_secrets_calls_reload_for_admin(monkeypatch):
     def _fake_reload():
         called["value"] = True
 
-    monkeypatch.setattr(system, "_is_admin_request", lambda _request: True)
+    async def _mock_admin(_request):
+        return True
+
+    monkeypatch.setattr(system, "_is_admin_request", _mock_admin)
     monkeypatch.setattr(system, "reload_settings", _fake_reload)
     request = _build_request("/api/admin/reload-secrets", method="POST")
 

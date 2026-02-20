@@ -40,7 +40,10 @@ def test_ai_chat_requires_authentication(client):
 
 
 def test_ai_chat_success_response_with_dependency_override(client, monkeypatch):
-    monkeypatch.setattr(auth, "decode_clerk_jwt", lambda _token: {"sub": "user_1"})
+    async def _mock_decode(_t):
+        return {"sub": "user_1"}
+
+    monkeypatch.setattr(auth, "decode_clerk_jwt", _mock_decode)
 
     async def _allow_consume(key, limit):
         return True, 0
@@ -59,7 +62,10 @@ def test_ai_chat_success_response_with_dependency_override(client, monkeypatch):
 
 
 def test_ai_chat_returns_retry_after_when_rate_limited(client, monkeypatch):
-    monkeypatch.setattr(auth, "decode_clerk_jwt", lambda _token: {"sub": "user_1"})
+    async def _mock_decode(_t):
+        return {"sub": "user_1"}
+
+    monkeypatch.setattr(auth, "decode_clerk_jwt", _mock_decode)
 
     async def _deny_consume(key, limit):
         return False, 17

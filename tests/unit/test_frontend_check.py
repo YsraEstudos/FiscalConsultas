@@ -23,7 +23,9 @@ def test_verify_frontend_build_warns_when_package_is_newer(monkeypatch):
         lambda p: 200.0 if p.endswith("package.json") else 100.0,
     )
     warnings = []
-    monkeypatch.setattr(frontend_check.logger, "warning", lambda msg: warnings.append(msg))
+    monkeypatch.setattr(
+        frontend_check.logger, "warning", lambda msg: warnings.append(msg)
+    )
     monkeypatch.setattr(frontend_check.logger, "info", lambda _msg: None)
 
     frontend_check.verify_frontend_build("C:/proj")
@@ -52,8 +54,9 @@ def test_verify_frontend_build_handles_exceptions(monkeypatch):
         lambda _p: (_ for _ in ()).throw(RuntimeError("boom")),
     )
     warnings = []
-    monkeypatch.setattr(frontend_check.logger, "warning", lambda msg: warnings.append(msg))
+    monkeypatch.setattr(
+        frontend_check.logger, "warning", lambda msg: warnings.append(msg)
+    )
 
     frontend_check.verify_frontend_build("C:/proj")
     assert any("Failed to verify frontend build freshness" in msg for msg in warnings)
-

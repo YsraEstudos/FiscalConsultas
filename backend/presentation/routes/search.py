@@ -1,3 +1,4 @@
+from typing import Annotated
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from starlette.responses import Response
 from collections import OrderedDict
@@ -16,6 +17,7 @@ from backend.presentation.renderer import HtmlRenderer
 
 import orjson as _orjson
 
+JSON_MEDIA_TYPE = "application/json"
 
 _CODE_PAYLOAD_CACHE_MAX = 16
 _code_payload_cache: OrderedDict[str, tuple[bytes, bytes]] = OrderedDict()
@@ -43,7 +45,7 @@ def _normalize_query_for_cache(ncm: str, *, is_code_query: bool) -> str:
 def _orjson_response(content: dict, headers: dict[str, str] | None = None) -> Response:
     """Build a Response pre-serialized with orjson (5-10x faster than stdlib json)."""
     body = _orjson.dumps(content)
-    resp = Response(content=body, media_type="application/json")
+    resp = Response(content=body, media_type=JSON_MEDIA_TYPE)
     if headers:
         resp.headers.update(headers)
     return resp
@@ -100,31 +102,33 @@ router = APIRouter()
 @router.get("/search")
 async def search(
     request: Request,
-    ncm: str = Query(..., description="Código NCM ou termo textual para busca"),
-    service: NeshService = Depends(get_nesh_service)
+    service: Annotated[NeshService, Depends(get_nesh_service)],
+    ncm: Annotated[
+        str, Query(..., description="Código NCM ou termo textual para busca")
+    ],
 ):
     """
     Busca Principal (NCM/NESH).
-    
+
     Realiza busca híbrida:
     - Se a query for numérica (ex: "8517"): Busca hierárquica por código.
     - Se for texto (ex: "sem fio"): Busca Full-Text Search (FTS) com ranking.
-    
+
     Returns:
         JSON com resultados da busca, metadados e estrutura para renderização.
-        
+
     Raises:
         ValidationError: Se a query estiver vazia ou for muito longa.
     """
     if not ncm:
         raise ValidationError("Parâmetro 'ncm' é obrigatório", field="ncm")
-    
+
     if len(ncm) > SearchConfig.MAX_QUERY_LENGTH:
         raise ValidationError(
             f"Query muito longa (máximo {SearchConfig.MAX_QUERY_LENGTH} caracteres)",
-            field="ncm"
+            field="ncm",
         )
-    
+
     safe_ncm = ncm.replace("\r", "\\r").replace("\n", "\\n")
     logger.debug("Busca: '%s'", safe_ncm)
 
@@ -159,15 +163,17 @@ async def search(
                 search_payload_cache_metrics.record_served(gzip=True)
                 return Response(
                     content=gzip_body,
-                    media_type="application/json",
+                    media_type=JSON_MEDIA_TYPE,
                     headers={**common_headers, "Content-Encoding": "gzip"},
                 )
             search_payload_cache_metrics.record_served(gzip=False)
-            return Response(content=raw_body, media_type="application/json", headers=common_headers)
-    
+            return Response(
+                content=raw_body, media_type=JSON_MEDIA_TYPE, headers=common_headers
+            )
+
     # Service Layer (ASYNC) - Exceções propagam para o handler global
     response_data = await service.process_request(ncm)
-    
+
     # Compatibilidade de contrato / performance:
     # - manter 'results' como chave canônica e alias legado 'resultados'
     # - pre-renderizar HTML no backend (campo `markdown` mantido por compatibilidade)
@@ -179,9 +185,13 @@ async def search(
             if isinstance(chapter_data, dict):
                 chapter_data.pop("conteudo", None)
         response_data["results"] = results
-        response_data["resultados"] = results  # @deprecated: legacy alias, planned removal v2.0
-        response_data["total_capitulos"] = response_data.get("total_capitulos") or len(results)
-    
+        response_data["resultados"] = (
+            results  # @deprecated: legacy alias, planned removal v2.0
+        )
+        response_data["total_capitulos"] = response_data.get("total_capitulos") or len(
+            results
+        )
+
     # Hot path optimization:
     # code lookups are frequently repeated with very large payloads (~860KB+).
     # Cache both raw and gzip bodies to avoid serializing/compressing each request.
@@ -205,19 +215,22 @@ async def search(
             search_payload_cache_metrics.record_served(gzip=True)
             return Response(
                 content=gzip_body,
-                media_type="application/json",
+                media_type=JSON_MEDIA_TYPE,
                 headers={**common_headers, "Content-Encoding": "gzip"},
             )
         search_payload_cache_metrics.record_served(gzip=False)
-        return Response(content=raw_body, media_type="application/json", headers=common_headers)
+        return Response(
+            content=raw_body, media_type=JSON_MEDIA_TYPE, headers=common_headers
+        )
 
     return _orjson_response(response_data, headers=headers)
+
 
 @router.get("/chapters")
 async def get_chapters(request: Request):
     """
     Lista todos os capítulos do sistema Harmonizado (NESH).
-    
+
     Returns:
         JSON contendo lista de capítulos disponíveis no banco de dados.
     """
@@ -228,56 +241,63 @@ async def get_chapters(request: Request):
         chapters = await db.get_all_chapters_list()
     else:
         from backend.infrastructure.db_engine import get_session
-        from backend.infrastructure.repositories.chapter_repository import ChapterRepository
+        from backend.infrastructure.repositories.chapter_repository import (
+            ChapterRepository,
+        )
+
         async with get_session() as session:
             repo = ChapterRepository(session)
             chapters = await repo.get_all_nums()
     return {"success": True, "capitulos": chapters}
 
-@router.get("/nesh/chapter/{chapter}/notes")
+
+@router.get(
+    "/nesh/chapter/{chapter}/notes",
+    responses={404: {"description": "Capítulo não encontrado"}},
+)
 async def get_chapter_notes(
-    chapter: str,
-    service: NeshService = Depends(get_nesh_service)
+    chapter: str, service: Annotated[NeshService, Depends(get_nesh_service)]
 ):
     """
     Busca notas de um capítulo específico (para cross-chapter references).
-    
+
     Retorna apenas as notas parseadas, sem o conteúdo completo do capítulo.
     Otimizado para carregamento lazy de notas referenciadas em outros capítulos.
-    
+
     Args:
         chapter: Número do capítulo (ex: "43", "62")
-        
+
     Returns:
         JSON com notas parseadas do capítulo.
-        
+
     Raises:
         HTTPException 404: Se o capítulo não for encontrado.
     """
     logger.info(f"Buscando notas do capítulo: {chapter}")
-    
+
     # Usa o método existente de fetch com cache
     data = await service.fetch_chapter_data(chapter)
-    
+
     if not data:
         raise HTTPException(
-            status_code=404,
-            detail=f"Capítulo {chapter} não encontrado"
+            status_code=404, detail=f"Capítulo {chapter} não encontrado"
         )
-    
+
     return {
         "success": True,
         "capitulo": chapter,
-        "notas_parseadas": data.get('parsed_notes', {}),
-        "notas_gerais": data.get('notes', None)
+        "notas_parseadas": data.get("parsed_notes", {}),
+        "notas_gerais": data.get("notes", None),
     }
 
 
 @router.get("/glossary")
-async def get_glossary(term: str = Query(..., description="Termo para consultar no glossário")):
+async def get_glossary(
+    term: Annotated[str, Query(..., description="Termo para consultar no glossário")],
+):
     """
     Consulta definições no Glossário Aduaneiro.
-    
+
     Retorna a definição de um termo técnico se encontrado.
     """
     definition = glossary_manager.get_definition(term)

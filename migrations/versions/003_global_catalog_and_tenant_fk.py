@@ -10,6 +10,7 @@ This migration:
 2) Nullifies invalid tenant references in catalog tables.
 3) Adds missing FK constraints from catalog tenant_id columns to tenants.id.
 """
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -25,7 +26,9 @@ def upgrade() -> None:
     # 1) Normalize legacy seeded tenant to shared catalog (NULL tenant_id)
     op.execute("UPDATE chapters SET tenant_id = NULL WHERE tenant_id = 'org_default'")
     op.execute("UPDATE positions SET tenant_id = NULL WHERE tenant_id = 'org_default'")
-    op.execute("UPDATE chapter_notes SET tenant_id = NULL WHERE tenant_id = 'org_default'")
+    op.execute(
+        "UPDATE chapter_notes SET tenant_id = NULL WHERE tenant_id = 'org_default'"
+    )
 
     # 2) Guarantee referential consistency before adding FK constraints
     op.execute("""
@@ -76,6 +79,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Drop FK constraints added in upgrade
-    op.drop_constraint("fk_chapter_notes_tenant_id_tenants", "chapter_notes", type_="foreignkey")
-    op.drop_constraint("fk_positions_tenant_id_tenants", "positions", type_="foreignkey")
+    op.drop_constraint(
+        "fk_chapter_notes_tenant_id_tenants", "chapter_notes", type_="foreignkey"
+    )
+    op.drop_constraint(
+        "fk_positions_tenant_id_tenants", "positions", type_="foreignkey"
+    )
     op.drop_constraint("fk_chapters_tenant_id_tenants", "chapters", type_="foreignkey")

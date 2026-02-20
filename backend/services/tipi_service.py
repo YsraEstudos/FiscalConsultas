@@ -30,15 +30,17 @@ TIPI_DB_PATH = Path(__file__).parent.parent.parent / "database" / "tipi.db"
 try:
     from ..infrastructure.repositories.tipi_repository import TipiRepository
     from ..infrastructure.db_engine import get_session
+
     _REPO_AVAILABLE = True
 except ImportError:
     _REPO_AVAILABLE = False
     TipiRepository = None
 
+
 class TipiService:
     """
     Serviço para busca de NCMs na TIPI (Async).
-    
+
     Features:
     - Busca por código NCM
     - Busca textual (FTS5)
@@ -46,16 +48,22 @@ class TipiService:
     - Destaque de alíquotas
     - Connection pooling
     """
-    
+
     # Pool compartilhado (singleton)
     _pool: List[aiosqlite.Connection] = []
     _pool_lock: Optional[asyncio.Lock] = None
     _pool_max_size: int = 3
-    
-    def __init__(self, db_path: Path = TIPI_DB_PATH, *, repository: 'TipiRepository' = None, repository_factory=None):
+
+    def __init__(
+        self,
+        db_path: Path = TIPI_DB_PATH,
+        *,
+        repository: "TipiRepository" = None,
+        repository_factory=None,
+    ):
         """
         Inicializa o serviço com pool aiosqlite ou repository.
-        
+
         Args:
             db_path: Caminho do banco SQLite (legado)
             repository: TipiRepository para novo padrão SQLModel
@@ -66,37 +74,43 @@ class TipiService:
         self._repository = repository
         self._repository_factory = repository_factory
         self._use_repository = repository is not None or repository_factory is not None
-        
+
         # Performance: LRU caches for search results
-        self._code_search_cache: OrderedDict = OrderedDict()  # key: (ncm_query, view_mode) -> result
-        self._chapter_positions_cache: OrderedDict = OrderedDict()  # key: chapter_num -> positions
+        self._code_search_cache: OrderedDict = (
+            OrderedDict()
+        )  # key: (ncm_query, view_mode) -> result
+        self._chapter_positions_cache: OrderedDict = (
+            OrderedDict()
+        )  # key: chapter_num -> positions
         self._code_search_cache_metrics = PayloadCacheMetrics("tipi_code_search_cache")
-        self._chapter_positions_cache_metrics = PayloadCacheMetrics("tipi_chapter_positions_cache")
+        self._chapter_positions_cache_metrics = PayloadCacheMetrics(
+            "tipi_chapter_positions_cache"
+        )
         self._cache_lock: Optional[asyncio.Lock] = None  # Lazy init
-        
+
         mode = "Repository" if self._use_repository else "aiosqlite"
         logger.info(f"TipiService inicializado (modo: {mode})")
-    
+
     @classmethod
-    async def create_with_repository(cls) -> 'TipiService':
+    async def create_with_repository(cls) -> "TipiService":
         """
         Factory assíncrono para criar TipiService com TipiRepository.
         Usa factory pattern para criar repos sob demanda (cada chamada tem sua session).
-        
+
         Uso:
             service = await TipiService.create_with_repository()
             results = await service.search_text("bomba")
         """
         if not _REPO_AVAILABLE:
             raise RuntimeError("Repository não disponível. Instale sqlmodel.")
-        
+
         @asynccontextmanager
         async def repo_factory():
             async with get_session() as session:
                 yield TipiRepository(session)
 
         return cls(repository_factory=repo_factory)
-    
+
     def _get_cache_lock(self) -> asyncio.Lock:
         """Lazy initialization do lock para evitar criação fora do event loop."""
         if self._cache_lock is None:
@@ -114,21 +128,21 @@ class TipiService:
                 yield repo
             return
         yield None
-    
+
     @classmethod
     def _get_pool_lock(cls) -> asyncio.Lock:
         """Lazy initialization do lock."""
         if cls._pool_lock is None:
             cls._pool_lock = asyncio.Lock()
         return cls._pool_lock
-    
+
     async def _get_connection(self) -> aiosqlite.Connection:
         """Obtém conexão do pool ou cria nova."""
         async with self._get_pool_lock():
             if self._pool:
                 conn = self._pool.pop()
                 return conn
-        
+
         try:
             conn = await aiosqlite.connect(self.db_path)
             conn.row_factory = aiosqlite.Row
@@ -136,7 +150,7 @@ class TipiService:
         except Exception as e:
             logger.error(f"Failed to connect to TIPI DB: {e}")
             raise DatabaseError(f"TIPI DB connection failed: {e}")
-    
+
     async def _release_connection(self, conn: aiosqlite.Connection) -> None:
         """Devolve conexão ao pool."""
         async with self._get_pool_lock():
@@ -148,7 +162,9 @@ class TipiService:
                 except Exception as e:
                     logger.warning(f"Error closing TIPI connection: {e}")
 
-    async def _get_table_columns(self, conn: aiosqlite.Connection, table: str) -> set[str]:
+    async def _get_table_columns(
+        self, conn: aiosqlite.Connection, table: str
+    ) -> set[str]:
         """Return a cached set of column names for a table."""
         if table in self._schema_columns_cache:
             return self._schema_columns_cache[table]
@@ -172,26 +188,22 @@ class TipiService:
     async def check_connection(self) -> Dict[str, Any]:
         """Verifica status do banco TIPI."""
         if not self.db_path.exists():
-             # We return a status dict here because often this is used for diagnostic
-             # but raising DatabaseError is also fine if caught by the status endpoint.
-             # However, status endpoint usually wants to show "error" rather than 503.
-             # Let's keep returning dict but logging errors.
-             return {"ok": False, "error": f"Banco TIPI não encontrado: {self.db_path}"}
-             
+            # We return a status dict here because often this is used for diagnostic
+            # but raising DatabaseError is also fine if caught by the status endpoint.
+            # However, status endpoint usually wants to show "error" rather than 503.
+            # Let's keep returning dict but logging errors.
+            return {"ok": False, "error": f"Banco TIPI não encontrado: {self.db_path}"}
+
         try:
             conn = await self._get_connection()
             try:
                 cursor = await conn.execute("SELECT COUNT(*) FROM tipi_chapters")
                 chapters = (await cursor.fetchone())[0]
-                
+
                 cursor = await conn.execute("SELECT COUNT(*) FROM tipi_positions")
                 positions = (await cursor.fetchone())[0]
-                
-                return {
-                    "ok": True,
-                    "chapters": chapters,
-                    "positions": positions
-                }
+
+                return {"ok": True, "chapters": chapters, "positions": positions}
             finally:
                 await self._release_connection(conn)
         except Exception as e:
@@ -208,7 +220,7 @@ class TipiService:
             "total": 0,
             "total_capitulos": 0,
         }
-    
+
     def is_code_query(self, query: str) -> bool:
         """Helper to detect if query is NCM code."""
         return ncm_utils.is_code_query(query)
@@ -232,14 +244,21 @@ class TipiService:
                     rows_list = await repo.get_by_chapter(cap_num)
                     # Normalize keys to match legacy format
                     rows = tuple(
-                        {**r, 'capitulo': r.get('capitulo', cap_num), 'nivel': r.get('nivel', 0)}
+                        {
+                            **r,
+                            "capitulo": r.get("capitulo", cap_num),
+                            "nivel": r.get("nivel", 0),
+                        }
                         for r in rows_list
                     )
                     # Cache result
                     async with self._get_cache_lock():
                         self._chapter_positions_cache[cap_num] = rows
                         self._chapter_positions_cache_metrics.record_set()
-                        if len(self._chapter_positions_cache) > CacheConfig.TIPI_CHAPTER_CACHE_SIZE:
+                        if (
+                            len(self._chapter_positions_cache)
+                            > CacheConfig.TIPI_CHAPTER_CACHE_SIZE
+                        ):
                             self._chapter_positions_cache.popitem(last=False)
                             self._chapter_positions_cache_metrics.record_eviction()
                     return rows
@@ -249,24 +268,27 @@ class TipiService:
             # Check for ncm_sort column availability
             cols = await self._get_table_columns(conn, "tipi_positions")
             order_by = "ncm_sort, ncm" if "ncm_sort" in cols else "ncm"
-            
+
             cursor = await conn.execute(
                 f"""
                 SELECT ncm, capitulo, descricao, aliquota, nivel
                 FROM tipi_positions
                 WHERE capitulo = ?
                 ORDER BY {order_by}
-                """ ,
+                """,
                 (cap_num,),
             )
             rows = await cursor.fetchall()
             result = tuple(dict(row) for row in rows)
-            
+
             # Cache result
             async with self._get_cache_lock():
                 self._chapter_positions_cache[cap_num] = result
                 self._chapter_positions_cache_metrics.record_set()
-                if len(self._chapter_positions_cache) > CacheConfig.TIPI_CHAPTER_CACHE_SIZE:
+                if (
+                    len(self._chapter_positions_cache)
+                    > CacheConfig.TIPI_CHAPTER_CACHE_SIZE
+                ):
                     self._chapter_positions_cache.popitem(last=False)
                     self._chapter_positions_cache_metrics.record_eviction()
             return result
@@ -278,7 +300,7 @@ class TipiService:
     ) -> Tuple[Dict[str, Any], ...]:
         """
         Fetch positions filtradas por família NCM (otimizado em SQL).
-        
+
         Args:
             cap_num: Número do capítulo (2 dígitos)
             prefix: Prefixo NCM para filtrar descendentes (ex: "8413")
@@ -287,9 +309,15 @@ class TipiService:
         if self._use_repository:
             async with self._get_repo() as repo:
                 if repo:
-                    rows_list = await repo.get_family_positions(cap_num, prefix, ancestor_prefixes)
+                    rows_list = await repo.get_family_positions(
+                        cap_num, prefix, ancestor_prefixes
+                    )
                     return tuple(
-                        {**r, 'capitulo': r.get('capitulo', cap_num), 'nivel': r.get('nivel', 0)}
+                        {
+                            **r,
+                            "capitulo": r.get("capitulo", cap_num),
+                            "nivel": r.get("nivel", 0),
+                        }
                         for r in rows_list
                     )
 
@@ -297,20 +325,20 @@ class TipiService:
         try:
             cols = await self._get_table_columns(conn, "tipi_positions")
             order_by = "ncm_sort, ncm" if "ncm_sort" in cols else "ncm"
-            
+
             # Construir condições SQL dinâmicas
             # NCM limpo (sem pontos) começa com prefix OU é um dos ancestrais
             # Usamos REPLACE para remover pontos do NCM antes de comparar
             conditions = ["REPLACE(ncm, '.', '') LIKE ? || '%'"]
             params = [prefix]
-            
+
             # Adicionar condições para cada ancestral
             for ancestor in ancestor_prefixes:
                 conditions.append("REPLACE(ncm, '.', '') = ?")
                 params.append(ancestor)
-            
+
             where_clause = " OR ".join(conditions)
-            
+
             cursor = await conn.execute(
                 f"""
                 SELECT ncm, capitulo, descricao, aliquota, nivel
@@ -325,11 +353,13 @@ class TipiService:
         finally:
             await self._release_connection(conn)
 
-    async def search_by_code(self, ncm_query: str, view_mode: str = "family") -> Dict[str, Any]:
+    async def search_by_code(
+        self, ncm_query: str, view_mode: str = "family"
+    ) -> Dict[str, Any]:
         """
         Busca por código NCM na TIPI (Async).
         Performance: Cacheia resultados por (query, view_mode) com LRU.
-        
+
         Args:
             ncm_query: Código NCM (ex: "85.17" ou "8517")
             view_mode: 'family' (retorna apenas família NCM) ou 'chapter' (capítulo completo)
@@ -350,12 +380,16 @@ class TipiService:
             for part in parts:
                 part_resp = await self.search_by_code(part, view_mode=view_mode)
                 total_rows += int(part_resp.get("total", 0) or 0)
-                for cap, cap_data in (part_resp.get("resultados") or part_resp.get("results") or {}).items():
+                for cap, cap_data in (
+                    part_resp.get("resultados") or part_resp.get("results") or {}
+                ).items():
                     if cap not in merged:
                         merged[cap] = cap_data
                     else:
                         merged[cap].setdefault("posicoes", [])
-                        merged[cap]["posicoes"].extend(cap_data.get("posicoes", []) or [])
+                        merged[cap]["posicoes"].extend(
+                            cap_data.get("posicoes", []) or []
+                        )
             return {
                 "success": True,
                 "type": "code",
@@ -375,7 +409,7 @@ class TipiService:
 
         # Extrair capítulo (primeiros 2 dígitos)
         cap_num = clean_query[:2].zfill(2)
-        
+
         # posicao_alvo para auto-scroll
         posicao_alvo = None
         if len(clean_query) > 2:
@@ -385,7 +419,7 @@ class TipiService:
         # Filtro só se aplica quando view_mode == 'family'
         if view_mode == "family" and len(clean_query) > 2:
             prefix = clean_query  # ex: "8413" ou "84131100"
-            
+
             # Coletar prefixos ancestrais para incluir hierarquia completa
             # Ex: para "39249000", ancestrais são "3924" e "392490"
             ancestor_prefixes = set()
@@ -393,13 +427,13 @@ class TipiService:
                 ancestor_prefixes.add(prefix[:4])  # Posição (XX.XX)
             if len(prefix) >= 6:
                 ancestor_prefixes.add(prefix[:6])  # Subposição (XXXX.XX)
-            
+
             # Filtro otimizado em SQL (evita iteração Python)
             rows = await self._get_family_positions(cap_num, prefix, ancestor_prefixes)
         else:
             # Capítulo completo ou query curta (2 dígitos)
             rows = await self._get_chapter_positions(cap_num)
-        
+
         if not rows:
             return self._empty_code_response(ncm_query)
 
@@ -412,7 +446,7 @@ class TipiService:
                     clean_alvo = ncm_utils.clean_ncm(posicao_alvo)
                     if clean_alvo.startswith(cap):
                         cap_posicao_alvo = posicao_alvo
-                
+
                 resultados[cap] = {
                     "capitulo": cap,
                     "titulo": f"Capítulo {cap}",
@@ -429,7 +463,7 @@ class TipiService:
                     "descricao": row["descricao"],
                     "aliquota": row["aliquota"] or "0",
                     "nivel": row["nivel"],
-                    "anchor_id": generate_anchor_id(codigo)
+                    "anchor_id": generate_anchor_id(codigo),
                 }
             )
 
@@ -452,7 +486,7 @@ class TipiService:
                 self._code_search_cache_metrics.record_eviction()
 
         return result
-    
+
     async def search_text(self, query: str, limit: int = 50) -> Dict[str, Any]:
         """
         Busca textual via FTS5/tsvector (Async).
@@ -476,32 +510,38 @@ class TipiService:
         try:
             # Busca FTS
             fts_query = f'"{query}"'  # Busca exata primeiro
-            cursor = await conn.execute('''
+            cursor = await conn.execute(
+                """
                 SELECT ncm, capitulo, descricao, aliquota
                 FROM tipi_fts
                 WHERE tipi_fts MATCH ?
                 LIMIT ?
-            ''', (fts_query, limit))
-            
+            """,
+                (fts_query, limit),
+            )
+
             rows = await cursor.fetchall()
             results = [dict(row) for row in rows]
-            
+
             # Se poucos resultados, tentar busca mais flexível
             if len(results) < 5:
                 words = query.split()
                 if len(words) > 1:
-                    and_query = ' AND '.join(words)
-                    cursor = await conn.execute('''
+                    and_query = " AND ".join(words)
+                    cursor = await conn.execute(
+                        """
                         SELECT ncm, capitulo, descricao, aliquota
                         FROM tipi_fts
                         WHERE tipi_fts MATCH ?
                         LIMIT ?
-                    ''', (and_query, limit))
+                    """,
+                        (and_query, limit),
+                    )
                     rows = await cursor.fetchall()
                     results = [dict(row) for row in rows]
         finally:
             await self._release_connection(conn)
-        
+
         return {
             "success": True,
             "type": "text",
@@ -520,7 +560,7 @@ class TipiService:
                 for r in results
             ],
         }
-    
+
     async def get_all_chapters(self) -> List[Dict[str, str]]:
         """Retorna lista de todos os capítulos (Async)."""
         if self._use_repository:
@@ -530,11 +570,11 @@ class TipiService:
 
         conn = await self._get_connection()
         try:
-            cursor = await conn.execute('''
+            cursor = await conn.execute("""
                 SELECT codigo, titulo, secao
                 FROM tipi_chapters
                 ORDER BY codigo
-            ''')
+            """)
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
         finally:

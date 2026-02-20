@@ -3,6 +3,7 @@ import re
 from backend.presentation.renderer import _get_position_pattern, HtmlRenderer
 from backend.utils.id_utils import generate_anchor_id
 
+
 class TestRendererRegex:
     """
     Testes focados na correção do Regex para injeção de âncoras.
@@ -22,15 +23,15 @@ class TestRendererRegex:
         """Cenário da Correção: NCM indentado ou com espaços antes."""
         code = "8517"
         pattern = _get_position_pattern(code)
-        
+
         # Casos que falhavam antes
         cases = [
             " 8517 - Telefones",
             "  8517 - Telefones",
             "\t8517 - Telefones",
-            " \t 8517 - Telefones"
+            " \t 8517 - Telefones",
         ]
-        
+
         for case in cases:
             match = pattern.search(case)
             assert match is not None, f"Falhou para caso: '{case}'"
@@ -43,21 +44,22 @@ class TestRendererRegex:
             "capitulo": "85",
             "posicoes": [{"codigo": "85.17"}],
             "conteudo": "  85.17 - Aparelhos telefônicos\n\nOutro texto...",
-            "real_content_found": True
+            "real_content_found": True,
         }
-        
+
         rendered = renderer.render_chapter(data)
-        
+
         # Verifica se o ID foi injetado
         expected_id = 'id="pos-85-17"'
-        assert expected_id in rendered, \
+        assert expected_id in rendered, (
             f"ID não encontrado no HTML gerado:\n{rendered[:200]}..."
+        )
 
     def test_regex_false_positives(self):
         """Garante que não casamos números no meio de frases."""
         code = "8517"
         pattern = _get_position_pattern(code)
-        
+
         content = "A norma 8517 diz que..."
         match = pattern.search(content)
         assert match is None, "Regex não deveria casar no meio da frase"

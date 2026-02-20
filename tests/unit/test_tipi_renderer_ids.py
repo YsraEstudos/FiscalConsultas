@@ -7,12 +7,13 @@ from pathlib import Path
 from backend.services.tipi_service import TipiService
 from backend.presentation.tipi_renderer import TipiRenderer
 
+
 @pytest.mark.asyncio
 async def test_renderer_outputs_compatible_ids():
     # Setup temporary DB
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
-    
+
     try:
         conn = sqlite3.connect(path)
         conn.execute(
@@ -26,8 +27,8 @@ async def test_renderer_outputs_compatible_ids():
 
         svc = TipiService(db_path=Path(path))
         resp = await svc.search_by_code("85")
-        await svc.close() # Good practice to close
-        
+        await svc.close()  # Good practice to close
+
         html = TipiRenderer.render_full_response(resp["resultados"])
 
         assert 'id="cap-85"' in html

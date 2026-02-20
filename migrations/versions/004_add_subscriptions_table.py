@@ -4,6 +4,7 @@ Revision ID: 004_add_subscriptions_table
 Revises: 003_global_catalog_and_tenant_fk
 Create Date: 2026-02-06
 """
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -19,7 +20,9 @@ def upgrade() -> None:
     op.create_table(
         "subscriptions",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("tenant_id", sa.String(255), sa.ForeignKey("tenants.id"), nullable=False),
+        sa.Column(
+            "tenant_id", sa.String(255), sa.ForeignKey("tenants.id"), nullable=False
+        ),
         sa.Column("provider", sa.String(30), nullable=False, server_default="asaas"),
         sa.Column("provider_customer_id", sa.String(255), nullable=True),
         sa.Column("provider_subscription_id", sa.String(255), nullable=True),
@@ -32,22 +35,39 @@ def upgrade() -> None:
         sa.Column("last_payment_date", sa.DateTime(), nullable=True),
         sa.Column("last_event", sa.String(64), nullable=True),
         sa.Column("raw_payload", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at", sa.DateTime(), nullable=False, server_default=sa.text("now()")
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(), nullable=False, server_default=sa.text("now()")
+        ),
     )
 
     op.create_index("ix_subscriptions_tenant_id", "subscriptions", ["tenant_id"])
     op.create_index("ix_subscriptions_provider", "subscriptions", ["provider"])
-    op.create_index("ix_subscriptions_provider_customer_id", "subscriptions", ["provider_customer_id"])
-    op.create_index("ix_subscriptions_provider_subscription_id", "subscriptions", ["provider_subscription_id"], unique=True)
-    op.create_index("ix_subscriptions_provider_payment_id", "subscriptions", ["provider_payment_id"])
+    op.create_index(
+        "ix_subscriptions_provider_customer_id",
+        "subscriptions",
+        ["provider_customer_id"],
+    )
+    op.create_index(
+        "ix_subscriptions_provider_subscription_id",
+        "subscriptions",
+        ["provider_subscription_id"],
+        unique=True,
+    )
+    op.create_index(
+        "ix_subscriptions_provider_payment_id", "subscriptions", ["provider_payment_id"]
+    )
     op.create_index("ix_subscriptions_status", "subscriptions", ["status"])
 
 
 def downgrade() -> None:
     op.drop_index("ix_subscriptions_status", table_name="subscriptions")
     op.drop_index("ix_subscriptions_provider_payment_id", table_name="subscriptions")
-    op.drop_index("ix_subscriptions_provider_subscription_id", table_name="subscriptions")
+    op.drop_index(
+        "ix_subscriptions_provider_subscription_id", table_name="subscriptions"
+    )
     op.drop_index("ix_subscriptions_provider_customer_id", table_name="subscriptions")
     op.drop_index("ix_subscriptions_provider", table_name="subscriptions")
     op.drop_index("ix_subscriptions_tenant_id", table_name="subscriptions")
