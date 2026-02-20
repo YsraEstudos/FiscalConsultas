@@ -4,7 +4,6 @@ Gera HTML com destaque de alíquotas por cor.
 """
 
 from typing import Dict, Any, List
-from ..config.logging_config import renderer_logger as logger
 from ..utils.id_utils import generate_anchor_id
 from .renderer import HtmlRenderer
 

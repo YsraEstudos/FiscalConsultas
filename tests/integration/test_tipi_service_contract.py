@@ -8,7 +8,6 @@ Usa banco de dados em memória com fixtures de teste.
 import os
 import sqlite3
 import tempfile
-import asyncio
 import pytest
 from pathlib import Path
 

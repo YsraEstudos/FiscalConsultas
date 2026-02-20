@@ -10,7 +10,6 @@ from backend.config import CONFIG, setup_logging
 from backend.config.settings import settings
 from backend.config.exceptions import NeshError
 from backend.infrastructure import DatabaseAdapter
-from backend.services import NeshService
 from backend.services.ai_service import AiService
 from backend.services.tipi_service import TipiService
 from backend.server.error_handlers import (
@@ -81,8 +80,6 @@ async def lifespan(app: FastAPI):
 
     logger.info("Initializing Services...")
     from backend.services.nesh_service import NeshService
-    from backend.services.tipi_service import TipiService
-    from backend.services.ai_service import AiService
 
     if settings.database.is_postgres:
         # Criamos o serviço no modo Repository para suporte a RLS
