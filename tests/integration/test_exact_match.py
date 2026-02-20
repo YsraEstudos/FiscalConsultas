@@ -123,20 +123,20 @@ def test_chapter_84():
         first_bomba = bomba_matches[0].start()
         first_exact = matches[0]["position"]
 
-        print(f"\n" + "=" * 60)
+        print("\n" + "=" * 60)
         print("🎯 DIAGNÓSTICO:")
         print("=" * 60)
         print(f"  Primeira 'bomba' no texto: posição {first_bomba}")
         print(f"  Primeiro match EXATO: posição {first_exact}")
 
         if first_bomba < first_exact:
-            print(f"\n  ⚠️ PROBLEMA IDENTIFICADO!")
-            print(f"     A primeira 'bomba' aparece ANTES do match exato.")
+            print("\n  ⚠️ PROBLEMA IDENTIFICADO!")
+            print("     A primeira 'bomba' aparece ANTES do match exato.")
             print(f"     Diferença: {first_exact - first_bomba} caracteres")
             print(f"\n  📍 O Mark.js marca a primeira 'bomba' (pos {first_bomba})")
             print(f"     mas deveria ir para 'bombas submersíveis' (pos {first_exact})")
         else:
-            print(f"\n  ✅ O primeiro match já é o exato!")
+            print("\n  ✅ O primeiro match já é o exato!")
 
     conn.close()
 

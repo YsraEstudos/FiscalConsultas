@@ -6,7 +6,6 @@ Gerencia conexões e queries ao banco nesh.db com connection pooling assíncrono
 import os
 import asyncio
 import aiosqlite
-import logging
 import time
 
 from typing import Dict, List, Optional, Any

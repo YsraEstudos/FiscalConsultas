@@ -228,7 +228,7 @@ def parse_tipi_xlsx(filepath: Path):
 
     wb.close()
 
-    print(f"Processamento concluído:")
+    print("Processamento concluído:")
     print(f"  - Linhas processadas: {rows_processed}")
     print(f"  - Linhas ignoradas: {rows_skipped}")
     print(f"  - Capítulos: {len(chapters)}")

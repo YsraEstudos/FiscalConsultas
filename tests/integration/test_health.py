@@ -1,6 +1,3 @@
-import pytest
-
-
 def test_status_endpoint(client):
     """
     Verify the /api/status endpoint returns healthy status.

@@ -8,7 +8,6 @@ Observações de contrato (importante para o frontend):
 - Estrutura de capítulos/posições é compatível com a navegação do app (posicoes[].codigo).
 """
 
-import re
 import asyncio
 import aiosqlite
 from pathlib import Path
