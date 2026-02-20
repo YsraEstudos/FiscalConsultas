@@ -100,7 +100,9 @@ async def test_webhook_rejects_oversized_payload_without_content_length(monkeypa
     assert exc.value.detail == "Payload too large"
 
 
-def test_webhook_payment_confirmed_calls_processor(client, monkeypatch, asaas_payment_confirmed_payload):
+def test_webhook_payment_confirmed_calls_processor(
+    client, monkeypatch, asaas_payment_confirmed_payload
+):
     monkeypatch.setattr(settings.billing, "asaas_webhook_token", "expected-signature")
 
     async def fake_processor(payload):
@@ -152,7 +154,9 @@ async def _cleanup_subscription_state(tenant_id: str):
 
 
 @pytest.mark.asyncio
-async def test_process_payment_confirmed_requires_external_reference(asaas_payment_confirmed_payload):
+async def test_process_payment_confirmed_requires_external_reference(
+    asaas_payment_confirmed_payload,
+):
     payload = deepcopy(asaas_payment_confirmed_payload)
     payload["payment"].pop("externalReference", None)
 
@@ -162,7 +166,9 @@ async def test_process_payment_confirmed_requires_external_reference(asaas_payme
 
 
 @pytest.mark.asyncio
-async def test_process_payment_confirmed_rejects_invalid_tenant_id(asaas_payment_confirmed_payload):
+async def test_process_payment_confirmed_rejects_invalid_tenant_id(
+    asaas_payment_confirmed_payload,
+):
     payload = deepcopy(asaas_payment_confirmed_payload)
     payload["payment"]["externalReference"] = "tenant invalido"
 
@@ -172,7 +178,9 @@ async def test_process_payment_confirmed_rejects_invalid_tenant_id(asaas_payment
 
 
 @pytest.mark.asyncio
-async def test_process_payment_confirmed_rejects_non_positive_amount(asaas_payment_confirmed_payload):
+async def test_process_payment_confirmed_rejects_non_positive_amount(
+    asaas_payment_confirmed_payload,
+):
     payload = deepcopy(asaas_payment_confirmed_payload)
     payload["payment"]["externalReference"] = f"org_test_{uuid4().hex[:8]}"
     payload["payment"]["value"] = -1
@@ -183,7 +191,9 @@ async def test_process_payment_confirmed_rejects_non_positive_amount(asaas_payme
 
 
 @pytest.mark.asyncio
-async def test_process_payment_confirmed_is_idempotent_for_same_subscription(asaas_payment_confirmed_payload):
+async def test_process_payment_confirmed_is_idempotent_for_same_subscription(
+    asaas_payment_confirmed_payload,
+):
     tenant_id = f"org_test_{uuid4().hex[:8]}"
     provider_subscription_id = f"sub_{uuid4().hex[:8]}"
 

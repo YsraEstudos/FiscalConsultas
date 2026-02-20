@@ -2,6 +2,7 @@
 Testes para validar que a rota TIPI aplica highlights nas descrições antes de retornar JSON.
 Testa a função _apply_highlights_to_descriptions isoladamente.
 """
+
 from backend.presentation.routes.tipi import _apply_highlights_to_descriptions
 
 
@@ -17,11 +18,19 @@ class TestApplyHighlightsToDescriptions:
                     "capitulo": "85",
                     "titulo": "Capítulo 85",
                     "posicoes": [
-                        {"ncm": "8516.10", "descricao": "Aquecedor de 1500 W", "aliquota": "5"},
-                        {"ncm": "8414.30", "descricao": "Compressor de 10 kW", "aliquota": "10"},
-                    ]
+                        {
+                            "ncm": "8516.10",
+                            "descricao": "Aquecedor de 1500 W",
+                            "aliquota": "5",
+                        },
+                        {
+                            "ncm": "8414.30",
+                            "descricao": "Compressor de 10 kW",
+                            "aliquota": "10",
+                        },
+                    ],
                 }
-            }
+            },
         }
         _apply_highlights_to_descriptions(result)
         desc1 = result["results"]["85"]["posicoes"][0]["descricao"]
@@ -35,8 +44,12 @@ class TestApplyHighlightsToDescriptions:
             "type": "text",
             "results": [
                 {"ncm": "8516.10", "descricao": "Aquecedor de 1500 W", "aliquota": "5"},
-                {"ncm": "8414.30", "descricao": "Compressor de 10 kW", "aliquota": "10"},
-            ]
+                {
+                    "ncm": "8414.30",
+                    "descricao": "Compressor de 10 kW",
+                    "aliquota": "10",
+                },
+            ],
         }
         _apply_highlights_to_descriptions(result)
         assert 'highlight-unit">W</span>' in result["results"][0]["descricao"]
@@ -50,14 +63,18 @@ class TestApplyHighlightsToDescriptions:
                 "84": {
                     "capitulo": "84",
                     "posicoes": [
-                        {"ncm": "8414", "descricao": "Compressores, exceto os de uso doméstico", "aliquota": "10"},
-                    ]
+                        {
+                            "ncm": "8414",
+                            "descricao": "Compressores, exceto os de uso doméstico",
+                            "aliquota": "10",
+                        },
+                    ],
                 }
-            }
+            },
         }
         _apply_highlights_to_descriptions(result)
         desc = result["results"]["84"]["posicoes"][0]["descricao"]
-        assert 'highlight-exclusion' in desc
+        assert "highlight-exclusion" in desc
 
     def test_empty_results_no_error(self):
         """Resultado vazio não deve causar erro."""
@@ -80,7 +97,7 @@ class TestApplyHighlightsToDescriptions:
                         {"ncm": "0101", "descricao": "", "aliquota": "0"},
                     ]
                 }
-            }
+            },
         }
         _apply_highlights_to_descriptions(result)
         assert result["results"]["01"]["posicoes"][0]["descricao"] == ""
@@ -91,7 +108,7 @@ class TestApplyHighlightsToDescriptions:
             "type": "text",
             "results": [
                 {"ncm": "0101", "descricao": "Cavalos vivos", "aliquota": "0"},
-            ]
+            ],
         }
         _apply_highlights_to_descriptions(result)
         assert result["results"][0]["descricao"] == "Cavalos vivos"
@@ -101,10 +118,14 @@ class TestApplyHighlightsToDescriptions:
         result = {
             "type": "text",
             "results": [
-                {"ncm": "8518", "descricao": "Nível de ruído de 85 dB", "aliquota": "5"},
+                {
+                    "ncm": "8518",
+                    "descricao": "Nível de ruído de 85 dB",
+                    "aliquota": "5",
+                },
                 {"ncm": "8533", "descricao": "Resistor de 10 kΩ", "aliquota": "5"},
                 {"ncm": "8414", "descricao": "Pressão de 30 psi", "aliquota": "10"},
-            ]
+            ],
         }
         _apply_highlights_to_descriptions(result)
         assert 'highlight-unit">dB</span>' in result["results"][0]["descricao"]

@@ -16,20 +16,20 @@ def _extract_client_ip(request: Request) -> str:
     return extract_client_ip(request)
 
 
-def _is_authenticated(token: str | None) -> bool:
+async def _is_authenticated(token: str | None) -> bool:
     if not token:
         return False
-    return decode_clerk_jwt(token) is not None
+    return (await decode_clerk_jwt(token)) is not None
 
 
-def _build_limiter_key(
+async def _build_limiter_key(
     http_request: Request,
     token: str | None = None,
     jwt_payload: dict | None = None,
 ) -> str:
     payload = jwt_payload
     if payload is None and token:
-        payload = decode_clerk_jwt(token) or {}
+        payload = (await decode_clerk_jwt(token)) or {}
     if payload:
         user_id = payload.get("sub")
         if user_id:
@@ -40,7 +40,8 @@ def _build_limiter_key(
 @router.get("/auth/me")
 async def auth_me(http_request: Request):
     token = extract_bearer_token(http_request)
-    return {"authenticated": _is_authenticated(token)}
+    return {"authenticated": await _is_authenticated(token)}
+
 
 @router.post("/ai/chat")
 async def chat_endpoint(
@@ -62,11 +63,13 @@ async def chat_endpoint(
         )
 
     token = extract_bearer_token(http_request)
-    payload = decode_clerk_jwt(token) if token else None
+    payload = (await decode_clerk_jwt(token)) if token else None
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    limiter_key = _build_limiter_key(http_request, token=token, jwt_payload=payload)
+    limiter_key = await _build_limiter_key(
+        http_request, token=token, jwt_payload=payload
+    )
     allowed, retry_after = await ai_chat_rate_limiter.consume(
         key=limiter_key,
         limit=settings.security.ai_chat_requests_per_minute,

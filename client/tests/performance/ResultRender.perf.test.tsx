@@ -17,6 +17,14 @@ vi.mock('react-virtuoso', () => ({
     )
 }));
 
+vi.mock('../../src/context/AuthContext', () => ({
+    useAuth: () => ({
+        isAdmin: false,
+        isSignedIn: true,
+        getToken: vi.fn(),
+    })
+}));
+
 describe('Frontend Render Performance', () => {
     it('renders initial window for large result set within 500ms', async () => {
         // 1. Generate Large Mock Data (50 complex items)

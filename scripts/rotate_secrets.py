@@ -17,6 +17,7 @@ def _set_env_value(content: str, key: str, value: str) -> str:
     suffix = "\n" if content and not content.endswith("\n") else ""
     return f"{content}{suffix}{line}\n"
 
+
 def rotate_secrets(env_path=".env"):
     if not os.path.exists(env_path):
         print(f"⚠️ Erro: Arquivo {env_path} não encontrado.")
@@ -27,7 +28,9 @@ def rotate_secrets(env_path=".env"):
 
     # Captura valores atuais para permitir coexistencia (novo + antigo)
     previous_values = {
-        "AUTH__ADMIN_PASSWORD_PREVIOUS": _get_env_value(content, "AUTH__ADMIN_PASSWORD"),
+        "AUTH__ADMIN_PASSWORD_PREVIOUS": _get_env_value(
+            content, "AUTH__ADMIN_PASSWORD"
+        ),
         "AUTH__ADMIN_TOKEN_PREVIOUS": _get_env_value(content, "AUTH__ADMIN_TOKEN"),
     }
 
@@ -54,7 +57,10 @@ def rotate_secrets(env_path=".env"):
     with open(env_path, "w", encoding="utf-8") as f:
         f.write(content)
 
-    print("\n🚀 Rotação concluída! Use o endpoint /api/admin/reload-secrets para hot-reload.")
+    print(
+        "\n🚀 Rotação concluída! Use o endpoint /api/admin/reload-secrets para hot-reload."
+    )
+
 
 if __name__ == "__main__":
     rotate_secrets()

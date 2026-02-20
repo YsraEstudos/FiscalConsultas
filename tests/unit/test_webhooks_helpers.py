@@ -11,7 +11,9 @@ pytestmark = pytest.mark.unit
 
 def _request_with_headers(headers: dict[str, str] | None = None) -> Request:
     headers = headers or {}
-    scope_headers = [(k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in headers.items()]
+    scope_headers = [
+        (k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in headers.items()
+    ]
     scope = {
         "type": "http",
         "method": "POST",

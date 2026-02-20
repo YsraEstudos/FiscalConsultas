@@ -102,6 +102,119 @@ class _MultiTransformParser(HTMLParser):
         return "".join(self.out)
 
 
+class _SmartLinkParser(HTMLParser):
+    """Aplica smart links apenas em texto, ignorando conteúdo dentro de links existentes."""
+
+    def __init__(self, replacer_func: Callable[[re.Match], str]):
+        super().__init__(convert_charrefs=False)
+        self.out: list[str] = []
+        self._skip_depth = 0
+        self._replacer = replacer_func
+
+    @staticmethod
+    def _is_smart_link(attrs) -> bool:
+        if not attrs:
+            return False
+        for k, v in attrs:
+            if k.lower() == "class" and v:
+                classes = {c.strip() for c in v.split() if c.strip()}
+                if "smart-link" in classes:
+                    return True
+        return False
+
+    def handle_starttag(self, tag, attrs):
+        raw_tag = self.get_starttag_text() or ""
+        if self._skip_depth > 0:
+            self._skip_depth += 1
+        else:
+            if tag.lower() == "a" or self._is_smart_link(attrs):
+                self._skip_depth = 1
+        self.out.append(raw_tag)
+
+    def handle_endtag(self, tag):
+        self.out.append(f"</{tag}>")
+        if self._skip_depth > 0:
+            self._skip_depth -= 1
+
+    def handle_startendtag(self, tag, attrs):
+        raw_tag = self.get_starttag_text() or ""
+        self.out.append(raw_tag)
+
+    def handle_data(self, data):
+        if not data:
+            return
+        if self._skip_depth > 0:
+            self.out.append(data)
+            return
+        self.out.append(HtmlRenderer.RE_NCM_LINK.sub(self._replacer, data))
+
+    def handle_entityref(self, name):
+        self.out.append(f"&{name};")
+
+    def handle_charref(self, name):
+        self.out.append(f"&#{name};")
+
+    def get_html(self) -> str:
+        return "".join(self.out)
+
+
+class _UnitHighlighter(HTMLParser):
+    """Aplica highlight apenas em texto, ignorando conteúdo dentro de `.smart-link`."""
+
+    def __init__(self, replacer_func: Callable[[re.Match], str]):
+        super().__init__(convert_charrefs=False)
+        self.out: list[str] = []
+        self._skip_depth = 0
+        self._replacer = replacer_func
+
+    @staticmethod
+    def _is_smart_link(attrs) -> bool:
+        if not attrs:
+            return False
+        for k, v in attrs:
+            if k.lower() == "class" and v:
+                classes = {c.strip() for c in v.split() if c.strip()}
+                if "smart-link" in classes:
+                    return True
+        return False
+
+    def handle_starttag(self, tag, attrs):
+        raw_tag = self.get_starttag_text() or ""
+        # Se já estamos dentro de smart-link, apenas aumente profundidade
+        if self._skip_depth > 0:
+            self._skip_depth += 1
+        else:
+            if self._is_smart_link(attrs):
+                self._skip_depth = 1
+        self.out.append(raw_tag)
+
+    def handle_endtag(self, tag):
+        self.out.append(f"</{tag}>")
+        if self._skip_depth > 0:
+            self._skip_depth -= 1
+
+    def handle_startendtag(self, tag, attrs):
+        raw_tag = self.get_starttag_text() or ""
+        self.out.append(raw_tag)
+
+    def handle_data(self, data):
+        if not data:
+            return
+        if self._skip_depth > 0:
+            self.out.append(data)
+            return
+        self.out.append(HtmlRenderer.RE_UNIT.sub(self._replacer, data))
+
+    def handle_entityref(self, name):
+        self.out.append(f"&{name};")
+
+    def handle_charref(self, name):
+        self.out.append(f"&#{name};")
+
+    def get_html(self) -> str:
+        return "".join(self.out)
+
+
 class HtmlRenderer:
     """
     Responsável por transformar DataObjects em HTML rico.
@@ -183,31 +296,67 @@ class HtmlRenderer:
     )
 
     @classmethod
+    def _match_list_item(cls, line: str) -> tuple[str, str] | None:
+        """Helper to match a line against list patterns and return (list_type, item_content)."""
+        if match := cls.RE_LETTER_LIST.match(line):
+            return "a", match.group(2)
+        if match := cls.RE_NUMBER_LIST.match(line):
+            return "1", match.group(2)
+        if match := cls.RE_ROMAN_LIST.match(line):
+            return "I", match.group(2)
+        return None
+
+    @classmethod
+    def _process_list_block(cls, lines: list[str], html_parts: list[str]) -> None:
+        is_list = False
+        list_type = None
+        list_items = []
+        normal_lines = []
+
+        def _flush_normal_lines():
+            if normal_lines:
+                content = "<br>\n".join(normal_lines)
+                html_parts.append(f'<p class="nesh-paragraph">{content}</p>')
+                normal_lines.clear()
+
+        def _flush_current_list():
+            nonlocal is_list, list_items
+            if is_list and list_items:
+                type_attr = f' type="{list_type}"' if list_type != "1" else ""
+                html_parts.append(
+                    f'<ol{type_attr} class="nesh-list">{"".join(list_items)}</ol>'
+                )
+                list_items.clear()
+            is_list = False
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            list_match = cls._match_list_item(line)
+            if list_match:
+                _flush_normal_lines()
+                is_list = True
+                list_type = list_match[0]
+                list_items.append(f"<li>{list_match[1]}</li>")
+                continue
+
+            _flush_current_list()
+            normal_lines.append(line)
+
+        _flush_current_list()
+        _flush_normal_lines()
+
+    @classmethod
     def _convert_text_to_html(cls, text: str) -> str:
         """
         Converte texto plano NESH em HTML estruturado de alta qualidade.
-
-        Regras de conversão:
-        1. Blocos separados por linhas em branco -> <p class="nesh-paragraph">
-        2. Linhas com padrão "XX.XX -" -> <h3 class="nesh-heading">
-        3. Listas alfabéticas (a), b)) -> <ol type="a" class="nesh-list">
-        4. Listas numéricas (1., 2.)) -> <ol class="nesh-list">
-        5. Listas romanas (I., II.)) -> <ol type="I" class="nesh-list">
-        6. Linhas indentadas -> mantém indentação visual
-
-        Args:
-            text: Texto plano limpo
-
-        Returns:
-            HTML estruturado com classes semânticas
         """
         if not text:
             return ""
 
-        # Normalizar quebras de linha
         text = text.replace("\r\n", "\n").replace("\r", "\n")
-
-        # Dividir em blocos (parágrafos)
         blocks = re.split(r"\n\n+", text)
         html_parts = []
 
@@ -216,7 +365,6 @@ class HtmlRenderer:
             if not block:
                 continue
 
-            # Verificar se é um cabeçalho NCM (ex: "85.17 - Telefones")
             heading_match = cls.RE_NCM_HEADING.match(block)
             if heading_match:
                 ncm_code = heading_match.group(1)
@@ -227,61 +375,17 @@ class HtmlRenderer:
                 )
                 continue
 
-            # Verificar se o bloco contém lista
             lines = block.split("\n")
-            is_list = False
-            list_type = None
-            list_items = []
+            has_list_marker = any(
+                cls.RE_LETTER_LIST.match(line.strip())
+                or cls.RE_NUMBER_LIST.match(line.strip())
+                or cls.RE_ROMAN_LIST.match(line.strip())
+                for line in lines
+                if line.strip()
+            )
 
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-
-                # Lista alfabética
-                letter_match = cls.RE_LETTER_LIST.match(line)
-                if letter_match:
-                    is_list = True
-                    list_type = "a"
-                    list_items.append(f"<li>{letter_match.group(2)}</li>")
-                    continue
-
-                # Lista numérica
-                number_match = cls.RE_NUMBER_LIST.match(line)
-                if number_match:
-                    is_list = True
-                    list_type = "1"
-                    list_items.append(f"<li>{number_match.group(2)}</li>")
-                    continue
-
-                # Lista romana
-                roman_match = cls.RE_ROMAN_LIST.match(line)
-                if roman_match:
-                    is_list = True
-                    list_type = "I"
-                    list_items.append(f"<li>{roman_match.group(2)}</li>")
-                    continue
-
-                # Se não é item de lista mas estamos em uma lista, fechar e resetar
-                if is_list and list_items:
-                    type_attr = f' type="{list_type}"' if list_type != "1" else ""
-                    html_parts.append(
-                        f'<ol{type_attr} class="nesh-list">{"".join(list_items)}</ol>'
-                    )
-                    list_items = []
-                    is_list = False
-
-                # Linha normal dentro do bloco
-                if not is_list:
-                    # Adicionar como parágrafo se for linha única significativa
-                    pass
-
-            # Fechar lista pendente
-            if is_list and list_items:
-                type_attr = f' type="{list_type}"' if list_type != "1" else ""
-                html_parts.append(
-                    f'<ol{type_attr} class="nesh-list">{"".join(list_items)}</ol>'
-                )
+            if has_list_marker:
+                cls._process_list_block(lines, html_parts)
                 continue
 
             # Bloco normal -> parágrafo
@@ -336,64 +440,10 @@ class HtmlRenderer:
             clean_ncm = ncm.replace(".", "")
             return f'<a href="#" class="smart-link" data-ncm="{clean_ncm}">{ncm}</a>'
 
-        class _SmartLinkParser(HTMLParser):
-            """Aplica smart links apenas em texto, ignorando conteúdo dentro de links existentes."""
-
-            def __init__(self):
-                super().__init__(convert_charrefs=False)
-                self.out: list[str] = []
-                self._skip_depth = 0
-
-            @staticmethod
-            def _is_smart_link(attrs) -> bool:
-                if not attrs:
-                    return False
-                for k, v in attrs:
-                    if k.lower() == "class" and v:
-                        classes = {c.strip() for c in v.split() if c.strip()}
-                        if "smart-link" in classes:
-                            return True
-                return False
-
-            def handle_starttag(self, tag, attrs):
-                raw_tag = self.get_starttag_text() or ""
-                if self._skip_depth > 0:
-                    self._skip_depth += 1
-                else:
-                    if tag.lower() == "a" or self._is_smart_link(attrs):
-                        self._skip_depth = 1
-                self.out.append(raw_tag)
-
-            def handle_endtag(self, tag):
-                self.out.append(f"</{tag}>")
-                if self._skip_depth > 0:
-                    self._skip_depth -= 1
-
-            def handle_startendtag(self, tag, attrs):
-                raw_tag = self.get_starttag_text() or ""
-                self.out.append(raw_tag)
-
-            def handle_data(self, data):
-                if not data:
-                    return
-                if self._skip_depth > 0:
-                    self.out.append(data)
-                    return
-                self.out.append(cls.RE_NCM_LINK.sub(replacer, data))
-
-            def handle_entityref(self, name):
-                self.out.append(f"&{name};")
-
-            def handle_charref(self, name):
-                self.out.append(f"&#{name};")
-
-            def get_html(self) -> str:
-                return "".join(self.out)
-
         if "<" not in text and ">" not in text:
             return cls.RE_NCM_LINK.sub(replacer, text)
 
-        parser = _SmartLinkParser()
+        parser = _SmartLinkParser(replacer)
         try:
             parser.feed(text)
             parser.close()
@@ -440,66 +490,11 @@ class HtmlRenderer:
                 return f'{leading}<span class="highlight-unit">{stripped}</span>'
             return f'<span class="highlight-unit">{raw}</span>'
 
-        class _UnitHighlighter(HTMLParser):
-            """Aplica highlight apenas em texto, ignorando conteúdo dentro de `.smart-link`."""
-
-            def __init__(self):
-                super().__init__(convert_charrefs=False)
-                self.out: list[str] = []
-                self._skip_depth = 0
-
-            @staticmethod
-            def _is_smart_link(attrs) -> bool:
-                if not attrs:
-                    return False
-                for k, v in attrs:
-                    if k.lower() == "class" and v:
-                        classes = {c.strip() for c in v.split() if c.strip()}
-                        if "smart-link" in classes:
-                            return True
-                return False
-
-            def handle_starttag(self, tag, attrs):
-                raw_tag = self.get_starttag_text() or ""
-                # Se já estamos dentro de smart-link, apenas aumente profundidade
-                if self._skip_depth > 0:
-                    self._skip_depth += 1
-                else:
-                    if self._is_smart_link(attrs):
-                        self._skip_depth = 1
-                self.out.append(raw_tag)
-
-            def handle_endtag(self, tag):
-                self.out.append(f"</{tag}>")
-                if self._skip_depth > 0:
-                    self._skip_depth -= 1
-
-            def handle_startendtag(self, tag, attrs):
-                raw_tag = self.get_starttag_text() or ""
-                self.out.append(raw_tag)
-
-            def handle_data(self, data):
-                if not data:
-                    return
-                if self._skip_depth > 0:
-                    self.out.append(data)
-                    return
-                self.out.append(cls.RE_UNIT.sub(replacer, data))
-
-            def handle_entityref(self, name):
-                self.out.append(f"&{name};")
-
-            def handle_charref(self, name):
-                self.out.append(f"&#{name};")
-
-            def get_html(self) -> str:
-                return "".join(self.out)
-
         # Se não é tags, é texto puro: aplique diretamente.
         if "<" not in text and ">" not in text:
             return cls.RE_UNIT.sub(replacer, text)
 
-        parser = _UnitHighlighter()
+        parser = _UnitHighlighter(replacer)
         try:
             parser.feed(text)
             parser.close()
@@ -654,150 +649,10 @@ class HtmlRenderer:
             return _run_inline(text)
 
     @classmethod
-    def render_chapter(cls, data: SearchResult) -> str:
-        """
-        Gera HTML formatado para um único capítulo.
-
-        Inclui:
-            - Header do capítulo
-            - Regras gerais (blockquote)
-            - Headings para NCMs (h3 com id)
-            - Anchors para posições
-            - Smart links
-
-        Args:
-            data: SearchResult com dados do capítulo
-
-        Returns:
-            String HTML formatada
-        """
-        html = ""
-
-        # Capítulo não encontrado
-        if not data.get("real_content_found", True):
-            logger.warning(
-                f"Renderizando erro: Capítulo {data['capitulo']} não encontrado"
-            )
-            return (
-                "<hr>\n\n"
-                f'<span id="cap-{data["capitulo"]}"></span>\n\n'
-                f"<h2>Capítulo {data['capitulo']}</h2>\n\n"
-                "<blockquote><p><strong>Erro:</strong> Capítulo não encontrado.</p></blockquote>\n\n"
-            )
-
-        logger.debug(f"Renderizando capítulo {data['capitulo']}")
-
-        content = cls.clean_content(data["conteudo"])
-
-        # ---------------------------------------------------------------------------
-        # Trim accidental content from other chapters or sections (e.g., Chapter 49 containing Section XI)
-        # Only trims when a standalone chapter/section header is found.
-        # ---------------------------------------------------------------------------
-        current_chapter = str(data.get("capitulo", "")).strip()
-        if current_chapter:
-            trimmed_at = None
-            for match in cls.RE_CHAPTER_HEADER.finditer(content):
-                chapter_num = (match.group(1) or "").lstrip("0")
-                current_num = current_chapter.lstrip("0")
-                if chapter_num and current_num and chapter_num != current_num:
-                    trimmed_at = match.start()
-                    break
-            if trimmed_at is not None and trimmed_at > 0:
-                content = content[:trimmed_at].rstrip()
-
-        section_match = cls.RE_SECTION_HEADER.search(content)
-        if section_match and section_match.start() > 0:
-            content = content[: section_match.start()].rstrip()
-        content = cls.inject_note_links(content)
-
-        # ---------------------------------------------------------------------------
-        # STRUCTURING: Implement section headings using <h3> with id
-        # IMPORTANT: Must run BEFORE inject_smart_links to preserve ** markers
-        # ---------------------------------------------------------------------------
-        state = {"injected_count": 0, "ids_injected": []}
-
-        def section_wrapper(match):
-            pos_code = match.group(1)
-            pos_desc = match.group(2)
-
-            anchor_id = generate_anchor_id(pos_code)
-
-            opening = (
-                f'<h3 class="nesh-section" id="{anchor_id}" data-ncm="{pos_code}">'
-                f"<strong>{pos_code}</strong> - {pos_desc}"
-                f"</h3>\n\n"
-            )
-            state["injected_count"] += 1
-            state["ids_injected"].append(anchor_id)
-            return opening
-
-        def sub_section_wrapper(match):
-            pos_code = match.group(1)
-            pos_desc = match.group(2)
-
-            anchor_id = generate_anchor_id(pos_code)
-            opening = (
-                f'<h4 class="nesh-subsection" id="{anchor_id}" data-ncm="{pos_code}">'
-                f"<strong>{pos_code}</strong> - {pos_desc}"
-                f"</h4>\n\n"
-            )
-            state["injected_count"] += 1
-            state["ids_injected"].append(anchor_id)
-            return opening
-
-        # First: short subpositions (e.g., 8419.8)
-        content = cls.RE_NCM_SUBHEADING.sub(sub_section_wrapper, content)
-        content = cls.RE_NCM_HEADING.sub(section_wrapper, content)
-
-        # ---------------------------------------------------------------------------
-        # Normalize bold-only lines (titles) and bullet artifacts
-        # ---------------------------------------------------------------------------
-        normalized_lines = []
-        for line in content.split("\n"):
-            if cls.RE_BULLET_ONLY.match(line):
-                # Drop stray bullets with no content
-                continue
-            bullet_match = cls.RE_BULLET_ITEM.match(line)
-            if bullet_match:
-                normalized_lines.append(f"- {bullet_match.group(1).strip()}")
-                continue
-
-            bold_only = cls.RE_BOLD_ONLY_LINE.match(line)
-            if bold_only:
-                title = bold_only.group(1).strip()
-                normalized_lines.append(f'<h4 class="nesh-subheading">{title}</h4>')
-                continue
-
-            bold_inline = cls.RE_BOLD_INLINE.match(line)
-            if bold_inline:
-                title = bold_inline.group(1).strip()
-                rest = bold_inline.group(2).strip()
-                normalized_lines.append(
-                    f'<span class="nesh-inline-title">{title}</span> {rest}'
-                )
-                continue
-
-            normalized_lines.append(line)
-
-        content = "\n".join(normalized_lines)
-
-        logger.debug(
-            f"Capítulo {data['capitulo']}: {state['injected_count']} seções estruturadas"
-        )
-
-        # ---------------------------------------------------------------------------
-        # FALLBACK: Inject scroll anchors even when headings aren't bolded.
-        # Some sources/tests use plain lines like "85.17 - ..." without ** markers.
-        # CRITICAL FIX: Only inject anchors for MAIN positions (XX.XX format),
-        # and require the line to be a heading (has dash/colon separator).
-        # ---------------------------------------------------------------------------
-        posicoes = data.get("posicoes") or []
-        logger.debug(
-            f"[RENDERER] Checking {len(posicoes)} positions for ID injection fallback in Cap {data['capitulo']}"
-        )
-        existing_ids = set(re.findall(r'id="(pos-[^"]+)"', content))
+    def _get_pending_anchors(
+        cls, posicoes: list, existing_ids: set[str]
+    ) -> list[tuple[str, str]]:
         re_main_pos = re.compile(r"^\d{2}\.\d{2}$")
-
         pending: list[tuple[str, str]] = []
         for pos in posicoes:
             if not isinstance(pos, dict):
@@ -806,12 +661,27 @@ class HtmlRenderer:
             if not pos_code or not re_main_pos.match(pos_code):
                 continue
             anchor_id = generate_anchor_id(pos_code)
-            if anchor_id in existing_ids:
-                continue
-            pending.append((pos_code, anchor_id))
+            if anchor_id not in existing_ids:
+                pending.append((pos_code, anchor_id))
+        return pending
+
+    @classmethod
+    def _inject_fallback_anchors(
+        cls, content: str, posicoes: list, chapter_num: str
+    ) -> str:
+        """Inject fallback anchors for MAIN positions (XX.XX) when headings are not bold."""
+        if not posicoes:
+            return content
+
+        logger.debug(
+            f"[RENDERER] Checking {len(posicoes)} positions for ID injection fallback in Cap {chapter_num}"
+        )
+        existing_ids = set(re.findall(r'id="(pos-[^"]+)"', content))
+
+        pending = cls._get_pending_anchors(posicoes, existing_ids)
 
         if pending:
-            code_to_anchor = {pos_code: anchor_id for pos_code, anchor_id in pending}
+            code_to_anchor = dict(pending)
             escaped_codes = "|".join(
                 re.escape(pos_code) for pos_code in code_to_anchor.keys()
             )
@@ -841,21 +711,22 @@ class HtmlRenderer:
                 "[RENDERER] Injected %s/%s fallback anchors for Cap %s (missing=%s)",
                 len(injected),
                 len(code_to_anchor),
-                data["capitulo"],
+                chapter_num,
                 not_found,
             )
-        # ---------------------------------------------------------------------------
+        return content
 
-        # Single-pass transform: bold + exclusion + unit + glossary + smart links.
-        content = cls.apply_post_transforms(content, data["capitulo"])
-
-        html += "<hr>\n\n"
-        html += f'<span id="cap-{data["capitulo"]}"></span>\n\n'
-        html += f"<h2>Capítulo {data['capitulo']}</h2>\n\n"
+    @classmethod
+    def _render_structured_sections(
+        cls, sections: dict, chapter_id: str
+    ) -> tuple[str, bool]:
+        """Renders the HTML for the structured sections: titulo, notas, consideracoes, definicoes."""
+        html = ""
+        rendered_notes_block = False
 
         def _render_section_lines(raw_text: str) -> str:
             processed = cls.inject_note_links(raw_text)
-            processed = cls.apply_post_transforms(processed, data["capitulo"])
+            processed = cls.apply_post_transforms(processed, chapter_id)
             lines = []
             for line in processed.split("\n"):
                 if line.strip():
@@ -863,6 +734,210 @@ class HtmlRenderer:
                 else:
                     lines.append("<p><br></p>")
             return "\n".join(lines)
+
+        titulo = str(sections.get("titulo") or "").strip()
+        if titulo:
+            titulo_processed = cls.apply_post_transforms(
+                cls.inject_note_links(titulo), chapter_id
+            )
+            html += (
+                f'<div class="section-titulo" id="chapter-{chapter_id}-titulo">\n'
+                f'<h3 class="section-header titulo-header">📖 {titulo_processed}</h3>\n'
+                "</div>\n\n"
+            )
+            rendered_notes_block = True
+
+        notas_sec = str(sections.get("notas") or "").strip()
+        if notas_sec:
+            notas_html = _render_section_lines(notas_sec)
+            html += (
+                f'<div class="section-notas" id="chapter-{chapter_id}-notas">\n'
+                '<h3 class="section-header notas-header">📝 Notas do Capítulo</h3>\n'
+                f'<blockquote class="nesh-blockquote">\n{notas_html}\n</blockquote>\n'
+                "</div>\n\n"
+            )
+            rendered_notes_block = True
+
+        consideracoes = str(sections.get("consideracoes") or "").strip()
+        if consideracoes:
+            consideracoes_html = _render_section_lines(consideracoes)
+            html += (
+                f'<div class="section-consideracoes" id="chapter-{chapter_id}-consideracoes">\n'
+                '<h3 class="section-header consideracoes-header">📚 Considerações Gerais</h3>\n'
+                f'<div class="consideracoes-content">\n{consideracoes_html}\n</div>\n'
+                "</div>\n\n"
+            )
+            rendered_notes_block = True
+
+        definicoes = str(sections.get("definicoes") or "").strip()
+        if definicoes:
+            definicoes_html = _render_section_lines(definicoes)
+            html += (
+                f'<div class="section-definicoes" id="chapter-{chapter_id}-definicoes">\n'
+                '<h3 class="section-header definicoes-header">📋 Definições Técnicas</h3>\n'
+                f'<div class="definicoes-content">\n{definicoes_html}\n</div>\n'
+                "</div>\n\n"
+            )
+            rendered_notes_block = True
+
+        return html, rendered_notes_block
+
+    @classmethod
+    def _trim_chapter_content(cls, content: str, current_chapter: str) -> str:
+        """Trims accidental content from other chapters or sections."""
+        current_chapter_str = str(current_chapter).strip()
+        if current_chapter_str:
+            trimmed_at = None
+            for match in cls.RE_CHAPTER_HEADER.finditer(content):
+                chapter_num = (match.group(1) or "").lstrip("0")
+                current_num = current_chapter_str.lstrip("0")
+                if chapter_num and current_num and chapter_num != current_num:
+                    trimmed_at = match.start()
+                    break
+            if trimmed_at is not None and trimmed_at > 0:
+                content = content[:trimmed_at].rstrip()
+
+        section_match = cls.RE_SECTION_HEADER.search(content)
+        if section_match and section_match.start() > 0:
+            content = content[: section_match.start()].rstrip()
+        return content
+
+    @classmethod
+    def _structure_headings(cls, content: str, state: dict) -> str:
+        def section_wrapper(match):
+            pos_code = match.group(1)
+            pos_desc = match.group(2)
+            anchor_id = generate_anchor_id(pos_code)
+            opening = (
+                f'<h3 class="nesh-section" id="{anchor_id}" data-ncm="{pos_code}">'
+                f"<strong>{pos_code}</strong> - {pos_desc}"
+                f"</h3>\n\n"
+            )
+            state["injected_count"] += 1
+            state["ids_injected"].append(anchor_id)
+            return opening
+
+        def sub_section_wrapper(match):
+            pos_code = match.group(1)
+            pos_desc = match.group(2)
+            anchor_id = generate_anchor_id(pos_code)
+            opening = (
+                f'<h4 class="nesh-subsection" id="{anchor_id}" data-ncm="{pos_code}">'
+                f"<strong>{pos_code}</strong> - {pos_desc}"
+                f"</h4>\n\n"
+            )
+            state["injected_count"] += 1
+            state["ids_injected"].append(anchor_id)
+            return opening
+
+        content = cls.RE_NCM_SUBHEADING.sub(sub_section_wrapper, content)
+        content = cls.RE_NCM_HEADING.sub(section_wrapper, content)
+        return content
+
+    @classmethod
+    def _normalize_lines(cls, content: str) -> str:
+        """Normalizes bold-only lines (titles) and bullet artifacts."""
+        normalized_lines = []
+        for line in content.split("\n"):
+            if cls.RE_BULLET_ONLY.match(line):
+                continue
+            bullet_match = cls.RE_BULLET_ITEM.match(line)
+            if bullet_match:
+                normalized_lines.append(f"- {bullet_match.group(1).strip()}")
+                continue
+
+            bold_only = cls.RE_BOLD_ONLY_LINE.match(line)
+            if bold_only:
+                title = bold_only.group(1).strip()
+                normalized_lines.append(f'<h4 class="nesh-subheading">{title}</h4>')
+                continue
+
+            bold_inline = cls.RE_BOLD_INLINE.match(line)
+            if bold_inline:
+                title = bold_inline.group(1).strip()
+                rest = bold_inline.group(2).strip()
+                normalized_lines.append(
+                    f'<span class="nesh-inline-title">{title}</span> {rest}'
+                )
+                continue
+
+            normalized_lines.append(line)
+        return "\n".join(normalized_lines)
+
+    @classmethod
+    def _render_general_notes(cls, notas: str, capitulo: str) -> str:
+        if not notas:
+            return ""
+        notas_processed = cls.inject_note_links(notas)
+        notas_processed = cls.inject_smart_links(notas_processed, capitulo)
+        lines = []
+        for line in notas_processed.split("\n"):
+            if line.strip():
+                lines.append(f"<p>{line}</p>")
+            else:
+                lines.append("<p><br></p>")
+        blockquote_content = "\n".join(lines)
+        return (
+            f'<div class="regras-gerais" id="chapter-{capitulo}-notas">\n'
+            "<h3>Regras Gerais do Capítulo</h3>\n"
+            f"<blockquote>\n{blockquote_content}\n</blockquote>\n"
+            "</div>\n\n"
+        )
+
+    @classmethod
+    def render_chapter(cls, data: SearchResult) -> str:
+        """
+        Gera HTML formatado para um único capítulo.
+
+        Inclui:
+            - Header do capítulo
+            - Regras gerais (blockquote)
+            - Headings para NCMs (h3 com id)
+            - Anchors para posições
+            - Smart links
+
+        Args:
+            data: SearchResult com dados do capítulo
+
+        Returns:
+            String HTML formatada
+        """
+        html = ""
+
+        if not data.get("real_content_found", True):
+            logger.warning(
+                f"Renderizando erro: Capítulo {data['capitulo']} não encontrado"
+            )
+            return (
+                "<hr>\n\n"
+                f'<span id="cap-{data["capitulo"]}"></span>\n\n'
+                f"<h2>Capítulo {data['capitulo']}</h2>\n\n"
+                "<blockquote><p><strong>Erro:</strong> Capítulo não encontrado.</p></blockquote>\n\n"
+            )
+
+        logger.debug(f"Renderizando capítulo {data['capitulo']}")
+
+        content = cls.clean_content(data["conteudo"])
+        content = cls._trim_chapter_content(content, data.get("capitulo", ""))
+        content = cls.inject_note_links(content)
+
+        state = {"injected_count": 0, "ids_injected": []}
+        content = cls._structure_headings(content, state)
+        content = cls._normalize_lines(content)
+
+        logger.debug(
+            f"Capítulo {data['capitulo']}: {state['injected_count']} seções estruturadas"
+        )
+
+        content = cls._inject_fallback_anchors(
+            content, data.get("posicoes") or [], data["capitulo"]
+        )
+
+        content = cls.apply_post_transforms(content, data["capitulo"])
+
+        html += "<hr>\n\n"
+        html += f'<span id="cap-{data["capitulo"]}"></span>\n\n'
+        html += f"<h2>Capítulo {data['capitulo']}</h2>\n\n"
 
         sections = data.get("secoes") or {}
         has_structured_sections = isinstance(sections, dict) and any(
@@ -873,70 +948,17 @@ class HtmlRenderer:
 
         if has_structured_sections:
             chapter_id = str(data["capitulo"]).strip()
-
-            titulo = str(sections.get("titulo") or "").strip()
-            if titulo:
-                titulo_processed = cls.apply_post_transforms(
-                    cls.inject_note_links(titulo), data["capitulo"]
-                )
-                html += (
-                    f'<div class="section-titulo" id="chapter-{chapter_id}-titulo">\n'
-                    f'<h3 class="section-header titulo-header">📖 {titulo_processed}</h3>\n'
-                    "</div>\n\n"
-                )
-                rendered_notes_block = True
-
-            notas_sec = str(sections.get("notas") or "").strip()
-            if notas_sec:
-                notas_html = _render_section_lines(notas_sec)
-                html += (
-                    f'<div class="section-notas" id="chapter-{chapter_id}-notas">\n'
-                    '<h3 class="section-header notas-header">📝 Notas do Capítulo</h3>\n'
-                    f'<blockquote class="nesh-blockquote">\n{notas_html}\n</blockquote>\n'
-                    "</div>\n\n"
-                )
-                rendered_notes_block = True
-
-            consideracoes = str(sections.get("consideracoes") or "").strip()
-            if consideracoes:
-                consideracoes_html = _render_section_lines(consideracoes)
-                html += (
-                    f'<div class="section-consideracoes" id="chapter-{chapter_id}-consideracoes">\n'
-                    '<h3 class="section-header consideracoes-header">📚 Considerações Gerais</h3>\n'
-                    f'<div class="consideracoes-content">\n{consideracoes_html}\n</div>\n'
-                    "</div>\n\n"
-                )
-                rendered_notes_block = True
-
-            definicoes = str(sections.get("definicoes") or "").strip()
-            if definicoes:
-                definicoes_html = _render_section_lines(definicoes)
-                html += (
-                    f'<div class="section-definicoes" id="chapter-{chapter_id}-definicoes">\n'
-                    '<h3 class="section-header definicoes-header">📋 Definições Técnicas</h3>\n'
-                    f'<div class="definicoes-content">\n{definicoes_html}\n</div>\n'
-                    "</div>\n\n"
-                )
-                rendered_notes_block = True
+            sections_html, rendered_notes_block = cls._render_structured_sections(
+                sections, chapter_id
+            )
+            html += sections_html
 
         if not rendered_notes_block:
-            notas = data.get("notas_gerais")
-            if notas:
-                notas_processed = cls.inject_note_links(notas)
-                notas_processed = cls.inject_smart_links(notas_processed, data["capitulo"])
-                lines = []
-                for line in notas_processed.split("\n"):
-                    if line.strip():
-                        lines.append(f"<p>{line}</p>")
-                    else:
-                        lines.append("<p><br></p>")
-                blockquote_content = "\n".join(lines)
-                html += (
-                    f'<div class="regras-gerais" id="chapter-{data["capitulo"]}-notas">\n'
-                    "<h3>Regras Gerais do Capítulo</h3>\n"
-                    f"<blockquote>\n{blockquote_content}\n</blockquote>\n"
-                    "</div>\n\n"
-                )
+            notas_html = cls._render_general_notes(
+                data.get("notas_gerais", ""), data["capitulo"]
+            )
+            if notas_html:
+                html += notas_html
                 rendered_notes_block = True
 
         if rendered_notes_block:

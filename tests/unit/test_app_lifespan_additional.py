@@ -43,11 +43,18 @@ async def test_no_cache_html_sets_headers_for_html_paths_only():
     async def _next(_request):
         return Response("ok")
 
-    html_response = await app_module.no_cache_html(_request_for_path("/index.html"), _next)
+    html_response = await app_module.no_cache_html(
+        _request_for_path("/index.html"), _next
+    )
     root_response = await app_module.no_cache_html(_request_for_path("/"), _next)
-    api_response = await app_module.no_cache_html(_request_for_path("/api/status"), _next)
+    api_response = await app_module.no_cache_html(
+        _request_for_path("/api/status"), _next
+    )
 
-    assert html_response.headers["Cache-Control"] == "no-store, no-cache, must-revalidate, max-age=0"
+    assert (
+        html_response.headers["Cache-Control"]
+        == "no-store, no-cache, must-revalidate, max-age=0"
+    )
     assert root_response.headers["Pragma"] == "no-cache"
     assert "Cache-Control" not in api_response.headers
 
@@ -83,8 +90,16 @@ async def test_lifespan_sqlite_init_db_failure_keeps_startup_and_shutdown(monkey
     monkeypatch.setattr(nesh_service_module, "NeshService", _FakeNeshService)
     monkeypatch.setattr(tipi_service_module, "TipiService", _FakeTipiService)
     monkeypatch.setattr(ai_service_module, "AiService", _FakeAiService)
-    monkeypatch.setattr(app_module, "init_glossary", lambda _root: fake_calls.__setitem__("glossary", True))
-    monkeypatch.setattr(app_module, "verify_frontend_build", lambda _root: fake_calls.__setitem__("frontend", True))
+    monkeypatch.setattr(
+        app_module,
+        "init_glossary",
+        lambda _root: fake_calls.__setitem__("glossary", True),
+    )
+    monkeypatch.setattr(
+        app_module,
+        "verify_frontend_build",
+        lambda _root: fake_calls.__setitem__("frontend", True),
+    )
     monkeypatch.setattr(app_module.redis_cache, "close", _redis_close)
 
     app = _FakeApp()
@@ -265,7 +280,9 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(monke
 
 
 @pytest.mark.asyncio
-async def test_lifespan_postgres_tipi_count_failure_falls_back_to_sqlite_mode(monkeypatch):
+async def test_lifespan_postgres_tipi_count_failure_falls_back_to_sqlite_mode(
+    monkeypatch,
+):
     class _FakeNeshService:
         @classmethod
         async def create_with_repository(cls):

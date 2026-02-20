@@ -9,7 +9,7 @@ interface SettingsModalProps {
     onClose: () => void;
 }
 
-export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
+export function SettingsModal({ isOpen, onClose }: Readonly<SettingsModalProps>) {
     const {
         theme, fontSize, highlightEnabled, adminMode, tipiViewMode, sidebarPosition,
         updateTheme, updateFontSize, toggleHighlight, toggleAdminMode, updateTipiViewMode, updateSidebarPosition, restoreDefaults
@@ -21,19 +21,19 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         const handleEsc = (e: KeyboardEvent) => {
             if (e.key === 'Escape') onClose();
         };
-        if (isOpen) window.addEventListener('keydown', handleEsc);
-        return () => window.removeEventListener('keydown', handleEsc);
+        if (isOpen) globalThis.addEventListener('keydown', handleEsc);
+        return () => globalThis.removeEventListener('keydown', handleEsc);
     }, [isOpen, onClose]);
 
     if (!isOpen) return null;
 
     const handleFontSizeChange = (e: ChangeEvent<HTMLInputElement>) => {
-        updateFontSize(parseInt(e.target.value));
+        updateFontSize(Number.parseInt(e.target.value));
     };
 
     return (
-        <div className={`${styles.modal} ${isOpen ? styles.active : ''}`} onClick={onClose}>
-            <div className={styles.content} onClick={e => e.stopPropagation()}>
+        <div className={`${styles.modal} ${isOpen ? styles.active : ''}`} onClick={onClose} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClose(); }} role="presentation">
+            <div className={styles.content} onClick={e => e.stopPropagation()} role="presentation">
 
                 {/* Header */}
                 <div className={styles.header}>
@@ -83,8 +83,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                     max="20"
                                     value={fontSize}
                                     onChange={handleFontSizeChange}
-                                    className={styles.slider}
-                                    style={{ maxWidth: '120px' }}
+                                    className={`${styles.slider} ${styles.sliderInput}`}
+                                    aria-label="Tamanho da Fonte"
+                                    title="Tamanho da Fonte"
+                                    placeholder="Tamanho da Fonte"
                                 />
                             </div>
                         </div>
@@ -96,12 +98,15 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                     <span>Realçar Resultados</span>
                                     <span className={styles.hint}>Destacar termos encontrados</span>
                                 </div>
-                                <label className={styles.switch}>
+                                <label className={styles.switch} aria-label="Realçar Resultados" title="Realçar Resultados">
                                     <input
                                         type="checkbox"
                                         checked={highlightEnabled}
                                         onChange={toggleHighlight}
                                         data-testid="highlight-toggle"
+                                        aria-label="Realçar Resultados"
+                                        title="Realçar Resultados"
+                                        placeholder="Realçar Resultados"
                                     />
                                     <span className={styles.sliderRound}></span>
                                 </label>
@@ -113,12 +118,15 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                         <span>Modo Desenvolvedor</span>
                                         <span className={styles.hint}>Logs de IA e Admin</span>
                                     </div>
-                                    <label className={styles.switch}>
+                                    <label className={styles.switch} aria-label="Modo Desenvolvedor" title="Modo Desenvolvedor">
                                         <input
                                             type="checkbox"
                                             checked={adminMode}
                                             onChange={toggleAdminMode}
                                             data-testid="admin-toggle"
+                                            aria-label="Modo Desenvolvedor"
+                                            title="Modo Desenvolvedor"
+                                            placeholder="Modo Desenvolvedor"
                                         />
                                         <span className={styles.sliderRound}></span>
                                     </label>
@@ -151,7 +159,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         </div>
 
                         {/* CARD 4: TIPI (Full width) */}
-                        <div className={styles.card} style={{ gridColumn: '1 / -1' }}>
+                        <div className={`${styles.card} ${styles.fullWidthCard}`}>
                             <div className={styles.item}>
                                 <div className={styles.label}>
                                     <span>Visualização TIPI</span>

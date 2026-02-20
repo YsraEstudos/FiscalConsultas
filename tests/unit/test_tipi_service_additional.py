@@ -51,11 +51,25 @@ class _FakeConn:
 
 class _FakeRepo:
     async def get_by_chapter(self, cap_num):
-        return [{"ncm": "85.17", "descricao": "Telefone", "aliquota": "0", "capitulo": cap_num}]
+        return [
+            {
+                "ncm": "85.17",
+                "descricao": "Telefone",
+                "aliquota": "0",
+                "capitulo": cap_num,
+            }
+        ]
 
     async def get_family_positions(self, cap_num, prefix, ancestor_prefixes):
         del prefix, ancestor_prefixes
-        return [{"ncm": "85.17", "descricao": "Telefone", "aliquota": "0", "capitulo": cap_num}]
+        return [
+            {
+                "ncm": "85.17",
+                "descricao": "Telefone",
+                "aliquota": "0",
+                "capitulo": cap_num,
+            }
+        ]
 
     async def search_fulltext(self, query, limit):
         del query, limit
@@ -200,7 +214,15 @@ async def test_get_chapter_positions_sqlite_mode_evicts_cache(monkeypatch):
     conn = _FakeConn(
         scripted_rows=[
             [{"name": "ncm_sort"}],
-            [{"ncm": "85.17", "capitulo": "85", "descricao": "Telefone", "aliquota": "0", "nivel": 1}],
+            [
+                {
+                    "ncm": "85.17",
+                    "capitulo": "85",
+                    "descricao": "Telefone",
+                    "aliquota": "0",
+                    "nivel": 1,
+                }
+            ],
         ]
     )
 
@@ -234,12 +256,24 @@ async def test_search_by_code_handles_multi_part_merge_with_same_chapter(monkeyp
     async def _fake_family(cap_num, prefix, ancestors):
         del prefix, ancestors
         return (
-            {"ncm": "85.17", "capitulo": cap_num, "descricao": "Telefone", "aliquota": "0", "nivel": 1},
+            {
+                "ncm": "85.17",
+                "capitulo": cap_num,
+                "descricao": "Telefone",
+                "aliquota": "0",
+                "nivel": 1,
+            },
         )
 
     async def _fake_chapter(cap_num):
         return (
-            {"ncm": "85.10", "capitulo": cap_num, "descricao": "Outro item", "aliquota": "5", "nivel": 1},
+            {
+                "ncm": "85.10",
+                "capitulo": cap_num,
+                "descricao": "Outro item",
+                "aliquota": "5",
+                "nivel": 1,
+            },
         )
 
     monkeypatch.setattr(service, "_get_family_positions", _fake_family)
@@ -271,7 +305,13 @@ async def test_search_by_code_evicts_code_cache_when_limit_is_zero(monkeypatch):
 
     async def _fake_chapter_positions(_cap_num):
         return (
-            {"ncm": "85.17", "capitulo": "85", "descricao": "Telefone", "aliquota": "0", "nivel": 1},
+            {
+                "ncm": "85.17",
+                "capitulo": "85",
+                "descricao": "Telefone",
+                "aliquota": "0",
+                "nivel": 1,
+            },
         )
 
     monkeypatch.setattr(service, "_get_chapter_positions", _fake_chapter_positions)
@@ -296,10 +336,27 @@ async def test_search_text_sqlite_mode_runs_and_query_fallback(monkeypatch):
     service = TipiService()
     conn = _FakeConn(
         scripted_rows=[
-            [{"ncm": "85.17", "capitulo": "85", "descricao": "Telefone", "aliquota": None}],
             [
-                {"ncm": "84.13", "capitulo": "84", "descricao": "Bomba", "aliquota": "0"},
-                {"ncm": "84.14", "capitulo": "84", "descricao": "Compressor", "aliquota": "0"},
+                {
+                    "ncm": "85.17",
+                    "capitulo": "85",
+                    "descricao": "Telefone",
+                    "aliquota": None,
+                }
+            ],
+            [
+                {
+                    "ncm": "84.13",
+                    "capitulo": "84",
+                    "descricao": "Bomba",
+                    "aliquota": "0",
+                },
+                {
+                    "ncm": "84.14",
+                    "capitulo": "84",
+                    "descricao": "Compressor",
+                    "aliquota": "0",
+                },
             ],
         ]
     )
@@ -327,7 +384,9 @@ async def test_get_all_chapters_repository_and_sqlite_modes(monkeypatch):
     assert repo_payload == [{"codigo": "85", "titulo": "Capítulo 85", "secao": "XVI"}]
 
     sqlite_service = TipiService()
-    conn = _FakeConn(scripted_rows=[[{"codigo": "01", "titulo": "Animais", "secao": "I"}]])
+    conn = _FakeConn(
+        scripted_rows=[[{"codigo": "01", "titulo": "Animais", "secao": "I"}]]
+    )
 
     async def _fake_get_connection():
         return conn

@@ -5,12 +5,14 @@ import aiosqlite
 from backend.infrastructure.database import DatabaseAdapter
 from backend.config.exceptions import DatabaseError
 
+
 async def _fts_table_exists(db_file: str) -> bool:
     async with aiosqlite.connect(db_file) as conn:
         cur = await conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='search_index' LIMIT 1"
         )
         return await cur.fetchone() is not None
+
 
 @pytest.mark.asyncio
 async def test_fts_debug_smoke():

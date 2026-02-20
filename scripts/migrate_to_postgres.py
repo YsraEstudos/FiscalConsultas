@@ -15,6 +15,7 @@ Pré-requisitos:
     3. DATABASE__POSTGRES_URL configurado
     4. Rodar: alembic upgrade head
 """
+
 import asyncio
 import sys
 import os
@@ -27,7 +28,13 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.db_engine import get_session
-from backend.domain.sqlmodels import Chapter, Position, ChapterNotes, Glossary, TipiPosition
+from backend.domain.sqlmodels import (
+    Chapter,
+    Position,
+    ChapterNotes,
+    Glossary,
+    TipiPosition,
+)
 from backend.config.settings import settings
 
 
@@ -36,20 +43,24 @@ async def migrate_chapters(sqlite_path: str, pg_session: AsyncSession) -> int:
     count = 0
     async with aiosqlite.connect(sqlite_path) as db:
         db.row_factory = aiosqlite.Row
-        
+
         # Check if raw_text column exists
         async with db.execute("PRAGMA table_info(chapters)") as cursor:
             columns = [row[1] async for row in cursor]
         has_raw_text = "raw_text" in columns
-        
-        query = "SELECT chapter_num, content" + (", raw_text" if has_raw_text else "") + " FROM chapters"
+
+        query = (
+            "SELECT chapter_num, content"
+            + (", raw_text" if has_raw_text else "")
+            + " FROM chapters"
+        )
         async with db.execute(query) as cursor:
             async for row in cursor:
                 chapter = Chapter(
                     chapter_num=row["chapter_num"],
                     content=row["content"],
                     raw_text=row["raw_text"] if has_raw_text else None,
-                    tenant_id=None
+                    tenant_id=None,
                 )
                 pg_session.add(chapter)
                 count += 1
@@ -68,7 +79,11 @@ async def migrate_positions(sqlite_path: str, pg_session: AsyncSession) -> int:
             columns = [row[1] async for row in cursor]
         has_anchor = "anchor_id" in columns
 
-        query = "SELECT codigo, descricao, chapter_num" + (", anchor_id" if has_anchor else "") + " FROM positions"
+        query = (
+            "SELECT codigo, descricao, chapter_num"
+            + (", anchor_id" if has_anchor else "")
+            + " FROM positions"
+        )
         batch = []
         async with db.execute(query) as cursor:
             async for row in cursor:
@@ -108,7 +123,7 @@ async def migrate_chapter_notes(sqlite_path: str, pg_session: AsyncSession) -> i
             has_parsed = "parsed_notes_json" in columns
 
             query = (
-                "SELECT chapter_num, notes_content, titulo, notas, consideracoes, definicoes" \
+                "SELECT chapter_num, notes_content, titulo, notas, consideracoes, definicoes"
                 + (", parsed_notes_json" if has_parsed else "")
                 + " FROM chapter_notes"
             )
@@ -121,8 +136,10 @@ async def migrate_chapter_notes(sqlite_path: str, pg_session: AsyncSession) -> i
                         notas=row["notas"],
                         consideracoes=row["consideracoes"],
                         definicoes=row["definicoes"],
-                        parsed_notes_json=row["parsed_notes_json"] if has_parsed else None,
-                        tenant_id=None
+                        parsed_notes_json=row["parsed_notes_json"]
+                        if has_parsed
+                        else None,
+                        tenant_id=None,
                     )
                     pg_session.add(notes)
                     count += 1
@@ -201,24 +218,30 @@ async def update_search_vectors(pg_session: AsyncSession):
     Necessário porque os triggers só disparam em INSERT/UPDATE.
     """
     from sqlalchemy import text
-    
+
     print("\n📊 Atualizando search_vectors...")
-    
-    await pg_session.execute(text("""
+
+    await pg_session.execute(
+        text("""
         UPDATE chapters 
         SET search_vector = to_tsvector('portuguese', COALESCE(content, ''))
-    """))
-    
-    await pg_session.execute(text("""
+    """)
+    )
+
+    await pg_session.execute(
+        text("""
         UPDATE positions 
         SET search_vector = to_tsvector('portuguese', COALESCE(descricao, ''))
-    """))
+    """)
+    )
 
-    await pg_session.execute(text("""
+    await pg_session.execute(
+        text("""
         UPDATE tipi_positions
         SET search_vector = to_tsvector('portuguese', COALESCE(descricao, ''))
-    """))
-    
+    """)
+    )
+
     await pg_session.commit()
     print("  ✅ Search vectors atualizados")
 
@@ -228,7 +251,7 @@ async def main():
     print("=" * 60)
     print("🚀 Migração SQLite → PostgreSQL")
     print("=" * 60)
-    
+
     # Verificar se está configurado para PostgreSQL
     if not settings.database.is_postgres:
         print("\n❌ Erro: DATABASE__ENGINE deve ser 'postgresql'")
@@ -236,19 +259,19 @@ async def main():
         print("   DATABASE__ENGINE=postgresql")
         print("   DATABASE__POSTGRES_URL=postgresql+asyncpg://user:pass@host/db")
         return
-    
+
     print(f"\n📁 SQLite source: {settings.database.path}")
     print(f"🐘 PostgreSQL target: {settings.database.postgres_url}")
-    
+
     # Verificar se SQLite existe
     if not os.path.exists(settings.database.path):
         print(f"\n❌ Erro: Banco SQLite não encontrado: {settings.database.path}")
         return
-    
+
     print("\n" + "-" * 60)
     print("📦 Migrando dados...")
     print("-" * 60)
-    
+
     async with get_session() as session:
         # Migrar tabelas na ordem correta (FK constraints)
         await migrate_chapters(settings.database.path, session)
@@ -256,16 +279,18 @@ async def main():
         await migrate_chapter_notes(settings.database.path, session)
         await migrate_glossary(settings.database.path, session)
         await migrate_tipi_positions(settings.database.tipi_path, session)
-        
+
         # Atualizar search_vectors
         await update_search_vectors(session)
-    
+
     print("\n" + "=" * 60)
     print("✅ Migração concluída com sucesso!")
     print("=" * 60)
     print("\nPróximos passos:")
     print("  1. Testar busca: curl 'http://localhost:8000/api/search?ncm=bomba'")
-    print("  2. Verificar FTS: psql -d nesh_db -c \"SELECT codigo, ts_headline('portuguese', descricao, plainto_tsquery('portuguese', 'bomba')) FROM positions WHERE search_vector @@ plainto_tsquery('portuguese', 'bomba') LIMIT 5;\"")
+    print(
+        "  2. Verificar FTS: psql -d nesh_db -c \"SELECT codigo, ts_headline('portuguese', descricao, plainto_tsquery('portuguese', 'bomba')) FROM positions WHERE search_vector @@ plainto_tsquery('portuguese', 'bomba') LIMIT 5;\""
+    )
 
 
 if __name__ == "__main__":
