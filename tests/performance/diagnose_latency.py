@@ -19,11 +19,10 @@ settings.database.engine = "sqlite"
 settings.database.postgres_url = None
 settings.cache.enable_redis = False
 
-import asyncio
-import orjson
-from starlette.testclient import TestClient
-from backend.server.app import app
-from backend.config import CONFIG
+import orjson  # noqa: E402
+from starlette.testclient import TestClient  # noqa: E402
+from backend.server.app import app  # noqa: E402
+from backend.config import CONFIG  # noqa: E402
 
 
 def measure(label, fn, rounds=50):
@@ -151,7 +150,7 @@ def main():
         print(f"   GZip overhead:          ~{avg - avg_nogz:.1f}ms per request")
 
         # 5) Measure just TestClient overhead with a minimal endpoint
-        print(f"\n5. Summary:")
+        print("\n5. Summary:")
         print(f"   Raw SQL:                {measure('', raw_sql, rounds=200)[0]:.3f}ms")
         print(f"   TestClient+ovrhead:     ~{avg - 0.5:.1f}ms  (full HTTP - raw SQL)")
 
