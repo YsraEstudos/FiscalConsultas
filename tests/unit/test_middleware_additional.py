@@ -1,4 +1,3 @@
-import asyncio
 from types import SimpleNamespace
 
 import jwt
@@ -36,10 +35,10 @@ async def _invoke_middleware(
 ) -> tuple[int, list[dict]]:
     sent_messages: list[dict] = []
 
-    async def receive():
+    async def receive():  # NOSONAR
         return {"type": "http.request", "body": b"", "more_body": False}
 
-    async def send(message):
+    async def send(message):  # NOSONAR
         sent_messages.append(message)
 
     await mw(scope, receive, send)
@@ -50,8 +49,8 @@ async def _invoke_middleware(
 
 
 def test_get_payload_exp_variants():
-    assert middleware._get_payload_exp({"exp": 123}) == 123.0
-    assert middleware._get_payload_exp({"exp": "123.5"}) == 123.5
+    assert middleware._get_payload_exp({"exp": 123}) == pytest.approx(123.0)
+    assert middleware._get_payload_exp({"exp": "123.5"}) == pytest.approx(123.5)
     assert middleware._get_payload_exp({"exp": "abc"}) is None
     assert middleware._get_payload_exp({}) is None
 
@@ -419,20 +418,16 @@ async def test_decode_clerk_jwt_handles_invalid_and_expired_exceptions(monkeypat
     monkeypatch.setattr(middleware.logger, "warning", lambda _msg: None)
     monkeypatch.setattr(middleware.logger, "error", lambda _msg: None)
 
-    monkeypatch.setattr(
-        middleware.jwt,
-        "decode",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(jwt.InvalidTokenError("bad")),
-    )
+    def _raise_invalid(*_args, **_kwargs):
+        raise jwt.InvalidTokenError("bad")
+
+    monkeypatch.setattr(middleware.jwt, "decode", _raise_invalid)
     assert (await middleware.decode_clerk_jwt("tok1")) is None
 
-    monkeypatch.setattr(
-        middleware.jwt,
-        "decode",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            jwt.ExpiredSignatureError("exp")
-        ),
-    )
+    def _raise_expired(*_args, **_kwargs):
+        raise jwt.ExpiredSignatureError("exp")
+
+    monkeypatch.setattr(middleware.jwt, "decode", _raise_expired)
     assert (await middleware.decode_clerk_jwt("tok2")) is None
 
     class _BoomJWKS:
@@ -445,13 +440,13 @@ async def test_decode_clerk_jwt_handles_invalid_and_expired_exceptions(monkeypat
 
 @pytest.mark.asyncio
 async def test_extract_org_from_jwt_and_get_current_tenant(monkeypatch):
-    async def _mock_decode1(_token):
+    async def _mock_decode1(_token):  # NOSONAR
         return {"org_id": "org_123"}
 
     monkeypatch.setattr(middleware, "decode_clerk_jwt", _mock_decode1)
     assert (await middleware.extract_org_from_jwt("tok")) == "org_123"
 
-    async def _mock_decode2(_token):
+    async def _mock_decode2(_token):  # NOSONAR
         return None
 
     monkeypatch.setattr(middleware, "decode_clerk_jwt", _mock_decode2)
@@ -466,13 +461,13 @@ async def test_extract_org_from_jwt_and_get_current_tenant(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_is_clerk_token_valid_delegates_to_decode(monkeypatch):
-    async def _mock_decode1(_token):
+    async def _mock_decode1(_token):  # NOSONAR
         return {"sub": "u"}
 
     monkeypatch.setattr(middleware, "decode_clerk_jwt", _mock_decode1)
     assert (await middleware.is_clerk_token_valid("ok")) is True
 
-    async def _mock_decode2(_token):
+    async def _mock_decode2(_token):  # NOSONAR
         return None
 
     monkeypatch.setattr(middleware, "decode_clerk_jwt", _mock_decode2)
@@ -510,7 +505,7 @@ async def test_dispatch_returns_401_in_prod_postgres_without_tenant(monkeypatch)
     )
     called = []
 
-    async def app(_scope, _receive, _send):
+    async def app(_scope, _receive, _send):  # NOSONAR
         called.append("called")
 
     mw = middleware.TenantMiddleware(app=app)
@@ -548,7 +543,7 @@ async def test_dispatch_sets_tenant_from_bearer_and_schedules_provision(monkeypa
         middleware.settings.database, "engine", "postgresql", raising=False
     )
 
-    async def _mock_decode(_token):
+    async def _mock_decode(_token):  # NOSONAR
         return {"org_id": "org_bearer", "sub": "user_1"}
 
     monkeypatch.setattr(middleware, "decode_clerk_jwt", _mock_decode)
@@ -562,7 +557,7 @@ async def test_dispatch_sets_tenant_from_bearer_and_schedules_provision(monkeypa
 
     monkeypatch.setattr(middleware.asyncio, "ensure_future", _fake_ensure_future)
 
-    async def _ensure(*_args, **_kwargs):
+    async def _ensure(*_args, **_kwargs):  # NOSONAR
         return None
 
     monkeypatch.setattr(middleware, "ensure_clerk_entities", _ensure)
@@ -590,7 +585,7 @@ class _FakeProvisionSession:
         self._user = user
         self.added = []
 
-    async def get(self, model, pk):
+    async def get(self, model, pk):  # NOSONAR
         name = getattr(model, "__name__", "")
         if name == "Tenant":
             return self._tenant
@@ -647,10 +642,13 @@ async def test_ensure_clerk_entities_skips_when_recently_cached(monkeypatch):
     middleware._provisioned_entities_cache.clear()
     middleware._provisioned_entities_cache[("org1", "u1")] = 90.0
 
+    def _raise_should_not_use(*_args, **_kwargs):
+        raise RuntimeError("should not use db")
+
     # Would fail if DB path was reached
     monkeypatch.setattr(
         "backend.infrastructure.db_engine.get_session",
-        lambda: (_ for _ in ()).throw(RuntimeError("should not use db")),
+        _raise_should_not_use,
     )
     await middleware.ensure_clerk_entities({"sub": "u1"}, "org1")
 
@@ -676,7 +674,9 @@ async def test_ensure_clerk_entities_creates_tenant_and_user(monkeypatch):
 
     assert any(obj.__class__.__name__ == "Tenant" for obj in session.added)
     assert any(obj.__class__.__name__ == "User" for obj in session.added)
-    assert middleware._provisioned_entities_cache[("org_1", "user_1")] == 123.0
+    assert middleware._provisioned_entities_cache[("org_1", "user_1")] == pytest.approx(
+        123.0
+    )
 
 
 @pytest.mark.asyncio
@@ -721,9 +721,12 @@ async def test_ensure_clerk_entities_eviction_and_exception_path(monkeypatch):
     await middleware.ensure_clerk_entities({"sub": "u2"}, "o2")
     assert ("o1", "u1") not in middleware._provisioned_entities_cache
 
+    def _raise_db_explode(*_args, **_kwargs):
+        raise RuntimeError("db explode")
+
     monkeypatch.setattr(
         "backend.infrastructure.db_engine.get_session",
-        lambda: (_ for _ in ()).throw(RuntimeError("db explode")),
+        _raise_db_explode,
     )
     warned = []
     monkeypatch.setattr(middleware.logger, "warning", lambda msg: warned.append(msg))

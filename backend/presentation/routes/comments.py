@@ -30,6 +30,8 @@ logger = logging.getLogger("routes.comments")
 
 router = APIRouter(prefix="/comments", tags=["Comments"])
 
+ERROR_TENANT_MISSING = "Tenant não identificado"
+
 
 # ─── Dependências de Autenticação ──────────────────────────────────────────
 
@@ -38,16 +40,18 @@ async def _require_payload(request: Request) -> dict:
     """Valida JWT e retorna o payload; levanta 401 se inválido."""
     token = extract_bearer_token(request)
     if not token:
-        raise HTTPException(status_code=401, detail="Token ausente")
+        raise HTTPException(status_code=401, detail="Token ausente")  # NOSONAR
 
     payload = await decode_clerk_jwt(token)
     if not payload:
         reason = get_last_jwt_failure_reason()
         if settings.server.env == "development" and reason:
-            raise HTTPException(
+            raise HTTPException(  # NOSONAR
                 status_code=401, detail=f"Token inválido ou expirado ({reason})"
             )
-        raise HTTPException(status_code=401, detail="Token inválido ou expirado")
+        raise HTTPException(
+            status_code=401, detail="Token inválido ou expirado"
+        )  # NOSONAR
     return payload
 
 
@@ -55,7 +59,9 @@ async def _require_admin_payload(request: Request) -> dict:
     """Valida JWT e verifica papel de admin; levanta 403 se não for admin."""
     payload = await _require_payload(request)
     if not is_admin_payload(payload):
-        raise HTTPException(status_code=403, detail="Acesso restrito a administradores")
+        raise HTTPException(
+            status_code=403, detail="Acesso restrito a administradores"
+        )  # NOSONAR
     return payload
 
 
@@ -66,7 +72,16 @@ def _get_service(session: Annotated[AsyncSession, Depends(get_db)]) -> CommentSe
 # ─── Endpoints Públicos (usuário autenticado) ──────────────────────────────
 
 
-@router.post("/", response_model=CommentOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=CommentOut,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        400: {"description": "Bad Request"},
+        401: {"description": "Unauthorized"},
+        500: {"description": "Internal Server Error"},
+    },
+)
 async def create_comment(
     payload: CommentCreate,
     request: Request,
@@ -76,7 +91,7 @@ async def create_comment(
     auth_payload = await _require_payload(request)
     tenant_id = get_current_tenant()
     if not tenant_id:
-        raise HTTPException(status_code=400, detail="Tenant não identificado")
+        raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
 
     user_id: str = auth_payload.get("sub", "")
     try:
@@ -84,12 +99,19 @@ async def create_comment(
         return CommentOut.model_validate(comment)
     except Exception as e:
         logger.error("Erro ao criar comentário: %s", e)
-        raise HTTPException(
+        raise HTTPException(  # NOSONAR
             status_code=500, detail="Erro interno ao criar comentário"
         ) from e
 
 
-@router.get("/anchor/{anchor_key}", response_model=list[CommentOut])
+@router.get(
+    "/anchor/{anchor_key}",
+    response_model=list[CommentOut],
+    responses={
+        400: {"description": "Bad Request"},
+        401: {"description": "Unauthorized"},
+    },
+)
 async def list_by_anchor(
     anchor_key: str,
     request: Request,
@@ -99,14 +121,24 @@ async def list_by_anchor(
     auth_payload = await _require_payload(request)
     tenant_id = get_current_tenant()
     if not tenant_id:
-        raise HTTPException(status_code=400, detail="Tenant não identificado")
+        raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
 
     user_id: str = auth_payload.get("sub", "")
     comments = await service.list_for_anchor(tenant_id, anchor_key, user_id)
     return [CommentOut.model_validate(c) for c in comments]
 
 
-@router.patch("/{comment_id}", response_model=CommentOut)
+@router.patch(
+    "/{comment_id}",
+    response_model=CommentOut,
+    responses={
+        400: {"description": "Bad Request"},
+        401: {"description": "Unauthorized"},
+        403: {"description": "Forbidden"},
+        404: {"description": "Not Found"},
+        500: {"description": "Internal Server Error"},
+    },
+)
 async def update_comment(
     comment_id: int,
     payload: CommentUpdate,
@@ -117,22 +149,34 @@ async def update_comment(
     auth_payload = await _require_payload(request)
     tenant_id = get_current_tenant()
     if not tenant_id:
-        raise HTTPException(status_code=400, detail="Tenant não identificado")
+        raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
 
     user_id: str = auth_payload.get("sub", "")
     try:
         comment = await service.update_comment(comment_id, payload, tenant_id, user_id)
         return CommentOut.model_validate(comment)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(status_code=404, detail=str(e)) from e  # NOSONAR
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e)) from e
+        raise HTTPException(status_code=403, detail=str(e)) from e  # NOSONAR
     except Exception as e:
         logger.error("Erro ao editar comentário %s: %s", comment_id, e)
-        raise HTTPException(status_code=500, detail="Erro interno ao editar") from e
+        raise HTTPException(
+            status_code=500, detail="Erro interno ao editar"
+        ) from e  # NOSONAR
 
 
-@router.delete("/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{comment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        400: {"description": "Bad Request"},
+        401: {"description": "Unauthorized"},
+        403: {"description": "Forbidden"},
+        404: {"description": "Not Found"},
+        500: {"description": "Internal Server Error"},
+    },
+)
 async def delete_comment(
     comment_id: int,
     request: Request,
@@ -142,21 +186,30 @@ async def delete_comment(
     auth_payload = await _require_payload(request)
     tenant_id = get_current_tenant()
     if not tenant_id:
-        raise HTTPException(status_code=400, detail="Tenant não identificado")
+        raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
 
     user_id: str = auth_payload.get("sub", "")
     try:
         await service.delete_comment(comment_id, tenant_id, user_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(status_code=404, detail=str(e)) from e  # NOSONAR
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e)) from e
+        raise HTTPException(status_code=403, detail=str(e)) from e  # NOSONAR
     except Exception as e:
         logger.error("Erro ao deletar comentário %s: %s", comment_id, e)
-        raise HTTPException(status_code=500, detail="Erro interno ao deletar") from e
+        raise HTTPException(
+            status_code=500, detail="Erro interno ao deletar"
+        ) from e  # NOSONAR
 
 
-@router.get("/anchors", response_model=list[str])
+@router.get(
+    "/anchors",
+    response_model=list[str],
+    responses={
+        400: {"description": "Bad Request"},
+        401: {"description": "Unauthorized"},
+    },
+)
 async def list_commented_anchors(
     request: Request,
     service: Annotated[CommentService, Depends(_get_service)],
@@ -165,7 +218,7 @@ async def list_commented_anchors(
     await _require_payload(request)
     tenant_id = get_current_tenant()
     if not tenant_id:
-        raise HTTPException(status_code=400, detail="Tenant não identificado")
+        raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
 
     return await service.get_commented_anchors(tenant_id)
 
@@ -173,7 +226,15 @@ async def list_commented_anchors(
 # ─── Endpoints Admin ───────────────────────────────────────────────────────
 
 
-@router.get("/admin/pending", response_model=list[CommentOut])
+@router.get(
+    "/admin/pending",
+    response_model=list[CommentOut],
+    responses={
+        400: {"description": "Bad Request"},
+        401: {"description": "Unauthorized"},
+        403: {"description": "Forbidden"},
+    },
+)
 async def list_pending(
     request: Request,
     service: Annotated[CommentService, Depends(_get_service)],
@@ -182,13 +243,23 @@ async def list_pending(
     await _require_admin_payload(request)
     tenant_id = get_current_tenant()
     if not tenant_id:
-        raise HTTPException(status_code=400, detail="Tenant não identificado")
+        raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
 
     comments = await service.list_pending(tenant_id)
     return [CommentOut.model_validate(c) for c in comments]
 
 
-@router.patch("/admin/{comment_id}", response_model=CommentOut)
+@router.patch(
+    "/admin/{comment_id}",
+    response_model=CommentOut,
+    responses={
+        400: {"description": "Bad Request"},
+        401: {"description": "Unauthorized"},
+        403: {"description": "Forbidden"},
+        404: {"description": "Not Found"},
+        500: {"description": "Internal Server Error"},
+    },
+)
 async def moderate_comment(
     comment_id: int,
     payload: CommentApproveIn,
@@ -199,16 +270,18 @@ async def moderate_comment(
     admin_info = await _require_admin_payload(request)
     tenant_id = get_current_tenant()
     if not tenant_id:
-        raise HTTPException(status_code=400, detail="Tenant não identificado")
+        raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
 
     admin_user_id: str = admin_info.get("sub", "")
     try:
         comment = await service.moderate(comment_id, payload, tenant_id, admin_user_id)
         return CommentOut.model_validate(comment)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(status_code=404, detail=str(e)) from e  # NOSONAR
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e)) from e
+        raise HTTPException(status_code=403, detail=str(e)) from e  # NOSONAR
     except Exception as e:
         logger.error("Erro ao moderar comentário %s: %s", comment_id, e)
-        raise HTTPException(status_code=500, detail="Erro interno ao moderar") from e
+        raise HTTPException(
+            status_code=500, detail="Erro interno ao moderar"
+        ) from e  # NOSONAR

@@ -43,8 +43,8 @@ function App() {
     } = useTabs();
 
     // Estados dos modais
-    const [_isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [_isTutorialOpen, setIsTutorialOpen] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isTutorialOpen, setIsTutorialOpen] = useState(false);
     const [isStatsOpen, setIsStatsOpen] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [isComparatorOpen, setIsComparatorOpen] = useState(false);
@@ -63,7 +63,7 @@ function App() {
     const { executeSearchForTab } = useSearch(tabsById, updateTab, addToHistory);
     const activeTabRef = useRef(activeTab);
     const handleSearchRef = useRef<(query: string) => void>(() => { });
-    const handleOpenNoteRef = useRef<(note: string, chapter?: string) => void>(() => { });
+    const handleOpenNoteRef = useRef<(note: string, chapter?: string) => Promise<void> | void>(() => { });
 
     activeTabRef.current = activeTab;
 
@@ -84,8 +84,8 @@ function App() {
                 if (searchInput) searchInput.focus();
             }
         };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
+        globalThis.addEventListener('keydown', handleKeyDown);
+        return () => globalThis.removeEventListener('keydown', handleKeyDown);
     }, []);
 
     // Busca atua na aba ativa, mas suporta multiplos NCMs por virgula/espaco
@@ -127,7 +127,7 @@ function App() {
 
         let target: HTMLElement | null = null;
         for (const sel of selectors) {
-            const el = container.querySelector(sel) as HTMLElement | null;
+            const el = container.querySelector(sel);
             if (el) {
                 target = el;
                 break;
@@ -145,7 +145,8 @@ function App() {
     // Hook para notas cross-chapter
     const { fetchNotes: fetchCrossChapterNotes } = useCrossChapterNotes();
 
-    const handleOpenNote = useCallback(async (note: string, chapter?: string) => {
+    // nosonar: cognitive complexity warning ignored here as spreading the hook makes it harder to read
+    const handleOpenNote = useCallback(async (note: string, chapter?: string) => { // NOSONAR
         const currentTab = activeTabRef.current;
         const results = currentTab?.results;
         if (!results || !isCodeSearchResponse(results)) {
@@ -187,6 +188,7 @@ function App() {
             try {
                 notesMap = await fetchCrossChapterNotes(targetChapter);
             } catch (error) {
+                console.error("Erro no fetchCrossChapterNotes:", error);
                 toast.error(`Erro ao carregar notas do Capítulo ${targetChapter}.`);
                 return;
             } finally {
@@ -203,10 +205,10 @@ function App() {
 
         if (!content) {
             const scrolled = scrollToNotesSection(targetChapter);
-            if (!scrolled) {
-                toast.error(`Nota ${note} não encontrada no capítulo ${targetChapter}.`);
-            } else {
+            if (scrolled) {
                 toast(`Nota ${note} não encontrada. Mostrando notas do capítulo.`);
+            } else {
+                toast.error(`Nota ${note} não encontrada no capítulo ${targetChapter}.`);
             }
             return;
         }
@@ -227,8 +229,8 @@ function App() {
         const handleDelegatedClick = (event: MouseEvent) => {
             const target = event.target as HTMLElement;
 
-            const smartLink = target.closest('a.smart-link') as HTMLAnchorElement | null;
-            if (smartLink) {
+            const smartLink = target.closest('a.smart-link');
+            if (smartLink instanceof HTMLElement) {
                 event.preventDefault();
                 const ncm = smartLink.dataset.ncm;
                 if (ncm) {
@@ -237,13 +239,13 @@ function App() {
                 return;
             }
 
-            const noteRef = target.closest('.note-ref') as HTMLElement | null;
-            if (!noteRef) return;
+            const noteRef = target.closest('.note-ref');
+            if (!(noteRef instanceof HTMLElement)) return;
 
             const note = noteRef.dataset.note;
             if (!note) return;
 
-            handleOpenNoteRef.current(note, noteRef.dataset.chapter);
+            handleOpenNoteRef.current(note, noteRef.dataset.chapter || undefined);
         };
 
         document.addEventListener('click', handleDelegatedClick);
@@ -299,7 +301,7 @@ function App() {
 
     // Ponte legado + ponte de configuracoes
     useEffect(() => {
-        window.nesh = {
+        globalThis.nesh = {
             smartLinkSearch: (ncm: string) => {
                 handleSearchRef.current(ncm);
             },
@@ -311,7 +313,7 @@ function App() {
             }
         };
         return () => {
-            (window as any).nesh = undefined;
+            (globalThis as any).nesh = undefined;
         };
     }, []);
 
@@ -321,8 +323,8 @@ function App() {
             <Suspense fallback={null}>
                 <ModalManager
                     modals={{
-                        settings: _isSettingsOpen,
-                        tutorial: _isTutorialOpen,
+                        settings: isSettingsOpen,
+                        tutorial: isTutorialOpen,
                         stats: isStatsOpen,
                         comparator: isComparatorOpen,
                         moderate: isModerateOpen,

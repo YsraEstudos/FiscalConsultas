@@ -11,6 +11,7 @@ vi.mock('react-virtuoso', () => ({
     Virtuoso: ({ data, itemContent }: any) => (
         <div data-testid="virtuoso">
             {data.slice(0, VISIBLE_ITEMS).map((item: any, index: number) => (
+                // nosonar: safe to use index as key in this static test mock
                 <div key={index}>{itemContent(index, item)}</div>
             ))}
         </div>
@@ -39,7 +40,7 @@ describe('Frontend Render Performance', () => {
                 }
             },
             markdown: '<h1>Conteúdo Gerado</h1><p>Renderização de teste...</p>',
-            type: 'code'
+            type: 'code' as const
         };
 
         // 2. Measure Render Time
