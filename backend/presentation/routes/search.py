@@ -75,13 +75,39 @@ def _code_payload_cache_set(key: str, payload: tuple[bytes, bytes]) -> None:
 
 
 def _accepts_gzip(request: Request) -> bool:
-    accept_encoding = (request.headers.get("Accept-Encoding") or "").lower()
-    return "gzip" in accept_encoding
+    accept_encoding = request.headers.get("Accept-Encoding") or ""
+    gzip_q: float | None = None
+    wildcard_q: float | None = None
+
+    for token in accept_encoding.split(","):
+        part = token.strip()
+        if not part:
+            continue
+        pieces = [p.strip() for p in part.split(";")]
+        encoding = pieces[0].lower()
+        q_value = 1.0
+        for param in pieces[1:]:
+            if param.lower().startswith("q="):
+                try:
+                    q_value = float(param.split("=", 1)[1].strip())
+                except ValueError:
+                    q_value = 0.0
+                break
+        if encoding == "gzip":
+            gzip_q = q_value
+        elif encoding == "*":
+            wildcard_q = q_value
+
+    if gzip_q is not None:
+        return gzip_q > 0
+    return wildcard_q is not None and wildcard_q > 0
 
 
 def get_payload_cache_metrics() -> dict[str, str | float | int]:
+    with _code_payload_cache_lock:
+        current_size = len(_code_payload_cache)
     snapshot = search_payload_cache_metrics.snapshot(
-        current_size=len(_code_payload_cache),
+        current_size=current_size,
         max_size=_CODE_PAYLOAD_CACHE_MAX,
     )
     return {
@@ -101,7 +127,10 @@ def get_payload_cache_metrics() -> dict[str, str | float | int]:
 router = APIRouter()
 
 
-@router.get("/search")
+@router.get(
+    "/search",
+    responses={500: {"description": "Formato de resposta inválido do serviço"}},
+)
 async def search(
     request: Request,
     service: Annotated[NeshService, Depends(get_nesh_service)],
@@ -191,9 +220,12 @@ async def search(
     # - pre-renderizar HTML no backend (campo `markdown` mantido por compatibilidade)
     # - remover campos brutos pesados da serialização
     if response_data.get("type") == "code":
-        raw_results = (
-            response_data.get("results") or response_data.get("resultados") or {}
-        )
+        if "results" in response_data:
+            raw_results = response_data.get("results")
+        elif "resultados" in response_data:
+            raw_results = response_data.get("resultados")
+        else:
+            raw_results = {}
         results = raw_results if isinstance(raw_results, dict) else {}
         response_data["markdown"] = HtmlRenderer.render_full_response(results)
         for chapter_data in results.values():
