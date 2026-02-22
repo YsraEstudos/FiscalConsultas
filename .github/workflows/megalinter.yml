@@ -38,6 +38,8 @@ jobs:
           # https://megalinter.io/latest/config-file/
           # PR-only fast mode: lint only changed files in the pull request.
           VALIDATE_ALL_CODEBASE: false
+          # Keep CI fast and deterministic for PRs by linting workflow/config scope only.
+          ENABLE_LINTERS: ACTION_ACTIONLINT,YAML_PRETTIER,YAML_YAMLLINT,YAML_V8R,REPOSITORY_GIT_DIFF
           # Manual workflow with least privilege: use default GitHub token only.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Read-only lint run: never mutate repository files.
