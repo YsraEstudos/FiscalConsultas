@@ -21,6 +21,13 @@ from backend.config.db_schema import (
 from backend.utils.nesh_sections import extract_chapter_sections
 from backend.utils.text_processor import NeshTextProcessor
 
+# Configura logging básico apenas quando não houver configuração prévia.
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+
 # Configuração
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 NESH_FILE = os.path.join(SCRIPT_DIR, "..", "data", "debug_nesh", "Nesh.txt")
