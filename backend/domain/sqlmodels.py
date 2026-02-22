@@ -9,11 +9,11 @@ Este módulo coexiste com models.py (TypedDict) para migração gradual.
 """
 
 from datetime import date, datetime
-from typing import Optional, List
-from sqlmodel import SQLModel, Field, Relationship
+from typing import List, Optional
+
 from sqlalchemy import Column, Text
 from sqlalchemy.dialects.postgresql import TSVECTOR
-
+from sqlmodel import Field, Relationship, SQLModel
 
 # ============================================================
 # Core Multi-Tenant Models

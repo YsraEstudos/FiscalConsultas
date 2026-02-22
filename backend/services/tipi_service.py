@@ -9,17 +9,18 @@ Observações de contrato (importante para o frontend):
 """
 
 import asyncio
-import aiosqlite
-from pathlib import Path
 from collections import OrderedDict
 from contextlib import asynccontextmanager
-from typing import Dict, Any, List, Tuple, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
-from ..config.logging_config import service_logger as logger
-from ..config.exceptions import DatabaseError
+import aiosqlite
+
 from ..config.constants import CacheConfig
-from ..utils.id_utils import generate_anchor_id
+from ..config.exceptions import DatabaseError
+from ..config.logging_config import service_logger as logger
 from ..utils import ncm_utils
+from ..utils.id_utils import generate_anchor_id
 from ..utils.payload_cache_metrics import PayloadCacheMetrics
 
 # Caminho do banco de dados TIPI
@@ -27,8 +28,8 @@ TIPI_DB_PATH = Path(__file__).parent.parent.parent / "database" / "tipi.db"
 
 # SQLModel Repository imports (optional - for new code paths)
 try:
-    from ..infrastructure.repositories.tipi_repository import TipiRepository
     from ..infrastructure.db_engine import get_session
+    from ..infrastructure.repositories.tipi_repository import TipiRepository
 
     _REPO_AVAILABLE = True
 except ImportError:
@@ -569,11 +570,13 @@ class TipiService:
 
         conn = await self._get_connection()
         try:
-            cursor = await conn.execute("""
+            cursor = await conn.execute(
+                """
                 SELECT codigo, titulo, secao
                 FROM tipi_chapters
                 ORDER BY codigo
-            """)
+            """
+            )
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
         finally:

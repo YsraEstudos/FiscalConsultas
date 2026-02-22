@@ -5,15 +5,15 @@ Suporta multi-tenant via tenant_id filtering.
 Suporta dual SQLite/PostgreSQL similar ao ChapterRepository.
 """
 
-from typing import Optional, List, Dict, Any, Set
+from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...domain.sqlmodels import TipiPosition
 from ...config.settings import settings
-from ...utils.id_utils import generate_anchor_id
+from ...domain.sqlmodels import TipiPosition
 from ...infrastructure.db_engine import tenant_context
+from ...utils.id_utils import generate_anchor_id
 
 
 class TipiRepository:
@@ -103,12 +103,14 @@ class TipiRepository:
                 params[f"ancestor{i}"] = ancestor
 
             where_clause = " OR ".join(conditions)
-            stmt = text(f"""
+            stmt = text(
+                f"""
                 SELECT codigo, chapter_num, descricao, aliquota, nivel, parent_ncm, ncm_sort
                 FROM tipi_positions
                 WHERE chapter_num = :chapter_num AND ({where_clause})
                 ORDER BY ncm_sort, codigo
-            """)
+            """
+            )
         else:
             # SQLite: mesma lógica
             conditions = ["REPLACE(ncm, '.', '') LIKE ? || '%'"]
@@ -119,12 +121,14 @@ class TipiRepository:
                 params_list.append(ancestor)
 
             where_clause = " OR ".join(conditions)
-            stmt = text(f"""
+            stmt = text(
+                f"""
                 SELECT ncm as codigo, capitulo as chapter_num, descricao, aliquota, nivel, parent_ncm, ncm_sort
                 FROM tipi_positions
                 WHERE capitulo = ? AND ({where_clause})
                 ORDER BY ncm_sort, ncm
-            """)
+            """
+            )
             params = tuple(params_list)
 
         result = await self.session.execute(stmt, params)
@@ -163,7 +167,8 @@ class TipiRepository:
 
     async def _fts_postgres(self, query: str, limit: int) -> List[Dict[str, Any]]:
         """FTS usando tsvector do PostgreSQL."""
-        stmt = text("""
+        stmt = text(
+            """
             SELECT 
                 codigo as ncm,
                 chapter_num as capitulo,
@@ -174,7 +179,8 @@ class TipiRepository:
             WHERE search_vector @@ plainto_tsquery('portuguese', :query)
             ORDER BY score DESC
             LIMIT :limit
-        """)
+        """
+        )
         result = await self.session.execute(stmt, {"query": query, "limit": limit})
         return [
             {
@@ -188,12 +194,14 @@ class TipiRepository:
 
     async def _fts_sqlite(self, query: str, limit: int) -> List[Dict[str, Any]]:
         """FTS usando FTS5 do SQLite."""
-        stmt = text("""
+        stmt = text(
+            """
             SELECT ncm, capitulo, descricao, aliquota
             FROM tipi_fts
             WHERE tipi_fts MATCH :query
             LIMIT :limit
-        """)
+        """
+        )
         result = await self.session.execute(
             stmt, {"query": f'"{query}"', "limit": limit}
         )
@@ -210,17 +218,21 @@ class TipiRepository:
     async def get_all_chapters(self) -> List[Dict[str, str]]:
         """Lista todos os capítulos TIPI."""
         if self.is_postgres:
-            stmt = text("""
+            stmt = text(
+                """
                 SELECT DISTINCT chapter_num as codigo, chapter_num as titulo
                 FROM tipi_positions
                 ORDER BY chapter_num
-            """)
+            """
+            )
         else:
-            stmt = text("""
+            stmt = text(
+                """
                 SELECT codigo, titulo, secao
                 FROM tipi_chapters
                 ORDER BY codigo
-            """)
+            """
+            )
 
         result = await self.session.execute(stmt)
         return [dict(row._mapping) for row in result]

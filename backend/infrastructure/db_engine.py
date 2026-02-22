@@ -8,15 +8,14 @@ Este módulo fornece:
 """
 
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 from contextvars import ContextVar
+from typing import AsyncGenerator
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
 from ..config.settings import settings
-
 
 # ContextVar para rastrear o tenant_id na requisição atual
 tenant_context: ContextVar[str] = ContextVar("tenant_context", default="")

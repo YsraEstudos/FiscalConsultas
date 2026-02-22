@@ -3,7 +3,7 @@ Modelos de domínio do Nesh.
 Define as estruturas de dados utilizadas em toda a aplicação.
 """
 
-from typing import Dict, List, Optional, Any, Union, TypedDict
+from typing import Any, Dict, List, Optional, TypedDict, Union
 
 
 class Position(TypedDict):
