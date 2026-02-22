@@ -5,9 +5,8 @@ Revises: 003_global_catalog_and_tenant_fk
 Create Date: 2026-02-06
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers
 revision = "004_add_subscriptions_table"
