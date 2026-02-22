@@ -12,7 +12,7 @@ import asyncio
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Tuple, cast
 
 import aiosqlite
 
@@ -25,6 +25,8 @@ from ..utils.payload_cache_metrics import PayloadCacheMetrics
 
 # Caminho do banco de dados TIPI
 TIPI_DB_PATH = Path(__file__).parent.parent.parent / "database" / "tipi.db"
+TIPI_SORT_WITH_NCM = "ncm_sort, ncm"
+TIPI_SORT_FALLBACK = "ncm"
 
 # SQLModel Repository imports (optional - for new code paths)
 get_session = None
@@ -112,14 +114,12 @@ class TipiService:
         if get_session is None:
             raise RuntimeError("Session factory não disponível.")
         session_factory = get_session
-        repo_cls = TipiRepository
-        if repo_cls is None:
-            raise RuntimeError("TipiRepository não disponível.")
+        repository_cls = cast("type[_TipiRepo]", TipiRepository)
 
         @asynccontextmanager
         async def repo_factory():
             async with session_factory() as session:
-                yield repo_cls(session)
+                yield repository_cls(session)
 
         return cls(repository_factory=repo_factory)
 
@@ -130,7 +130,7 @@ class TipiService:
         return self._cache_lock
 
     @asynccontextmanager
-    async def _get_repo(self) -> AsyncIterator[Any]:
+    async def _get_repo(self) -> AsyncIterator["_TipiRepo | None"]:
         """Get repository via direct instance or factory."""
         if self._repository is not None:
             yield self._repository
@@ -186,6 +186,10 @@ class TipiService:
         cols = {row["name"] for row in rows}
         self._schema_columns_cache[table] = cols
         return cols
+
+    def _get_order_by(self, cols: set[str]) -> str:
+        """Resolve ORDER BY com base no schema disponível."""
+        return TIPI_SORT_WITH_NCM if "ncm_sort" in cols else TIPI_SORT_FALLBACK
 
     async def close(self):
         """Fecha todas as conexões do pool."""
@@ -280,9 +284,7 @@ class TipiService:
         conn = await self._get_connection()
         try:
             cols = await self._get_table_columns(conn, "tipi_positions")
-            order_by = "ncm_sort, ncm" if "ncm_sort" in cols else "ncm"
-            if order_by not in {"ncm_sort, ncm", "ncm"}:
-                order_by = "ncm"
+            order_by = self._get_order_by(cols)
             sql = f"""
                 SELECT ncm, capitulo, descricao, aliquota, nivel
                 FROM tipi_positions
@@ -336,9 +338,7 @@ class TipiService:
         conn = await self._get_connection()
         try:
             cols = await self._get_table_columns(conn, "tipi_positions")
-            order_by = "ncm_sort, ncm" if "ncm_sort" in cols else "ncm"
-            if order_by not in {"ncm_sort, ncm", "ncm"}:
-                order_by = "ncm"
+            order_by = self._get_order_by(cols)
 
             conditions = ["REPLACE(ncm, '.', '') LIKE ? || '%'"]
             params = [prefix]
@@ -516,7 +516,8 @@ class TipiService:
         conn = await self._get_connection()
         try:
             # Busca FTS
-            fts_query = f'"{query}"'  # Busca exata primeiro
+            escaped_query = query.replace('"', '""')
+            fts_query = f'"{escaped_query}"'  # Busca exata primeiro
             cursor = await conn.execute(
                 """
                 SELECT ncm, capitulo, descricao, aliquota

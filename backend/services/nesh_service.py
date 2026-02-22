@@ -238,14 +238,22 @@ class NeshService:
                 if not chapter:
                     return None
 
+                notes = chapter.notes
+                sections = None
+                if notes:
+                    sections = {
+                        "titulo": notes.titulo,
+                        "notas": notes.notas,
+                        "consideracoes": notes.consideracoes,
+                        "definicoes": notes.definicoes,
+                    }
+
                 raw_data = {
                     "chapter_num": chapter.chapter_num,
                     "content": chapter.content,
-                    "notes": chapter.notes.notes_content if chapter.notes else None,
+                    "notes": notes.notes_content if notes else None,
                     "parsed_notes_json": (
-                        getattr(chapter.notes, "parsed_notes_json", None)
-                        if chapter.notes
-                        else None
+                        getattr(notes, "parsed_notes_json", None) if notes else None
                     ),
                     "positions": [
                         {
@@ -255,20 +263,7 @@ class NeshService:
                         }
                         for p in chapter.positions
                     ],
-                    "sections": (
-                        {
-                            "titulo": chapter.notes.titulo if chapter.notes else None,
-                            "notas": chapter.notes.notas if chapter.notes else None,
-                            "consideracoes": (
-                                chapter.notes.consideracoes if chapter.notes else None
-                            ),
-                            "definicoes": (
-                                chapter.notes.definicoes if chapter.notes else None
-                            ),
-                        }
-                        if chapter.notes
-                        else None
-                    ),
+                    "sections": sections,
                 }
         else:
             if not self.db:
