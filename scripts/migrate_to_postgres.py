@@ -305,6 +305,7 @@ async def main():
     print("✅ Migração concluída com sucesso!")
     print("=" * 60)
     print("\nPróximos passos:")
+    # NOSONAR - local manual check
     print("  1. Testar busca: curl 'http://localhost:8000/api/search?ncm=bomba'")
     print(
         "  2. Verificar FTS: psql -d nesh_db -c \"SELECT codigo, ts_headline('portuguese', descricao, plainto_tsquery('portuguese', 'bomba')) FROM positions WHERE search_vector @@ plainto_tsquery('portuguese', 'bomba') LIMIT 5;\""  # noqa: E501
