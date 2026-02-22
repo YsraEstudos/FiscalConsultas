@@ -1,6 +1,6 @@
-import secrets
 import os
 import re
+import secrets
 
 
 def _get_env_value(content: str, key: str) -> str | None:
@@ -47,7 +47,7 @@ def rotate_secrets(env_path=".env"):
             content = _set_env_value(content, key, previous_value)
             print(f"✅ {key} atualizado com valor anterior.")
         else:
-            print(f"⚠️ Valor anterior de {key.replace('_PREVIOUS', '')} não encontrado.")
+            print(f"⚠️ Valor anterior de {key.replace('_PREVIOUS', '')} não encontrado.")  # noqa: E501
 
     # Substituir no arquivo
     for key, new_value in new_secrets.items():
@@ -58,7 +58,7 @@ def rotate_secrets(env_path=".env"):
         f.write(content)
 
     print(
-        "\n🚀 Rotação concluída! Use o endpoint /api/admin/reload-secrets para hot-reload."
+        "\n🚀 Rotação concluída! Use o endpoint /api/admin/reload-secrets para hot-reload."  # noqa: E501
     )
 
 

@@ -1,9 +1,10 @@
-import requests
-import json
 import hashlib
+import json
 from datetime import datetime
 
-BASE_URL = "http://localhost:8000"
+import requests
+
+BASE_URL = "http://localhost:8000"  # NOSONAR - local test endpoint
 SNAPSHOT_FILE = "snapshots/baseline_v1.json"
 
 TEST_CASES = [
@@ -36,7 +37,7 @@ def run_snapshot():
             url = f"{BASE_URL}/api/search?ncm={query}"
             print(f"Fetching: {query.ljust(20)}", end="")
 
-            resp = requests.get(url)
+            resp = requests.get(url, timeout=10)
             data = resp.json()
 
             # Remove timestamp/dynamic fields if any (currently none, but good practice)
@@ -44,16 +45,18 @@ def run_snapshot():
 
             # Store hash + brief summary for size
             content_str = json.dumps(data, sort_keys=True)
-            content_hash = hashlib.md5(content_str.encode("utf-8")).hexdigest()
+            content_hash = hashlib.sha256(content_str.encode("utf-8")).hexdigest()
 
             results[query] = {
                 "status": resp.status_code,
                 "hash": content_hash,
                 "type": data.get("type"),
-                "count": len(data.get("results", []))
-                if data.get("type") == "text"
-                else data.get("total_capitulos"),
-                # Store full data for deep comparison if needed, but hash is usually enough for regression
+                "count": (
+                    len(data.get("results", []))
+                    if data.get("type") == "text"
+                    else data.get("total_capitulos")
+                ),
+                # Store full data for deep comparison if needed, but hash is usually enough for regression  # noqa: E501
                 "data_preview": str(data)[:100],
             }
             print(f"✅ (Type: {data.get('type')})")

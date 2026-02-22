@@ -7,7 +7,6 @@ from backend.presentation.routes import search as search_route
 from backend.server.app import app
 from backend.server.dependencies import get_nesh_service, get_tipi_service
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -128,7 +127,9 @@ def test_search_text_response_does_not_inject_resultados(client):
 
 
 def test_search_code_prefers_results_key_even_when_empty(client):
-    app.dependency_overrides[get_nesh_service] = lambda: _FakeNeshServiceCodeEmptyResults()
+    app.dependency_overrides[get_nesh_service] = lambda: (
+        _FakeNeshServiceCodeEmptyResults()
+    )
 
     response = client.get("/api/search?ncm=8517")
     assert response.status_code == 200
@@ -149,7 +150,9 @@ def test_search_invalid_service_response_returns_500_with_cors_header(client):
     )
     assert response.status_code == 500
     assert response.json()["detail"] == "Formato de resposta inválido do serviço"
-    assert response.headers.get("Access-Control-Allow-Origin") == "http://127.0.0.1:5173"
+    assert (
+        response.headers.get("Access-Control-Allow-Origin") == "http://127.0.0.1:5173"
+    )
 
 
 def test_tipi_code_response_enforces_compatibility_fields(client):
