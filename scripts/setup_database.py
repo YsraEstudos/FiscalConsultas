@@ -12,15 +12,22 @@ import sys
 import time
 import zipfile
 
-from backend.config.db_schema import (
-    CHAPTER_NOTES_COLUMNS,
-    CHAPTER_NOTES_CREATE_SQL,
-    CHAPTER_NOTES_INSERT_SQL,
-)
-from backend.utils.nesh_sections import extract_chapter_sections
-
-# Adiciona diretório pai ao path para importar utils
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+try:
+    from backend.config.db_schema import (
+        CHAPTER_NOTES_COLUMNS,
+        CHAPTER_NOTES_CREATE_SQL,
+        CHAPTER_NOTES_INSERT_SQL,
+    )
+    from backend.utils.nesh_sections import extract_chapter_sections
+except ModuleNotFoundError:
+    # Allow running this script from the scripts/ directory.
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from backend.config.db_schema import (
+        CHAPTER_NOTES_COLUMNS,
+        CHAPTER_NOTES_CREATE_SQL,
+        CHAPTER_NOTES_INSERT_SQL,
+    )
+    from backend.utils.nesh_sections import extract_chapter_sections
 
 
 def _parse_notes_for_precompute(notes_content: str) -> dict:

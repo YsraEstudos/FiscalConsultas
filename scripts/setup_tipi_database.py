@@ -277,8 +277,8 @@ def populate_database(conn, data):
         for pos in data["positions"]
     ]
     cursor.executemany(
-        """
-        INSERT OR REPLACE INTO tipi_positions (ncm, capitulo, descricao, aliquota, nivel, parent_ncm, ncm_sort)  # noqa: E501
+        """INSERT OR REPLACE INTO tipi_positions
+        (ncm, capitulo, descricao, aliquota, nivel, parent_ncm, ncm_sort)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     """,
         position_rows,
