@@ -6,6 +6,7 @@ name: MegaLinter
 on:
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,6 +14,8 @@ concurrency:
 
 permissions:
   contents: read
+  checks: write
+  pull-requests: write
 
 jobs:
   build:
@@ -38,6 +41,11 @@ jobs:
           # https://megalinter.io/latest/config-file/
           # PR-only fast mode: lint only changed files in the pull request.
           VALIDATE_ALL_CODEBASE: false
+          # In PRs, restrict descriptors to workflow/config checks only.
+          # Keep REPOSITORY descriptor available for manual runs.
+          ENABLE: ${{ github.event_name == 'workflow_dispatch' && 'REPOSITORY,ACTION,YAML' || 'ACTION,YAML' }}
+          # Keep CI fast and deterministic for PRs by linting workflow/config scope only.
+          ENABLE_LINTERS: ${{ github.event_name == 'workflow_dispatch' && 'ACTION_ACTIONLINT,YAML_PRETTIER,YAML_YAMLLINT,YAML_V8R,REPOSITORY_GIT_DIFF' || 'ACTION_ACTIONLINT,YAML_PRETTIER,YAML_YAMLLINT,YAML_V8R' }}
           # Manual workflow with least privilege: use default GitHub token only.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Read-only lint run: never mutate repository files.
