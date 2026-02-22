@@ -4,15 +4,15 @@
 name: MegaLinter
 
 on:
-  workflow_dispatch:
+  pull_request:
+    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   build:
@@ -24,8 +24,8 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
-          fetch-depth: 0 # If you use VALIDATE_ALL_CODEBASE: false, you need full history
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0 # Full history is required by MegaLinter diff logic.
 
       # MegaLinter
       - name: MegaLinter
@@ -36,10 +36,9 @@ jobs:
         env:
           # All available variables are described in documentation
           # https://megalinter.io/latest/config-file/
+          # PR-only fast mode: lint only changed files in the pull request.
           VALIDATE_ALL_CODEBASE: false
-          # Use PAT so bot commits trigger downstream test workflows (GITHUB_TOKEN may not trigger them).
-          GITHUB_TOKEN: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
-          APPLY_FIXES: all
-          # Manual-only execution: never auto-commit fixes to branches.
-          APPLY_FIXES_EVENT: none
-          APPLY_FIXES_MODE: commit
+          # Manual workflow with least privilege: use default GitHub token only.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Read-only lint run: never mutate repository files.
+          APPLY_FIXES: none
