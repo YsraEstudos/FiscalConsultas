@@ -3,7 +3,7 @@
    Includes Info Section, Results, and Markdown
    =========================================== */
 
-/*Info Section */
+/* Info Section */
 .info-section {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
@@ -52,6 +52,7 @@
     color: var(--text-primary);
     line-height: 1.8;
     contain: content;
+
     /* Performance: Isolate layout calculations */
 }
 
@@ -94,10 +95,9 @@
     border: 1px solid var(--border-color);
     border-radius: 10px;
     padding: 1.5rem;
-    overflow-x: auto;
+    overflow: auto;
     margin: 1rem 0;
     max-height: 600px;
-    overflow-y: auto;
 }
 
 .markdown-body pre code {
@@ -107,11 +107,10 @@
     font-size: 0.85rem;
     line-height: 1.6;
     white-space: pre-wrap;
-    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 .markdown-body blockquote {
-    border-left: none;
     background: transparent;
     margin: 1rem 0;
     padding: 0 1rem;
@@ -281,6 +280,7 @@
 .content-renderer h2,
 .content-renderer h3 {
     scroll-margin-top: var(--scroll-offset);
+
     /* For sticky header offset */
 }
 
@@ -291,7 +291,7 @@
 
 @keyframes flashHighlight {
     0% {
-        background: rgba(99, 102, 241, 0.3);
+        background: rgb(99 102 241 / 30%);
     }
 
     100% {
@@ -304,13 +304,13 @@
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 12px;
-    padding: 1rem 1.25rem 1.25rem 1.25rem;
-    margin: 2rem 0 1rem 0;
+    padding: 1rem 1.25rem 1.25rem;
+    margin: 2rem 0 1rem;
     position: relative;
 }
 
 .markdown-body h3.nesh-section {
-    margin: 0 0 0.75rem 0;
+    margin: 0 0 0.75rem;
     font-size: 1.1rem;
     font-weight: 600;
     color: var(--text-primary);
@@ -344,7 +344,7 @@
 
 /* Subheadings converted from **TITLE** lines */
 .markdown-body .nesh-subheading {
-    margin: 1rem 0 0.5rem 0;
+    margin: 1rem 0 0.5rem;
     font-size: 1rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -430,7 +430,7 @@
 
 /* Highlight units - inherits from global .highlight-unit, adds markdown-specific styles */
 .markdown-body .highlight-unit {
-    background-color: rgba(59, 130, 246, 0.2);
+    background-color: rgb(59 130 246 / 20%);
     color: #93c5fd;
     padding: 0 3px;
     border-radius: 3px;
@@ -446,6 +446,7 @@
 }
 
 /* Clean up scroll anchors - deprecated in favor of container scroll-padding */
+
 /* Clean up scroll anchors - deprecated in favor of container scroll-padding */
 .markdown-body .scroll-anchor {
     display: none;
@@ -473,6 +474,7 @@
 
 .markdown-body .ncm-target {
     display: inline-block;
+
     /* Ensure span respects scroll-margin */
 }
 
@@ -531,7 +533,7 @@
 }
 
 .section-header {
-    margin: 0 0 0.75rem 0;
+    margin: 0 0 0.75rem;
     font-size: 1.05rem;
     font-weight: 700;
     display: flex;
@@ -556,22 +558,22 @@
 }
 
 .section-titulo {
-    background: rgba(139, 92, 246, 0.08);
+    background: rgb(139 92 246 / 8%);
     border-left: 3px solid #8b5cf6;
 }
 
 .section-notas {
-    background: rgba(16, 185, 129, 0.08);
+    background: rgb(16 185 129 / 8%);
     border-left: 3px solid #10b981;
 }
 
 .section-consideracoes {
-    background: rgba(59, 130, 246, 0.08);
+    background: rgb(59 130 246 / 8%);
     border-left: 3px solid #3b82f6;
 }
 
 .section-definicoes {
-    background: rgba(249, 115, 22, 0.08);
+    background: rgb(249 115 22 / 8%);
     border-left: 3px solid #f97316;
 }
 

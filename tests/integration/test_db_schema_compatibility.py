@@ -1,7 +1,6 @@
 import sqlite3
 
 import pytest
-
 from backend.infrastructure.database import DatabaseAdapter
 
 

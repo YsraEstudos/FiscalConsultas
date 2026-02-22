@@ -1,8 +1,8 @@
 /* ─── Wrapper Posicionado via CSS Custom Properties ──────────────────────── */
 .wrapper {
     position: fixed;
-    top: var(--popover-top, 0px);
-    left: var(--popover-left, 0px);
+    top: var(--popover-top, 0);
+    left: var(--popover-left, 0);
     z-index: 1000;
     transform: translateX(-50%);
     pointer-events: none;
@@ -22,7 +22,7 @@
     color: #fff;
     font-size: 16px;
     cursor: pointer;
-    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.45);
+    box-shadow: 0 4px 16px rgb(99 102 241 / 45%);
     animation: popIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
     transform-origin: center bottom;
     transition: transform 0.18s ease, box-shadow 0.18s ease;
@@ -30,7 +30,7 @@
 
 .bubble:hover {
     transform: scale(1.15);
-    box-shadow: 0 6px 24px rgba(99, 102, 241, 0.6);
+    box-shadow: 0 6px 24px rgb(99 102 241 / 60%);
 }
 
 .bubble:active {

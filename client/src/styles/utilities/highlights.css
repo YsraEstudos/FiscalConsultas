@@ -14,12 +14,12 @@
     background-color: var(--success);
     color: white;
     font-weight: 600;
-    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+    box-shadow: 0 0 8px rgb(34 197 94 / 60%);
 }
 
 /* Match PARCIAL: palavras isoladas - AMARELO fraco */
 .search-highlight.search-highlight-partial {
-    background-color: rgba(253, 224, 71, 0.4);
+    background-color: rgb(253 224 71 / 40%);
     color: inherit;
     box-shadow: none;
 }
@@ -30,7 +30,7 @@
     color: white;
     transform: scale(1.1);
     font-weight: bold;
-    box-shadow: 0 0 12px rgba(249, 115, 22, 0.8);
+    box-shadow: 0 0 12px rgb(249 115 22 / 80%);
 }
 
 /* Exclusion Highlighter (Caça-Exceções) */
@@ -41,7 +41,7 @@
 
 /* Unit Highlighter (Raio-X de Unidades) */
 .highlight-unit {
-    background-color: rgba(59, 130, 246, 0.2);
+    background-color: rgb(59 130 246 / 20%);
     color: #93c5fd;
     padding: 0 3px;
     border-radius: 3px;
@@ -70,12 +70,11 @@ body.disable-smart-links .smart-link {
 
 /* Highlight Animation Pulse - 3 blinks */
 @keyframes highlight-pulse {
-
     /* Blink 1 */
     0% {
-        background-color: rgba(251, 191, 36, 0.5);
+        background-color: rgb(251 191 36 / 50%);
         transform: scale(1.01);
-        box-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
+        box-shadow: 0 0 15px rgb(251 191 36 / 30%);
     }
 
     11% {
@@ -86,9 +85,9 @@ body.disable-smart-links .smart-link {
 
     /* Blink 2 */
     22% {
-        background-color: rgba(251, 191, 36, 0.5);
+        background-color: rgb(251 191 36 / 50%);
         transform: scale(1.01);
-        box-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
+        box-shadow: 0 0 15px rgb(251 191 36 / 30%);
     }
 
     33% {
@@ -99,9 +98,9 @@ body.disable-smart-links .smart-link {
 
     /* Blink 3 */
     44% {
-        background-color: rgba(251, 191, 36, 0.5);
+        background-color: rgb(251 191 36 / 50%);
         transform: scale(1.01);
-        box-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
+        box-shadow: 0 0 15px rgb(251 191 36 / 30%);
     }
 
     55% {

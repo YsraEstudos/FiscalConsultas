@@ -11,7 +11,7 @@
 }
 
 .glossary-term:hover {
-    background-color: rgba(139, 92, 246, 0.15);
+    background-color: rgb(139 92 246 / 15%);
     color: var(--accent-primary);
 }
 
@@ -22,12 +22,13 @@
     border-radius: 8px;
     padding: 1rem;
     max-width: 300px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 10px 30px rgb(0 0 0 / 50%);
     z-index: 9999;
     display: none;
     font-size: 0.9rem;
     line-height: 1.5;
     pointer-events: none;
+
     /* Don't block mouse */
 }
 
