@@ -19,22 +19,41 @@ Pré-requisitos:
 import asyncio
 import os
 import sys
+from urllib.parse import urlsplit, urlunsplit
 
 # Adicionar root ao path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import aiosqlite
-from backend.config.settings import settings
-from backend.domain.sqlmodels import (
-    Chapter,
-    ChapterNotes,
-    Glossary,
-    Position,
-    TipiPosition,
-)
-from backend.infrastructure.db_engine import get_session
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.infrastructure.db_engine import get_session
+from backend.domain.sqlmodels import (
+    Chapter,
+    Position,
+    ChapterNotes,
+    Glossary,
+    TipiPosition,
+)
+from backend.config.settings import settings
+
+
+def _mask_database_url(url: str | None) -> str:
+    """Mascara credenciais em URLs de banco para logs seguros."""
+    if not url:
+        return "<not configured>"
+
+    parsed = urlsplit(url)
+    if not parsed.scheme:
+        return "<invalid database url>"
+
+    host = parsed.hostname or "localhost"
+    port = f":{parsed.port}" if parsed.port else ""
+    path = parsed.path or ""
+    credentials = f"{parsed.username}:***@" if parsed.username else ""
+
+    return urlunsplit((parsed.scheme, f"{credentials}{host}{port}", path, "", ""))
 
 
 async def migrate_chapters(sqlite_path: str, pg_session: AsyncSession) -> int:
@@ -48,11 +67,10 @@ async def migrate_chapters(sqlite_path: str, pg_session: AsyncSession) -> int:
             columns = [row[1] async for row in cursor]
         has_raw_text = "raw_text" in columns
 
-        query = (
-            "SELECT chapter_num, content"
-            + (", raw_text" if has_raw_text else "")
-            + " FROM chapters"
-        )
+        if has_raw_text:
+            query = "SELECT chapter_num, content, raw_text FROM chapters"
+        else:
+            query = "SELECT chapter_num, content FROM chapters"
         async with db.execute(query) as cursor:
             async for row in cursor:
                 chapter = Chapter(
@@ -63,7 +81,6 @@ async def migrate_chapters(sqlite_path: str, pg_session: AsyncSession) -> int:
                 )
                 pg_session.add(chapter)
                 count += 1
-    await pg_session.commit()
     print(f"  ✅ {count} capítulos migrados")
     return count
 
@@ -78,11 +95,10 @@ async def migrate_positions(sqlite_path: str, pg_session: AsyncSession) -> int:
             columns = [row[1] async for row in cursor]
         has_anchor = "anchor_id" in columns
 
-        query = (
-            "SELECT codigo, descricao, chapter_num"
-            + (", anchor_id" if has_anchor else "")
-            + " FROM positions"
-        )
+        if has_anchor:
+            query = "SELECT codigo, descricao, chapter_num, anchor_id FROM positions"
+        else:
+            query = "SELECT codigo, descricao, chapter_num FROM positions"
         batch = []
         async with db.execute(query) as cursor:
             async for row in cursor:
@@ -100,13 +116,11 @@ async def migrate_positions(sqlite_path: str, pg_session: AsyncSession) -> int:
                     stmt = pg_insert(Position).values(batch)
                     stmt = stmt.on_conflict_do_nothing(index_elements=["codigo"])
                     await pg_session.execute(stmt)
-                    await pg_session.commit()
                     batch = []
         if batch:
             stmt = pg_insert(Position).values(batch)
             stmt = stmt.on_conflict_do_nothing(index_elements=["codigo"])
             await pg_session.execute(stmt)
-            await pg_session.commit()
     print(f"  ✅ {count} posições migradas")
     return count
 
@@ -121,11 +135,16 @@ async def migrate_chapter_notes(sqlite_path: str, pg_session: AsyncSession) -> i
                 columns = [row[1] async for row in cursor]
             has_parsed = "parsed_notes_json" in columns
 
-            query = (
-                "SELECT chapter_num, notes_content, titulo, notas, consideracoes, definicoes"
-                + (", parsed_notes_json" if has_parsed else "")
-                + " FROM chapter_notes"
-            )
+            if has_parsed:
+                query = (
+                    "SELECT chapter_num, notes_content, titulo, notas, consideracoes, "
+                    "definicoes, parsed_notes_json FROM chapter_notes"
+                )
+            else:
+                query = (
+                    "SELECT chapter_num, notes_content, titulo, notas, consideracoes, "
+                    "definicoes FROM chapter_notes"
+                )
             async with db.execute(query) as cursor:
                 async for row in cursor:
                     notes = ChapterNotes(
@@ -135,16 +154,15 @@ async def migrate_chapter_notes(sqlite_path: str, pg_session: AsyncSession) -> i
                         notas=row["notas"],
                         consideracoes=row["consideracoes"],
                         definicoes=row["definicoes"],
-                        parsed_notes_json=(
-                            row["parsed_notes_json"] if has_parsed else None
-                        ),
+                        parsed_notes_json=row["parsed_notes_json"]
+                        if has_parsed
+                        else None,
                         tenant_id=None,
                     )
                     pg_session.add(notes)
                     count += 1
         except Exception as e:
             print(f"  ⚠️ Aviso ao migrar chapter_notes: {e}")
-    await pg_session.commit()
     print(f"  ✅ {count} notas de capítulo migradas")
     return count
 
@@ -165,7 +183,6 @@ async def migrate_glossary(sqlite_path: str, pg_session: AsyncSession) -> int:
                     count += 1
         except Exception as e:
             print(f"  ⚠️ Aviso ao migrar glossary: {e}")
-    await pg_session.commit()
     print(f"  ✅ {count} termos do glossário migrados")
     return count
 
@@ -200,13 +217,11 @@ async def migrate_tipi_positions(sqlite_path: str, pg_session: AsyncSession) -> 
                     stmt = pg_insert(TipiPosition).values(batch)
                     stmt = stmt.on_conflict_do_nothing(index_elements=["codigo"])
                     await pg_session.execute(stmt)
-                    await pg_session.commit()
                     batch = []
         if batch:
             stmt = pg_insert(TipiPosition).values(batch)
             stmt = stmt.on_conflict_do_nothing(index_elements=["codigo"])
             await pg_session.execute(stmt)
-            await pg_session.commit()
     print(f"  ✅ {count} posições TIPI migradas")
     return count
 
@@ -221,33 +236,26 @@ async def update_search_vectors(pg_session: AsyncSession):
     print("\n📊 Atualizando search_vectors...")
 
     await pg_session.execute(
-        text(
-            """
+        text("""
         UPDATE chapters 
         SET search_vector = to_tsvector('portuguese', COALESCE(content, ''))
-    """
-        )
+    """)
     )
 
     await pg_session.execute(
-        text(
-            """
+        text("""
         UPDATE positions 
         SET search_vector = to_tsvector('portuguese', COALESCE(descricao, ''))
-    """
-        )
+    """)
     )
 
     await pg_session.execute(
-        text(
-            """
+        text("""
         UPDATE tipi_positions
         SET search_vector = to_tsvector('portuguese', COALESCE(descricao, ''))
-    """
-        )
+    """)
     )
 
-    await pg_session.commit()
     print("  ✅ Search vectors atualizados")
 
 
@@ -266,7 +274,7 @@ async def main():
         return
 
     print(f"\n📁 SQLite source: {settings.database.path}")
-    print(f"🐘 PostgreSQL target: {settings.database.postgres_url}")
+    print(f"🐘 PostgreSQL target: {_mask_database_url(settings.database.postgres_url)}")
 
     # Verificar se SQLite existe
     if not os.path.exists(settings.database.path):
@@ -277,16 +285,21 @@ async def main():
     print("📦 Migrando dados...")
     print("-" * 60)
 
-    async with get_session() as session:
-        # Migrar tabelas na ordem correta (FK constraints)
-        await migrate_chapters(settings.database.path, session)
-        await migrate_positions(settings.database.path, session)
-        await migrate_chapter_notes(settings.database.path, session)
-        await migrate_glossary(settings.database.path, session)
-        await migrate_tipi_positions(settings.database.tipi_path, session)
+    try:
+        async with get_session() as session:
+            async with session.begin():
+                # Migrar tabelas na ordem correta (FK constraints)
+                await migrate_chapters(settings.database.path, session)
+                await migrate_positions(settings.database.path, session)
+                await migrate_chapter_notes(settings.database.path, session)
+                await migrate_glossary(settings.database.path, session)
+                await migrate_tipi_positions(settings.database.tipi_path, session)
 
-        # Atualizar search_vectors
-        await update_search_vectors(session)
+                # Atualizar search_vectors
+                await update_search_vectors(session)
+    except Exception as exc:
+        print(f"\n❌ Erro durante a migração: {exc}")
+        raise
 
     print("\n" + "=" * 60)
     print("✅ Migração concluída com sucesso!")
