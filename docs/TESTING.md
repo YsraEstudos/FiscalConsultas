@@ -63,7 +63,7 @@
 - Gitleaks (git history/repo scan):
   - `docker run --rm -v "${PWD}:/repo" ghcr.io/gitleaks/gitleaks:latest detect --source /repo --redact`
 - 2MS (scan only tracked git content to avoid local `.env` / `.venv` noise):
-  - `docker run --rm --entrypoint /bin/sh -v "${PWD}:/target" checkmarx/2ms:latest -lc "git config --global --add safe.directory /target && /app/2ms git /target --depth 200 --stdout-format json --report-path /target/2ms-git-report.json"`
+  - `docker run --rm --entrypoint /bin/sh -v "${PWD}:/target" checkmarx/2ms:latest -lc "git config --global --add safe.directory /target && /app/2ms git /target --depth 200 --stdout-format json --report-path /target/2ms-report-git.json"`
 
 ## CI Policy
 - Run backend unit+integration (no perf/snapshot) on push/PR.
