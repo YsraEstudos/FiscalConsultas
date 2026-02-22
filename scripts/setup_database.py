@@ -12,15 +12,22 @@ import sys
 import time
 import zipfile
 
-# Adiciona diretório pai ao path para importar utils
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from backend.config.db_schema import (
-    CHAPTER_NOTES_COLUMNS,
-    CHAPTER_NOTES_CREATE_SQL,
-    CHAPTER_NOTES_INSERT_SQL,
-)
-from backend.utils.nesh_sections import extract_chapter_sections
+try:
+    from backend.config.db_schema import (
+        CHAPTER_NOTES_COLUMNS,
+        CHAPTER_NOTES_CREATE_SQL,
+        CHAPTER_NOTES_INSERT_SQL,
+    )
+    from backend.utils.nesh_sections import extract_chapter_sections
+except ModuleNotFoundError:
+    # Allow running this script from the scripts/ directory.
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from backend.config.db_schema import (
+        CHAPTER_NOTES_COLUMNS,
+        CHAPTER_NOTES_CREATE_SQL,
+        CHAPTER_NOTES_INSERT_SQL,
+    )
+    from backend.utils.nesh_sections import extract_chapter_sections
 
 
 def _parse_notes_for_precompute(notes_content: str) -> dict:
@@ -58,8 +65,8 @@ DB_FILE = os.path.join(SCRIPT_DIR, "..", "database", "nesh.db")
 
 
 def calculate_content_hash(content: str) -> str:
-    """Calcula o hash MD5 do conteúdo."""
-    return hashlib.md5(content.encode("utf-8")).hexdigest()
+    """Calcula o hash SHA-256 do conteúdo."""
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
 def get_current_db_hash() -> str | None:
@@ -78,7 +85,7 @@ def get_current_db_hash() -> str | None:
         return None
 
 
-def read_nesh_content() -> tuple[str, str, str]:
+def read_nesh_content() -> tuple[str | None, str | None, str | None]:
     """
     Lê o conteúdo do arquivo Nesh.
     Prioridade: Nesh.txt > Nesh.zip
@@ -87,8 +94,8 @@ def read_nesh_content() -> tuple[str, str, str]:
     # 1. Tenta ler TXT
     if os.path.exists(NESH_TXT):
         print(f"📖 Lendo {NESH_TXT}...")
-        with open(NESH_TXT, "r", encoding="utf-8") as f:
-            return f.read(), "txt", NESH_TXT
+        with open(NESH_TXT, "r", encoding="utf-8") as txt_file:
+            return txt_file.read(), "txt", NESH_TXT
 
     # 2. Tenta ler ZIP
     if os.path.exists(NESH_ZIP):
@@ -105,8 +112,8 @@ def read_nesh_content() -> tuple[str, str, str]:
                     )
 
                 target_file = txt_files[0]
-                with z.open(target_file) as f:
-                    return f.read().decode("utf-8"), "zip", NESH_ZIP
+                with z.open(target_file) as zip_entry:
+                    return zip_entry.read().decode("utf-8"), "zip", NESH_ZIP
         except zipfile.BadZipFile:
             print("❌ Erro: Arquivo ZIP corrompido.")
             return None, None, None
@@ -203,7 +210,7 @@ def parse_nesh_content(content: str) -> dict:
         chapter_content = content[start_pos:end_pos].strip()
         chapters[chapter_num] = chapter_content
 
-    # Move standalone section headers (e.g., "Seção XI") that appear AFTER the chapter header
+    # Move standalone section headers (e.g., "Seção XI") that appear AFTER the chapter header  # noqa: E501
     # to the next chapter. This avoids cascading moves when a section header was already
     # prefixed to the next chapter.
     section_header_re = re.compile(
@@ -233,8 +240,9 @@ def parse_nesh_content(content: str) -> dict:
                 break
 
         if section_match:
-            section_block = chap_content[section_match.start() :].strip()
-            chapters[chap_num] = chap_content[: section_match.start()].rstrip()
+            section_start = section_match.start()
+            section_block = chap_content[section_start:].strip()
+            chapters[chap_num] = chap_content[:section_start].rstrip()
             next_chap = chapter_keys[idx + 1]
             if section_block:
                 chapters[next_chap] = (
@@ -255,7 +263,7 @@ def create_database(chapters: dict, content_hash: str):
             print("🗑️  Banco anterior removido")
         except PermissionError:
             print(
-                f"❌ Erro: Não foi possível remover {DB_FILE}. O arquivo pode estar em uso."
+                f"❌ Erro: Não foi possível remover {DB_FILE}. O arquivo pode estar em uso."  # noqa: E501
             )
             return False
 
@@ -265,18 +273,15 @@ def create_database(chapters: dict, content_hash: str):
     cursor = conn.cursor()
 
     # Cria tabelas
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE chapters (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             chapter_num TEXT UNIQUE NOT NULL,
             content TEXT NOT NULL
         )
-    """
-    )
+    """)
 
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE positions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             chapter_num TEXT NOT NULL,
@@ -285,20 +290,17 @@ def create_database(chapters: dict, content_hash: str):
             anchor_id TEXT,
             FOREIGN KEY (chapter_num) REFERENCES chapters(chapter_num)
         )
-    """
-    )
+    """)
 
     cursor.execute(CHAPTER_NOTES_CREATE_SQL)
 
     # Tabela de metadados para controle de versão/updates
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE metadata (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         )
-    """
-    )
+    """)
 
     # Cria índices
     cursor.execute("CREATE INDEX idx_chapter_num ON chapters(chapter_num)")
@@ -330,7 +332,7 @@ def create_database(chapters: dict, content_hash: str):
         for pos in positions:
             anchor_id = "pos-" + pos["codigo"].replace(".", "-")
             cursor.execute(
-                "INSERT INTO positions (chapter_num, codigo, descricao, anchor_id) VALUES (?, ?, ?, ?)",
+                "INSERT INTO positions (chapter_num, codigo, descricao, anchor_id) VALUES (?, ?, ?, ?)",  # noqa: E501
                 (chapter_num, pos["codigo"], pos["descricao"], anchor_id),
             )
         total_positions += len(positions)
@@ -368,7 +370,7 @@ def create_database(chapters: dict, content_hash: str):
     num_positions = cursor.fetchone()[0]
 
     cursor.execute(
-        'SELECT COUNT(*) FROM chapter_notes WHERE notes_content IS NOT NULL AND notes_content != ""'
+        'SELECT COUNT(*) FROM chapter_notes WHERE notes_content IS NOT NULL AND notes_content != ""'  # noqa: E501
     )
     num_notes = cursor.fetchone()[0]
 
@@ -401,7 +403,7 @@ def compress_nesh_file():
         os.remove(NESH_TXT)
         print(f"✅ Compactação concluída! Economia de {savings:.1f}%")
         print(
-            f"   Original: {original_size / 1024 / 1024:.2f} MB -> Zip: {compressed_size / 1024 / 1024:.2f} MB"
+            f"   Original: {original_size / 1024 / 1024:.2f} MB -> Zip: {compressed_size / 1024 / 1024:.2f} MB"  # noqa: E501
         )
 
     except Exception as e:
@@ -429,7 +431,7 @@ def main():
 
     if db_hash == current_hash:
         print(
-            "\n✨ O banco de dados já está atualizado com a versão mais recente do arquivo."
+            "\n✨ O banco de dados já está atualizado com a versão mais recente do arquivo."  # noqa: E501
         )
         print("   Nenhuma alteração detectada. Pule o setup.")
 
