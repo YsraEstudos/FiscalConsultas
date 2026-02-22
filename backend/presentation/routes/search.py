@@ -74,25 +74,41 @@ def _code_payload_cache_set(key: str, payload: tuple[bytes, bytes]) -> None:
             search_payload_cache_metrics.record_eviction()
 
 
+def _parse_quality_value(raw_value: str) -> float:
+    try:
+        return float(raw_value)
+    except ValueError:
+        return 0.0
+
+
+def _parse_accept_encoding_token(token: str) -> tuple[str, float] | None:
+    part = token.strip()
+    if not part:
+        return None
+
+    pieces = [p.strip() for p in part.split(";")]
+    encoding = pieces[0].lower()
+    quality = 1.0
+    for param in pieces[1:]:
+        key, separator, value = param.partition("=")
+        if not separator or key.strip().lower() != "q":
+            continue
+        quality = _parse_quality_value(value.strip())
+        break
+
+    return encoding, quality
+
+
 def _accepts_gzip(request: Request) -> bool:
     accept_encoding = request.headers.get("Accept-Encoding") or ""
     gzip_q: float | None = None
     wildcard_q: float | None = None
 
     for token in accept_encoding.split(","):
-        part = token.strip()
-        if not part:
+        parsed = _parse_accept_encoding_token(token)
+        if parsed is None:
             continue
-        pieces = [p.strip() for p in part.split(";")]
-        encoding = pieces[0].lower()
-        q_value = 1.0
-        for param in pieces[1:]:
-            if param.lower().startswith("q="):
-                try:
-                    q_value = float(param.split("=", 1)[1].strip())
-                except ValueError:
-                    q_value = 0.0
-                break
+        encoding, q_value = parsed
         if encoding == "gzip":
             gzip_q = q_value
         elif encoding == "*":
@@ -122,6 +138,44 @@ def get_payload_cache_metrics() -> dict[str, str | float | int]:
         "max_size": snapshot.max_size,
         "hit_rate": snapshot.hit_rate,
     }
+
+
+def _build_cache_headers(cache_key: str, ncm_normalized: str) -> dict[str, str]:
+    return {
+        "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",
+        "ETag": weak_etag("nesh", cache_key, ncm_normalized),
+        "Vary": "Authorization, X-Tenant-Id, Accept-Encoding",
+    }
+
+
+def _extract_code_results(response_data: Mapping[str, Any]) -> dict[str, Any]:
+    if "results" in response_data:
+        raw_results = response_data.get("results")
+    elif "resultados" in response_data:
+        raw_results = response_data.get("resultados")
+    else:
+        raw_results = {}
+    return raw_results if isinstance(raw_results, dict) else {}
+
+
+def _build_payload_response(
+    request: Request,
+    payload: tuple[bytes, bytes],
+    *,
+    headers: Mapping[str, str],
+    cache_status: str,
+) -> Response:
+    raw_body, gzip_body = payload
+    common_headers = {**headers, "X-Payload-Cache": cache_status}
+    if _accepts_gzip(request):
+        search_payload_cache_metrics.record_served(gzip=True)
+        return Response(
+            content=gzip_body,
+            media_type=JSON_MEDIA_TYPE,
+            headers={**common_headers, "Content-Encoding": "gzip"},
+        )
+    search_payload_cache_metrics.record_served(gzip=False)
+    return Response(content=raw_body, media_type=JSON_MEDIA_TYPE, headers=common_headers)
 
 
 router = APIRouter()
@@ -172,11 +226,7 @@ async def search(
 
     # Common caching headers / scope key
     cache_key = cache_scope_key(request)
-    headers = {
-        "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",
-        "ETag": weak_etag("nesh", cache_key, ncm_normalized),
-        "Vary": "Authorization, X-Tenant-Id, Accept-Encoding",
-    }
+    headers = _build_cache_headers(cache_key, ncm_normalized)
 
     # Hot-path short-circuit:
     # for code queries, return cached payload before running service/renderer.
@@ -188,18 +238,11 @@ async def search(
         cached_payload = _code_payload_cache_get(payload_key)
         cache_checked = True
         if cached_payload is not None:
-            raw_body, gzip_body = cached_payload
-            common_headers = {**headers, "X-Payload-Cache": "HIT"}
-            if _accepts_gzip(request):
-                search_payload_cache_metrics.record_served(gzip=True)
-                return Response(
-                    content=gzip_body,
-                    media_type=JSON_MEDIA_TYPE,
-                    headers={**common_headers, "Content-Encoding": "gzip"},
-                )
-            search_payload_cache_metrics.record_served(gzip=False)
-            return Response(
-                content=raw_body, media_type=JSON_MEDIA_TYPE, headers=common_headers
+            return _build_payload_response(
+                request,
+                cached_payload,
+                headers=headers,
+                cache_status="HIT",
             )
 
     # Service Layer (ASYNC) - Exceções propagam para o handler global
@@ -220,13 +263,7 @@ async def search(
     # - pre-renderizar HTML no backend (campo `markdown` mantido por compatibilidade)
     # - remover campos brutos pesados da serialização
     if response_data.get("type") == "code":
-        if "results" in response_data:
-            raw_results = response_data.get("results")
-        elif "resultados" in response_data:
-            raw_results = response_data.get("resultados")
-        else:
-            raw_results = {}
-        results = raw_results if isinstance(raw_results, dict) else {}
+        results = _extract_code_results(response_data)
         response_data["markdown"] = HtmlRenderer.render_full_response(results)
         for chapter_data in results.values():
             if isinstance(chapter_data, dict):
@@ -259,18 +296,11 @@ async def search(
             if payload_key is not None:
                 _code_payload_cache_set(payload_key, cached_payload)
 
-        raw_body, gzip_body = cached_payload
-        common_headers = {**headers, "X-Payload-Cache": cache_status}
-        if _accepts_gzip(request):
-            search_payload_cache_metrics.record_served(gzip=True)
-            return Response(
-                content=gzip_body,
-                media_type=JSON_MEDIA_TYPE,
-                headers={**common_headers, "Content-Encoding": "gzip"},
-            )
-        search_payload_cache_metrics.record_served(gzip=False)
-        return Response(
-            content=raw_body, media_type=JSON_MEDIA_TYPE, headers=common_headers
+        return _build_payload_response(
+            request,
+            cached_payload,
+            headers=headers,
+            cache_status=cache_status,
         )
 
     return _orjson_response(response_data, headers=headers)

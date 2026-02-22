@@ -194,6 +194,18 @@ class TipiService:
         """Resolve ORDER BY com base no schema disponível."""
         return TIPI_SORT_WITH_NCM if "ncm_sort" in cols else TIPI_SORT_FALLBACK
 
+    @staticmethod
+    def _enforce_cache_limit(
+        cache: OrderedDict[Any, Any],
+        max_size: int,
+        metrics: PayloadCacheMetrics,
+    ) -> None:
+        """Evict oldest entries until cache reaches max_size."""
+        limit = max(max_size, 0)
+        while len(cache) > limit:
+            cache.popitem(last=False)
+            metrics.record_eviction()
+
     async def close(self):
         """Fecha todas as conexões do pool."""
         async with self._get_pool_lock():
@@ -276,12 +288,11 @@ class TipiService:
                     async with self._get_cache_lock():
                         self._chapter_positions_cache[cap_num] = rows
                         self._chapter_positions_cache_metrics.record_set()
-                        if (
-                            len(self._chapter_positions_cache)
-                            >= CacheConfig.TIPI_CHAPTER_CACHE_SIZE
-                        ):
-                            self._chapter_positions_cache.popitem(last=False)
-                            self._chapter_positions_cache_metrics.record_eviction()
+                        self._enforce_cache_limit(
+                            self._chapter_positions_cache,
+                            CacheConfig.TIPI_CHAPTER_CACHE_SIZE,
+                            self._chapter_positions_cache_metrics,
+                        )
                     return rows
 
         conn = await self._get_connection()
@@ -302,12 +313,11 @@ class TipiService:
             async with self._get_cache_lock():
                 self._chapter_positions_cache[cap_num] = result
                 self._chapter_positions_cache_metrics.record_set()
-                if (
-                    len(self._chapter_positions_cache)
-                    >= CacheConfig.TIPI_CHAPTER_CACHE_SIZE
-                ):
-                    self._chapter_positions_cache.popitem(last=False)
-                    self._chapter_positions_cache_metrics.record_eviction()
+                self._enforce_cache_limit(
+                    self._chapter_positions_cache,
+                    CacheConfig.TIPI_CHAPTER_CACHE_SIZE,
+                    self._chapter_positions_cache_metrics,
+                )
             return result
         finally:
             await self._release_connection(conn)
@@ -491,9 +501,11 @@ class TipiService:
         async with self._get_cache_lock():
             self._code_search_cache[cache_key] = result
             self._code_search_cache_metrics.record_set()
-            if len(self._code_search_cache) >= CacheConfig.TIPI_RESULT_CACHE_SIZE:
-                self._code_search_cache.popitem(last=False)
-                self._code_search_cache_metrics.record_eviction()
+            self._enforce_cache_limit(
+                self._code_search_cache,
+                CacheConfig.TIPI_RESULT_CACHE_SIZE,
+                self._code_search_cache_metrics,
+            )
 
         return result
 
