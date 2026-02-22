@@ -1,0 +1,70 @@
+---
+# MegaLinter GitHub Action configuration file
+# More info at https://megalinter.io
+name: MegaLinter
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "**/*.py"
+      - "**/*.js"
+      - "**/*.jsx"
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.css"
+      - "**/*.html"
+      - "**/*.sql"
+      - "**/*.json"
+      - "**/*.yml"
+      - "**/*.yaml"
+      - "**/*.toml"
+      - "**/*.ini"
+      - "**/*.ps1"
+      - ".mega-linter.yml"
+      - ".github/workflows/megalinter.yml"
+      - "pyproject.toml"
+      - "alembic.ini"
+      - "docker-compose.yml"
+      - ".env.example"
+      - "client/package.json"
+      - "client/package-lock.json"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build:
+    name: MegaLinter
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Git Checkout
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0 # If you use VALIDATE_ALL_CODEBASE: false, you need full history
+
+      # MegaLinter
+      - name: MegaLinter
+        id: ml
+        # You can use any MegaLinter flavour (full, javascript, python, go, dotnet, php...)
+        # See https://megalinter.io/latest/flavors/
+        uses: oxsecurity/megalinter@v9.3.0
+        env:
+          # All available variables are described in documentation
+          # https://megalinter.io/latest/config-file/
+          VALIDATE_ALL_CODEBASE: false
+          # Use PAT so bot commits trigger downstream test workflows (GITHUB_TOKEN may not trigger them).
+          GITHUB_TOKEN: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
+          APPLY_FIXES: all
+          # Never commit fixes on main or fork PRs; require PAT; commit only on feature branches in this repository.
+          APPLY_FIXES_EVENT: ${{ (github.event.pull_request.head.repo.fork || github.event.pull_request.head.ref == 'main' || secrets.PAT == '') && 'none' || 'pull_request' }}
+          APPLY_FIXES_MODE: commit
