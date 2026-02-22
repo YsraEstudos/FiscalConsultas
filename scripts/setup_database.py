@@ -3,24 +3,24 @@ Script de instalação - Converte Nesh.txt (ou .zip) para banco de dados SQLite.
 Inclui validação de hash para evitar processamento redundante e compressão automática.
 """
 
-import sqlite3
-import re
-import os
-import time
 import hashlib
 import json
-import zipfile
+import os
+import re
+import sqlite3
 import sys
+import time
+import zipfile
 
 # Adiciona diretório pai ao path para importar utils
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.utils.nesh_sections import extract_chapter_sections
 from backend.config.db_schema import (
     CHAPTER_NOTES_COLUMNS,
     CHAPTER_NOTES_CREATE_SQL,
     CHAPTER_NOTES_INSERT_SQL,
 )
+from backend.utils.nesh_sections import extract_chapter_sections
 
 
 def _parse_notes_for_precompute(notes_content: str) -> dict:
@@ -117,14 +117,16 @@ def read_nesh_content() -> tuple[str, str, str]:
 def extract_positions_from_chapter(chapter_content: str) -> list:
     """Extrai as posições (ex: 01.01, 85.07) de um capítulo."""
     # Aceita linhas com **bold** e diferentes tipos de hífen
-    position_pattern = r"^\s*(?:\*\*)?(\d{2}\.\d{2})\s*[\-–—]\s*"
+    position_pattern = r"^\s*(?:\*\*)?(\d{2}\.\d{2})(?:\*\*)?\s*[\-–—]\s*"
     positions = []
 
     for line in chapter_content.split("\n"):
         match = re.match(position_pattern, line)
         if match:
             pos = match.group(1)
-            desc_match = re.match(r"^\s*(?:\*\*)?\d{2}\.\d{2}\s*[\-–—]\s*(.+)", line)
+            desc_match = re.match(
+                r"^\s*(?:\*\*)?\d{2}\.\d{2}(?:\*\*)?\s*[\-–—]\s*(.+)", line
+            )
             desc = desc_match.group(1)[:100] if desc_match else ""
             positions.append({"codigo": pos, "descricao": desc})
 
@@ -263,15 +265,18 @@ def create_database(chapters: dict, content_hash: str):
     cursor = conn.cursor()
 
     # Cria tabelas
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE chapters (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             chapter_num TEXT UNIQUE NOT NULL,
             content TEXT NOT NULL
         )
-    """)
+    """
+    )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE positions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             chapter_num TEXT NOT NULL,
@@ -280,17 +285,20 @@ def create_database(chapters: dict, content_hash: str):
             anchor_id TEXT,
             FOREIGN KEY (chapter_num) REFERENCES chapters(chapter_num)
         )
-    """)
+    """
+    )
 
     cursor.execute(CHAPTER_NOTES_CREATE_SQL)
 
     # Tabela de metadados para controle de versão/updates
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE metadata (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         )
-    """)
+    """
+    )
 
     # Cria índices
     cursor.execute("CREATE INDEX idx_chapter_num ON chapters(chapter_num)")
