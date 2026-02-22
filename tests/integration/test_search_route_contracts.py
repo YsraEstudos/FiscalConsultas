@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -38,11 +40,13 @@ class _FakeNeshServiceText:
 
 class _FakeNeshServiceInvalid:
     async def process_request(self, _query: str):
+        await asyncio.sleep(0)
         return []
 
 
 class _FakeNeshServiceCodeEmptyResults:
     async def process_request(self, query: str):
+        await asyncio.sleep(0)
         return {
             "success": True,
             "type": "code",

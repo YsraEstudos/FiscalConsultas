@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 import pytest
@@ -347,6 +348,7 @@ async def test_search_by_code_cache_respects_exact_capacity(monkeypatch):
     service = TipiService()
 
     async def _fake_chapter_positions(cap_num):
+        await asyncio.sleep(0)
         return (
             {
                 "ncm": f"{cap_num}.17",
@@ -428,9 +430,11 @@ async def test_search_text_sqlite_mode_escapes_quotes_in_match_queries(monkeypat
     conn = _FakeConn(scripted_rows=[[], []])
 
     async def _fake_get_connection():
+        await asyncio.sleep(0)
         return conn
 
     async def _fake_release(_conn):
+        await asyncio.sleep(0)
         return None
 
     monkeypatch.setattr(service, "_get_connection", _fake_get_connection)
