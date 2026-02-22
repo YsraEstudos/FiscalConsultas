@@ -3,28 +3,30 @@ Script de reconstrução do índice com Stemming (Fase 5).
 Recria o banco de dados incluindo a tabela FTS5 com textos processados.
 """
 
-import sqlite3
-import re
-import os
 import json
+import logging
+import os
+import re
+import sqlite3
 import sys
 
 # Adiciona diretório pai ao path para importar utils
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.utils.text_processor import NeshTextProcessor
-from backend.utils.nesh_sections import extract_chapter_sections
 from backend.config.db_schema import (
     CHAPTER_NOTES_COLUMNS,
     CHAPTER_NOTES_CREATE_SQL,
     CHAPTER_NOTES_INSERT_SQL,
 )
+from backend.utils.nesh_sections import extract_chapter_sections
+from backend.utils.text_processor import NeshTextProcessor
 
 # Configuração
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 NESH_FILE = os.path.join(SCRIPT_DIR, "..", "data", "debug_nesh", "Nesh.txt")
 DB_FILE = os.path.join(SCRIPT_DIR, "..", "database", "nesh.db")
 CONFIG_FILE = os.path.join(SCRIPT_DIR, "..", "config", "settings.json")
+logger = logging.getLogger(__name__)
 
 # Carrega Stopwords
 try:
@@ -32,14 +34,19 @@ try:
         config = json.load(f)
         stopwords = config.get("search", {}).get("stopwords", [])
 except Exception:
+    logger.warning(
+        "Falha ao carregar stopwords de %s; seguindo com lista vazia",
+        CONFIG_FILE,
+        exc_info=True,
+    )
     stopwords = []
 
 processor = NeshTextProcessor(stopwords)
 
 
 def extract_positions_from_chapter(chapter_content: str) -> list:
-    # Match: 01.01 - or **01.01 -**
-    position_pattern = r"^\s*\*{0,2}(\d{2}\.\d{2})\*{0,2}\s*-"
+    # Match: 01.01 - or **01.01 -**, including hyphen/en-dash/em-dash
+    position_pattern = r"^\s*(?:\*\*)?(\d{2}\.\d{2})(?:\*\*)?\s*[\-–—]\s*"
     positions = []
 
     for line in chapter_content.split("\n"):
@@ -48,7 +55,7 @@ def extract_positions_from_chapter(chapter_content: str) -> list:
             pos = match.group(1)
             # Handle description after dash, potentially removing trailing bold
             desc_match = re.match(
-                r"^\s*\*{0,2}\d{2}\.\d{2}\*{0,2}\s*-\s*(.+)", line.strip()
+                r"^\s*(?:\*\*)?\d{2}\.\d{2}(?:\*\*)?\s*[\-–—]\s*(.+)", line.strip()
             )
             desc = (
                 desc_match.group(1).replace("**", "").replace("*", "").strip()
@@ -107,14 +114,17 @@ def create_database(chapters: dict):
     cursor = conn.cursor()
 
     # 1. Tabelas Estruturais
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE chapters (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             chapter_num TEXT UNIQUE NOT NULL,
             content TEXT NOT NULL
         )
-    """)
-    cursor.execute("""
+    """
+    )
+    cursor.execute(
+        """
         CREATE TABLE positions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             chapter_num TEXT NOT NULL,
@@ -122,7 +132,8 @@ def create_database(chapters: dict):
             descricao TEXT,
             FOREIGN KEY (chapter_num) REFERENCES chapters(chapter_num)
         )
-    """)
+    """
+    )
     cursor.execute(CHAPTER_NOTES_CREATE_SQL)
 
     # 2. Tabela FTS (Busca Textual)
@@ -131,7 +142,8 @@ def create_database(chapters: dict):
     # type: 'chapter' ou 'position'
     # description: para busca
     # search_index: coluna mágica onde inserimos o texto processado (stemmed)
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE VIRTUAL TABLE search_index USING fts5(
             ncm, 
             display_text, 
@@ -139,7 +151,8 @@ def create_database(chapters: dict):
             description,
             indexed_content
         )
-    """)
+    """
+    )
 
     # Índices Relacionais
     cursor.execute("CREATE INDEX idx_chapter_num ON chapters(chapter_num)")

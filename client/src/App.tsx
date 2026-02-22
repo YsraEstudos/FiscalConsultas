@@ -22,9 +22,12 @@ import { ModalManager } from './components/ModalManager';
 type DocType = 'nesh' | 'tipi';
 
 function splitSearchTerms(raw: string): string[] {
+    // Split only on commas — spaces are kept as part of multi-word queries
+    // e.g. "centrifugal motor" → ["centrifugal motor"] (single query)
+    // e.g. "motor, bomba"     → ["motor", "bomba"] (two queries)
     return raw
-        .split(/[,\s]+/)
-        .map(term => term.trim())
+        .split(/,/)
+        .map(term => term.trim().replace(/\s+/g, ' '))
         .filter(Boolean);
 }
 
@@ -39,6 +42,7 @@ function App() {
         createTab,
         closeTab,
         switchTab,
+        reorderTabs,
         updateTab
     } = useTabs();
 
@@ -64,6 +68,7 @@ function App() {
     const activeTabRef = useRef(activeTab);
     const handleSearchRef = useRef<(query: string) => void>(() => { });
     const handleOpenNoteRef = useRef<(note: string, chapter?: string) => Promise<void> | void>(() => { });
+    const openTextResultInNewTabRef = useRef<(ncm: string, textQuery?: string) => Promise<void> | void>(() => { });
 
     activeTabRef.current = activeTab;
 
@@ -227,7 +232,8 @@ function App() {
     // Handler único de clique com delegação (smart-link + note-ref)
     useEffect(() => {
         const handleDelegatedClick = (event: MouseEvent) => {
-            const target = event.target as HTMLElement;
+            const target = event.target;
+            if (!(target instanceof Element)) return;
 
             const smartLink = target.closest('a.smart-link');
             if (smartLink instanceof HTMLElement) {
@@ -256,6 +262,26 @@ function App() {
         const tabId = createTab(doc);
         await executeSearchForTab(tabId, doc, ncm, false);
     }, [createTab, executeSearchForTab]);
+
+    const openTextResultInNewTab = useCallback(async (ncm: string, textQuery?: string) => {
+        const doc = (activeTabRef.current?.document || 'nesh') as DocType;
+        const tabId = createTab(doc);
+        const nextTextQuery = (textQuery || '').trim();
+
+        if (nextTextQuery) {
+            updateTab(tabId, { latestTextQuery: nextTextQuery });
+        }
+
+        await executeSearchForTab(tabId, doc, ncm, false);
+
+        if (nextTextQuery) {
+            updateTab(tabId, { latestTextQuery: nextTextQuery });
+        }
+    }, [createTab, executeSearchForTab, updateTab]);
+
+    useEffect(() => {
+        openTextResultInNewTabRef.current = openTextResultInNewTab;
+    }, [openTextResultInNewTab]);
 
     const openInDocCurrentTab = useCallback(async (doc: DocType, ncm: string) => {
         const currentTab = activeTabRef.current;
@@ -310,6 +336,9 @@ function App() {
             },
             openSettings: () => {
                 setIsSettingsOpen(true);
+            },
+            openTextResultInNewTab: (ncm: string, textQuery?: string) => {
+                void openTextResultInNewTabRef.current(ncm, textQuery);
             }
         };
         return () => {
@@ -355,7 +384,6 @@ function App() {
                 doc={activeTab?.document || 'nesh'}
                 setDoc={setDoc}
                 searchKey={`${activeTabId}-${activeTab?.document || 'nesh'}`}
-                onMenuOpen={() => setMobileMenuOpen(prev => !prev)}
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 onOpenTutorial={() => setIsTutorialOpen(true)}
                 onOpenStats={() => setIsStatsOpen(true)}
@@ -371,6 +399,7 @@ function App() {
                     activeTabId={activeTabId}
                     onSwitch={switchTab}
                     onClose={closeTab}
+                    onReorder={reorderTabs}
                     onNewTab={() => createTab(activeTab?.document || 'nesh')}
                 />
 
@@ -409,9 +438,11 @@ function App() {
                                     data={tab.results}
                                     mobileMenuOpen={tab.id === activeTabId ? mobileMenuOpen : false}
                                     onCloseMobileMenu={tab.id === activeTabId ? closeMobileMenu : noop}
+                                    onToggleMobileMenu={tab.id === activeTabId ? () => setMobileMenuOpen(prev => !prev) : noop}
                                     isActive={tab.id === activeTabId}
                                     tabId={tab.id}
                                     isNewSearch={tab.isNewSearch || false}
+                                    latestTextQuery={tab.latestTextQuery}
                                     onConsumeNewSearch={(incomingTabId, finalScrollTop) => {
                                         const updates: any = { isNewSearch: false };
                                         if (typeof finalScrollTop === 'number') {

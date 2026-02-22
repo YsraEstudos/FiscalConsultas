@@ -49,6 +49,8 @@ test_results*.txt
 .coverage
 .coverage.*
 coverage.xml
+2ms-report*.json
+gitleaks-report*.json
 
 # Environment Variables
 .env
