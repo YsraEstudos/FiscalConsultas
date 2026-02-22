@@ -13,6 +13,7 @@ export interface Tab {
     loading: boolean;
     error: string | null;
     ncm?: string;
+    latestTextQuery?: string;
     results?: SearchResponse | null;
     /**
      * Flag para indicar que há resultados novos de busca.
