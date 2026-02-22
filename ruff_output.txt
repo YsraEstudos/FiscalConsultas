@@ -1,0 +1,89 @@
+F841 Local variable `src_dir` is assigned to but never used
+  --> backend\utils\frontend_check.py:17:5
+   |
+15 |     dist_dir = os.path.join(client_dir, "dist")
+16 |     index_html = os.path.join(dist_dir, "index.html")
+17 |     src_dir = os.path.join(client_dir, "src")
+   |     ^^^^^^^
+18 |
+19 |     # 1. Check existence
+   |
+help: Remove assignment to unused variable `src_dir`
+
+F841 Local variable `in_notes` is assigned to but never used
+   --> scripts\setup_database.py:154:13
+    |
+152 |         # Detecta início das notas
+153 |         if re.match(r"^Notas?\.?$", stripped, re.IGNORECASE):
+154 |             in_notes = True
+    |             ^^^^^^^^
+155 |             notes_started = True
+156 |             notes_lines.append(stripped)
+    |
+help: Remove assignment to unused variable `in_notes`
+
+F841 Local variable `current_count` is assigned to but never used
+  --> tests\integration\test_api_regression.py:72:9
+   |
+70 |     current_count = len(data.get("results", []))
+71 |     if data.get("total_capitulos"):
+72 |         current_count = data.get("total_capitulos")
+   |         ^^^^^^^^^^^^^
+73 |
+74 |     expected_count = expected.get("count")
+   |
+help: Remove assignment to unused variable `current_count`
+
+E402 Module level import not at top of file
+  --> tests\performance\diagnose_latency.py:22:1
+   |
+20 | settings.cache.enable_redis = False
+21 |
+22 | import orjson
+   | ^^^^^^^^^^^^^
+23 | from starlette.testclient import TestClient
+24 | from backend.server.app import app
+   |
+
+E402 Module level import not at top of file
+  --> tests\performance\diagnose_latency.py:23:1
+   |
+22 | import orjson
+23 | from starlette.testclient import TestClient
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+24 | from backend.server.app import app
+25 | from backend.config import CONFIG
+   |
+
+E402 Module level import not at top of file
+  --> tests\performance\diagnose_latency.py:24:1
+   |
+22 | import orjson
+23 | from starlette.testclient import TestClient
+24 | from backend.server.app import app
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+25 | from backend.config import CONFIG
+   |
+
+E402 Module level import not at top of file
+  --> tests\performance\diagnose_latency.py:25:1
+   |
+23 | from starlette.testclient import TestClient
+24 | from backend.server.app import app
+25 | from backend.config import CONFIG
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+
+F841 Local variable `result` is assigned to but never used
+  --> tests\performance\test_search_timeout_repro.py:44:13
+   |
+43 |             # Call the service method directly to isolate business logic perfermance
+44 |             result = await service.process_request(query)
+   |             ^^^^^^
+45 |
+46 |             duration = time.perf_counter() - start_time
+   |
+help: Remove assignment to unused variable `result`
+
+Found 8 errors.
+No fixes available (4 hidden fixes can be enabled with the `--unsafe-fixes` option).
