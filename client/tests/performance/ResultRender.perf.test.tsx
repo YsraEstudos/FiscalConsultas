@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { ResultDisplay } from '../../src/../src/components/ResultDisplay';
+import { ResultDisplay } from '../../src/components/ResultDisplay';
 import { SettingsProvider } from '../../src/context/SettingsContext';
 
 // Sidebar data includes a chapter header + positions.
@@ -11,7 +11,7 @@ vi.mock('react-virtuoso', () => ({
     Virtuoso: ({ data, itemContent }: any) => (
         <div data-testid="virtuoso">
             {data.slice(0, VISIBLE_ITEMS).map((item: any, index: number) => (
-                // nosonar: safe to use index as key in this static test mock
+                // NOSONAR: safe to use index as key in this static test mock
                 <div key={index}>{itemContent(index, item)}</div>
             ))}
         </div>

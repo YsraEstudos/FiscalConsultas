@@ -33,13 +33,19 @@ export function SettingsModal({ isOpen, onClose }: Readonly<SettingsModalProps>)
 
     return (
         // nosonar: ignoring non-interactive element click warning since this is a standard modal backdrop pattern
-        <div className={`${styles.modal} ${isOpen ? styles.active : ''}`} onClick={onClose} onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }} aria-modal="true" role="dialog"> {/* NOSONAR */}
-            {/* nosonar: ignoring role=document warning as it matches aria-modal dialog standards */}
-            <div className={styles.content} onClick={e => e.stopPropagation()} role="document" onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}> {/* NOSONAR */}
+        <div className={`${styles.modal} ${isOpen ? styles.active : ''}`} onClick={onClose} onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }} role="presentation"> {/* NOSONAR */}
+            <div
+                className={styles.content}
+                onClick={e => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="settings-modal-title"
+                onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}
+            > {/* NOSONAR */}
 
                 {/* Header */}
                 <div className={styles.header}>
-                    <h2>Configurações</h2>
+                    <h2 id="settings-modal-title">Configurações</h2>
                     <button className={styles.closeBtn} onClick={onClose} aria-label="Fechar">
                         ×
                     </button>
