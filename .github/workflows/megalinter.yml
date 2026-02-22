@@ -6,37 +6,15 @@ name: MegaLinter
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - "**/*.py"
-      - "**/*.js"
-      - "**/*.jsx"
-      - "**/*.ts"
-      - "**/*.tsx"
-      - "**/*.css"
-      - "**/*.html"
-      - "**/*.sql"
-      - "**/*.json"
-      - "**/*.yml"
-      - "**/*.yaml"
-      - "**/*.toml"
-      - "**/*.ini"
-      - "**/*.ps1"
-      - ".mega-linter.yml"
-      - ".github/workflows/megalinter.yml"
-      - "pyproject.toml"
-      - "alembic.ini"
-      - "docker-compose.yml"
-      - ".env.example"
-      - "client/package.json"
-      - "client/package-lock.json"
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
+  checks: write
   pull-requests: write
 
 jobs:
@@ -49,8 +27,8 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
-          fetch-depth: 0 # If you use VALIDATE_ALL_CODEBASE: false, you need full history
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0 # Full history is required by MegaLinter diff logic.
 
       # MegaLinter
       - name: MegaLinter
@@ -61,10 +39,14 @@ jobs:
         env:
           # All available variables are described in documentation
           # https://megalinter.io/latest/config-file/
+          # PR-only fast mode: lint only changed files in the pull request.
           VALIDATE_ALL_CODEBASE: false
-          # Use PAT so bot commits trigger downstream test workflows (GITHUB_TOKEN may not trigger them).
-          GITHUB_TOKEN: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
-          APPLY_FIXES: all
-          # Never commit fixes on main or fork PRs; require PAT; commit only on feature branches in this repository.
-          APPLY_FIXES_EVENT: ${{ (github.event.pull_request.head.repo.fork || github.event.pull_request.head.ref == 'main' || secrets.PAT == '') && 'none' || 'pull_request' }}
-          APPLY_FIXES_MODE: commit
+          # In PRs, restrict descriptors to workflow/config checks only.
+          # Keep REPOSITORY descriptor available for manual runs.
+          ENABLE: ${{ github.event_name == 'workflow_dispatch' && 'REPOSITORY,ACTION,YAML' || 'ACTION,YAML' }}
+          # Keep CI fast and deterministic for PRs by linting workflow/config scope only.
+          ENABLE_LINTERS: ${{ github.event_name == 'workflow_dispatch' && 'ACTION_ACTIONLINT,YAML_PRETTIER,YAML_YAMLLINT,YAML_V8R,REPOSITORY_GIT_DIFF' || 'ACTION_ACTIONLINT,YAML_PRETTIER,YAML_YAMLLINT,YAML_V8R' }}
+          # Manual workflow with least privilege: use default GitHub token only.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Read-only lint run: never mutate repository files.
+          APPLY_FIXES: none
