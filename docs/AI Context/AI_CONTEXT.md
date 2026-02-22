@@ -182,6 +182,8 @@ CI observado em `.github/workflows/tests.yml`:
   - `uv sync --group dev`
   - `uv run ruff format --check`
   - `uv run ruff check`
+  - `uv run --with pyright pyright migrations`
+  - `uv run --with pylint pylint migrations/env.py migrations/versions/001_initial.py migrations/versions/006_precomputed_columns_and_gin.py --disable=all --enable=E,F --disable=E0401,E1101`
   - `uv run pytest -q --cov=backend --cov-report=xml --cov-report=term-missing --cov-fail-under=70`
 - Job frontend:
   - Node `22`
@@ -192,16 +194,16 @@ CI observado em `.github/workflows/tests.yml`:
 
 CI adicional em `.github/workflows/megalinter.yml`:
 
-- Workflow `MegaLinter` roda em `pull_request` para `main` (com filtro por paths).
-- Usa `oxsecurity/megalinter` pinned por SHA completo.
-- Executa com `VALIDATE_ALL_CODEBASE=false` e pode aplicar auto-fixes em commits de PR conforme condicoes do workflow.
+- `pull_request` (`PR Smart`): `VALIDATE_ALL_CODEBASE=false` e linters/scanners selecionados para diff de PR.
+- `workflow_dispatch` e `schedule` (`Full Audit`): `VALIDATE_ALL_CODEBASE=true` para varredura completa.
+- `PYTHON_PYLINT` e `PYTHON_PYRIGHT` ficam fora do PR Smart e sao cobertos no workflow de testes do backend.
 
-## 11) Drift Documental (importante)
+## 11) Drift Documental (status atual)
 
-Inconsistencias atuais entre docs e codigo:
+Status:
 
-1. Nao foi identificada inconsistencia critica em `README.md` nesta revisao (2026-02-22).
-2. `requirements.txt` e `requirements-dev.txt` seguem inexistentes; setup oficial permanece via `pyproject.toml`/`uv`.
+1. Sem drift critico identificado entre README, workflows e configuracao ativa de CI.
+2. O ponto de atencao e manter este documento sincronizado quando o escopo do `PR Smart` mudar.
 
 ## 12) Divida Tecnica Estrutural (resumo)
 
