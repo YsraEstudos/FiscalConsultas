@@ -1,6 +1,7 @@
 import sqlite3
-import pytest
 from pathlib import Path
+
+import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DB_PATH = PROJECT_ROOT / "database" / "tipi.db"
@@ -21,9 +22,9 @@ def test_ncm_sort_column_exists(db_connection):
     cursor = db_connection.cursor()
     cursor.execute("PRAGMA table_info(tipi_positions)")
     columns = [r["name"] for r in cursor.fetchall()]
-    assert "ncm_sort" in columns, (
-        "Coluna 'ncm_sort' é obrigatória para a ordenação correta"
-    )
+    assert (
+        "ncm_sort" in columns
+    ), "Coluna 'ncm_sort' é obrigatória para a ordenação correta"
 
 
 def test_chapter_84_sorting_invariant(db_connection):
@@ -32,12 +33,14 @@ def test_chapter_84_sorting_invariant(db_connection):
     Verifica se a query ordenada por ncm_sort retorna a ordem topológica correta.
     """
     cursor = db_connection.cursor()
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT ncm, ncm_sort 
         FROM tipi_positions 
         WHERE capitulo = '84' 
         ORDER BY ncm_sort
-    """)
+    """
+    )
     rows = cursor.fetchall()
 
     ncms = [r["ncm"] for r in rows]
@@ -61,9 +64,9 @@ def test_chapter_84_sorting_invariant(db_connection):
         clean_item = item.replace(".", "")
         # Check para descendentes diretos ou subposições
         # Nota: 8413... deve ser prefixo
-        assert clean_item.startswith("8413"), (
-            f"Item fora de ordem encontrado: {item} (deveria ser filho de 8413)"
-        )
+        assert clean_item.startswith(
+            "8413"
+        ), f"Item fora de ordem encontrado: {item} (deveria ser filho de 8413)"
 
 
 def test_global_structure_integrity(db_connection):

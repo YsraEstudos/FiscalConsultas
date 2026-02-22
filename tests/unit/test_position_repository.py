@@ -1,10 +1,8 @@
 from types import SimpleNamespace
 
 import pytest
-
 from backend.infrastructure.db_engine import tenant_context
 from backend.infrastructure.repositories.position_repository import PositionRepository
-
 
 pytestmark = pytest.mark.unit
 

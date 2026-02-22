@@ -1,7 +1,5 @@
 import pytest
-
 from backend.presentation.routes import system
-
 
 pytestmark = pytest.mark.integration
 

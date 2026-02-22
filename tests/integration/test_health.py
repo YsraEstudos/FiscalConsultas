@@ -16,9 +16,9 @@ def test_status_endpoint(client):
         and data.get("tipi", {}).get("status") == "online"
         else "error"
     )
-    assert data.get("status") == expected_global, (
-        f"Inconsistent global status. Got: {data}"
-    )
+    assert (
+        data.get("status") == expected_global
+    ), f"Inconsistent global status. Got: {data}"
     assert "chapters" in data["database"]
     assert "positions" in data["database"]
     assert "latency_ms" in data["database"]

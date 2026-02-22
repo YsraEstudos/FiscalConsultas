@@ -1,6 +1,7 @@
-import pytest
 import hashlib
 import json
+
+import pytest
 
 pytestmark = pytest.mark.snapshot
 
@@ -76,9 +77,9 @@ def test_search_regression(client, snapshot_data, query):
     if data.get("type") == "code":
         # For NCM code lookup, we look at total_capitulos
         # (Though sometimes results count matches too, total_capitulos is the source of truth for chapters found)
-        assert data.get("total_capitulos") == expected_count, (
-            f"Count mismatch for '{query}' (code). Expected {expected_count}, got {data.get('total_capitulos')}"
-        )
+        assert (
+            data.get("total_capitulos") == expected_count
+        ), f"Count mismatch for '{query}' (code). Expected {expected_count}, got {data.get('total_capitulos')}"
     else:
         # For FTS (text), we count the items in 'results' list
         # Note: 'total_capitulos' is 0 for FTS queries in nesh_service.py, so we must ignore it.

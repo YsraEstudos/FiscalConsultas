@@ -1,7 +1,8 @@
-import requests
-import json
 import hashlib
+import json
 from datetime import datetime
+
+import requests
 
 BASE_URL = "http://localhost:8000"
 SNAPSHOT_FILE = "snapshots/baseline_v1.json"
@@ -50,9 +51,11 @@ def run_snapshot():
                 "status": resp.status_code,
                 "hash": content_hash,
                 "type": data.get("type"),
-                "count": len(data.get("results", []))
-                if data.get("type") == "text"
-                else data.get("total_capitulos"),
+                "count": (
+                    len(data.get("results", []))
+                    if data.get("type") == "text"
+                    else data.get("total_capitulos")
+                ),
                 # Store full data for deep comparison if needed, but hash is usually enough for regression
                 "data_preview": str(data)[:100],
             }

@@ -1,11 +1,9 @@
 from contextlib import asynccontextmanager
 
-import pytest
-
 import backend.services.tipi_service as tipi_module
+import pytest
 from backend.config.exceptions import DatabaseError
 from backend.services.tipi_service import TipiService
-
 
 pytestmark = pytest.mark.unit
 

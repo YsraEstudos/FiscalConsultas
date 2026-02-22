@@ -1,7 +1,5 @@
 import pytest
-
 from backend.infrastructure import redis_client as redis_mod
-
 
 pytestmark = pytest.mark.unit
 

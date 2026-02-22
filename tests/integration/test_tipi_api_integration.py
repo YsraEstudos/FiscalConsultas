@@ -1,5 +1,5 @@
-from backend.presentation.tipi_renderer import TipiRenderer
 from backend.presentation.renderer import HtmlRenderer
+from backend.presentation.tipi_renderer import TipiRenderer
 
 
 class TestTipiApiIntegration:
@@ -41,9 +41,9 @@ class TestTipiApiIntegration:
 
         resultados = data.get("resultados", {})
         rendered = TipiRenderer.render_full_response(resultados)
-        assert "tipi-aliquota" in rendered, (
-            "Renderização deve conter classe tipi-aliquota"
-        )
+        assert (
+            "tipi-aliquota" in rendered
+        ), "Renderização deve conter classe tipi-aliquota"
 
     def test_tipi_differs_from_nesh(self, client):
         """Mesma consulta em TIPI e NESH deve retornar conteúdos diferentes."""
@@ -69,9 +69,9 @@ class TestTipiApiIntegration:
         # Check success logic (API might return 200 even if empty results, but success=False?
         # Original test asserted success=True)
         assert data.get("success") is True
-        assert data.get("total", 0) > 0, (
-            "Busca por 8517 deve retornar pelo menos 1 resultado"
-        )
+        assert (
+            data.get("total", 0) > 0
+        ), "Busca por 8517 deve retornar pelo menos 1 resultado"
 
         # Check if 85 is in results keys (Chapter 85)
         # Original: self.assertIn("85", data.get("resultados", {}))
