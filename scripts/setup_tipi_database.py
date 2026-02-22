@@ -7,8 +7,8 @@ Estrutura do Excel (4 colunas):
     NCM | EX | Descrição | Alíquota (%)
 """
 
-import sqlite3
 import re
+import sqlite3
 from pathlib import Path
 
 try:
@@ -278,7 +278,7 @@ def populate_database(conn, data):
     ]
     cursor.executemany(
         """
-        INSERT OR REPLACE INTO tipi_positions (ncm, capitulo, descricao, aliquota, nivel, parent_ncm, ncm_sort)
+        INSERT OR REPLACE INTO tipi_positions (ncm, capitulo, descricao, aliquota, nivel, parent_ncm, ncm_sort)  # noqa: E501
         VALUES (?, ?, ?, ?, ?, ?, ?)
     """,
         position_rows,
@@ -299,7 +299,7 @@ def populate_database(conn, data):
 
     conn.commit()
     print(
-        f"Inseridos {len(data['chapters'])} capítulos e {len(data['positions'])} posições"
+        f"Inseridos {len(data['chapters'])} capítulos e {len(data['positions'])} posições"  # noqa: E501
     )
 
 
@@ -327,10 +327,10 @@ def verify_results(conn):
     # Verificar capítulo 84.13
     print("\nOK Amostra do capítulo 84.13:")
     cursor.execute("""
-        SELECT ncm, descricao, aliquota, nivel 
-        FROM tipi_positions 
+        SELECT ncm, descricao, aliquota, nivel
+        FROM tipi_positions
         WHERE ncm LIKE '8413%' OR ncm LIKE '84.13%'
-        ORDER BY ncm 
+        ORDER BY ncm
         LIMIT 15
     """)
     for ncm, desc, aliq, nivel in cursor.fetchall():
