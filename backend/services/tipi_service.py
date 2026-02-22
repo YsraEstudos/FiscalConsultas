@@ -38,7 +38,9 @@ except ImportError:
     TipiRepository = None
 
 if TYPE_CHECKING:
-    from ..infrastructure.repositories.tipi_repository import TipiRepository as _TipiRepo
+    from ..infrastructure.repositories.tipi_repository import (
+        TipiRepository as _TipiRepo,
+    )
 
 
 class TipiService:

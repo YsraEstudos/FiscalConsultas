@@ -181,7 +181,9 @@ async def search(
     # - pre-renderizar HTML no backend (campo `markdown` mantido por compatibilidade)
     # - remover campos brutos pesados da serialização
     if response_data.get("type") == "code":
-        raw_results = response_data.get("results") or response_data.get("resultados") or {}
+        raw_results = (
+            response_data.get("results") or response_data.get("resultados") or {}
+        )
         results = raw_results if isinstance(raw_results, dict) else {}
         response_data["markdown"] = HtmlRenderer.render_full_response(results)
         for chapter_data in results.values():
