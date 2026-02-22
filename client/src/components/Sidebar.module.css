@@ -4,14 +4,14 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgb(0 0 0 / 50%);
     z-index: 999;
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
+
     /* Prevent blocking clicks when hidden */
     transition: all 0.3s;
-    -webkit-backdrop-filter: blur(2px);
     backdrop-filter: blur(2px);
 }
 
@@ -19,6 +19,7 @@
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
+
     /* Enable clicks when visible */
 }
 
@@ -68,11 +69,12 @@
     font-size: 1.2rem;
     cursor: pointer;
     display: none;
+
     /* Desktop default */
 }
 
 /* Mobile specific styles for the sidebar itself */
-@media (max-width: 768px) {
+@media (width <= 768px) {
     .navSidebar {
         position: fixed;
         top: 0;
@@ -80,7 +82,7 @@
         height: 100vh;
         z-index: 1000;
         transition: left 0.3s ease;
-        box-shadow: 5px 0 15px rgba(0, 0, 0, 0.5);
+        box-shadow: 5px 0 15px rgb(0 0 0 / 50%);
     }
 
     .navSidebar.mobileOpen {
@@ -101,7 +103,8 @@
     font-size: 0.85rem;
     font-weight: 600;
     color: var(--accent-secondary);
-    background: rgba(139, 92, 246, 0.05);
+    background: rgb(139 92 246 / 5%);
+
     /* accent-secondary alpha */
     display: flex;
     align-items: center;
@@ -109,7 +112,7 @@
 }
 
 .chapterBadge {
-    background: rgba(0, 0, 0, 0.2);
+    background: rgb(0 0 0 / 20%);
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 0.7rem;
@@ -137,17 +140,17 @@
 }
 
 .notesItem {
-    background: rgba(16, 185, 129, 0.08);
+    background: rgb(16 185 129 / 8%);
     border-left-color: var(--accent-primary);
 }
 
 .notesItem:hover {
-    background: rgba(16, 185, 129, 0.15);
+    background: rgb(16 185 129 / 15%);
 }
 
 .notesItem .itemCode {
-    background: rgba(16, 185, 129, 0.2);
-    border-color: rgba(16, 185, 129, 0.4);
+    background: rgb(16 185 129 / 20%);
+    border-color: rgb(16 185 129 / 40%);
     color: #6ee7b7;
 }
 
@@ -158,23 +161,23 @@
 
 /* Base style for all section items */
 .sectionItem {
-    background: rgba(99, 102, 241, 0.05);
+    background: rgb(99 102 241 / 5%);
     border-left: 3px solid transparent;
 }
 
 .sectionItem:hover {
-    background: rgba(99, 102, 241, 0.12);
+    background: rgb(99 102 241 / 12%);
 }
 
 /* Título do Capítulo - Purple */
 .sectionItemTitulo {
-    background: rgba(139, 92, 246, 0.1);
+    background: rgb(139 92 246 / 10%);
     border-left-color: #8b5cf6;
 }
 
 .sectionItemTitulo .itemCode {
-    background: rgba(139, 92, 246, 0.2);
-    border-color: rgba(139, 92, 246, 0.4);
+    background: rgb(139 92 246 / 20%);
+    border-color: rgb(139 92 246 / 40%);
     color: #c4b5fd;
 }
 
@@ -185,13 +188,13 @@
 
 /* Notas do Capítulo - Green */
 .sectionItemNotas {
-    background: rgba(16, 185, 129, 0.08);
+    background: rgb(16 185 129 / 8%);
     border-left-color: #10b981;
 }
 
 .sectionItemNotas .itemCode {
-    background: rgba(16, 185, 129, 0.2);
-    border-color: rgba(16, 185, 129, 0.4);
+    background: rgb(16 185 129 / 20%);
+    border-color: rgb(16 185 129 / 40%);
     color: #6ee7b7;
 }
 
@@ -202,13 +205,13 @@
 
 /* Considerações Gerais - Blue */
 .sectionItemConsideracoes {
-    background: rgba(59, 130, 246, 0.08);
+    background: rgb(59 130 246 / 8%);
     border-left-color: #3b82f6;
 }
 
 .sectionItemConsideracoes .itemCode {
-    background: rgba(59, 130, 246, 0.2);
-    border-color: rgba(59, 130, 246, 0.4);
+    background: rgb(59 130 246 / 20%);
+    border-color: rgb(59 130 246 / 40%);
     color: #93c5fd;
 }
 
@@ -218,13 +221,13 @@
 
 /* Definições Técnicas - Orange */
 .sectionItemDefinicoes {
-    background: rgba(249, 115, 22, 0.08);
+    background: rgb(249 115 22 / 8%);
     border-left-color: #f97316;
 }
 
 .sectionItemDefinicoes .itemCode {
-    background: rgba(249, 115, 22, 0.2);
-    border-color: rgba(249, 115, 22, 0.4);
+    background: rgb(249 115 22 / 20%);
+    border-color: rgb(249 115 22 / 40%);
     color: #fdba74;
 }
 
@@ -233,7 +236,7 @@
 }
 
 .item:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: rgb(255 255 255 / 3%);
     border-left-color: var(--accent-primary);
 }
 
@@ -242,8 +245,8 @@
     font-size: 0.8rem;
     color: var(--accent-secondary);
     font-weight: 700;
-    background: rgba(99, 102, 241, 0.12);
-    border: 1px solid rgba(99, 102, 241, 0.25);
+    background: rgb(99 102 241 / 12%);
+    border: 1px solid rgb(99 102 241 / 25%);
     border-radius: 6px;
     padding: 0.15rem 0.35rem;
     text-align: center;
@@ -264,7 +267,7 @@
 
 /* Highlight para item encontrado pelo autoscroll */
 .itemHighlight {
-    background: rgba(99, 102, 241, 0.25) !important;
+    background: rgb(99 102 241 / 25%) !important;
     border-left-color: var(--accent-primary) !important;
     animation: sidebarFlash 2.5s ease-out;
 }
@@ -286,13 +289,16 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+
     /* Ensure it fills available space */
     min-height: 0;
+
     /* Crucial for nested flex scrolling */
 }
 
 .virtualList {
     height: 100% !important;
+
     /* Virtuoso needs explicit height or 100% of parent */
 }
 
@@ -304,21 +310,21 @@
 
 .chapterTitleTipi {
     color: #93c5fd;
-    background: rgba(59, 130, 246, 0.1);
-    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+    background: rgb(59 130 246 / 10%);
+    border-bottom: 1px solid rgb(148 163 184 / 15%);
 }
 
 .itemTipi {
     grid-template-columns: 76px 1fr;
     padding: 0.6rem 0.9rem;
     border-left: 3px solid transparent;
-    border-bottom: 1px dashed rgba(148, 163, 184, 0.15);
+    border-bottom: 1px dashed rgb(148 163 184 / 15%);
 }
 
 .itemCodeTipi {
     font-size: 0.75rem;
-    background: rgba(59, 130, 246, 0.14);
-    border-color: rgba(59, 130, 246, 0.35);
+    background: rgb(59 130 246 / 14%);
+    border-color: rgb(59 130 246 / 35%);
     color: #bfdbfe;
 }
 

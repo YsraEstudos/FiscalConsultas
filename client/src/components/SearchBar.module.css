@@ -13,7 +13,7 @@
 
 .searchBox:focus-within {
     border-color: var(--accent-primary);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+    box-shadow: 0 0 0 3px rgb(99 102 241 / 20%);
 }
 
 .searchInput {
@@ -58,7 +58,7 @@
 
 .searchButton:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+    box-shadow: 0 4px 15px rgb(99 102 241 / 40%);
 }
 
 .searchButton:active {
@@ -114,10 +114,9 @@
     border: 1px solid var(--border-color);
     border-radius: 12px;
     margin-top: 8px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 10px 40px rgb(0 0 0 / 40%);
     z-index: 1000;
     overflow: hidden;
-    -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
     animation: slideDown 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -140,7 +139,7 @@
     align-items: center;
     padding: 0.75rem 1rem;
     border-bottom: 1px solid var(--border-color);
-    background: rgba(255, 255, 255, 0.03);
+    background: rgb(255 255 255 / 3%);
 }
 
 .historyHeader span {
@@ -171,7 +170,7 @@
     padding: 0.75rem 1rem;
     cursor: pointer;
     transition: background 0.15s;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid rgb(255 255 255 / 2%);
 }
 
 .historyRow:last-child {
@@ -179,7 +178,7 @@
 }
 
 .historyRow:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgb(255 255 255 / 5%);
 }
 
 .historyTerm {
@@ -213,6 +212,6 @@
 }
 
 .historyRemoveButton:hover {
-    background: rgba(239, 68, 68, 0.2);
+    background: rgb(239 68 68 / 20%);
     color: var(--error);
 }

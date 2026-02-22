@@ -11,7 +11,7 @@
     flex-shrink: 0;
     position: relative;
     align-self: stretch;
-    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    border-left: 1px solid rgb(255 255 255 / 6%);
     padding: 0 12px;
     overflow: visible;
 }
@@ -21,7 +21,7 @@
     position: absolute;
     left: 0;
     width: 2px;
-    background: rgba(99, 102, 241, 0.25);
+    background: rgb(99 102 241 / 25%);
     border-radius: 1px;
     pointer-events: none;
     z-index: 5;
@@ -35,8 +35,8 @@
     right: 8px;
     border-radius: 10px;
     background: var(--surface-elevated, #1e1e2e);
-    border: 1px solid rgba(99, 102, 241, 0.25);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    border: 1px solid rgb(99 102 241 / 25%);
+    box-shadow: 0 4px 20px rgb(0 0 0 / 25%);
     overflow: hidden;
     z-index: 10;
     transition: top 0.2s ease;
@@ -46,12 +46,12 @@
 /* Indicador visual em cards deslocados pela anti-colisão */
 .formCard.displaced,
 .commentCard.displaced {
-    border-left: 3px solid rgba(99, 102, 241, 0.45);
+    border-left: 3px solid rgb(99 102 241 / 45%);
 }
 
 /* ─── Formulário de novo comentário ─────────────────────────────────────── */
 .formCard {
-    border-color: rgba(99, 102, 241, 0.45);
+    border-color: rgb(99 102 241 / 45%);
     animation: slideIn 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards;
     display: flex;
     flex-direction: column;
@@ -76,7 +76,7 @@
     align-items: flex-start;
     gap: 8px;
     padding: 10px 12px 8px;
-    background: rgba(99, 102, 241, 0.07);
+    background: rgb(99 102 241 / 7%);
 }
 
 .quoteBar {
@@ -107,7 +107,7 @@
     box-sizing: border-box;
     background: var(--surface-base, #13131f);
     border: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid rgb(255 255 255 / 6%);
     color: var(--text-primary, #e2e8f0);
     font-size: 12.5px;
     font-family: inherit;
@@ -120,7 +120,7 @@
 }
 
 .textarea:focus {
-    background: rgba(99, 102, 241, 0.05);
+    background: rgb(99 102 241 / 5%);
 }
 
 .textarea::placeholder {
@@ -134,7 +134,7 @@
     justify-content: space-between;
     padding: 8px 12px;
     gap: 8px;
-    background: rgba(0, 0, 0, 0.12);
+    background: rgb(0 0 0 / 12%);
 }
 
 .toggle {
@@ -144,7 +144,6 @@
     font-size: 11px;
     color: var(--text-secondary, #94a3b8);
     cursor: pointer;
-    -webkit-user-select: none;
     user-select: none;
 }
 
@@ -172,12 +171,12 @@
 }
 
 .cancelBtn {
-    background: rgba(255, 255, 255, 0.07);
+    background: rgb(255 255 255 / 7%);
     color: var(--text-secondary, #94a3b8);
 }
 
 .cancelBtn:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgb(255 255 255 / 12%);
 }
 
 .submitBtn {
@@ -203,7 +202,7 @@
 }
 
 .commentCard.private {
-    border-color: rgba(168, 85, 247, 0.3);
+    border-color: rgb(168 85 247 / 30%);
 }
 
 @keyframes fadeIn {
@@ -245,7 +244,7 @@
 
 .avatar {
     object-fit: cover;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgb(255 255 255 / 10%);
 }
 
 .avatarFallback {
@@ -321,7 +320,7 @@
 
 .actionBtn:hover {
     opacity: 1;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgb(255 255 255 / 8%);
 }
 
 /* ─── Edição inline ────────────────────────────────────────────────────── */
@@ -332,8 +331,8 @@
 /* ─── Confirmação de exclusão ──────────────────────────────────────────── */
 .deleteConfirm {
     padding: 8px 12px;
-    background: rgba(239, 68, 68, 0.08);
-    border-top: 1px solid rgba(239, 68, 68, 0.2);
+    background: rgb(239 68 68 / 8%);
+    border-top: 1px solid rgb(239 68 68 / 20%);
 }
 
 .deleteConfirm p {
@@ -350,7 +349,7 @@
     font-family: inherit;
     padding: 4px 11px;
     cursor: pointer;
-    background: rgba(239, 68, 68, 0.8);
+    background: rgb(239 68 68 / 80%);
     color: #fff;
     transition: opacity 0.15s ease;
 }
@@ -369,9 +368,10 @@
 }
 
 /* ─── Responsivo: oculta painel lateral em telas estreitas ────────────────── */
+
 /* Em telas < 1280px o painel lateral é substituído pelo CommentDrawer.
    O CommentDrawer é renderizado condicionalmente em ResultDisplay.tsx. */
-@media (max-width: 1280px) {
+@media (width <= 1280px) {
     .panel {
         display: none;
     }
