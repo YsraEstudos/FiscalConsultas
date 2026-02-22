@@ -208,6 +208,93 @@ function resolveSectionElement(container: HTMLElement, targetId: string): HTMLEl
     return resolved;
 }
 
+const TERM_MARK_ATTR = 'data-text-query-highlight';
+const TERM_MARK_SELECTOR = `mark[${TERM_MARK_ATTR}="true"]`;
+const TERM_HIGHLIGHT_MAX_MATCHES = 250;
+const TERM_HIGHLIGHT_MIN_LENGTH = 2;
+const SKIP_HIGHLIGHT_TAGS = new Set(['SCRIPT', 'STYLE', 'MARK', 'NOSCRIPT', 'TEXTAREA']);
+
+function escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function unwrapQueryHighlights(container: HTMLElement) {
+    const marks = Array.from(container.querySelectorAll<HTMLElement>(TERM_MARK_SELECTOR));
+    marks.forEach(mark => {
+        const parent = mark.parentNode;
+        if (!parent) return;
+        parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
+        if (parent instanceof HTMLElement) {
+            parent.normalize();
+        }
+    });
+}
+
+function highlightTermInContainer(container: HTMLElement, term: string): number {
+    const normalizedTerm = term.trim();
+    if (normalizedTerm.length < TERM_HIGHLIGHT_MIN_LENGTH) return 0;
+
+    const matcher = new RegExp(escapeRegex(normalizedTerm), 'i');
+    const splitRegex = new RegExp(`(${escapeRegex(normalizedTerm)})`, 'gi');
+    const textNodes: Text[] = [];
+
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+        acceptNode: (node) => {
+            const value = node.nodeValue || '';
+            if (!value.trim()) return NodeFilter.FILTER_REJECT;
+
+            const parentElement = (node as Text).parentElement;
+            if (!parentElement) return NodeFilter.FILTER_REJECT;
+            if (SKIP_HIGHLIGHT_TAGS.has(parentElement.tagName)) return NodeFilter.FILTER_REJECT;
+            if (parentElement.closest(TERM_MARK_SELECTOR)) return NodeFilter.FILTER_REJECT;
+            if (!matcher.test(value)) return NodeFilter.FILTER_REJECT;
+
+            return NodeFilter.FILTER_ACCEPT;
+        }
+    });
+
+    let currentNode = walker.nextNode();
+    while (currentNode) {
+        textNodes.push(currentNode as Text);
+        currentNode = walker.nextNode();
+    }
+
+    let highlightedCount = 0;
+    const normalizedLowerTerm = normalizedTerm.toLowerCase();
+
+    for (const node of textNodes) {
+        if (highlightedCount >= TERM_HIGHLIGHT_MAX_MATCHES) break;
+
+        const text = node.nodeValue || '';
+        const parts = text.split(splitRegex);
+        if (parts.length < 3) continue;
+
+        const fragment = document.createDocumentFragment();
+        let replaced = false;
+
+        for (const part of parts) {
+            if (!part) continue;
+
+            if (part.toLowerCase() === normalizedLowerTerm && highlightedCount < TERM_HIGHLIGHT_MAX_MATCHES) {
+                const mark = document.createElement('mark');
+                mark.setAttribute(TERM_MARK_ATTR, 'true');
+                mark.className = 'search-highlight search-highlight-partial';
+                mark.textContent = part;
+                fragment.appendChild(mark);
+                highlightedCount += 1;
+                replaced = true;
+            } else {
+                fragment.appendChild(document.createTextNode(part));
+            }
+        }
+
+        if (!replaced || !node.parentNode) continue;
+        node.parentNode.replaceChild(fragment, node);
+    }
+
+    return highlightedCount;
+}
+
 interface ResultData {
     type?: 'text' | 'code';
     markdown?: string;
@@ -221,6 +308,7 @@ interface ResultDisplayProps {
     data: ResultData | null;
     mobileMenuOpen: boolean;
     onCloseMobileMenu: () => void;
+    onToggleMobileMenu?: () => void;
     isActive: boolean;
     tabId: string;
     initialScrollTop?: number;
@@ -238,6 +326,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     data,
     mobileMenuOpen,
     onCloseMobileMenu,
+    onToggleMobileMenu: _onToggleMobileMenu,
     isActive,
     tabId,
     initialScrollTop,
@@ -254,6 +343,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     const latestScrollTopRef = useRef(0);
     const lastPersistedScrollRef = useRef<number | null>(null);
     const [isContentReady, setIsContentReady] = useState(false);
+    const [activeTerm, setActiveTerm] = useState('');
     const [activeAnchorId, setActiveAnchorId] = useState<string | null>(null);
     const containerId = `results-content-${tabId}`;
     const lastMarkupRef = useRef<string | null>(null);
@@ -639,6 +729,12 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         }
     }, [isContentReady, tabId]);
 
+    // Keep active term in sync with the latest text query for this tab.
+    useEffect(() => {
+        const normalizedLatestTextQuery = (latestTextQuery || '').trim();
+        setActiveTerm(prev => (prev === normalizedLatestTextQuery ? prev : normalizedLatestTextQuery));
+    }, [latestTextQuery, data?.query, tabId]);
+
     const handleAutoScrollComplete = useCallback((success?: boolean) => {
         if (!success) return;
         // Wrap in RAF to ensure DOM has updated/painted the scroll action
@@ -912,6 +1008,29 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         if (!isContentReady || !codeResults || !containerRef.current) return;
         ensureSectionAnchors(codeResults, containerRef.current);
     }, [codeResults, ensureSectionAnchors, isContentReady]);
+
+    // Query-term highlighting for code results.
+    // Always clean previous wrappers first to avoid nested/duplicated marks after query changes.
+    useEffect(() => {
+        const contentContainer = contentRef.current;
+        if (!contentContainer || data?.type === 'text') return;
+
+        unwrapQueryHighlights(contentContainer);
+
+        if (!isActive || !isContentReady || !activeTerm) {
+            return () => {
+                const current = contentRef.current;
+                if (current) unwrapQueryHighlights(current);
+            };
+        }
+
+        highlightTermInContainer(contentContainer, activeTerm);
+
+        return () => {
+            const current = contentRef.current;
+            if (current) unwrapQueryHighlights(current);
+        };
+    }, [activeTerm, isActive, isContentReady, tabId, data?.type, data?.markdown]);
 
     // Sync Sidebar to current visible anchor
     useEffect(() => {
