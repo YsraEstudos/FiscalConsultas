@@ -3,18 +3,18 @@ Adaptador de banco de dados SQLite para o Nesh (Async).
 Gerencia conexões e queries ao banco nesh.db com connection pooling assíncrono.
 """
 
-import os
 import asyncio
-import aiosqlite
+import os
 import time
-
-from typing import Dict, List, Optional, Any
 from contextlib import asynccontextmanager
+from typing import Any, Dict, List, Optional
+
+import aiosqlite
 
 from ..config.constants import SearchConfig
 from ..config.db_schema import CHAPTER_NOTES_SECTION_COLUMNS
-from ..config.logging_config import db_logger as logger
 from ..config.exceptions import DatabaseError, DatabaseNotFoundError
+from ..config.logging_config import db_logger as logger
 from ..config.settings import settings
 
 

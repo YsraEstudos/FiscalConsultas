@@ -5,7 +5,7 @@ Redis cache client for shared L2 caching.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 import orjson
 
@@ -17,8 +17,8 @@ except Exception:  # pragma: no cover - optional dependency
     aioredis = None  # type: ignore[assignment]
     _REDIS_AVAILABLE = False
 
-from backend.config.settings import settings
 from backend.config.logging_config import service_logger as logger
+from backend.config.settings import settings
 
 
 @dataclass
