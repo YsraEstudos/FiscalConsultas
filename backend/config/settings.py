@@ -1,17 +1,10 @@
-import os
 import json
+import os
 import secrets
-from typing import List, Set, Optional, Literal
+from typing import List, Literal, Optional, Set
 
-try:
-    from pydantic_settings import BaseSettings, SettingsConfigDict
-    from pydantic import BaseModel, Field
-
-    _PYDANTIC_V2 = True
-except ImportError:
-    from pydantic.v1 import BaseSettings, BaseModel, Field
-
-    _PYDANTIC_V2 = False
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Root path resolving
 PROJECT_ROOT = os.path.dirname(
@@ -146,21 +139,12 @@ class AppSettings(BaseSettings):
     def stopwords(self) -> Set[str]:
         return self.search.stopwords_set
 
-    # Pydantic configuration
-    if _PYDANTIC_V2:
-        model_config = SettingsConfigDict(
-            env_file=".env",
-            env_nested_delimiter="__",
-            case_sensitive=False,
-            extra="ignore",
-        )
-    else:
-        # Pydantic v1 (inner Config class)
-        class Config:
-            env_file = ".env"
-            env_nested_delimiter = "__"
-            case_sensitive = False
-            extra = "ignore"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_nested_delimiter="__",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
     @classmethod
     def load(cls) -> "AppSettings":
@@ -191,9 +175,10 @@ settings = AppSettings.load()
 
 
 def _get_model_fields(model: BaseModel) -> Set[str]:
-    if hasattr(model, "model_fields"):
-        return set(model.model_fields.keys())
-    return set(model.__fields__.keys())
+    model_fields = getattr(model, "model_fields", None)
+    if isinstance(model_fields, dict):
+        return set(model_fields.keys())
+    return set(getattr(model, "__fields__", {}).keys())
 
 
 def reload_settings() -> "AppSettings":

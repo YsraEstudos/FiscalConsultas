@@ -21,9 +21,10 @@ Arquitetura:
 Versão: 4.0 (Modular Architecture)
 """
 
-import uvicorn
 import os
 import sys
+
+import uvicorn
 from dotenv import load_dotenv
 
 # Load environment variables from .env file

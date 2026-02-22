@@ -6,10 +6,10 @@ garantindo respostas JSON padronizadas e evitando vazamento de stack traces.
 """
 
 import logging
-from fastapi import Request
-from fastapi.responses import JSONResponse
 
 from backend.config.exceptions import NeshError
+from fastapi import Request
+from fastapi.responses import JSONResponse
 
 logger = logging.getLogger("server")
 

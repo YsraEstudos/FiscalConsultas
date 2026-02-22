@@ -7,24 +7,24 @@ autenticação via decode_clerk_jwt e verificação de admin via is_admin_payloa
 
 import logging
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.config.settings import settings
 from backend.infrastructure.db_engine import get_db
-from backend.services.comment_service import CommentService
 from backend.presentation.schemas.comment_schemas import (
+    CommentApproveIn,
     CommentCreate,
     CommentOut,
-    CommentApproveIn,
     CommentUpdate,
 )
 from backend.server.middleware import (
-    get_current_tenant,
     decode_clerk_jwt,
+    get_current_tenant,
     get_last_jwt_failure_reason,
 )
-from backend.config.settings import settings
+from backend.services.comment_service import CommentService
 from backend.utils.auth import extract_bearer_token, is_admin_payload
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("routes.comments")
 
