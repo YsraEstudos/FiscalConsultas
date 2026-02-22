@@ -5,7 +5,21 @@
 APPLY_FIXES: none # Read-only mode: do not rewrite repository files
 SHOW_ELAPSED_TIME: true
 
-# Use MegaLinter default descriptors/linters (full ruleset).
+# Limit MegaLinter to file types that exist in this repository.
+ENABLE:
+  - REPOSITORY
+  - PYTHON
+  - JAVASCRIPT
+  - TYPESCRIPT
+  - TSX
+  - CSS
+  - HTML
+  - SQL
+  - YAML
+  - JSON
+  - MARKDOWN
+  - ENV
+  - POWERSHELL
 
 # Exclusions
 ADDITIONAL_EXCLUDED_DIRECTORIES:
