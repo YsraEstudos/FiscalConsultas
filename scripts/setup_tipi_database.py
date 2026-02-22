@@ -7,8 +7,8 @@ Estrutura do Excel (4 colunas):
     NCM | EX | Descrição | Alíquota (%)
 """
 
-import sqlite3
 import re
+import sqlite3
 from pathlib import Path
 
 try:
@@ -38,17 +38,20 @@ def create_database():
     cursor.execute("DROP TABLE IF EXISTS tipi_fts")
 
     # Tabela de capítulos
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS tipi_chapters (
             codigo TEXT PRIMARY KEY,
             titulo TEXT,
             secao TEXT,
             notas TEXT
         )
-    """)
+    """
+    )
 
     # Tabela de posições/NCMs
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS tipi_positions (
             ncm TEXT PRIMARY KEY,
             capitulo TEXT,
@@ -59,18 +62,21 @@ def create_database():
             ncm_sort TEXT,
             FOREIGN KEY (capitulo) REFERENCES tipi_chapters(codigo)
         )
-    """)
+    """
+    )
 
     # Índice FTS para busca full-text
     cursor.execute("DROP TABLE IF EXISTS tipi_fts")
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE VIRTUAL TABLE tipi_fts USING fts5(
             ncm,
             capitulo,
             descricao,
             aliquota
         )
-    """)
+    """
+    )
 
     conn.commit()
     return conn
@@ -306,13 +312,15 @@ def verify_results(conn):
 
     # Verificar capítulo 84.13
     print("\nOK Amostra do capítulo 84.13:")
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT ncm, descricao, aliquota, nivel 
         FROM tipi_positions 
         WHERE ncm LIKE '8413%' OR ncm LIKE '84.13%'
         ORDER BY ncm 
         LIMIT 15
-    """)
+    """
+    )
     for ncm, desc, aliq, nivel in cursor.fetchall():
         indent = "  " * nivel
         desc_short = (desc[:40] + "...") if len(desc) > 40 else desc
