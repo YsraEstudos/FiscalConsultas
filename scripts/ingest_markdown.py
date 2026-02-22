@@ -1,6 +1,6 @@
+import os
 import re
 import sqlite3
-import os
 
 INPUT_FILE = "raw_data/nesh.md"
 DB_FILE = "database/nesh.db"

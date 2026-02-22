@@ -1,8 +1,7 @@
+import os
+import re
 import sqlite3
 import unicodedata
-import re
-
-import os
 
 SCRIPT_DIR = os.path.dirname(__file__)
 DB_FILE = os.path.join(SCRIPT_DIR, "..", "database", "nesh.db")
@@ -31,14 +30,16 @@ def setup_fulltext():
     # Create FTS5 virtual table
     # columns: ncm, description (normalized), display_text (original), type (chapter/pos)
     print("Creating FTS5 table...")
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE VIRTUAL TABLE search_index USING fts5(
             ncm, 
             description, 
             display_text, 
             type
         )
-    """)
+    """
+    )
 
     print("Indexing Data...")
 

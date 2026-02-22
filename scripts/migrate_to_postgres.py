@@ -17,25 +17,24 @@ Pré-requisitos:
 """
 
 import asyncio
-import sys
 import os
+import sys
 
 # Adicionar root ao path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import aiosqlite
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from backend.infrastructure.db_engine import get_session
+from backend.config.settings import settings
 from backend.domain.sqlmodels import (
     Chapter,
-    Position,
     ChapterNotes,
     Glossary,
+    Position,
     TipiPosition,
 )
-from backend.config.settings import settings
+from backend.infrastructure.db_engine import get_session
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def migrate_chapters(sqlite_path: str, pg_session: AsyncSession) -> int:
@@ -136,9 +135,9 @@ async def migrate_chapter_notes(sqlite_path: str, pg_session: AsyncSession) -> i
                         notas=row["notas"],
                         consideracoes=row["consideracoes"],
                         definicoes=row["definicoes"],
-                        parsed_notes_json=row["parsed_notes_json"]
-                        if has_parsed
-                        else None,
+                        parsed_notes_json=(
+                            row["parsed_notes_json"] if has_parsed else None
+                        ),
                         tenant_id=None,
                     )
                     pg_session.add(notes)
@@ -222,24 +221,30 @@ async def update_search_vectors(pg_session: AsyncSession):
     print("\n📊 Atualizando search_vectors...")
 
     await pg_session.execute(
-        text("""
+        text(
+            """
         UPDATE chapters 
         SET search_vector = to_tsvector('portuguese', COALESCE(content, ''))
-    """)
+    """
+        )
     )
 
     await pg_session.execute(
-        text("""
+        text(
+            """
         UPDATE positions 
         SET search_vector = to_tsvector('portuguese', COALESCE(descricao, ''))
-    """)
+    """
+        )
     )
 
     await pg_session.execute(
-        text("""
+        text(
+            """
         UPDATE tipi_positions
         SET search_vector = to_tsvector('portuguese', COALESCE(descricao, ''))
-    """)
+    """
+        )
     )
 
     await pg_session.commit()

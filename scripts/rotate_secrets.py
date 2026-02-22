@@ -1,6 +1,6 @@
-import secrets
 import os
 import re
+import secrets
 
 
 def _get_env_value(content: str, key: str) -> str | None:
