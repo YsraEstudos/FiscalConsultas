@@ -174,7 +174,17 @@ async def search(
             )
 
     # Service Layer (ASYNC) - Exceções propagam para o handler global
-    response_data = cast(dict[str, Any], await service.process_request(ncm))
+    result = await service.process_request(ncm)
+    if not isinstance(result, dict):
+        logger.error(
+            "process_request retornou tipo inválido para ncm=%s: %s",
+            safe_ncm,
+            type(result).__name__,
+        )
+        raise HTTPException(
+            status_code=500, detail="Formato de resposta inválido do serviço"
+        )
+    response_data = cast(dict[str, Any], result)
 
     # Compatibilidade de contrato / performance:
     # - manter 'results' como chave canônica e alias legado 'resultados'
