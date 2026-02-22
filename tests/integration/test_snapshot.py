@@ -4,7 +4,7 @@ from datetime import datetime
 
 import requests
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8000"  # NOSONAR - local test endpoint
 SNAPSHOT_FILE = "snapshots/baseline_v1.json"
 
 TEST_CASES = [
