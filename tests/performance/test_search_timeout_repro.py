@@ -41,7 +41,7 @@ async def test_search_performance_repro():
             start_time = time.perf_counter()
 
             # Call the service method directly to isolate business logic perfermance
-            result = await service.process_request(query)
+            await service.process_request(query)
 
             duration = time.perf_counter() - start_time
             print(f"Query: '{query}' took {duration:.4f}s")

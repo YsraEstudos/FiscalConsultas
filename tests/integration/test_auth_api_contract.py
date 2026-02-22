@@ -10,7 +10,7 @@ pytestmark = pytest.mark.integration
 
 
 class _FakeAiService:
-    async def get_chat_response(self, message: str) -> str:
+    async def get_chat_response(self, message: str) -> str:  # NOSONAR
         return f"echo:{message}"
 
 
@@ -40,12 +40,12 @@ def test_ai_chat_requires_authentication(client):
 
 
 def test_ai_chat_success_response_with_dependency_override(client, monkeypatch):
-    async def _mock_decode(_t):
+    async def _mock_decode(_t):  # NOSONAR
         return {"sub": "user_1"}
 
     monkeypatch.setattr(auth, "decode_clerk_jwt", _mock_decode)
 
-    async def _allow_consume(key, limit):
+    async def _allow_consume(key, limit):  # NOSONAR
         return True, 0
 
     monkeypatch.setattr(auth.ai_chat_rate_limiter, "consume", _allow_consume)
@@ -62,12 +62,12 @@ def test_ai_chat_success_response_with_dependency_override(client, monkeypatch):
 
 
 def test_ai_chat_returns_retry_after_when_rate_limited(client, monkeypatch):
-    async def _mock_decode(_t):
+    async def _mock_decode(_t):  # NOSONAR
         return {"sub": "user_1"}
 
     monkeypatch.setattr(auth, "decode_clerk_jwt", _mock_decode)
 
-    async def _deny_consume(key, limit):
+    async def _deny_consume(key, limit):  # NOSONAR
         return False, 17
 
     monkeypatch.setattr(auth.ai_chat_rate_limiter, "consume", _deny_consume)

@@ -1,7 +1,4 @@
-import pytest
-import re
 from backend.presentation.renderer import _get_position_pattern, HtmlRenderer
-from backend.utils.id_utils import generate_anchor_id
 
 
 class TestRendererRegex:

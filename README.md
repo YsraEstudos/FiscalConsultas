@@ -27,6 +27,39 @@ npm ci
 cd ..
 ```
 
+### 1.1) Ativar MegaLinter local no commit (pre-commit)
+
+O projeto roda MegaLinter localmente via hook de commit.
+
+```powershell
+uv run pre-commit install
+```
+
+A partir disso, todo `git commit` executa o MegaLinter antes de criar o commit.
+Além disso, o repositório também possui workflow de MegaLinter em Pull Request (`.github/workflows/megalinter.yml`).
+
+### 1.2) MegaLinter local (execução manual)
+
+Uso local e CI:
+- Local: útil para feedback rápido antes do push, com saída em `megalinter-reports/`.
+- PR/CI: o workflow de MegaLinter roda em PRs para `main` e publica resultado como check + logs/artifacts no GitHub Actions.
+- Enforcement: se bloqueia merge depende das regras de branch protection/checks obrigatórios do repositório.
+
+Executar apenas mudanças do branch (modo diff):
+
+```powershell
+docker run --rm -e DEFAULT_WORKSPACE=/tmp/lint -e VALIDATE_ALL_CODEBASE=false -v "${PWD}:/tmp/lint" oxsecurity/megalinter:v9
+```
+
+Executar base inteira (modo full):
+
+```powershell
+docker run --rm -e DEFAULT_WORKSPACE=/tmp/lint -e VALIDATE_ALL_CODEBASE=true -v "${PWD}:/tmp/lint" oxsecurity/megalinter:v9
+```
+
+Relatórios locais: `megalinter-reports/`
+Relatórios de PR/CI: aba **Actions** (logs/artifacts) e comentário automático no PR quando habilitado pelo workflow.
+
 Opcional sem `uv` (manual):
 
 ```powershell
@@ -297,4 +330,7 @@ Não há script dedicado de deploy/orquestração além de `docker-compose.yml` 
 ## Documentação para IA e manutenção
 
 - Contexto técnico principal: [`docs/AI Context/AI_CONTEXT.md`](docs/AI%20Context/AI_CONTEXT.md)
-- Roadmap: [`docs/ROADMAP.md`](docs/ROADMAP.md)
+- Guia completo de abas (estado, fluxos e impactos): [`docs/AI Context/Frontend/Tabs.md`](docs/AI%20Context/Frontend/Tabs.md)
+- Navegação e interações cruzadas: [`docs/AI Context/Frontend/NavigationInteractions.md`](docs/AI%20Context/Frontend/NavigationInteractions.md)
+- Auto-scroll e sincronização: [`docs/AI Context/Frontend/Autoscroll.md`](docs/AI%20Context/Frontend/Autoscroll.md)
+- Roadmap: [`docs/roadmap/ROADMAP.md`](docs/roadmap/ROADMAP.md)

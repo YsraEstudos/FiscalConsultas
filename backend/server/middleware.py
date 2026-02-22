@@ -8,21 +8,20 @@ Este middleware:
 4. Define tenant no contextvar para RLS do PostgreSQL
 """
 
+import asyncio
+import hashlib
+import json
 import logging
 import time
-import hashlib
-import asyncio
-import json
 from contextvars import ContextVar
-from typing import Optional, Any, Dict
+from typing import Any, Dict, Optional
 from urllib.parse import urlparse
+
 import jwt
-from jwt import PyJWKClient
-
-from starlette.responses import JSONResponse
-
 from backend.config.settings import settings
 from backend.infrastructure.db_engine import tenant_context
+from jwt import PyJWKClient
+from starlette.responses import JSONResponse
 
 logger = logging.getLogger("middleware.tenant")
 
@@ -88,6 +87,7 @@ def _token_fingerprint(token: str) -> str:
 
 def _safe_get_unverified_header(token: str) -> dict[str, Any]:
     try:
+        # NOSONAR: unverified header is used only for observability/debug logs, never auth decisions.
         header = jwt.get_unverified_header(token)
         if isinstance(header, dict):
             return header
@@ -98,6 +98,7 @@ def _safe_get_unverified_header(token: str) -> dict[str, Any]:
 
 def _safe_get_unverified_claims(token: str) -> dict[str, Any]:
     try:
+        # NOSONAR: unverified claims are used only for observability/debug logs, never auth decisions.
         claims = jwt.decode(
             token,
             options={
@@ -392,8 +393,9 @@ async def decode_clerk_jwt(token: str) -> Optional[dict]:
             )
             return None
         else:
-            # Desenvolvimento: Decodificar sem validar assinatura
-            payload = jwt.decode(
+            # Desenvolvimento/debug somente: decode sem assinatura para diagnóstico local.
+            # Nunca usar payload sem assinatura para autenticação/autorização em produção.
+            payload = jwt.decode(  # NOSONAR: dev-only unsigned decode, gated by env=development and debug_mode=true.
                 token,
                 options={
                     "verify_signature": False,
@@ -612,8 +614,8 @@ async def ensure_clerk_entities(payload: Dict[str, Any], org_id: str) -> None:
         full_name = f"{given} {family}".strip() or None
 
     try:
-        from backend.infrastructure.db_engine import get_session
         from backend.domain.sqlmodels import Tenant, User
+        from backend.infrastructure.db_engine import get_session
 
         async with get_session() as session:
             tenant = await session.get(Tenant, org_id)

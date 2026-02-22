@@ -64,6 +64,102 @@ def _parse_datetime(value: Any) -> Optional[datetime]:
         return None
 
 
+async def _get_or_update_tenant(session: Any, tenant_id: str, plan_name: str) -> None:
+    tenant = await session.get(Tenant, tenant_id)
+    if not tenant:
+        tenant = Tenant(
+            id=tenant_id,
+            name=tenant_id,
+            is_active=True,
+            subscription_plan=plan_name,
+        )
+        session.add(tenant)
+    else:
+        tenant.is_active = True
+        tenant.subscription_plan = plan_name
+
+
+async def _find_asaas_subscription(
+    session: Any,
+    tenant_id: str,
+    provider_payment_id: Optional[str],
+    provider_subscription_id: Optional[str],
+):
+    if provider_payment_id:
+        result = await session.execute(
+            select(Subscription).where(
+                Subscription.provider == "asaas",
+                Subscription.provider_payment_id == provider_payment_id,
+            )
+        )
+        subscription = result.scalars().first()
+        if subscription:
+            return subscription
+
+    if provider_subscription_id:
+        result = await session.execute(
+            select(Subscription).where(
+                Subscription.provider == "asaas",
+                Subscription.provider_subscription_id == provider_subscription_id,
+            )
+        )
+        subscription = result.scalar_one_or_none()
+        if subscription:
+            return subscription
+
+    result = await session.execute(
+        select(Subscription)
+        .where(
+            Subscription.provider == "asaas",
+            Subscription.tenant_id == tenant_id,
+        )
+        .order_by(Subscription.updated_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+def _upsert_subscription(
+    session: Any,
+    subscription: Optional[Subscription],
+    **data: Any,
+) -> None:
+    if not subscription:
+        subscription = Subscription(
+            tenant_id=data["tenant_id"],
+            provider="asaas",
+            provider_customer_id=data.get("provider_customer_id"),
+            provider_subscription_id=data.get("provider_subscription_id"),
+            provider_payment_id=data.get("provider_payment_id"),
+            plan_name=data["plan_name"],
+            status=data["payment_status"],
+            amount=data.get("amount"),
+            billing_cycle=data.get("billing_cycle"),
+            next_due_date=data.get("next_due_date"),
+            last_payment_date=data.get("last_payment_date"),
+            last_event="PAYMENT_CONFIRMED",
+            raw_payload=data["raw_payload"],
+            updated_at=data["now"],
+        )
+        session.add(subscription)
+    else:
+        if data.get("provider_customer_id"):
+            subscription.provider_customer_id = data["provider_customer_id"]
+        if data.get("provider_subscription_id"):
+            subscription.provider_subscription_id = data["provider_subscription_id"]
+        if data.get("provider_payment_id"):
+            subscription.provider_payment_id = data["provider_payment_id"]
+        subscription.plan_name = data["plan_name"]
+        subscription.status = data["payment_status"]
+        subscription.amount = data.get("amount")
+        subscription.billing_cycle = data.get("billing_cycle")
+        subscription.next_due_date = data.get("next_due_date")
+        subscription.last_payment_date = data.get("last_payment_date")
+        subscription.last_event = "PAYMENT_CONFIRMED"
+        subscription.raw_payload = data["raw_payload"]
+        subscription.updated_at = data["now"]
+
+
 async def process_asaas_payment_confirmed(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     Provisiona ou atualiza assinatura/tenant após PAYMENT_CONFIRMED.
@@ -104,49 +200,10 @@ async def process_asaas_payment_confirmed(payload: Dict[str, Any]) -> Dict[str, 
     provider_payment_id = payment.get("id")
 
     async with get_session() as session:
-        tenant = await session.get(Tenant, tenant_id)
-        if not tenant:
-            tenant = Tenant(
-                id=tenant_id,
-                name=tenant_id,
-                is_active=True,
-                subscription_plan=plan_name,
-            )
-            session.add(tenant)
-        else:
-            tenant.is_active = True
-            tenant.subscription_plan = plan_name
-
-        subscription = None
-        if provider_payment_id:
-            result = await session.execute(
-                select(Subscription).where(
-                    Subscription.provider == "asaas",
-                    Subscription.provider_payment_id == provider_payment_id,
-                )
-            )
-            subscription = result.scalars().first()
-
-        if not subscription and provider_subscription_id:
-            result = await session.execute(
-                select(Subscription).where(
-                    Subscription.provider == "asaas",
-                    Subscription.provider_subscription_id == provider_subscription_id,
-                )
-            )
-            subscription = result.scalar_one_or_none()
-
-        if not subscription:
-            result = await session.execute(
-                select(Subscription)
-                .where(
-                    Subscription.provider == "asaas",
-                    Subscription.tenant_id == tenant_id,
-                )
-                .order_by(Subscription.updated_at.desc())
-                .limit(1)
-            )
-            subscription = result.scalar_one_or_none()
+        await _get_or_update_tenant(session, tenant_id, plan_name)
+        subscription = await _find_asaas_subscription(
+            session, tenant_id, provider_payment_id, provider_subscription_id
+        )
 
         raw_payload = json.dumps(payload, ensure_ascii=False)
         max_payload = max(1, int(settings.billing.asaas_max_payload_bytes))
@@ -156,43 +213,22 @@ async def process_asaas_payment_confirmed(payload: Dict[str, Any]) -> Dict[str, 
             )
         now = datetime.now(timezone.utc).replace(tzinfo=None)
 
-        if not subscription:
-            subscription = Subscription(
-                tenant_id=tenant_id,
-                provider="asaas",
-                provider_customer_id=provider_customer_id,
-                provider_subscription_id=provider_subscription_id,
-                provider_payment_id=provider_payment_id,
-                plan_name=plan_name,
-                status=payment_status,
-                amount=amount,
-                billing_cycle=billing_cycle,
-                next_due_date=next_due_date,
-                last_payment_date=last_payment_date,
-                last_event="PAYMENT_CONFIRMED",
-                raw_payload=raw_payload,
-                updated_at=now,
-            )
-            session.add(subscription)
-        else:
-            subscription.provider_customer_id = (
-                provider_customer_id or subscription.provider_customer_id
-            )
-            subscription.provider_subscription_id = (
-                provider_subscription_id or subscription.provider_subscription_id
-            )
-            subscription.provider_payment_id = (
-                provider_payment_id or subscription.provider_payment_id
-            )
-            subscription.plan_name = plan_name
-            subscription.status = payment_status
-            subscription.amount = amount
-            subscription.billing_cycle = billing_cycle
-            subscription.next_due_date = next_due_date
-            subscription.last_payment_date = last_payment_date
-            subscription.last_event = "PAYMENT_CONFIRMED"
-            subscription.raw_payload = raw_payload
-            subscription.updated_at = now
+        _upsert_subscription(
+            session,
+            subscription,
+            tenant_id=tenant_id,
+            provider_customer_id=provider_customer_id,
+            provider_subscription_id=provider_subscription_id,
+            provider_payment_id=provider_payment_id,
+            plan_name=plan_name,
+            payment_status=payment_status,
+            amount=amount,
+            billing_cycle=billing_cycle,
+            next_due_date=next_due_date,
+            last_payment_date=last_payment_date,
+            raw_payload=raw_payload,
+            now=now,
+        )
 
     return {
         "processed": True,
@@ -202,7 +238,14 @@ async def process_asaas_payment_confirmed(payload: Dict[str, Any]) -> Dict[str, 
     }
 
 
-@router.post("/asaas")
+@router.post(
+    "/asaas",
+    responses={
+        400: {"description": "Invalid JSON payload or missing event"},
+        401: {"description": "Invalid Asaas webhook token"},
+        413: {"description": "Payload too large"},
+    },
+)
 async def asaas_webhook(request: Request):
     if not _is_valid_asaas_webhook(request):
         raise HTTPException(status_code=401, detail="Invalid Asaas webhook token")

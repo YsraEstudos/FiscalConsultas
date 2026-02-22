@@ -1,6 +1,5 @@
 import requests
 import json
-import os
 import hashlib
 from datetime import datetime
 

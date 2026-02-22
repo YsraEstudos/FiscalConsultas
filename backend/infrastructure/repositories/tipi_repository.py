@@ -5,12 +5,12 @@ Suporta multi-tenant via tenant_id filtering.
 Suporta dual SQLite/PostgreSQL similar ao ChapterRepository.
 """
 
-from typing import Optional, List, Tuple, Dict, Any, Set
+from typing import Optional, List, Dict, Any, Set
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...domain.sqlmodels import TipiPosition, SearchResultItem
+from ...domain.sqlmodels import TipiPosition
 from ...config.settings import settings
 from ...utils.id_utils import generate_anchor_id
 from ...infrastructure.db_engine import tenant_context

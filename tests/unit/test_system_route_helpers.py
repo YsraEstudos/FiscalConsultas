@@ -79,7 +79,7 @@ async def test_is_admin_request_accepts_admin_role_in_jwt(monkeypatch):
     request = _build_request(headers={"Authorization": "Bearer jwt-token"})
     monkeypatch.setattr(system, "is_valid_admin_token", lambda _token: False)
 
-    async def _mock_decode(_t):
+    async def _mock_decode(_t):  # NOSONAR
         return {"role": "admin"}
 
     monkeypatch.setattr(system, "decode_clerk_jwt", _mock_decode)
@@ -92,7 +92,7 @@ async def test_is_admin_request_rejects_non_admin_user(monkeypatch):
     request = _build_request(headers={"Authorization": "Bearer jwt-token"})
     monkeypatch.setattr(system, "is_valid_admin_token", lambda _token: False)
 
-    async def _mock_decode(_t):
+    async def _mock_decode(_t):  # NOSONAR
         return {"role": "user"}
 
     monkeypatch.setattr(system, "decode_clerk_jwt", _mock_decode)

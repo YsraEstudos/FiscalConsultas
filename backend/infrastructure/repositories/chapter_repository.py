@@ -15,8 +15,6 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from ...domain.sqlmodels import (
     Chapter,
-    Position,
-    ChapterNotes,
     ChapterRead,
     PositionRead,
     ChapterNotesRead,
