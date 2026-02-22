@@ -4,7 +4,6 @@ import re
 import time
 
 from backend.services import NeshService
-from backend.services.tipi_service import TipiService
 from backend.server.dependencies import get_nesh_service
 from backend.config.settings import settings, reload_settings, is_valid_admin_token
 from backend.server.middleware import decode_clerk_jwt

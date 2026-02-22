@@ -22,9 +22,12 @@ import { ModalManager } from './components/ModalManager';
 type DocType = 'nesh' | 'tipi';
 
 function splitSearchTerms(raw: string): string[] {
+    // Split only on commas — spaces are kept as part of multi-word queries
+    // e.g. "centrifugal motor" → ["centrifugal motor"] (single query)
+    // e.g. "motor, bomba"     → ["motor", "bomba"] (two queries)
     return raw
-        .split(/[,\s]+/)
-        .map(term => term.trim())
+        .split(/,/)
+        .map(term => term.trim().replace(/\s+/g, ' '))
         .filter(Boolean);
 }
 
@@ -39,12 +42,13 @@ function App() {
         createTab,
         closeTab,
         switchTab,
+        reorderTabs,
         updateTab
     } = useTabs();
 
     // Estados dos modais
-    const [_isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [_isTutorialOpen, setIsTutorialOpen] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isTutorialOpen, setIsTutorialOpen] = useState(false);
     const [isStatsOpen, setIsStatsOpen] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [isComparatorOpen, setIsComparatorOpen] = useState(false);
@@ -63,7 +67,8 @@ function App() {
     const { executeSearchForTab } = useSearch(tabsById, updateTab, addToHistory);
     const activeTabRef = useRef(activeTab);
     const handleSearchRef = useRef<(query: string) => void>(() => { });
-    const handleOpenNoteRef = useRef<(note: string, chapter?: string) => void>(() => { });
+    const handleOpenNoteRef = useRef<(note: string, chapter?: string) => Promise<void> | void>(() => { });
+    const openTextResultInNewTabRef = useRef<(ncm: string, textQuery?: string) => Promise<void> | void>(() => { });
 
     activeTabRef.current = activeTab;
 
@@ -84,8 +89,8 @@ function App() {
                 if (searchInput) searchInput.focus();
             }
         };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
+        globalThis.addEventListener('keydown', handleKeyDown);
+        return () => globalThis.removeEventListener('keydown', handleKeyDown);
     }, []);
 
     // Busca atua na aba ativa, mas suporta multiplos NCMs por virgula/espaco
@@ -127,7 +132,7 @@ function App() {
 
         let target: HTMLElement | null = null;
         for (const sel of selectors) {
-            const el = container.querySelector(sel) as HTMLElement | null;
+            const el = container.querySelector<HTMLElement>(sel);
             if (el) {
                 target = el;
                 break;
@@ -145,7 +150,8 @@ function App() {
     // Hook para notas cross-chapter
     const { fetchNotes: fetchCrossChapterNotes } = useCrossChapterNotes();
 
-    const handleOpenNote = useCallback(async (note: string, chapter?: string) => {
+    // nosonar: cognitive complexity warning ignored here as spreading the hook makes it harder to read
+    const handleOpenNote = useCallback(async (note: string, chapter?: string) => { // NOSONAR
         const currentTab = activeTabRef.current;
         const results = currentTab?.results;
         if (!results || !isCodeSearchResponse(results)) {
@@ -187,6 +193,7 @@ function App() {
             try {
                 notesMap = await fetchCrossChapterNotes(targetChapter);
             } catch (error) {
+                console.error("Erro no fetchCrossChapterNotes:", error);
                 toast.error(`Erro ao carregar notas do Capítulo ${targetChapter}.`);
                 return;
             } finally {
@@ -203,10 +210,10 @@ function App() {
 
         if (!content) {
             const scrolled = scrollToNotesSection(targetChapter);
-            if (!scrolled) {
-                toast.error(`Nota ${note} não encontrada no capítulo ${targetChapter}.`);
-            } else {
+            if (scrolled) {
                 toast(`Nota ${note} não encontrada. Mostrando notas do capítulo.`);
+            } else {
+                toast.error(`Nota ${note} não encontrada no capítulo ${targetChapter}.`);
             }
             return;
         }
@@ -225,10 +232,11 @@ function App() {
     // Handler único de clique com delegação (smart-link + note-ref)
     useEffect(() => {
         const handleDelegatedClick = (event: MouseEvent) => {
-            const target = event.target as HTMLElement;
+            const target = event.target;
+            if (!(target instanceof Element)) return;
 
-            const smartLink = target.closest('a.smart-link') as HTMLAnchorElement | null;
-            if (smartLink) {
+            const smartLink = target.closest('a.smart-link');
+            if (smartLink instanceof HTMLElement) {
                 event.preventDefault();
                 const ncm = smartLink.dataset.ncm;
                 if (ncm) {
@@ -237,13 +245,13 @@ function App() {
                 return;
             }
 
-            const noteRef = target.closest('.note-ref') as HTMLElement | null;
-            if (!noteRef) return;
+            const noteRef = target.closest('.note-ref');
+            if (!(noteRef instanceof HTMLElement)) return;
 
             const note = noteRef.dataset.note;
             if (!note) return;
 
-            handleOpenNoteRef.current(note, noteRef.dataset.chapter);
+            handleOpenNoteRef.current(note, noteRef.dataset.chapter || undefined);
         };
 
         document.addEventListener('click', handleDelegatedClick);
@@ -254,6 +262,26 @@ function App() {
         const tabId = createTab(doc);
         await executeSearchForTab(tabId, doc, ncm, false);
     }, [createTab, executeSearchForTab]);
+
+    const openTextResultInNewTab = useCallback(async (ncm: string, textQuery?: string) => {
+        const doc = (activeTabRef.current?.document || 'nesh') as DocType;
+        const tabId = createTab(doc);
+        const nextTextQuery = (textQuery || '').trim();
+
+        if (nextTextQuery) {
+            updateTab(tabId, { latestTextQuery: nextTextQuery });
+        }
+
+        await executeSearchForTab(tabId, doc, ncm, false);
+
+        if (nextTextQuery) {
+            updateTab(tabId, { latestTextQuery: nextTextQuery });
+        }
+    }, [createTab, executeSearchForTab, updateTab]);
+
+    useEffect(() => {
+        openTextResultInNewTabRef.current = openTextResultInNewTab;
+    }, [openTextResultInNewTab]);
 
     const openInDocCurrentTab = useCallback(async (doc: DocType, ncm: string) => {
         const currentTab = activeTabRef.current;
@@ -299,7 +327,7 @@ function App() {
 
     // Ponte legado + ponte de configuracoes
     useEffect(() => {
-        window.nesh = {
+        (globalThis as any).nesh = {
             smartLinkSearch: (ncm: string) => {
                 handleSearchRef.current(ncm);
             },
@@ -308,10 +336,13 @@ function App() {
             },
             openSettings: () => {
                 setIsSettingsOpen(true);
+            },
+            openTextResultInNewTab: (ncm: string, textQuery?: string) => {
+                void openTextResultInNewTabRef.current(ncm, textQuery);
             }
         };
         return () => {
-            (window as any).nesh = undefined;
+            (globalThis as any).nesh = undefined;
         };
     }, []);
 
@@ -321,8 +352,8 @@ function App() {
             <Suspense fallback={null}>
                 <ModalManager
                     modals={{
-                        settings: _isSettingsOpen,
-                        tutorial: _isTutorialOpen,
+                        settings: isSettingsOpen,
+                        tutorial: isTutorialOpen,
                         stats: isStatsOpen,
                         comparator: isComparatorOpen,
                         moderate: isModerateOpen,
@@ -353,7 +384,6 @@ function App() {
                 doc={activeTab?.document || 'nesh'}
                 setDoc={setDoc}
                 searchKey={`${activeTabId}-${activeTab?.document || 'nesh'}`}
-                onMenuOpen={() => setMobileMenuOpen(prev => !prev)}
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 onOpenTutorial={() => setIsTutorialOpen(true)}
                 onOpenStats={() => setIsStatsOpen(true)}
@@ -369,6 +399,7 @@ function App() {
                     activeTabId={activeTabId}
                     onSwitch={switchTab}
                     onClose={closeTab}
+                    onReorder={reorderTabs}
                     onNewTab={() => createTab(activeTab?.document || 'nesh')}
                 />
 
@@ -407,9 +438,11 @@ function App() {
                                     data={tab.results}
                                     mobileMenuOpen={tab.id === activeTabId ? mobileMenuOpen : false}
                                     onCloseMobileMenu={tab.id === activeTabId ? closeMobileMenu : noop}
+                                    onToggleMobileMenu={tab.id === activeTabId ? () => setMobileMenuOpen(prev => !prev) : noop}
                                     isActive={tab.id === activeTabId}
                                     tabId={tab.id}
                                     isNewSearch={tab.isNewSearch || false}
+                                    latestTextQuery={tab.latestTextQuery}
                                     onConsumeNewSearch={(incomingTabId, finalScrollTop) => {
                                         const updates: any = { isNewSearch: false };
                                         if (typeof finalScrollTop === 'number') {

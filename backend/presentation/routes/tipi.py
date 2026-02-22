@@ -16,6 +16,7 @@ from backend.presentation.renderer import HtmlRenderer
 import orjson as _orjson
 
 
+JSON_MEDIA_TYPE = "application/json"
 _TIPI_CODE_PAYLOAD_CACHE_MAX = 16
 _tipi_code_payload_cache: OrderedDict[str, tuple[bytes, bytes]] = OrderedDict()
 _tipi_code_payload_cache_lock = threading.Lock()
@@ -23,7 +24,7 @@ _tipi_code_payload_cache_lock = threading.Lock()
 
 def _orjson_response(content: dict, headers: dict[str, str] | None = None) -> Response:
     body = _orjson.dumps(content)
-    resp = Response(content=body, media_type="application/json")
+    resp = Response(content=body, media_type=JSON_MEDIA_TYPE)
     if headers:
         resp.headers.update(headers)
     return resp
@@ -55,7 +56,28 @@ def _accepts_gzip(request: Request) -> bool:
     return "gzip" in accept_encoding
 
 
-def _apply_highlights_to_descriptions(result: dict) -> dict:
+def _apply_highlights_code_search(results: dict) -> None:
+    for cap_data in results.values():
+        if not isinstance(cap_data, dict):
+            continue
+        for pos in cap_data.get("posicoes") or []:
+            desc = pos.get("descricao", "")
+            if desc:
+                desc = HtmlRenderer.inject_exclusion_highlights(desc)
+                desc = HtmlRenderer.inject_unit_highlights(desc)
+                pos["descricao"] = desc
+
+
+def _apply_highlights_text_search(results: list) -> None:
+    for item in results:
+        desc = item.get("descricao", "")
+        if desc:
+            desc = HtmlRenderer.inject_exclusion_highlights(desc)
+            desc = HtmlRenderer.inject_unit_highlights(desc)
+            item["descricao"] = desc
+
+
+def _apply_highlights_to_descriptions(result: dict) -> None:
     """Aplica highlights de unidades e exclusões nas descrições TIPI antes de serializar.
 
     Percorre as duas estruturas possíveis de resposta:
@@ -64,29 +86,14 @@ def _apply_highlights_to_descriptions(result: dict) -> dict:
     """
     results = result.get("results") or result.get("resultados")
     if not results:
-        return result
+        return
 
     if isinstance(results, dict):
         # Code search: results é {cap: {posicoes: [...]}}
-        for cap_data in results.values():
-            if not isinstance(cap_data, dict):
-                continue
-            for pos in cap_data.get("posicoes") or []:
-                desc = pos.get("descricao", "")
-                if desc:
-                    desc = HtmlRenderer.inject_exclusion_highlights(desc)
-                    desc = HtmlRenderer.inject_unit_highlights(desc)
-                    pos["descricao"] = desc
+        _apply_highlights_code_search(results)
     elif isinstance(results, list):
         # Text search: results é [{descricao: ...}, ...]
-        for item in results:
-            desc = item.get("descricao", "")
-            if desc:
-                desc = HtmlRenderer.inject_exclusion_highlights(desc)
-                desc = HtmlRenderer.inject_unit_highlights(desc)
-                item["descricao"] = desc
-
-    return result
+        _apply_highlights_text_search(results)
 
 
 def get_payload_cache_metrics() -> dict[str, float | int]:
@@ -115,11 +122,15 @@ router = APIRouter()
 async def tipi_search(
     request: Request,
     tipi_service: Annotated[TipiService, Depends(get_tipi_service)],
-    ncm: str = Query(..., description="Código NCM ou termo para busca na TIPI"),
-    view_mode: ViewMode = Query(
-        ViewMode.FAMILY,
-        description="Modo de visualização: 'chapter' (completo) ou 'family' (apenas família NCM)",
-    ),
+    ncm: Annotated[
+        str, Query(..., description="Código NCM ou termo para busca na TIPI")
+    ],
+    view_mode: Annotated[
+        ViewMode,
+        Query(
+            description="Modo de visualização: 'chapter' (completo) ou 'family' (apenas família NCM)",
+        ),
+    ] = ViewMode.FAMILY,
 ):
     """
     Busca na Tabela TIPI (IPI).
@@ -192,12 +203,12 @@ async def tipi_search(
             tipi_payload_cache_metrics.record_served(gzip=True)
             return Response(
                 content=gzip_body,
-                media_type="application/json",
+                media_type=JSON_MEDIA_TYPE,
                 headers={**common_headers, "Content-Encoding": "gzip"},
             )
         tipi_payload_cache_metrics.record_served(gzip=False)
         return Response(
-            content=raw_body, media_type="application/json", headers=common_headers
+            content=raw_body, media_type=JSON_MEDIA_TYPE, headers=common_headers
         )
 
     return _orjson_response(result, headers=headers)

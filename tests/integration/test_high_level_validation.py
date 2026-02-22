@@ -1,4 +1,3 @@
-import pytest
 import sqlite3
 import os
 from backend.config import CONFIG

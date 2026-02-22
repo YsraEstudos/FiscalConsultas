@@ -1,7 +1,6 @@
 import os
 import logging
 import google.generativeai as genai
-from typing import Optional
 from ..config.exceptions import ServiceError
 
 logger = logging.getLogger("ai_service")

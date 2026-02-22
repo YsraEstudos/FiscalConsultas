@@ -32,12 +32,20 @@ export function SettingsModal({ isOpen, onClose }: Readonly<SettingsModalProps>)
     };
 
     return (
-        <div className={`${styles.modal} ${isOpen ? styles.active : ''}`} onClick={onClose} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClose(); }} role="presentation">
-            <div className={styles.content} onClick={e => e.stopPropagation()} role="presentation">
+        // nosonar: ignoring non-interactive element click warning since this is a standard modal backdrop pattern
+        <div className={`${styles.modal} ${isOpen ? styles.active : ''}`} onClick={onClose} onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }} role="presentation"> {/* NOSONAR */}
+            <div
+                className={styles.content}
+                onClick={e => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="settings-modal-title"
+                onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}
+            > {/* NOSONAR */}
 
                 {/* Header */}
                 <div className={styles.header}>
-                    <h2>Configurações</h2>
+                    <h2 id="settings-modal-title">Configurações</h2>
                     <button className={styles.closeBtn} onClick={onClose} aria-label="Fechar">
                         ×
                     </button>

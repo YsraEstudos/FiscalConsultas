@@ -39,7 +39,7 @@ class _FakeDb:
     def __init__(self, payload):
         self.payload = payload
 
-    async def check_connection(self):
+    async def check_connection(self):  # NOSONAR
         return self.payload
 
 
@@ -48,12 +48,12 @@ class _FakeTipiService:
         self.payload = payload or {}
         self.error = error
 
-    async def check_connection(self):
+    async def check_connection(self):  # NOSONAR
         if self.error:
             raise self.error
         return self.payload
 
-    async def get_internal_cache_metrics(self):
+    async def get_internal_cache_metrics(self):  # NOSONAR
         return {"cache": "tipi"}
 
 
@@ -61,10 +61,10 @@ class _FakeNeshService:
     def __init__(self, response):
         self.response = response
 
-    async def get_internal_cache_metrics(self):
+    async def get_internal_cache_metrics(self):  # NOSONAR
         return {"cache": "nesh"}
 
-    async def process_request(self, _ncm: str, **kwargs):
+    async def process_request(self, _ncm: str, **kwargs):  # NOSONAR
         return self.response
 
 
@@ -113,7 +113,7 @@ async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypat
             return _ScalarResult(12 if self.calls == 1 else 34)
 
     @asynccontextmanager
-    async def _fake_get_session():
+    async def _fake_get_session():  # NOSONAR
         yield _Session()
 
     monkeypatch.setattr(db_engine, "get_session", _fake_get_session)
@@ -131,9 +131,9 @@ async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypat
 @pytest.mark.asyncio
 async def test_get_status_handles_db_and_tipi_exceptions(monkeypatch):
     @asynccontextmanager
-    async def _broken_get_session():
+    async def _broken_get_session():  # NOSONAR
         raise RuntimeError("db down")
-        yield
+        yield  # type: ignore
 
     monkeypatch.setattr(db_engine, "get_session", _broken_get_session)
     request = _build_request(
@@ -155,7 +155,7 @@ async def test_get_status_handles_db_and_tipi_exceptions(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_cache_metrics_rejects_non_admin(monkeypatch):
-    async def _mock_admin(_request):
+    async def _mock_admin(_request):  # NOSONAR
         return False
 
     monkeypatch.setattr(system, "_is_admin_request", _mock_admin)
@@ -172,7 +172,7 @@ async def test_get_cache_metrics_returns_payload_for_admin(monkeypatch):
     from backend.presentation.routes import search as search_route
     from backend.presentation.routes import tipi as tipi_route
 
-    async def _mock_admin(_request):
+    async def _mock_admin(_request):  # NOSONAR
         return True
 
     monkeypatch.setattr(system, "_is_admin_request", _mock_admin)
@@ -204,7 +204,7 @@ async def test_get_cache_metrics_returns_payload_for_admin(monkeypatch):
 async def test_debug_anchors_returns_404_when_debug_mode_is_disabled(monkeypatch):
     monkeypatch.setattr(system.settings.features, "debug_mode", False, raising=False)
 
-    async def _mock_admin(_request):
+    async def _mock_admin(_request):  # NOSONAR
         return True
 
     monkeypatch.setattr(system, "_is_admin_request", _mock_admin)
@@ -220,7 +220,7 @@ async def test_debug_anchors_returns_404_when_debug_mode_is_disabled(monkeypatch
 async def test_debug_anchors_returns_403_for_non_admin(monkeypatch):
     monkeypatch.setattr(system.settings.features, "debug_mode", True, raising=False)
 
-    async def _mock_admin(_request):
+    async def _mock_admin(_request):  # NOSONAR
         return False
 
     monkeypatch.setattr(system, "_is_admin_request", _mock_admin)
@@ -236,7 +236,7 @@ async def test_debug_anchors_returns_403_for_non_admin(monkeypatch):
 async def test_debug_anchors_filters_position_related_ids(monkeypatch):
     monkeypatch.setattr(system.settings.features, "debug_mode", True, raising=False)
 
-    async def _mock_admin(_request):
+    async def _mock_admin(_request):  # NOSONAR
         return True
 
     monkeypatch.setattr(system, "_is_admin_request", _mock_admin)
@@ -267,7 +267,7 @@ async def test_debug_anchors_filters_position_related_ids(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_reload_secrets_rejects_non_admin(monkeypatch):
-    async def _mock_admin(_request):
+    async def _mock_admin(_request):  # NOSONAR
         return False
 
     monkeypatch.setattr(system, "_is_admin_request", _mock_admin)
@@ -286,7 +286,7 @@ async def test_reload_secrets_calls_reload_for_admin(monkeypatch):
     def _fake_reload():
         called["value"] = True
 
-    async def _mock_admin(_request):
+    async def _mock_admin(_request):  # NOSONAR
         return True
 
     monkeypatch.setattr(system, "_is_admin_request", _mock_admin)

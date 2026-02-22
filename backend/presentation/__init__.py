@@ -1,2 +1,2 @@
 # Presentation Module
-from .renderer import HtmlRenderer
+from .renderer import HtmlRenderer as HtmlRenderer

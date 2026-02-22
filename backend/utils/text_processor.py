@@ -1,6 +1,6 @@
 import re
 import unicodedata
-from typing import List, Set
+from typing import List
 
 # Pre-compiled regex for word extraction (performance optimization)
 _RE_WORD = re.compile(r"\b\w+\b")

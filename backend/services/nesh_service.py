@@ -16,7 +16,6 @@ from ..config import CONFIG
 from ..utils import ncm_utils
 from ..config.constants import CacheConfig, RegexPatterns, SearchConfig
 from ..config.logging_config import service_logger as logger
-from ..config.exceptions import ChapterNotFoundError, DatabaseError
 from ..domain import SearchResult, ServiceResponse
 from ..infrastructure import DatabaseAdapter
 from ..infrastructure.redis_client import redis_cache

@@ -59,7 +59,7 @@ def test_extract_client_ip_returns_unknown_when_not_available():
 async def test_build_limiter_key_uses_user_id_when_token_has_sub(monkeypatch):
     request = _build_request(client_host="203.0.113.12")
 
-    async def _mock_decode(_token):
+    async def _mock_decode(_token):  # NOSONAR
         return {"sub": "user_abc"}
 
     monkeypatch.setattr(auth, "decode_clerk_jwt", _mock_decode)
@@ -73,7 +73,7 @@ async def test_build_limiter_key_uses_user_id_when_token_has_sub(monkeypatch):
 async def test_build_limiter_key_falls_back_to_ip_when_sub_missing(monkeypatch):
     request = _build_request(client_host="203.0.113.12")
 
-    async def _mock_decode(_token):
+    async def _mock_decode(_token):  # NOSONAR
         return {"org_id": "org_123"}
 
     monkeypatch.setattr(auth, "decode_clerk_jwt", _mock_decode)

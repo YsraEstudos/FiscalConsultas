@@ -1,5 +1,3 @@
-import pytest
-import json
 from backend.presentation.tipi_renderer import TipiRenderer
 from backend.presentation.renderer import HtmlRenderer
 
