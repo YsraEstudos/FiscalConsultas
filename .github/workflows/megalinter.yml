@@ -4,35 +4,10 @@
 name: MegaLinter
 
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - "**/*.py"
-      - "**/*.js"
-      - "**/*.jsx"
-      - "**/*.ts"
-      - "**/*.tsx"
-      - "**/*.css"
-      - "**/*.html"
-      - "**/*.sql"
-      - "**/*.json"
-      - "**/*.yml"
-      - "**/*.yaml"
-      - "**/*.toml"
-      - "**/*.ini"
-      - "**/*.ps1"
-      - ".mega-linter.yml"
-      - ".github/workflows/megalinter.yml"
-      - "pyproject.toml"
-      - "alembic.ini"
-      - "docker-compose.yml"
-      - ".env.example"
-      - "client/package.json"
-      - "client/package-lock.json"
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -65,6 +40,6 @@ jobs:
           # Use PAT so bot commits trigger downstream test workflows (GITHUB_TOKEN may not trigger them).
           GITHUB_TOKEN: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
           APPLY_FIXES: all
-          # Never commit fixes on main or fork PRs; require PAT; commit only on feature branches in this repository.
-          APPLY_FIXES_EVENT: ${{ (github.event.pull_request.head.repo.fork || github.event.pull_request.head.ref == 'main' || secrets.PAT == '') && 'none' || 'pull_request' }}
+          # Manual-only execution: never auto-commit fixes to branches.
+          APPLY_FIXES_EVENT: none
           APPLY_FIXES_MODE: commit
