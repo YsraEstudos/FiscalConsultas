@@ -1,16 +1,15 @@
 import json
-import secrets
-import re
 import logging
+import re
+import secrets
 from datetime import date, datetime, timezone
-from typing import Any, Dict, Optional
-
-from fastapi import APIRouter, HTTPException, Request
-from sqlalchemy import select
+from typing import Any, Dict, Optional, cast
 
 from backend.config.settings import settings
 from backend.domain.sqlmodels import Subscription, Tenant
 from backend.infrastructure.db_engine import get_session
+from fastapi import APIRouter, HTTPException, Request
+from sqlalchemy import select
 
 router = APIRouter()
 logger = logging.getLogger("routes.webhooks")
@@ -85,11 +84,12 @@ async def _find_asaas_subscription(
     provider_payment_id: Optional[str],
     provider_subscription_id: Optional[str],
 ):
+    table = cast(Any, Subscription).__table__.c
     if provider_payment_id:
         result = await session.execute(
             select(Subscription).where(
-                Subscription.provider == "asaas",
-                Subscription.provider_payment_id == provider_payment_id,
+                table.provider == "asaas",
+                table.provider_payment_id == provider_payment_id,
             )
         )
         subscription = result.scalars().first()
@@ -99,8 +99,8 @@ async def _find_asaas_subscription(
     if provider_subscription_id:
         result = await session.execute(
             select(Subscription).where(
-                Subscription.provider == "asaas",
-                Subscription.provider_subscription_id == provider_subscription_id,
+                table.provider == "asaas",
+                table.provider_subscription_id == provider_subscription_id,
             )
         )
         subscription = result.scalar_one_or_none()
@@ -110,10 +110,10 @@ async def _find_asaas_subscription(
     result = await session.execute(
         select(Subscription)
         .where(
-            Subscription.provider == "asaas",
-            Subscription.tenant_id == tenant_id,
+            table.provider == "asaas",
+            table.tenant_id == tenant_id,
         )
-        .order_by(Subscription.updated_at.desc())
+        .order_by(table.updated_at.desc())
         .limit(1)
     )
     return result.scalar_one_or_none()
@@ -164,7 +164,8 @@ async def process_asaas_payment_confirmed(payload: Dict[str, Any]) -> Dict[str, 
     """
     Provisiona ou atualiza assinatura/tenant após PAYMENT_CONFIRMED.
     """
-    payment = payload.get("payment") if isinstance(payload.get("payment"), dict) else {}
+    raw_payment = payload.get("payment")
+    payment: Dict[str, Any] = raw_payment if isinstance(raw_payment, dict) else {}
 
     external_reference = payment.get("externalReference") or payload.get(
         "externalReference"

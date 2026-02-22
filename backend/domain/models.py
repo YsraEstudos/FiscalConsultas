@@ -3,7 +3,7 @@ Modelos de domínio do Nesh.
 Define as estruturas de dados utilizadas em toda a aplicação.
 """
 
-from typing import Dict, List, Optional, Any, Union, TypedDict
+from typing import Any, Dict, List, NotRequired, Optional, TypedDict, Union
 
 
 class Position(TypedDict):
@@ -89,3 +89,8 @@ class ServiceResponse(TypedDict):
     normalized: Optional[str]
     results: Union[Dict[str, SearchResult], List[Dict[str, Any]]]
     total_capitulos: int
+    match_type: NotRequired[str]
+    warning: NotRequired[Optional[str]]
+    total: NotRequired[int]
+    resultados: NotRequired[Union[Dict[str, SearchResult], List[Dict[str, Any]]]]
+    markdown: NotRequired[str]

@@ -8,8 +8,8 @@ Adds tenants and users tables for multi-tenant architecture.
 Adds tenant_id columns to existing tables.
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 # revision identifiers
 revision = "002_multi_tenant"

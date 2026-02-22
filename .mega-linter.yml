@@ -2,22 +2,25 @@
 # More info at https://megalinter.io/latest/config-file/
 
 # Configuration
-APPLY_FIXES: all # Apply fixes automatically (for local or CI that allows pushing)
+APPLY_FIXES: none # Read-only mode: do not rewrite repository files
 SHOW_ELAPSED_TIME: true
-FILE_IO_THREADS: 4
 
-# Restrict MegaLinter to descriptors used by this repository
-ENABLE: PYTHON,JAVASCRIPT,TYPESCRIPT,TSX,CSS,HTML,SQL,YAML,JSON,ENV,POWERSHELL,REPOSITORY
-
-# Keep Ruff/ESLint checks in tests.yml and let MegaLinter focus on other linters
-DISABLE_LINTERS:
-  - PYTHON_RUFF
-  - PYTHON_RUFF_FORMAT
-  - JAVASCRIPT_ES
-  - TYPESCRIPT_ES
-  - REPOSITORY_DEVSKIM
-  - REPOSITORY_KICS
-  - REPOSITORY_KINGFISHER
+# Limit MegaLinter to file types that exist in this repository.
+ENABLE:
+  - REPOSITORY
+  - PYTHON
+  - JAVASCRIPT
+  - TYPESCRIPT
+  - TSX
+  - CSS
+  - HTML
+  - SQL
+  - YAML
+  - ACTION
+  - JSON
+  - MARKDOWN
+  - ENV
+  - POWERSHELL
 
 # Exclusions
 ADDITIONAL_EXCLUDED_DIRECTORIES:
