@@ -37,9 +37,6 @@ concurrency:
 
 jobs:
   build:
-    permissions:
-      contents: write
-      pull-requests: write
     name: MegaLinter
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -63,7 +60,4 @@ jobs:
           VALIDATE_ALL_CODEBASE: false
           # Use PAT so bot commits trigger downstream test workflows (GITHUB_TOKEN may not trigger them).
           GITHUB_TOKEN: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
-          APPLY_FIXES: all
-          # Never commit fixes on main or fork PRs; require PAT; commit only on feature branches in this repository.
-          APPLY_FIXES_EVENT: ${{ (github.event.pull_request.head.repo.fork || github.event.pull_request.head.ref == 'main' || secrets.PAT == '') && 'none' || 'pull_request' }}
-          APPLY_FIXES_MODE: commit
+          APPLY_FIXES: none
