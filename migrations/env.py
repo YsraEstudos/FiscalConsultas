@@ -5,23 +5,22 @@ Este arquivo gerencia migrations para PostgreSQL e SQLite.
 """
 
 import asyncio
+import os
+
+# Importar todos os modelos para que Alembic os detecte
+import sys
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlmodel import SQLModel
 
-from alembic import context
-
-# Importar todos os modelos para que Alembic os detecte
-import sys
-import os
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.domain.comment_models import Comment  # noqa: F401 — Alembic autogenerate
 from backend.config.settings import settings
+from backend.domain.comment_models import Comment  # noqa: F401 — Alembic autogenerate
 
 # this is the Alembic Config object
 config = context.config
