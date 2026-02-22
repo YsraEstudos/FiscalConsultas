@@ -42,11 +42,11 @@ jobs:
           uv run ruff check
 
       - name: Type check migrations with Pyright
-        run: uv run --with pyright pyright migrations
+        run: uv run pyright migrations
 
       - name: Lint migrations with Pylint (reliable error subset)
         run: >
-          uv run --with pylint pylint
+          uv run pylint
           migrations/env.py
           migrations/versions/001_initial.py
           migrations/versions/006_precomputed_columns_and_gin.py
