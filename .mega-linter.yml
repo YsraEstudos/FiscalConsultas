@@ -15,9 +15,16 @@ DISABLE_LINTERS:
   - PYTHON_RUFF_FORMAT
   - JAVASCRIPT_ES
   - TYPESCRIPT_ES
+  - REPOSITORY_DEVSKIM
+  - REPOSITORY_KICS
+  - REPOSITORY_KINGFISHER
 
 # Exclusions
 ADDITIONAL_EXCLUDED_DIRECTORIES:
+  - .git
+  - .agent
+  - client/node_modules
+  - client/dist
   - node_modules
   - .venv
   - dist
@@ -27,9 +34,14 @@ ADDITIONAL_EXCLUDED_DIRECTORIES:
   - .ruff_cache
   - coverage
   - raw_data
+  - megalinter-reports
   - Scripts results
 
-FILTER_REGEX_EXCLUDE: "(^|/)(git_status_output\\.txt|pytest_output\\.txt|ruff_output\\.txt|test_failures\\.log|tests_output\\.txt|tests_output2\\.txt)$"
+FILTER_REGEX_EXCLUDE: "(^|/)(git_status_output\\.txt|pytest_output\\.txt|ruff_output\\.txt|test_failures\\.log|tests_output\\.txt|tests_output2\\.txt|2ms-report[^/]*\\.json|\\.git/config)$"
+
+# Avoid secret-scanner noise from generated local benchmark reports.
+REPOSITORY_CHECKOV_ARGUMENTS: "--skip-path 2ms-report.json --skip-path 2ms-report-filtered.json --skip-path megalinter-reports"
+REPOSITORY_KICS_ARGUMENTS: "--exclude-paths megalinter-reports,.git,node_modules,client/node_modules"
 
 # Flavors
 # FLAVOR_SUGGESTION: python, javascript

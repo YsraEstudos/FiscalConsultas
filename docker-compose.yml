@@ -12,7 +12,7 @@ services:
     command:
       - "redis-server"
       - "--save"
-      - ""  # disable RDB snapshots for cache-only usage
+      - "" # disable RDB snapshots for cache-only usage
       - "--appendonly"
       - "no"
       - "--maxmemory"
@@ -57,9 +57,13 @@ services:
       - "effective_io_concurrency=200"
       - "-c"
       - "max_parallel_workers_per_gather=2"
-    shm_size: '256mb'
+    shm_size: "256mb"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-nesh_db}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-nesh_db}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -83,7 +87,11 @@ services:
     depends_on:
       - db
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/misc/ping', timeout=5)\""]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8080/misc/ping'', timeout=5)"',
+        ]
       interval: 15s
       timeout: 5s
       retries: 10

@@ -28,18 +28,16 @@ def setup_fulltext():
     cursor.execute("DROP TABLE IF EXISTS search_index")
 
     # Create FTS5 virtual table
-    # columns: ncm, description (normalized), display_text (original), type (chapter/pos)
+    # columns: ncm, description (normalized), display_text (original), type (chapter/pos)  # noqa: E501
     print("Creating FTS5 table...")
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE VIRTUAL TABLE search_index USING fts5(
-            ncm, 
-            description, 
-            display_text, 
+            ncm,
+            description,
+            display_text,
             type
         )
-    """
-    )
+    """)
 
     print("Indexing Data...")
 
@@ -56,7 +54,7 @@ def setup_fulltext():
         normalized_content = normalize_text(content)
 
         cursor.execute(
-            "INSERT INTO search_index (ncm, description, display_text, type) VALUES (?, ?, ?, ?)",
+            "INSERT INTO search_index (ncm, description, display_text, type) VALUES (?, ?, ?, ?)",  # noqa: E501
             (num, normalized_content, f"Capítulo {num}", "chapter"),
         )
 
@@ -72,7 +70,7 @@ def setup_fulltext():
         normalized_desc = normalize_text(desc)
 
         cursor.execute(
-            "INSERT INTO search_index (ncm, description, display_text, type) VALUES (?, ?, ?, ?)",
+            "INSERT INTO search_index (ncm, description, display_text, type) VALUES (?, ?, ?, ?)",  # noqa: E501
             (code, normalized_desc, desc, "position"),
         )
 

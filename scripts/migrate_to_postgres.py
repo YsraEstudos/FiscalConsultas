@@ -21,22 +21,22 @@ import os
 import sys
 from urllib.parse import urlsplit, urlunsplit
 
-# Adicionar root ao path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 import aiosqlite
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.infrastructure.db_engine import get_session
+from backend.config.settings import settings
 from backend.domain.sqlmodels import (
     Chapter,
-    Position,
     ChapterNotes,
     Glossary,
+    Position,
     TipiPosition,
 )
-from backend.config.settings import settings
+from backend.infrastructure.db_engine import get_session
+
+# Adicionar root ao path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def _mask_database_url(url: str | None) -> str:
@@ -154,9 +154,9 @@ async def migrate_chapter_notes(sqlite_path: str, pg_session: AsyncSession) -> i
                         notas=row["notas"],
                         consideracoes=row["consideracoes"],
                         definicoes=row["definicoes"],
-                        parsed_notes_json=row["parsed_notes_json"]
-                        if has_parsed
-                        else None,
+                        parsed_notes_json=(
+                            row["parsed_notes_json"] if has_parsed else None
+                        ),
                         tenant_id=None,
                     )
                     pg_session.add(notes)
@@ -198,7 +198,7 @@ async def migrate_tipi_positions(sqlite_path: str, pg_session: AsyncSession) -> 
         db.row_factory = aiosqlite.Row
         batch = []
         async with db.execute(
-            "SELECT ncm, capitulo, descricao, aliquota, nivel, parent_ncm, ncm_sort FROM tipi_positions"
+            "SELECT ncm, capitulo, descricao, aliquota, nivel, parent_ncm, ncm_sort FROM tipi_positions"  # noqa: E501
         ) as cursor:
             async for row in cursor:
                 batch.append(
@@ -237,14 +237,14 @@ async def update_search_vectors(pg_session: AsyncSession):
 
     await pg_session.execute(
         text("""
-        UPDATE chapters 
+        UPDATE chapters
         SET search_vector = to_tsvector('portuguese', COALESCE(content, ''))
     """)
     )
 
     await pg_session.execute(
         text("""
-        UPDATE positions 
+        UPDATE positions
         SET search_vector = to_tsvector('portuguese', COALESCE(descricao, ''))
     """)
     )
@@ -307,7 +307,7 @@ async def main():
     print("\nPróximos passos:")
     print("  1. Testar busca: curl 'http://localhost:8000/api/search?ncm=bomba'")
     print(
-        "  2. Verificar FTS: psql -d nesh_db -c \"SELECT codigo, ts_headline('portuguese', descricao, plainto_tsquery('portuguese', 'bomba')) FROM positions WHERE search_vector @@ plainto_tsquery('portuguese', 'bomba') LIMIT 5;\""
+        "  2. Verificar FTS: psql -d nesh_db -c \"SELECT codigo, ts_headline('portuguese', descricao, plainto_tsquery('portuguese', 'bomba')) FROM positions WHERE search_vector @@ plainto_tsquery('portuguese', 'bomba') LIMIT 5;\""  # noqa: E501
     )
 
 

@@ -1,6 +1,6 @@
+import os
 import re
 import sqlite3
-import os
 
 INPUT_FILE = "raw_data/nesh.md"
 DB_FILE = "database/nesh.db"
@@ -61,10 +61,10 @@ def ingest_markdown():
         if current_chapter is not None:
             # Sanitize line before adding
 
-            # Filter out standalone NCM codes (e.g. "73.24", "**73.24**", "7324.10") that don't have descriptions
-            # Pattern: start, optional stars, digits(2 or 4).digits(2 or 0), optional extensions, optional stars, end
+            # Filter out standalone NCM codes (e.g. "73.24", "**73.24**", "7324.10") that don't have descriptions  # noqa: E501
+            # Pattern: start, optional stars, digits(2 or 4).digits(2 or 0), optional extensions, optional stars, end  # noqa: E501
             if re.match(
-                r"^\s*(?:\*\*)?(?:\d{4}|\d{2}\.\d{2})(?:\.\d{2})?(?:\.\d{2})?(?:\*\*)?\s*$",
+                r"^\s*(?:\*\*)?(?:\d{4}|\d{2}\.\d{2})(?:\.\d{2})?(?:\.\d{2})?(?:\*\*)?\s*$",  # noqa: E501
                 line_clean,
             ):
                 continue
@@ -80,7 +80,7 @@ def ingest_markdown():
     print("Re-populating positions table...")
     cursor.execute("DROP TABLE IF EXISTS positions")
     cursor.execute(
-        "CREATE TABLE positions (codigo TEXT PRIMARY KEY, descricao TEXT, chapter_num TEXT, anchor_id TEXT)"
+        "CREATE TABLE positions (codigo TEXT PRIMARY KEY, descricao TEXT, chapter_num TEXT, anchor_id TEXT)"  # noqa: E501
     )
 
     # Select all chapters and parse them
@@ -90,7 +90,7 @@ def ingest_markdown():
     # Regex to find NCMs in content: **73.24 - ...** or 73.24 - ...
     # Capture Group 1: Code, Group 2: Desc
     ncm_pattern = re.compile(
-        r"^\s*(?:\*\*)?(\d{2}\.\d{2}(?:\.\d{2})?(?:\.\d{2})?)(?:\*\*)?\s*[-–—:]\s*(.+?)(?:\*\*)?\s*$",
+        r"^\s*(?:\*\*)?(\d{2}\.\d{2}(?:\.\d{2})?(?:\.\d{2})?)(?:\*\*)?\s*[-–—:]\s*(.+?)(?:\*\*)?\s*$",  # noqa: E501
         re.MULTILINE,
     )
 
@@ -103,9 +103,9 @@ def ingest_markdown():
         matches = ncm_pattern.findall(content)
 
         for code, desc in matches:
-            # Clean desc (remove markdown stars if any remain, though regex handles outer ones)
+            # Clean desc (remove markdown stars if any remain, though regex handles outer ones)  # noqa: E501
             desc = desc.strip()
-            # If desc ends with **, remove it (regex (?:\*\*)? at end should handle, but be safe)
+            # If desc ends with **, remove it (regex (?:\*\*)? at end should handle, but be safe)  # noqa: E501
             if desc.endswith("**"):
                 desc = desc[:-2]
 
@@ -114,7 +114,7 @@ def ingest_markdown():
                 chap_str = str(num).zfill(2)
                 anchor_id = "pos-" + code.replace(".", "-")
                 cursor.execute(
-                    "INSERT OR IGNORE INTO positions (codigo, descricao, chapter_num, anchor_id) VALUES (?, ?, ?, ?)",
+                    "INSERT OR IGNORE INTO positions (codigo, descricao, chapter_num, anchor_id) VALUES (?, ?, ?, ?)",  # noqa: E501
                     (code, desc, chap_str, anchor_id),
                 )
                 pos_count += 1
