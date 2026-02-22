@@ -12,7 +12,7 @@ import asyncio
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Tuple
 
 import aiosqlite
 
@@ -27,6 +27,7 @@ from ..utils.payload_cache_metrics import PayloadCacheMetrics
 TIPI_DB_PATH = Path(__file__).parent.parent.parent / "database" / "tipi.db"
 
 # SQLModel Repository imports (optional - for new code paths)
+get_session = None
 try:
     from ..infrastructure.db_engine import get_session
     from ..infrastructure.repositories.tipi_repository import TipiRepository
@@ -35,6 +36,9 @@ try:
 except ImportError:
     _REPO_AVAILABLE = False
     TipiRepository = None
+
+if TYPE_CHECKING:
+    from ..infrastructure.repositories.tipi_repository import TipiRepository as _TipiRepo
 
 
 class TipiService:
@@ -58,7 +62,7 @@ class TipiService:
         self,
         db_path: Path = TIPI_DB_PATH,
         *,
-        repository: "TipiRepository" = None,
+        repository: "_TipiRepo | None" = None,
         repository_factory=None,
     ):
         """
@@ -103,11 +107,17 @@ class TipiService:
         """
         if not _REPO_AVAILABLE:
             raise RuntimeError("Repository não disponível. Instale sqlmodel.")
+        if get_session is None:
+            raise RuntimeError("Session factory não disponível.")
+        session_factory = get_session
+        repo_cls = TipiRepository
+        if repo_cls is None:
+            raise RuntimeError("TipiRepository não disponível.")
 
         @asynccontextmanager
         async def repo_factory():
-            async with get_session() as session:
-                yield TipiRepository(session)
+            async with session_factory() as session:
+                yield repo_cls(session)
 
         return cls(repository_factory=repo_factory)
 
@@ -118,7 +128,7 @@ class TipiService:
         return self._cache_lock
 
     @asynccontextmanager
-    async def _get_repo(self):
+    async def _get_repo(self) -> AsyncIterator[Any]:
         """Get repository via direct instance or factory."""
         if self._repository is not None:
             yield self._repository
@@ -198,10 +208,12 @@ class TipiService:
             conn = await self._get_connection()
             try:
                 cursor = await conn.execute("SELECT COUNT(*) FROM tipi_chapters")
-                chapters = (await cursor.fetchone())[0]
+                chapters_row = await cursor.fetchone()
+                chapters = chapters_row[0] if chapters_row else 0
 
                 cursor = await conn.execute("SELECT COUNT(*) FROM tipi_positions")
-                positions = (await cursor.fetchone())[0]
+                positions_row = await cursor.fetchone()
+                positions = positions_row[0] if positions_row else 0
 
                 return {"ok": True, "chapters": chapters, "positions": positions}
             finally:
@@ -265,19 +277,17 @@ class TipiService:
 
         conn = await self._get_connection()
         try:
-            # Check for ncm_sort column availability
             cols = await self._get_table_columns(conn, "tipi_positions")
             order_by = "ncm_sort, ncm" if "ncm_sort" in cols else "ncm"
-
-            cursor = await conn.execute(
-                f"""
+            if order_by not in {"ncm_sort, ncm", "ncm"}:
+                order_by = "ncm"
+            sql = f"""
                 SELECT ncm, capitulo, descricao, aliquota, nivel
                 FROM tipi_positions
                 WHERE capitulo = ?
                 ORDER BY {order_by}
-                """,
-                (cap_num,),
-            )
+                """  # nosec B608
+            cursor = await conn.execute(sql, (cap_num,))
             rows = await cursor.fetchall()
             result = tuple(dict(row) for row in rows)
 
@@ -325,29 +335,24 @@ class TipiService:
         try:
             cols = await self._get_table_columns(conn, "tipi_positions")
             order_by = "ncm_sort, ncm" if "ncm_sort" in cols else "ncm"
+            if order_by not in {"ncm_sort, ncm", "ncm"}:
+                order_by = "ncm"
 
-            # Construir condições SQL dinâmicas
-            # NCM limpo (sem pontos) começa com prefix OU é um dos ancestrais
-            # Usamos REPLACE para remover pontos do NCM antes de comparar
             conditions = ["REPLACE(ncm, '.', '') LIKE ? || '%'"]
             params = [prefix]
 
-            # Adicionar condições para cada ancestral
             for ancestor in ancestor_prefixes:
                 conditions.append("REPLACE(ncm, '.', '') = ?")
                 params.append(ancestor)
 
             where_clause = " OR ".join(conditions)
-
-            cursor = await conn.execute(
-                f"""
+            sql = f"""
                 SELECT ncm, capitulo, descricao, aliquota, nivel
                 FROM tipi_positions
                 WHERE capitulo = ? AND ({where_clause})
                 ORDER BY {order_by}
-                """,
-                (cap_num, *params),
-            )
+                """  # nosec B608
+            cursor = await conn.execute(sql, (cap_num, *params))
             rows = await cursor.fetchall()
             return tuple(dict(row) for row in rows)
         finally:
@@ -570,13 +575,11 @@ class TipiService:
 
         conn = await self._get_connection()
         try:
-            cursor = await conn.execute(
-                """
+            cursor = await conn.execute("""
                 SELECT codigo, titulo, secao
                 FROM tipi_chapters
                 ORDER BY codigo
-            """
-            )
+            """)
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
         finally:

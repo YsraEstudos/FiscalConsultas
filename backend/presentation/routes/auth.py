@@ -57,9 +57,10 @@ async def chat_endpoint(
     if not message:
         raise HTTPException(status_code=422, detail="message must not be empty")
     if len(message) > settings.security.ai_chat_max_message_chars:
+        max_chars = settings.security.ai_chat_max_message_chars
         raise HTTPException(
             status_code=413,
-            detail=f"message too long (max {settings.security.ai_chat_max_message_chars} chars)",
+            detail=f"message too long (max {max_chars} chars)",
         )
 
     token = extract_bearer_token(http_request)

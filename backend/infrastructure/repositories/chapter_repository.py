@@ -7,7 +7,7 @@ e fornecendo interface unificada para busca FTS.
 Suporta multi-tenant via tenant_id filtering.
 """
 
-from typing import List, Optional
+from typing import Any, List, Optional, cast
 
 from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,16 +51,20 @@ class ChapterRepository:
         Returns:
             Chapter com positions e notes carregados, ou None
         """
+        table = cast(Any, Chapter).__table__.c
         stmt = (
             select(Chapter)
-            .options(selectinload(Chapter.positions), joinedload(Chapter.notes))
-            .where(Chapter.chapter_num == chapter_num)
+            .options(
+                selectinload(cast(Any, Chapter.positions)),
+                joinedload(cast(Any, Chapter.notes)),
+            )
+            .where(table.chapter_num == chapter_num)
         )
 
         # Aplicar filtro de tenant se disponível
         if self.tenant_id:
             stmt = stmt.where(
-                or_(Chapter.tenant_id == self.tenant_id, Chapter.tenant_id.is_(None))
+                or_(table.tenant_id == self.tenant_id, table.tenant_id.is_(None))
             )
 
         result = await self.session.execute(stmt)
@@ -109,11 +113,12 @@ class ChapterRepository:
 
     async def get_all_nums(self) -> List[str]:
         """Lista todos os números de capítulos ordenados."""
-        stmt = select(Chapter.chapter_num).order_by(Chapter.chapter_num)
+        table = cast(Any, Chapter).__table__.c
+        stmt = select(table.chapter_num).order_by(table.chapter_num)
 
         if self.tenant_id:
             stmt = stmt.where(
-                or_(Chapter.tenant_id == self.tenant_id, Chapter.tenant_id.is_(None))
+                or_(table.tenant_id == self.tenant_id, table.tenant_id.is_(None))
             )
 
         result = await self.session.execute(stmt)
@@ -139,29 +144,39 @@ class ChapterRepository:
 
     async def _fts_postgres(self, query: str, limit: int) -> List[SearchResultItem]:
         """FTS usando tsvector/tsquery do PostgreSQL."""
-        tenant_filter = (
-            "AND (p.tenant_id = :tenant_id OR p.tenant_id IS NULL)"
-            if self.tenant_id
-            else ""
-        )
-        stmt = text(
-            f"""
-            SELECT 
-                p.codigo as ncm,
-                p.descricao as display_text,
-                'position' as type,
-                p.descricao as description,
-                ts_rank(p.search_vector, plainto_tsquery('portuguese', :query)) as score
-            FROM positions p
-            WHERE p.search_vector @@ plainto_tsquery('portuguese', :query)
-            {tenant_filter}
-            ORDER BY score DESC
-            LIMIT :limit
-        """
-        )
-        params = {"query": query, "limit": limit}
         if self.tenant_id:
-            params["tenant_id"] = self.tenant_id
+            stmt = text(
+                """
+                SELECT
+                    p.codigo as ncm,
+                    p.descricao as display_text,
+                    'position' as type,
+                    p.descricao as description,
+                    ts_rank(p.search_vector, plainto_tsquery('portuguese', :query)) as score
+                FROM positions p
+                WHERE p.search_vector @@ plainto_tsquery('portuguese', :query)
+                  AND (p.tenant_id = :tenant_id OR p.tenant_id IS NULL)
+                ORDER BY score DESC
+                LIMIT :limit
+                """
+            )
+            params = {"query": query, "limit": limit, "tenant_id": self.tenant_id}
+        else:
+            stmt = text(
+                """
+                SELECT
+                    p.codigo as ncm,
+                    p.descricao as display_text,
+                    'position' as type,
+                    p.descricao as description,
+                    ts_rank(p.search_vector, plainto_tsquery('portuguese', :query)) as score
+                FROM positions p
+                WHERE p.search_vector @@ plainto_tsquery('portuguese', :query)
+                ORDER BY score DESC
+                LIMIT :limit
+                """
+            )
+            params = {"query": query, "limit": limit}
 
         result = await self.session.execute(stmt, params)
         return [
@@ -180,7 +195,7 @@ class ChapterRepository:
         """FTS usando FTS5 do SQLite (compatibilidade)."""
         stmt = text(
             """
-            SELECT 
+            SELECT
                 ncm,
                 display_text,
                 type,
