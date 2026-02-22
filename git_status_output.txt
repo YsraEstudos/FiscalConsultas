@@ -1,0 +1,37 @@
+On branch feature/refactor-renderer-sonar
+Your branch is up to date with 'origin/feature/refactor-renderer-sonar'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   .agent/skills/api-design-principles/assets/rest-api-template.py
+	modified:   backend/infrastructure/database.py
+	modified:   backend/infrastructure/repositories/chapter_repository.py
+	modified:   backend/infrastructure/repositories/tipi_repository.py
+	modified:   backend/presentation/routes/system.py
+	modified:   backend/presentation/tipi_renderer.py
+	modified:   backend/server/app.py
+	modified:   backend/services/ai_service.py
+	modified:   backend/services/nesh_service.py
+	modified:   backend/services/tipi_service.py
+	modified:   backend/utils/text_processor.py
+	modified:   migrations/env.py
+	modified:   migrations/versions/003_global_catalog_and_tenant_fk.py
+	modified:   scripts/setup_tipi_database.py
+	modified:   tests/integration/test_exact_match.py
+	modified:   tests/integration/test_health.py
+	modified:   tests/integration/test_high_level_validation.py
+	modified:   tests/integration/test_snapshot.py
+	modified:   tests/integration/test_tipi_api_integration.py
+	modified:   tests/integration/test_tipi_service_contract.py
+	modified:   tests/performance/test_startup_repro.py
+	modified:   tests/unit/test_renderer_regex.py
+	modified:   tests/unit/test_tipi_service_additional.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	git_status_output.txt
+	pytest_output.txt
+	ruff_output.txt
+
+no changes added to commit (use "git add" and/or "git commit -a")

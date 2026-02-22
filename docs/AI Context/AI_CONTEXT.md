@@ -1,6 +1,6 @@
 # Nesh / Fiscal - AI_CONTEXT
 
-Atualizado em: 2026-02-17
+Atualizado em: 2026-02-22
 Base desta revisao: leitura direta de backend/frontend/scripts/docs no estado atual do repositório.
 
 ## 1) Proposito
@@ -22,7 +22,6 @@ A UX e orientada por navegacao rapida (abas, smart-links, menu contextual, autos
   - lifespan: inicializa `NeshService`, `TipiService`, `AiService`, `Redis`, glossario.
 - Frontend entrypoint real: `client/src/main.tsx`
   - exige `VITE_CLERK_PUBLISHABLE_KEY`.
-- `main.py` na raiz e placeholder (imprime "Hello from fiscal!") e nao representa runtime da aplicacao.
 
 ## 3) Mapa Arquitetural Atual
 
@@ -181,23 +180,28 @@ CI observado em `.github/workflows/tests.yml`:
 - Job backend:
   - Python `3.13`
   - `uv sync --group dev`
-  - Ruff apenas em arquivos `.py` alterados no diff do push/PR
-  - `uv run pytest -q --cov=backend --cov-report=xml --cov-report=term-missing`
+  - `uv run ruff format --check`
+  - `uv run ruff check`
+  - `uv run pytest -q --cov=backend --cov-report=xml --cov-report=term-missing --cov-fail-under=70`
 - Job frontend:
   - Node `22`
   - `npm ci`
   - `npm run lint`
   - `npm run type-check`
-  - `npm test`
   - `npm run test:coverage`
+
+CI adicional em `.github/workflows/megalinter.yml`:
+
+- Workflow `MegaLinter` roda em `pull_request` para `main` (com filtro por paths).
+- Usa `oxsecurity/megalinter` pinned por SHA completo.
+- Executa com `VALIDATE_ALL_CODEBASE=false` e pode aplicar auto-fixes em commits de PR conforme condicoes do workflow.
 
 ## 11) Drift Documental (importante)
 
 Inconsistencias atuais entre docs e codigo:
 
-1. `README.md` declara Python `3.10+`, mas `pyproject.toml` exige `>=3.13`.
-2. `README.md` sugere `requirements.txt`/`requirements-dev.txt`, arquivos inexistentes no snapshot.
-3. `README.md` aponta roadmap em `docs/ROADMAP.md`, mas o caminho ativo atual e `docs/roadmap/ROADMAP.md`.
+1. Nao foi identificada inconsistencia critica em `README.md` nesta revisao (2026-02-22).
+2. `requirements.txt` e `requirements-dev.txt` seguem inexistentes; setup oficial permanece via `pyproject.toml`/`uv`.
 
 ## 12) Divida Tecnica Estrutural (resumo)
 
