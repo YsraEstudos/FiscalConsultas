@@ -4,10 +4,21 @@
 # Configuration
 APPLY_FIXES: all # Apply fixes automatically (for local or CI that allows pushing)
 SHOW_ELAPSED_TIME: true
-FILE_IO_THREADS: 4
 
 # Restrict MegaLinter to descriptors used by this repository
-ENABLE: PYTHON,JAVASCRIPT,TYPESCRIPT,TSX,CSS,HTML,SQL,YAML,JSON,ENV,POWERSHELL,REPOSITORY
+ENABLE:
+  - PYTHON
+  - JAVASCRIPT
+  - TYPESCRIPT
+  - TSX
+  - CSS
+  - HTML
+  - SQL
+  - YAML
+  - JSON
+  - ENV
+  - POWERSHELL
+  - REPOSITORY
 
 # Keep Ruff/ESLint checks in tests.yml and let MegaLinter focus on other linters
 DISABLE_LINTERS:
@@ -18,6 +29,8 @@ DISABLE_LINTERS:
 
 # Exclusions
 ADDITIONAL_EXCLUDED_DIRECTORIES:
+  - client/node_modules
+  - client/dist
   - node_modules
   - .venv
   - dist
@@ -27,9 +40,10 @@ ADDITIONAL_EXCLUDED_DIRECTORIES:
   - .ruff_cache
   - coverage
   - raw_data
+  - megalinter-reports
   - Scripts results
 
-FILTER_REGEX_EXCLUDE: "(^|/)(git_status_output\\.txt|pytest_output\\.txt|ruff_output\\.txt|test_failures\\.log|tests_output\\.txt|tests_output2\\.txt)$"
+FILTER_REGEX_EXCLUDE: "(^|/)(git_status_output\\.txt|pytest_output\\.txt|ruff_output\\.txt|test_failures\\.log|tests_output\\.txt|tests_output2\\.txt|2ms-report[^/]*\\.json)$"
 
 # Flavors
 # FLAVOR_SUGGESTION: python, javascript
