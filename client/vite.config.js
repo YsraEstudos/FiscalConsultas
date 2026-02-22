@@ -8,7 +8,7 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',
-        changeOrigin: true,
+        changeOrigin: true
       }
     }
   },
@@ -24,8 +24,8 @@ export default defineConfig({
         lines: 80,
         statements: 80,
         functions: 80,
-        branches: 80,
-      },
-    },
-  },
+        branches: 80
+      }
+    }
+  }
 })
