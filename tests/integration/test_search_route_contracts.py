@@ -7,7 +7,6 @@ from backend.presentation.routes import search as search_route
 from backend.server.app import app
 from backend.server.dependencies import get_nesh_service, get_tipi_service
 
-
 pytestmark = pytest.mark.integration
 
 
