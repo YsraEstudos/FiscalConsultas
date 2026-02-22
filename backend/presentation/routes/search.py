@@ -175,7 +175,9 @@ def _build_payload_response(
             headers={**common_headers, "Content-Encoding": "gzip"},
         )
     search_payload_cache_metrics.record_served(gzip=False)
-    return Response(content=raw_body, media_type=JSON_MEDIA_TYPE, headers=common_headers)
+    return Response(
+        content=raw_body, media_type=JSON_MEDIA_TYPE, headers=common_headers
+    )
 
 
 router = APIRouter()
