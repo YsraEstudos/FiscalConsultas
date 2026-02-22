@@ -75,5 +75,5 @@
   - per-folder thresholds instead of one global gate
 
 ## MegaLinter Policy
-- MegaLinter remains local-only workflow support.
-- It is not the official required CI gate for merge in this strategy.
+- No contexto deste relatorio (PR20), MegaLinter estava sendo tratado como apoio local.
+- Estado atual do repositorio (apos PR30): MegaLinter roda no GitHub Actions com modo `PR Smart` e `Full Audit`.
