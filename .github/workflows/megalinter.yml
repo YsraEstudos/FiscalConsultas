@@ -35,12 +35,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
-permissions:
-  contents: write
-  pull-requests: write
-
 jobs:
   build:
+    permissions:
+      contents: write
+      pull-requests: write
     name: MegaLinter
     runs-on: ubuntu-latest
     timeout-minutes: 20
