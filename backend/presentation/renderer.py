@@ -4,14 +4,14 @@ Transforma dados brutos em conteúdo formatado para o frontend.
 """
 
 import re
-from html.parser import HTMLParser
 from functools import lru_cache
+from html.parser import HTMLParser
 from typing import Callable, Dict
 
 from ..config.constants import RegexPatterns
 from ..config.logging_config import renderer_logger as logger
-from ..domain import SearchResult
 from ..data.glossary_manager import glossary_manager
+from ..domain import SearchResult
 from ..utils.id_utils import generate_anchor_id
 
 

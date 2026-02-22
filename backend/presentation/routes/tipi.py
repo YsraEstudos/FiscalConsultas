@@ -1,20 +1,19 @@
-from typing import Annotated
-from fastapi import APIRouter, Depends, Query, Request
-from starlette.responses import Response
-from collections import OrderedDict
 import gzip
 import threading
-from backend.services.tipi_service import TipiService
-from backend.server.dependencies import get_tipi_service
+from collections import OrderedDict
+from typing import Annotated
+
+import orjson as _orjson
 from backend.config.constants import SearchConfig, ViewMode
 from backend.config.exceptions import ValidationError
 from backend.config.logging_config import server_logger as logger
+from backend.presentation.renderer import HtmlRenderer
+from backend.server.dependencies import get_tipi_service
+from backend.services.tipi_service import TipiService
 from backend.utils.cache import cache_scope_key, weak_etag
 from backend.utils.payload_cache_metrics import tipi_payload_cache_metrics
-from backend.presentation.renderer import HtmlRenderer
-
-import orjson as _orjson
-
+from fastapi import APIRouter, Depends, Query, Request
+from starlette.responses import Response
 
 JSON_MEDIA_TYPE = "application/json"
 _TIPI_CODE_PAYLOAD_CACHE_MAX = 16

@@ -1,29 +1,28 @@
+import logging
+import os
+from contextlib import asynccontextmanager
+
+from backend.config import CONFIG, setup_logging
+from backend.config.exceptions import NeshError
+from backend.config.settings import settings
+from backend.data.glossary_manager import init_glossary
+from backend.infrastructure import DatabaseAdapter
+from backend.infrastructure.redis_client import redis_cache
+
+# Import New Routers
+from backend.presentation.routes import auth, comments, search, system, tipi, webhooks
+from backend.server.error_handlers import (
+    generic_exception_handler,
+    nesh_exception_handler,
+)
+from backend.server.middleware import TenantMiddleware
+from backend.services.ai_service import AiService
+from backend.services.tipi_service import TipiService
+from backend.utils.frontend_check import verify_frontend_build
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
-from contextlib import asynccontextmanager
-import os
-import logging
-
-from backend.config import CONFIG, setup_logging
-from backend.config.settings import settings
-from backend.config.exceptions import NeshError
-from backend.infrastructure import DatabaseAdapter
-from backend.services.ai_service import AiService
-from backend.services.tipi_service import TipiService
-from backend.server.error_handlers import (
-    nesh_exception_handler,
-    generic_exception_handler,
-)
-from backend.infrastructure.redis_client import redis_cache
-
-from backend.data.glossary_manager import init_glossary
-from backend.utils.frontend_check import verify_frontend_build
-
-# Import New Routers
-from backend.presentation.routes import auth, search, system, tipi, webhooks, comments
-from backend.server.middleware import TenantMiddleware
 
 """
 Módulo do Servidor (API Handler).

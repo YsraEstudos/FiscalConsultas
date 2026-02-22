@@ -1,21 +1,21 @@
-from typing import Annotated
-from fastapi import APIRouter, Depends, Query, HTTPException, Request
-from starlette.responses import Response
-from collections import OrderedDict
 import gzip
 import threading
-from backend.services import NeshService
-from backend.server.dependencies import get_nesh_service
-from backend.config.constants import SearchConfig
-from backend.config.exceptions import ValidationError
-from backend.data.glossary_manager import glossary_manager
-from backend.config.logging_config import server_logger as logger
-from backend.utils.cache import cache_scope_key, weak_etag
-from backend.utils.payload_cache_metrics import search_payload_cache_metrics
-from backend.utils import ncm_utils
-from backend.presentation.renderer import HtmlRenderer
+from collections import OrderedDict
+from typing import Annotated
 
 import orjson as _orjson
+from backend.config.constants import SearchConfig
+from backend.config.exceptions import ValidationError
+from backend.config.logging_config import server_logger as logger
+from backend.data.glossary_manager import glossary_manager
+from backend.presentation.renderer import HtmlRenderer
+from backend.server.dependencies import get_nesh_service
+from backend.services import NeshService
+from backend.utils import ncm_utils
+from backend.utils.cache import cache_scope_key, weak_etag
+from backend.utils.payload_cache_metrics import search_payload_cache_metrics
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from starlette.responses import Response
 
 JSON_MEDIA_TYPE = "application/json"
 

@@ -2,15 +2,15 @@
 Repository para operações de Position (NCM) com suporte dual SQLite/PostgreSQL.
 """
 
-from typing import Optional, List
+from typing import List, Optional
 
-from sqlalchemy import select, text, func, or_
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...domain.sqlmodels import Position, PositionRead, SearchResultItem
 from ...config.settings import settings
-from ...utils.id_utils import generate_anchor_id
+from ...domain.sqlmodels import Position, PositionRead, SearchResultItem
 from ...infrastructure.db_engine import tenant_context
+from ...utils.id_utils import generate_anchor_id
 
 
 class PositionRepository:
@@ -139,7 +139,8 @@ class PositionRepository:
             if self.tenant_id
             else ""
         )
-        stmt = text(f"""
+        stmt = text(
+            f"""
             SELECT 
                 codigo as ncm,
                 descricao as display_text,
@@ -151,7 +152,8 @@ class PositionRepository:
             {tenant_filter}
             ORDER BY score DESC
             LIMIT :limit
-        """)
+        """
+        )
         params = {"query": query, "limit": limit}
         if self.tenant_id:
             params["tenant_id"] = self.tenant_id
@@ -170,7 +172,8 @@ class PositionRepository:
 
     async def _fts_sqlite(self, query: str, limit: int) -> List[SearchResultItem]:
         """FTS usando índice FTS5 existente do SQLite."""
-        stmt = text("""
+        stmt = text(
+            """
             SELECT 
                 ncm,
                 display_text,
@@ -182,7 +185,8 @@ class PositionRepository:
               AND type = 'position'
             ORDER BY rank
             LIMIT :limit
-        """)
+        """
+        )
         result = await self.session.execute(stmt, {"query": query, "limit": limit})
         return [
             SearchResultItem(

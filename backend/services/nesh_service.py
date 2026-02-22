@@ -3,28 +3,28 @@ Serviço principal de busca NCM.
 Contém toda a lógica de negócio, isolada de I/O e apresentação.
 """
 
-import re
 import asyncio
 import hashlib
-from contextlib import asynccontextmanager
+import re
 from collections import OrderedDict
-from typing import Dict, List, Optional, Any, Tuple, Callable, AsyncGenerator
+from contextlib import asynccontextmanager
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Tuple
 
 import orjson
 
 from ..config import CONFIG
-from ..utils import ncm_utils
 from ..config.constants import CacheConfig, RegexPatterns, SearchConfig
 from ..config.logging_config import service_logger as logger
 from ..domain import SearchResult, ServiceResponse
 from ..infrastructure import DatabaseAdapter
 from ..infrastructure.redis_client import redis_cache
+from ..utils import ncm_utils
 from ..utils.payload_cache_metrics import PayloadCacheMetrics
 
 # SQLModel Repository imports (optional - for new code paths)
 try:
-    from ..infrastructure.repositories.chapter_repository import ChapterRepository
     from ..infrastructure.db_engine import get_session
+    from ..infrastructure.repositories.chapter_repository import ChapterRepository
 
     _REPO_AVAILABLE = True
 except ImportError:
@@ -242,11 +242,11 @@ class NeshService:
                     "chapter_num": chapter.chapter_num,
                     "content": chapter.content,
                     "notes": chapter.notes.notes_content if chapter.notes else None,
-                    "parsed_notes_json": getattr(
-                        chapter.notes, "parsed_notes_json", None
-                    )
-                    if chapter.notes
-                    else None,
+                    "parsed_notes_json": (
+                        getattr(chapter.notes, "parsed_notes_json", None)
+                        if chapter.notes
+                        else None
+                    ),
                     "positions": [
                         {
                             "codigo": p.codigo,
@@ -255,18 +255,20 @@ class NeshService:
                         }
                         for p in chapter.positions
                     ],
-                    "sections": {
-                        "titulo": chapter.notes.titulo if chapter.notes else None,
-                        "notas": chapter.notes.notas if chapter.notes else None,
-                        "consideracoes": chapter.notes.consideracoes
+                    "sections": (
+                        {
+                            "titulo": chapter.notes.titulo if chapter.notes else None,
+                            "notas": chapter.notes.notas if chapter.notes else None,
+                            "consideracoes": (
+                                chapter.notes.consideracoes if chapter.notes else None
+                            ),
+                            "definicoes": (
+                                chapter.notes.definicoes if chapter.notes else None
+                            ),
+                        }
                         if chapter.notes
-                        else None,
-                        "definicoes": chapter.notes.definicoes
-                        if chapter.notes
-                        else None,
-                    }
-                    if chapter.notes
-                    else None,
+                        else None
+                    ),
                 }
         else:
             if not self.db:
@@ -697,14 +699,16 @@ class NeshService:
                         "conteudo": content,
                         "real_content_found": True,
                         "erro": None,
-                        "secoes": {
-                            "titulo": sections.get("titulo"),
-                            "notas": sections.get("notas"),
-                            "consideracoes": sections.get("consideracoes"),
-                            "definicoes": sections.get("definicoes"),
-                        }
-                        if has_sections
-                        else None,
+                        "secoes": (
+                            {
+                                "titulo": sections.get("titulo"),
+                                "notas": sections.get("notas"),
+                                "consideracoes": sections.get("consideracoes"),
+                                "definicoes": sections.get("definicoes"),
+                            }
+                            if has_sections
+                            else None
+                        ),
                     }
                 else:
                     logger.warning(f"Capítulo não encontrado: {chapter_num}")

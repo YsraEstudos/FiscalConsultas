@@ -1,15 +1,15 @@
-import os
 import json
+import os
 import secrets
-from typing import List, Set, Optional, Literal
+from typing import List, Literal, Optional, Set
 
 try:
-    from pydantic_settings import BaseSettings, SettingsConfigDict
     from pydantic import BaseModel, Field
+    from pydantic_settings import BaseSettings, SettingsConfigDict
 
     _PYDANTIC_V2 = True
 except ImportError:
-    from pydantic.v1 import BaseSettings, BaseModel, Field
+    from pydantic.v1 import BaseModel, BaseSettings, Field
 
     _PYDANTIC_V2 = False
 
