@@ -1,9 +1,24 @@
 import pytest
 
+from backend.presentation.routes import search as search_route
 from backend.presentation.routes import system
+from backend.presentation.routes import tipi as tipi_route
 
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.fixture(autouse=True)
+def _clear_route_payload_cache():
+    with search_route._code_payload_cache_lock:
+        search_route._code_payload_cache.clear()
+    with tipi_route._tipi_code_payload_cache_lock:
+        tipi_route._tipi_code_payload_cache.clear()
+    yield
+    with search_route._code_payload_cache_lock:
+        search_route._code_payload_cache.clear()
+    with tipi_route._tipi_code_payload_cache_lock:
+        tipi_route._tipi_code_payload_cache.clear()
 
 
 def test_cache_metrics_requires_admin(client):

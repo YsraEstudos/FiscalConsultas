@@ -1,21 +1,21 @@
-from typing import Annotated
-from fastapi import APIRouter, Depends, Query, HTTPException, Request
-from starlette.responses import Response
-from collections import OrderedDict
 import gzip
 import threading
-from backend.services import NeshService
-from backend.server.dependencies import get_nesh_service
+from collections import OrderedDict
+from typing import Annotated, Any, Mapping, cast
+
+import orjson as _orjson  # pyright: ignore[reportMissingImports]
 from backend.config.constants import SearchConfig
 from backend.config.exceptions import ValidationError
-from backend.data.glossary_manager import glossary_manager
 from backend.config.logging_config import server_logger as logger
+from backend.data.glossary_manager import glossary_manager
+from backend.presentation.renderer import HtmlRenderer
+from backend.server.dependencies import get_nesh_service
+from backend.services import NeshService
+from backend.utils import ncm_utils
 from backend.utils.cache import cache_scope_key, weak_etag
 from backend.utils.payload_cache_metrics import search_payload_cache_metrics
-from backend.utils import ncm_utils
-from backend.presentation.renderer import HtmlRenderer
-
-import orjson as _orjson
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from starlette.responses import Response
 
 JSON_MEDIA_TYPE = "application/json"
 
@@ -42,7 +42,9 @@ def _normalize_query_for_cache(ncm: str, *, is_code_query: bool) -> str:
     return raw_query.lower()
 
 
-def _orjson_response(content: dict, headers: dict[str, str] | None = None) -> Response:
+def _orjson_response(
+    content: Mapping[str, Any], headers: dict[str, str] | None = None
+) -> Response:
     """Build a Response pre-serialized with orjson (5-10x faster than stdlib json)."""
     body = _orjson.dumps(content)
     resp = Response(content=body, media_type=JSON_MEDIA_TYPE)
@@ -72,14 +74,56 @@ def _code_payload_cache_set(key: str, payload: tuple[bytes, bytes]) -> None:
             search_payload_cache_metrics.record_eviction()
 
 
+def _parse_quality_value(raw_value: str) -> float:
+    try:
+        return float(raw_value)
+    except ValueError:
+        return 0.0
+
+
+def _parse_accept_encoding_token(token: str) -> tuple[str, float] | None:
+    part = token.strip()
+    if not part:
+        return None
+
+    pieces = [p.strip() for p in part.split(";")]
+    encoding = pieces[0].lower()
+    quality = 1.0
+    for param in pieces[1:]:
+        key, separator, value = param.partition("=")
+        if not separator or key.strip().lower() != "q":
+            continue
+        quality = _parse_quality_value(value.strip())
+        break
+
+    return encoding, quality
+
+
 def _accepts_gzip(request: Request) -> bool:
-    accept_encoding = (request.headers.get("Accept-Encoding") or "").lower()
-    return "gzip" in accept_encoding
+    accept_encoding = request.headers.get("Accept-Encoding") or ""
+    gzip_q: float | None = None
+    wildcard_q: float | None = None
+
+    for token in accept_encoding.split(","):
+        parsed = _parse_accept_encoding_token(token)
+        if parsed is None:
+            continue
+        encoding, q_value = parsed
+        if encoding == "gzip":
+            gzip_q = q_value
+        elif encoding == "*":
+            wildcard_q = q_value
+
+    if gzip_q is not None:
+        return gzip_q > 0
+    return wildcard_q is not None and wildcard_q > 0
 
 
-def get_payload_cache_metrics() -> dict[str, float | int]:
+def get_payload_cache_metrics() -> dict[str, str | float | int]:
+    with _code_payload_cache_lock:
+        current_size = len(_code_payload_cache)
     snapshot = search_payload_cache_metrics.snapshot(
-        current_size=len(_code_payload_cache),
+        current_size=current_size,
         max_size=_CODE_PAYLOAD_CACHE_MAX,
     )
     return {
@@ -96,10 +140,51 @@ def get_payload_cache_metrics() -> dict[str, float | int]:
     }
 
 
+def _build_cache_headers(cache_key: str, ncm_normalized: str) -> dict[str, str]:
+    return {
+        "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",
+        "ETag": weak_etag("nesh", cache_key, ncm_normalized),
+        "Vary": "Authorization, X-Tenant-Id, Accept-Encoding",
+    }
+
+
+def _extract_code_results(response_data: Mapping[str, Any]) -> dict[str, Any]:
+    if "results" in response_data:
+        raw_results = response_data.get("results")
+    elif "resultados" in response_data:
+        raw_results = response_data.get("resultados")
+    else:
+        raw_results = {}
+    return raw_results if isinstance(raw_results, dict) else {}
+
+
+def _build_payload_response(
+    request: Request,
+    payload: tuple[bytes, bytes],
+    *,
+    headers: Mapping[str, str],
+    cache_status: str,
+) -> Response:
+    raw_body, gzip_body = payload
+    common_headers = {**headers, "X-Payload-Cache": cache_status}
+    if _accepts_gzip(request):
+        search_payload_cache_metrics.record_served(gzip=True)
+        return Response(
+            content=gzip_body,
+            media_type=JSON_MEDIA_TYPE,
+            headers={**common_headers, "Content-Encoding": "gzip"},
+        )
+    search_payload_cache_metrics.record_served(gzip=False)
+    return Response(content=raw_body, media_type=JSON_MEDIA_TYPE, headers=common_headers)
+
+
 router = APIRouter()
 
 
-@router.get("/search")
+@router.get(
+    "/search",
+    responses={500: {"description": "Formato de resposta inválido do serviço"}},
+)
 async def search(
     request: Request,
     service: Annotated[NeshService, Depends(get_nesh_service)],
@@ -141,11 +226,7 @@ async def search(
 
     # Common caching headers / scope key
     cache_key = cache_scope_key(request)
-    headers = {
-        "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",
-        "ETag": weak_etag("nesh", cache_key, ncm_normalized),
-        "Vary": "Authorization, X-Tenant-Id, Accept-Encoding",
-    }
+    headers = _build_cache_headers(cache_key, ncm_normalized)
 
     # Hot-path short-circuit:
     # for code queries, return cached payload before running service/renderer.
@@ -157,29 +238,32 @@ async def search(
         cached_payload = _code_payload_cache_get(payload_key)
         cache_checked = True
         if cached_payload is not None:
-            raw_body, gzip_body = cached_payload
-            common_headers = {**headers, "X-Payload-Cache": "HIT"}
-            if _accepts_gzip(request):
-                search_payload_cache_metrics.record_served(gzip=True)
-                return Response(
-                    content=gzip_body,
-                    media_type=JSON_MEDIA_TYPE,
-                    headers={**common_headers, "Content-Encoding": "gzip"},
-                )
-            search_payload_cache_metrics.record_served(gzip=False)
-            return Response(
-                content=raw_body, media_type=JSON_MEDIA_TYPE, headers=common_headers
+            return _build_payload_response(
+                request,
+                cached_payload,
+                headers=headers,
+                cache_status="HIT",
             )
 
     # Service Layer (ASYNC) - Exceções propagam para o handler global
-    response_data = await service.process_request(ncm)
+    result = await service.process_request(ncm)
+    if not isinstance(result, dict):
+        logger.error(
+            "process_request retornou tipo inválido para ncm=%s: %s",
+            safe_ncm,
+            type(result).__name__,
+        )
+        raise HTTPException(
+            status_code=500, detail="Formato de resposta inválido do serviço"
+        )
+    response_data = cast(dict[str, Any], result)
 
     # Compatibilidade de contrato / performance:
     # - manter 'results' como chave canônica e alias legado 'resultados'
     # - pre-renderizar HTML no backend (campo `markdown` mantido por compatibilidade)
     # - remover campos brutos pesados da serialização
     if response_data.get("type") == "code":
-        results = response_data.get("results") or response_data.get("resultados") or {}
+        results = _extract_code_results(response_data)
         response_data["markdown"] = HtmlRenderer.render_full_response(results)
         for chapter_data in results.values():
             if isinstance(chapter_data, dict):
@@ -195,6 +279,9 @@ async def search(
     # Hot path optimization:
     # code lookups are frequently repeated with very large payloads (~860KB+).
     # Cache both raw and gzip bodies to avoid serializing/compressing each request.
+    # Secondary cache lookup: if `is_code_query` was False but service returned
+    # `type="code"`, we still try `_code_payload_cache_get` once using
+    # `payload_key=f"{cache_key}:{ncm_normalized}"` and guard with `cache_checked`.
     if response_data.get("type") == "code":
         if not cache_checked:
             payload_key = f"{cache_key}:{ncm_normalized}"
@@ -209,18 +296,11 @@ async def search(
             if payload_key is not None:
                 _code_payload_cache_set(payload_key, cached_payload)
 
-        raw_body, gzip_body = cached_payload
-        common_headers = {**headers, "X-Payload-Cache": cache_status}
-        if _accepts_gzip(request):
-            search_payload_cache_metrics.record_served(gzip=True)
-            return Response(
-                content=gzip_body,
-                media_type=JSON_MEDIA_TYPE,
-                headers={**common_headers, "Content-Encoding": "gzip"},
-            )
-        search_payload_cache_metrics.record_served(gzip=False)
-        return Response(
-            content=raw_body, media_type=JSON_MEDIA_TYPE, headers=common_headers
+        return _build_payload_response(
+            request,
+            cached_payload,
+            headers=headers,
+            cache_status=cache_status,
         )
 
     return _orjson_response(response_data, headers=headers)
@@ -234,8 +314,9 @@ async def get_chapters(request: Request):
     Returns:
         JSON contendo lista de capítulos disponíveis no banco de dados.
     """
-    # Direct DB access via app state if service method doesn't exist for just listing simple things
-    # But cleaner to have it in service. For now, accessing DB directly as in original code.
+    # Direct DB access via app state if service method doesn't exist
+    # for just listing simple things.
+    # Cleaner seria manter isso no service, mas preservamos o contrato atual.
     db = request.app.state.db
     if db:
         chapters = await db.get_all_chapters_list()
@@ -273,7 +354,7 @@ async def get_chapter_notes(
     Raises:
         HTTPException 404: Se o capítulo não for encontrado.
     """
-    logger.info(f"Buscando notas do capítulo: {chapter}")
+    logger.info("Buscando notas do capítulo: %s", chapter)
 
     # Usa o método existente de fetch com cache
     data = await service.fetch_chapter_data(chapter)

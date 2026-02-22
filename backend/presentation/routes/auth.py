@@ -1,13 +1,13 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from backend.services.ai_service import AiService
 from backend.config.settings import settings
+from backend.presentation.schemas.chat import ChatRequest
 from backend.server.dependencies import get_ai_service
 from backend.server.middleware import decode_clerk_jwt
 from backend.server.rate_limit import ai_chat_rate_limiter
-from backend.presentation.schemas.chat import ChatRequest
+from backend.services.ai_service import AiService
 from backend.utils.auth import extract_bearer_token, extract_client_ip
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 router = APIRouter()
 
@@ -57,9 +57,10 @@ async def chat_endpoint(
     if not message:
         raise HTTPException(status_code=422, detail="message must not be empty")
     if len(message) > settings.security.ai_chat_max_message_chars:
+        max_chars = settings.security.ai_chat_max_message_chars
         raise HTTPException(
             status_code=413,
-            detail=f"message too long (max {settings.security.ai_chat_max_message_chars} chars)",
+            detail=f"message too long (max {max_chars} chars)",
         )
 
     token = extract_bearer_token(http_request)
