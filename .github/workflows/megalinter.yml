@@ -42,7 +42,7 @@ jobs:
           # PR-only fast mode: lint only changed files in the pull request.
           VALIDATE_ALL_CODEBASE: false
           # Keep CI fast and deterministic for PRs by linting workflow/config scope only.
-          ENABLE_LINTERS: ACTION_ACTIONLINT,YAML_PRETTIER,YAML_YAMLLINT,YAML_V8R,REPOSITORY_GIT_DIFF
+          ENABLE_LINTERS: ${{ github.event_name == 'workflow_dispatch' && 'ACTION_ACTIONLINT,YAML_PRETTIER,YAML_YAMLLINT,YAML_V8R,REPOSITORY_GIT_DIFF' || 'ACTION_ACTIONLINT,YAML_PRETTIER,YAML_YAMLLINT,YAML_V8R' }}
           # Manual workflow with least privilege: use default GitHub token only.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Read-only lint run: never mutate repository files.
