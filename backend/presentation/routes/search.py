@@ -210,6 +210,9 @@ async def search(
     # Hot path optimization:
     # code lookups are frequently repeated with very large payloads (~860KB+).
     # Cache both raw and gzip bodies to avoid serializing/compressing each request.
+    # Secondary cache lookup: if `is_code_query` was False but service returned
+    # `type="code"`, we still try `_code_payload_cache_get` once using
+    # `payload_key=f"{cache_key}:{ncm_normalized}"` and guard with `cache_checked`.
     if response_data.get("type") == "code":
         if not cache_checked:
             payload_key = f"{cache_key}:{ncm_normalized}"
@@ -289,7 +292,7 @@ async def get_chapter_notes(
     Raises:
         HTTPException 404: Se o capítulo não for encontrado.
     """
-    logger.info(f"Buscando notas do capítulo: {chapter}")
+    logger.info("Buscando notas do capítulo: %s", chapter)
 
     # Usa o método existente de fetch com cache
     data = await service.fetch_chapter_data(chapter)

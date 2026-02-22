@@ -27,6 +27,7 @@ from ..utils.payload_cache_metrics import PayloadCacheMetrics
 TIPI_DB_PATH = Path(__file__).parent.parent.parent / "database" / "tipi.db"
 TIPI_SORT_WITH_NCM = "ncm_sort, ncm"
 TIPI_SORT_FALLBACK = "ncm"
+TIPI_ALLOWED_TABLES = {"tipi_positions", "tipi_chapters", "tipi_fts"}
 
 # SQLModel Repository imports (optional - for new code paths)
 get_session = None
@@ -178,6 +179,8 @@ class TipiService:
         self, conn: aiosqlite.Connection, table: str
     ) -> set[str]:
         """Return a cached set of column names for a table."""
+        if table not in TIPI_ALLOWED_TABLES:
+            raise ValueError(f"Tabela não permitida para inspeção de schema: {table}")
         if table in self._schema_columns_cache:
             return self._schema_columns_cache[table]
 
@@ -535,7 +538,10 @@ class TipiService:
             if len(results) < 5:
                 words = query.split()
                 if len(words) > 1:
-                    and_query = " AND ".join(words)
+                    quoted_tokens = [
+                        '"' + word.replace('"', '""') + '"' for word in words
+                    ]
+                    and_query = " AND ".join(quoted_tokens)
                     cursor = await conn.execute(
                         """
                         SELECT ncm, capitulo, descricao, aliquota
