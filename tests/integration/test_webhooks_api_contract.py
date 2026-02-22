@@ -1,20 +1,18 @@
-import pytest
-from fastapi.testclient import TestClient
-from fastapi import HTTPException
 import json
 from copy import deepcopy
 from pathlib import Path
 from uuid import uuid4
-from starlette.requests import Request
 
-from sqlalchemy import delete, select
-
+import pytest
 from backend.config.settings import settings
 from backend.domain.sqlmodels import Subscription, Tenant
 from backend.infrastructure.db_engine import get_session
 from backend.presentation.routes import webhooks
 from backend.server.app import app
-
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
+from sqlalchemy import delete, select
+from starlette.requests import Request
 
 pytestmark = pytest.mark.integration
 

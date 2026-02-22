@@ -16,7 +16,6 @@ from backend.config.settings import settings
 from backend.server.app import app
 from backend.utils.text_processor import NeshTextProcessor
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOT_PATH = PROJECT_ROOT / "snapshots" / "baseline_v1.json"
 

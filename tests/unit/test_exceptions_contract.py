@@ -1,5 +1,4 @@
 import pytest
-
 from backend.config.exceptions import (
     ChapterNotFoundError,
     ConfigurationError,
@@ -11,7 +10,6 @@ from backend.config.exceptions import (
     ServiceError,
     ValidationError,
 )
-
 
 pytestmark = pytest.mark.unit
 

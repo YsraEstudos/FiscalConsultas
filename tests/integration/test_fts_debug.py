@@ -1,9 +1,9 @@
 import os
-import pytest
-import aiosqlite
 
-from backend.infrastructure.database import DatabaseAdapter
+import aiosqlite
+import pytest
 from backend.config.exceptions import DatabaseError
+from backend.infrastructure.database import DatabaseAdapter
 
 
 async def _fts_table_exists(db_file: str) -> bool:

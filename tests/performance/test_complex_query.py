@@ -1,15 +1,16 @@
-import pytest
-import time
 import asyncio
-import sys
 import os
+import sys
+import time
+
+import pytest
 
 # Ensure root is in path
 sys.path.insert(0, os.getcwd())
 
+from backend.config import CONFIG
 from backend.infrastructure.database import DatabaseAdapter
 from backend.services.nesh_service import NeshService
-from backend.config import CONFIG
 
 
 @pytest.mark.asyncio

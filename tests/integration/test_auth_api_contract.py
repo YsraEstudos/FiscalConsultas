@@ -1,10 +1,8 @@
 import pytest
-from fastapi.testclient import TestClient
-
+from backend.presentation.routes import auth
 from backend.server.app import app
 from backend.server.dependencies import get_ai_service
-from backend.presentation.routes import auth
-
+from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.integration
 
