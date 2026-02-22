@@ -106,6 +106,13 @@ VITE_CLERK_PUBLISHABLE_KEY=pk_test_sua_chave
 VITE_CLERK_TOKEN_TEMPLATE=backend_api
 ```
 
+Checklist rápido Clerk (dev local):
+
+- `AUTH__CLERK_DOMAIN` e `AUTH__CLERK_ISSUER` devem apontar para o mesmo tenant Clerk.
+- `AUTH__CLERK_AUDIENCE` deve ser exatamente o `aud` emitido no template JWT (`backend_api`).
+- `VITE_CLERK_TOKEN_TEMPLATE` deve ter o mesmo nome do template configurado no Clerk.
+- `AUTH__CLERK_AUTHORIZED_PARTIES` deve incluir `http://localhost:5173` e `http://127.0.0.1:5173`.
+
 ### 3) Preparar dados locais (SQLite)
 
 ```powershell
@@ -260,6 +267,13 @@ Observação importante:
 
 - se `POSTGRES_PASSWORD` tiver caractere `$`, escape como `$$` no `.env` para o Docker Compose não interpretar como interpolação de variável.
 - portas padrão: PostgreSQL `5432`, Redis `6379`, pgAdmin `8080`.
+- se existir um PostgreSQL local do Windows usando a porta `5432`, pare/desabilite o serviço local para evitar colisão com o container Docker.
+  - PowerShell (Administrador):
+
+```powershell
+Stop-Service -Name "postgresql-x64-18" -Force
+Set-Service -Name "postgresql-x64-18" -StartupType Disabled
+```
 
 Migrar schema:
 

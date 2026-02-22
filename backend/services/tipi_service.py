@@ -278,7 +278,7 @@ class TipiService:
                         self._chapter_positions_cache_metrics.record_set()
                         if (
                             len(self._chapter_positions_cache)
-                            > CacheConfig.TIPI_CHAPTER_CACHE_SIZE
+                            >= CacheConfig.TIPI_CHAPTER_CACHE_SIZE
                         ):
                             self._chapter_positions_cache.popitem(last=False)
                             self._chapter_positions_cache_metrics.record_eviction()
@@ -304,7 +304,7 @@ class TipiService:
                 self._chapter_positions_cache_metrics.record_set()
                 if (
                     len(self._chapter_positions_cache)
-                    > CacheConfig.TIPI_CHAPTER_CACHE_SIZE
+                    >= CacheConfig.TIPI_CHAPTER_CACHE_SIZE
                 ):
                     self._chapter_positions_cache.popitem(last=False)
                     self._chapter_positions_cache_metrics.record_eviction()
@@ -491,7 +491,7 @@ class TipiService:
         async with self._get_cache_lock():
             self._code_search_cache[cache_key] = result
             self._code_search_cache_metrics.record_set()
-            if len(self._code_search_cache) > CacheConfig.TIPI_RESULT_CACHE_SIZE:
+            if len(self._code_search_cache) >= CacheConfig.TIPI_RESULT_CACHE_SIZE:
                 self._code_search_cache.popitem(last=False)
                 self._code_search_cache_metrics.record_eviction()
 
