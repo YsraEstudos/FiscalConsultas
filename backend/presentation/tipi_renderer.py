@@ -154,14 +154,12 @@ class TipiRenderer:
             if aliq and aliq.isdigit():
                 aliq += "%"
 
-            items.append(
-                f"""
+            items.append(f"""
 <div class="tipi-result-item" data-ncm="{r.get("ncm", "")}">
     <span class="tipi-result-ncm smart-link" data-ncm="{r.get("ncm", "")}">{r.get("ncm", "")}</span>
     <span class="tipi-result-cap">Cap. {r.get("capitulo", "")}</span>
     <span class="tipi-result-desc">{HtmlRenderer.inject_exclusion_highlights(HtmlRenderer.inject_unit_highlights(r.get("descricao", "")))}</span>
     <span class="tipi-result-aliq {aliq_class}">{aliq}</span>
-</div>"""
-            )
+</div>""")
 
         return f'<div class="tipi-results-list">{"".join(items)}</div>'

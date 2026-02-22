@@ -1,9 +1,9 @@
 import gzip
 import threading
 from collections import OrderedDict
-from typing import Annotated
+from typing import Annotated, Any, Mapping, cast
 
-import orjson as _orjson
+import orjson as _orjson  # pyright: ignore[reportMissingImports]
 from backend.config.constants import SearchConfig
 from backend.config.exceptions import ValidationError
 from backend.config.logging_config import server_logger as logger
@@ -42,7 +42,9 @@ def _normalize_query_for_cache(ncm: str, *, is_code_query: bool) -> str:
     return raw_query.lower()
 
 
-def _orjson_response(content: dict, headers: dict[str, str] | None = None) -> Response:
+def _orjson_response(
+    content: Mapping[str, Any], headers: dict[str, str] | None = None
+) -> Response:
     """Build a Response pre-serialized with orjson (5-10x faster than stdlib json)."""
     body = _orjson.dumps(content)
     resp = Response(content=body, media_type=JSON_MEDIA_TYPE)
@@ -77,7 +79,7 @@ def _accepts_gzip(request: Request) -> bool:
     return "gzip" in accept_encoding
 
 
-def get_payload_cache_metrics() -> dict[str, float | int]:
+def get_payload_cache_metrics() -> dict[str, str | float | int]:
     snapshot = search_payload_cache_metrics.snapshot(
         current_size=len(_code_payload_cache),
         max_size=_CODE_PAYLOAD_CACHE_MAX,
@@ -172,14 +174,15 @@ async def search(
             )
 
     # Service Layer (ASYNC) - Exceções propagam para o handler global
-    response_data = await service.process_request(ncm)
+    response_data = cast(dict[str, Any], await service.process_request(ncm))
 
     # Compatibilidade de contrato / performance:
     # - manter 'results' como chave canônica e alias legado 'resultados'
     # - pre-renderizar HTML no backend (campo `markdown` mantido por compatibilidade)
     # - remover campos brutos pesados da serialização
     if response_data.get("type") == "code":
-        results = response_data.get("results") or response_data.get("resultados") or {}
+        raw_results = response_data.get("results") or response_data.get("resultados") or {}
+        results = raw_results if isinstance(raw_results, dict) else {}
         response_data["markdown"] = HtmlRenderer.render_full_response(results)
         for chapter_data in results.values():
             if isinstance(chapter_data, dict):
@@ -234,8 +237,9 @@ async def get_chapters(request: Request):
     Returns:
         JSON contendo lista de capítulos disponíveis no banco de dados.
     """
-    # Direct DB access via app state if service method doesn't exist for just listing simple things
-    # But cleaner to have it in service. For now, accessing DB directly as in original code.
+    # Direct DB access via app state if service method doesn't exist
+    # for just listing simple things.
+    # Cleaner seria manter isso no service, mas preservamos o contrato atual.
     db = request.app.state.db
     if db:
         chapters = await db.get_all_chapters_list()

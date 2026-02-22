@@ -2,7 +2,7 @@
 Repository para operações de Position (NCM) com suporte dual SQLite/PostgreSQL.
 """
 
-from typing import List, Optional
+from typing import Any, List, Optional, cast
 
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,10 +37,11 @@ class PositionRepository:
         Returns:
             Position ou None
         """
-        stmt = select(Position).where(Position.codigo == codigo)
+        table = cast(Any, Position).__table__.c
+        stmt = select(Position).where(table.codigo == codigo)
         if self.tenant_id:
             stmt = stmt.where(
-                or_(Position.tenant_id == self.tenant_id, Position.tenant_id.is_(None))
+                or_(table.tenant_id == self.tenant_id, table.tenant_id.is_(None))
             )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
@@ -55,14 +56,15 @@ class PositionRepository:
         Returns:
             Lista de PositionRead ordenadas por código
         """
+        table = cast(Any, Position).__table__.c
         stmt = (
             select(Position)
-            .where(Position.chapter_num == chapter_num)
-            .order_by(Position.codigo)
+            .where(table.chapter_num == chapter_num)
+            .order_by(table.codigo)
         )
         if self.tenant_id:
             stmt = stmt.where(
-                or_(Position.tenant_id == self.tenant_id, Position.tenant_id.is_(None))
+                or_(table.tenant_id == self.tenant_id, table.tenant_id.is_(None))
             )
         result = await self.session.execute(stmt)
         positions = result.scalars().all()
@@ -91,16 +93,17 @@ class PositionRepository:
         """
         # Normaliza prefixo (remove pontos)
         clean_prefix = prefix.replace(".", "")
+        table = cast(Any, Position).__table__.c
 
         stmt = (
             select(Position)
-            .where(func.replace(Position.codigo, ".", "").like(f"{clean_prefix}%"))
-            .order_by(Position.codigo)
+            .where(func.replace(table.codigo, ".", "").like(f"{clean_prefix}%"))
+            .order_by(table.codigo)
             .limit(limit)
         )
         if self.tenant_id:
             stmt = stmt.where(
-                or_(Position.tenant_id == self.tenant_id, Position.tenant_id.is_(None))
+                or_(table.tenant_id == self.tenant_id, table.tenant_id.is_(None))
             )
         result = await self.session.execute(stmt)
         positions = result.scalars().all()
@@ -134,29 +137,39 @@ class PositionRepository:
 
     async def _fts_postgres(self, query: str, limit: int) -> List[SearchResultItem]:
         """FTS usando tsvector do PostgreSQL."""
-        tenant_filter = (
-            "AND (tenant_id = :tenant_id OR tenant_id IS NULL)"
-            if self.tenant_id
-            else ""
-        )
-        stmt = text(
-            f"""
-            SELECT 
-                codigo as ncm,
-                descricao as display_text,
-                'position' as type,
-                descricao as description,
-                ts_rank(search_vector, plainto_tsquery('portuguese', :query)) as score
-            FROM positions
-            WHERE search_vector @@ plainto_tsquery('portuguese', :query)
-            {tenant_filter}
-            ORDER BY score DESC
-            LIMIT :limit
-        """
-        )
-        params = {"query": query, "limit": limit}
         if self.tenant_id:
-            params["tenant_id"] = self.tenant_id
+            stmt = text(
+                """
+                SELECT
+                    codigo as ncm,
+                    descricao as display_text,
+                    'position' as type,
+                    descricao as description,
+                    ts_rank(search_vector, plainto_tsquery('portuguese', :query)) as score
+                FROM positions
+                WHERE search_vector @@ plainto_tsquery('portuguese', :query)
+                  AND (tenant_id = :tenant_id OR tenant_id IS NULL)
+                ORDER BY score DESC
+                LIMIT :limit
+                """
+            )
+            params = {"query": query, "limit": limit, "tenant_id": self.tenant_id}
+        else:
+            stmt = text(
+                """
+                SELECT
+                    codigo as ncm,
+                    descricao as display_text,
+                    'position' as type,
+                    descricao as description,
+                    ts_rank(search_vector, plainto_tsquery('portuguese', :query)) as score
+                FROM positions
+                WHERE search_vector @@ plainto_tsquery('portuguese', :query)
+                ORDER BY score DESC
+                LIMIT :limit
+                """
+            )
+            params = {"query": query, "limit": limit}
         result = await self.session.execute(stmt, params)
         return [
             SearchResultItem(
@@ -174,7 +187,7 @@ class PositionRepository:
         """FTS usando índice FTS5 existente do SQLite."""
         stmt = text(
             """
-            SELECT 
+            SELECT
                 ncm,
                 display_text,
                 type,

@@ -5,7 +5,7 @@ Suporta multi-tenant via tenant_id filtering.
 Suporta dual SQLite/PostgreSQL similar ao ChapterRepository.
 """
 
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, cast
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,7 +41,8 @@ class TipiRepository:
         Returns:
             TipiPosition ou None
         """
-        stmt = select(TipiPosition).where(TipiPosition.codigo == codigo)
+        table = cast(Any, TipiPosition).__table__.c
+        stmt = select(TipiPosition).where(table.codigo == codigo)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -55,15 +56,12 @@ class TipiRepository:
         Returns:
             Lista de dicts com ncm, descricao, aliquota, nivel
         """
-        order_primary = (
-            TipiPosition.ncm_sort
-            if hasattr(TipiPosition, "ncm_sort")
-            else TipiPosition.codigo
-        )
+        table = cast(Any, TipiPosition).__table__.c
+        order_primary = table.ncm_sort if hasattr(table, "ncm_sort") else table.codigo
         stmt = (
             select(TipiPosition)
-            .where(TipiPosition.chapter_num == chapter_num)
-            .order_by(order_primary, TipiPosition.codigo)
+            .where(table.chapter_num == chapter_num)
+            .order_by(order_primary, table.codigo)
         )
         result = await self.session.execute(stmt)
         positions = result.scalars().all()
@@ -96,21 +94,21 @@ class TipiRepository:
         if self.is_postgres:
             # PostgreSQL: usar REPLACE e LIKE
             conditions = ["REPLACE(codigo, '.', '') LIKE :prefix || '%'"]
-            params = {"chapter_num": chapter_num, "prefix": prefix}
+            params: Dict[str, Any] = {"chapter_num": chapter_num, "prefix": prefix}
 
             for i, ancestor in enumerate(ancestor_prefixes):
                 conditions.append(f"REPLACE(codigo, '.', '') = :ancestor{i}")
                 params[f"ancestor{i}"] = ancestor
 
             where_clause = " OR ".join(conditions)
-            stmt = text(
-                f"""
+            sql = f"""
                 SELECT codigo, chapter_num, descricao, aliquota, nivel, parent_ncm, ncm_sort
                 FROM tipi_positions
                 WHERE chapter_num = :chapter_num AND ({where_clause})
                 ORDER BY ncm_sort, codigo
-            """
-            )
+            """  # nosec B608
+            stmt = text(sql)
+            result = await self.session.execute(stmt, params)
         else:
             # SQLite: mesma lógica
             conditions = ["REPLACE(ncm, '.', '') LIKE ? || '%'"]
@@ -121,17 +119,15 @@ class TipiRepository:
                 params_list.append(ancestor)
 
             where_clause = " OR ".join(conditions)
-            stmt = text(
-                f"""
+            sql = f"""
                 SELECT ncm as codigo, capitulo as chapter_num, descricao, aliquota, nivel, parent_ncm, ncm_sort
                 FROM tipi_positions
                 WHERE capitulo = ? AND ({where_clause})
                 ORDER BY ncm_sort, ncm
-            """
-            )
-            params = tuple(params_list)
-
-        result = await self.session.execute(stmt, params)
+            """  # nosec B608
+            stmt = text(sql)
+            params_tuple = tuple(params_list)
+            result = await self.session.execute(stmt, params_tuple)  # pyright: ignore[reportCallIssue,reportArgumentType]
 
         return [
             {
@@ -167,9 +163,8 @@ class TipiRepository:
 
     async def _fts_postgres(self, query: str, limit: int) -> List[Dict[str, Any]]:
         """FTS usando tsvector do PostgreSQL."""
-        stmt = text(
-            """
-            SELECT 
+        stmt = text("""
+            SELECT
                 codigo as ncm,
                 chapter_num as capitulo,
                 descricao,
@@ -179,8 +174,7 @@ class TipiRepository:
             WHERE search_vector @@ plainto_tsquery('portuguese', :query)
             ORDER BY score DESC
             LIMIT :limit
-        """
-        )
+        """)
         result = await self.session.execute(stmt, {"query": query, "limit": limit})
         return [
             {
@@ -194,14 +188,12 @@ class TipiRepository:
 
     async def _fts_sqlite(self, query: str, limit: int) -> List[Dict[str, Any]]:
         """FTS usando FTS5 do SQLite."""
-        stmt = text(
-            """
+        stmt = text("""
             SELECT ncm, capitulo, descricao, aliquota
             FROM tipi_fts
             WHERE tipi_fts MATCH :query
             LIMIT :limit
-        """
-        )
+        """)
         result = await self.session.execute(
             stmt, {"query": f'"{query}"', "limit": limit}
         )
@@ -218,21 +210,17 @@ class TipiRepository:
     async def get_all_chapters(self) -> List[Dict[str, str]]:
         """Lista todos os capítulos TIPI."""
         if self.is_postgres:
-            stmt = text(
-                """
+            stmt = text("""
                 SELECT DISTINCT chapter_num as codigo, chapter_num as titulo
                 FROM tipi_positions
                 ORDER BY chapter_num
-            """
-            )
+            """)
         else:
-            stmt = text(
-                """
+            stmt = text("""
                 SELECT codigo, titulo, secao
                 FROM tipi_chapters
                 ORDER BY codigo
-            """
-            )
+            """)
 
         result = await self.session.execute(stmt)
         return [dict(row._mapping) for row in result]

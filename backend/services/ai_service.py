@@ -15,8 +15,10 @@ class AiService:
 
         if self.api_key:
             try:
-                genai.configure(api_key=self.api_key)
-                self.model = genai.GenerativeModel("gemini-pro")
+                genai.configure(api_key=self.api_key)  # pyright: ignore[reportPrivateImportUsage]
+                self.model = genai.GenerativeModel(  # pyright: ignore[reportPrivateImportUsage]
+                    "gemini-pro"
+                )
                 logger.info("AI Service Initialized (Gemini Pro)")
             except Exception as e:
                 logger.error(f"Failed to initialize AI: {e}")

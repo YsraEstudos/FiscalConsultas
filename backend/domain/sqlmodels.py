@@ -9,7 +9,7 @@ Este módulo coexiste com models.py (TypedDict) para migração gradual.
 """
 
 from datetime import date, datetime
-from typing import List, Optional
+from typing import ClassVar, List, Optional
 
 from sqlalchemy import Column, Text
 from sqlalchemy.dialects.postgresql import TSVECTOR
@@ -23,7 +23,7 @@ from sqlmodel import Field, Relationship, SQLModel
 class Tenant(SQLModel, table=True):
     """Representa uma Organização ou Cliente B2B (Mapeado do Clerk org_id)."""
 
-    __tablename__ = "tenants"
+    __tablename__: ClassVar[str] = "tenants"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     id: str = Field(
         primary_key=True, description="ID da organização (ex: Clerk org_id)"
@@ -40,7 +40,7 @@ class Tenant(SQLModel, table=True):
 class User(SQLModel, table=True):
     """Usuário do sistema (Mapeado do Clerk user_id)."""
 
-    __tablename__ = "users"
+    __tablename__: ClassVar[str] = "users"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     id: str = Field(primary_key=True, description="ID do usuário (ex: Clerk user_id)")
     email: str = Field(unique=True, index=True, max_length=255)
@@ -55,7 +55,7 @@ class User(SQLModel, table=True):
 class Subscription(SQLModel, table=True):
     """Assinatura do tenant (evento de billing/webhook)."""
 
-    __tablename__ = "subscriptions"
+    __tablename__: ClassVar[str] = "subscriptions"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     id: Optional[int] = Field(default=None, primary_key=True)
     tenant_id: str = Field(foreign_key="tenants.id", index=True)
@@ -122,7 +122,7 @@ class GlossaryBase(SQLModel):
 class Chapter(ChapterBase, table=True):
     """Tabela de capítulos NESH."""
 
-    __tablename__ = "chapters"
+    __tablename__: ClassVar[str] = "chapters"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     chapter_num: str = Field(primary_key=True, max_length=10)
     tenant_id: Optional[str] = Field(default=None, foreign_key="tenants.id", index=True)
@@ -141,7 +141,7 @@ class Chapter(ChapterBase, table=True):
 class Position(PositionBase, table=True):
     """Tabela de posições NCM."""
 
-    __tablename__ = "positions"
+    __tablename__: ClassVar[str] = "positions"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     codigo: str = Field(primary_key=True, max_length=20)
     chapter_num: str = Field(foreign_key="chapters.chapter_num", max_length=10)
@@ -160,7 +160,7 @@ class Position(PositionBase, table=True):
 class ChapterNotes(SQLModel, table=True):
     """Notas e seções estruturadas de cada capítulo."""
 
-    __tablename__ = "chapter_notes"
+    __tablename__: ClassVar[str] = "chapter_notes"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     id: Optional[int] = Field(default=None, primary_key=True)
     chapter_num: str = Field(
@@ -184,7 +184,7 @@ class ChapterNotes(SQLModel, table=True):
 class Glossary(GlossaryBase, table=True):
     """Glossário de termos técnicos fiscais."""
 
-    __tablename__ = "glossary"
+    __tablename__: ClassVar[str] = "glossary"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     term: str = Field(primary_key=True, max_length=255)
 
@@ -197,7 +197,7 @@ class Glossary(GlossaryBase, table=True):
 class TipiPosition(SQLModel, table=True):
     """Posição NCM na tabela TIPI (alíquotas IPI)."""
 
-    __tablename__ = "tipi_positions"
+    __tablename__: ClassVar[str] = "tipi_positions"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     codigo: str = Field(primary_key=True, max_length=20)
     descricao: str = Field(sa_column=Column(Text))
@@ -240,7 +240,7 @@ class ChapterRead(SQLModel):
 
     chapter_num: str
     content: str
-    positions: List[PositionRead] = []
+    positions: List[PositionRead] = Field(default_factory=list)
     notes: Optional[ChapterNotesRead] = None
 
 
@@ -262,7 +262,7 @@ class FTSSearchResponse(SQLModel):
     type: str = "text"
     query: str
     normalized: Optional[str] = None
-    results: List[SearchResultItem] = []
+    results: List[SearchResultItem] = Field(default_factory=list)
     total: int = 0
     match_type: Optional[str] = None
     warning: Optional[str] = None
@@ -274,5 +274,5 @@ class CodeSearchResponse(SQLModel):
     success: bool = True
     type: str = "code"
     query: str
-    chapters: List[ChapterRead] = []
+    chapters: List[ChapterRead] = Field(default_factory=list)
     total_capitulos: int = 0

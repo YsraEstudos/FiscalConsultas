@@ -1,6 +1,7 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from typing import Any, cast
 
 from backend.config import CONFIG, setup_logging
 from backend.config.exceptions import NeshError
@@ -85,6 +86,8 @@ async def lifespan(app: FastAPI):
         app.state.service = await NeshService.create_with_repository()
         logger.info("NeshService initialized in Repository mode (Postgres/RLS)")
     else:
+        if app.state.db is None:
+            raise RuntimeError("DatabaseAdapter não inicializado para modo SQLite")
         app.state.service = NeshService(app.state.db)
         logger.info("NeshService initialized in Legacy mode (SQLite)")
 
@@ -109,7 +112,7 @@ async def lifespan(app: FastAPI):
                 result = await session.execute(
                     text("SELECT COUNT(*) FROM tipi_positions")
                 )
-                count = result.scalar()
+                count = int(result.scalar() or 0)
                 tipi_has_data = count > 0
                 logger.info(f"TIPI PostgreSQL: {count} positions found")
         except Exception as e:
@@ -121,7 +124,8 @@ async def lifespan(app: FastAPI):
         else:
             app.state.tipi_service = TipiService()
             logger.info(
-                "TipiService initialized in SQLite mode (tipi.db - TIPI data not in Postgres yet)"
+                "TipiService initialized in SQLite mode "
+                "(tipi.db - TIPI data not in Postgres yet)"
             )
     else:
         app.state.tipi_service = TipiService()
@@ -157,8 +161,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Nesh API", version="4.2", lifespan=lifespan)
 
 # --- Global Exception Handlers ---
-app.add_exception_handler(NeshError, nesh_exception_handler)
-app.add_exception_handler(Exception, generic_exception_handler)
+app.add_exception_handler(NeshError, cast(Any, nesh_exception_handler))
+app.add_exception_handler(Exception, cast(Any, generic_exception_handler))
 
 # --- Middleware ---
 # GZip (Architecture Improvement)
@@ -177,7 +181,8 @@ cors_origins = settings.server.cors_allowed_origins or [
     "http://127.0.0.1:5173",
 ]
 
-# Dev convenience: allow local-network Vite hosts on :5173 without opening broad CORS in production.
+# Dev convenience: allow local-network Vite hosts on :5173
+# without opening broad CORS in production.
 cors_allow_origin_regex = None
 if settings.server.env == "development":
     cors_allow_origin_regex = (
@@ -234,5 +239,8 @@ else:
     @app.get("/")
     async def read_root():
         return {
-            "message": "Nesh API running. Frontend not found. Run 'npm run build' in client/ folder."
+            "message": (
+                "Nesh API running. Frontend not found. "
+                "Run 'npm run build' in client/ folder."
+            )
         }
