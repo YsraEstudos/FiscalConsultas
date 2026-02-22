@@ -158,4 +158,31 @@ describe('useTabs', () => {
     expect(result.current.tabs.map((tab) => tab.id)).toEqual(['tab-601']);
     expect(result.current.activeTabId).toBe('tab-601');
   });
+
+  it('reorders tabs within bounds and ignores invalid indices', () => {
+    const nowSpy = vi.spyOn(Date, 'now');
+    nowSpy.mockReturnValueOnce(701).mockReturnValueOnce(702);
+    const { result } = renderHook(() => useTabs());
+
+    act(() => {
+      result.current.createTab('tipi');
+      result.current.createTab('nesh');
+    });
+
+    expect(result.current.tabs.map((tab) => tab.id)).toEqual(['tab-1', 'tab-701', 'tab-702']);
+
+    act(() => {
+      result.current.reorderTabs(0, 2);
+    });
+
+    expect(result.current.tabs.map((tab) => tab.id)).toEqual(['tab-701', 'tab-702', 'tab-1']);
+
+    act(() => {
+      result.current.reorderTabs(-1, 1);
+      result.current.reorderTabs(1, 99);
+    });
+
+    expect(result.current.tabs.map((tab) => tab.id)).toEqual(['tab-701', 'tab-702', 'tab-1']);
+    nowSpy.mockRestore();
+  });
 });
