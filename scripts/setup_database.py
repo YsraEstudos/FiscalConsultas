@@ -58,8 +58,8 @@ DB_FILE = os.path.join(SCRIPT_DIR, "..", "database", "nesh.db")
 
 
 def calculate_content_hash(content: str) -> str:
-    """Calcula o hash MD5 do conteúdo."""
-    return hashlib.md5(content.encode("utf-8")).hexdigest()
+    """Calcula o hash SHA-256 do conteúdo."""
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
 def get_current_db_hash() -> str | None:
@@ -78,7 +78,7 @@ def get_current_db_hash() -> str | None:
         return None
 
 
-def read_nesh_content() -> tuple[str, str, str]:
+def read_nesh_content() -> tuple[str | None, str | None, str | None]:
     """
     Lê o conteúdo do arquivo Nesh.
     Prioridade: Nesh.txt > Nesh.zip

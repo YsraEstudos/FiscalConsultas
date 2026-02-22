@@ -50,7 +50,7 @@ def test_search_regression(client, snapshot_data, query):
     # A. Hash Comparison (Strict Mode)
     # We serialize identically to how the snapshot was likely created (sorted keys)
     content_str = json.dumps(data, sort_keys=True)
-    current_hash = hashlib.md5(content_str.encode("utf-8")).hexdigest()
+    current_hash = hashlib.sha256(content_str.encode("utf-8")).hexdigest()
 
     # If hashes match, we are golden
     if current_hash == expected.get("hash"):

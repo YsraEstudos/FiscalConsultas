@@ -42,7 +42,6 @@ function App() {
         createTab,
         closeTab,
         switchTab,
-        reorderTabs,
         updateTab
     } = useTabs();
 
@@ -384,6 +383,7 @@ function App() {
                 doc={activeTab?.document || 'nesh'}
                 setDoc={setDoc}
                 searchKey={`${activeTabId}-${activeTab?.document || 'nesh'}`}
+                onMenuOpen={() => setMobileMenuOpen(true)}
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 onOpenTutorial={() => setIsTutorialOpen(true)}
                 onOpenStats={() => setIsStatsOpen(true)}
@@ -399,7 +399,6 @@ function App() {
                     activeTabId={activeTabId}
                     onSwitch={switchTab}
                     onClose={closeTab}
-                    onReorder={reorderTabs}
                     onNewTab={() => createTab(activeTab?.document || 'nesh')}
                 />
 
@@ -438,11 +437,9 @@ function App() {
                                     data={tab.results}
                                     mobileMenuOpen={tab.id === activeTabId ? mobileMenuOpen : false}
                                     onCloseMobileMenu={tab.id === activeTabId ? closeMobileMenu : noop}
-                                    onToggleMobileMenu={tab.id === activeTabId ? () => setMobileMenuOpen(prev => !prev) : noop}
                                     isActive={tab.id === activeTabId}
                                     tabId={tab.id}
                                     isNewSearch={tab.isNewSearch || false}
-                                    latestTextQuery={tab.latestTextQuery}
                                     onConsumeNewSearch={(incomingTabId, finalScrollTop) => {
                                         const updates: any = { isNewSearch: false };
                                         if (typeof finalScrollTop === 'number') {

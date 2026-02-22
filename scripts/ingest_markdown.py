@@ -1,6 +1,6 @@
-import os
 import re
 import sqlite3
+import os
 
 INPUT_FILE = "raw_data/nesh.md"
 DB_FILE = "database/nesh.db"
@@ -33,49 +33,30 @@ def ingest_markdown():
     chapters_written = 0
     max_chapter_seen = 0
 
-    for i, line in enumerate(lines):
+    for line in lines:
         line_clean = line.strip()
         match = chapter_start_re.match(line_clean)
 
         if match:
             new_chap_num = int(match.group(1))
+            if new_chap_num < max_chapter_seen:
+                # Header fora de ordem costuma ser índice/referência no fim do arquivo.
+                # Ignoramos para não contaminar o capítulo atual.
+                continue
 
-            # Helper for creating/updating
+            if current_chapter == new_chap_num:
+                # Header duplicado do mesmo capítulo.
+                continue
+
             if current_chapter is not None:
-                # Save previous chapter
+                # Só salva capítulo anterior depois de validar que houve troca válida.
                 save_chapter(cursor, current_chapter, buffer)
                 chapters_written += 1
 
-            # Logic to handle duplicates/index:
-            # We enforce strictly ascending order mostly, but allow gaps (missing chaps)
-            # If we see a lower number than max_seen, assume it's garbage/index and ignore switching
-            # UNLESS it's the first time we see it?
-            # Actually, "found 156 chapters" implies duplicates.
-            # Use strict ascending logic: Only switch if new_chap >= max_chapter_seen?
-            # Or distinct chapters?
-
-            # Let's assume the main content comes first (Line 1000+).
-            # If we see Chapter 1 at line 120000 again, ignore.
-
-            if new_chap_num < max_chapter_seen:
-                # Likely index/reference at end of file
-                # Don't switch current_chapter, treat this line as content of current_chapter?
-                # adhere to "buffer.append(line)" below?
-                # Ideally we stop being in "capture mode" for that header, but it's just one line.
-                # But wait, if it's "Capítulo 1" in an index, the NEXT lines might be index content.
-                # So we might append index content to the *previous* chapter (e.g. Chapter 97).
-                # That's acceptable.
-                pass
-            else:
-                if new_chap_num == 73:
-                    print("DEBUG: ENTERING CHAPTER 73")
-
-                current_chapter = new_chap_num
-                max_chapter_seen = new_chap_num
-                buffer = []  # Start fresh for this chapter
-                # Optional: Skip the "Capítulo X" line itself in the content?
-                # Renderer adds its own header.
-                continue
+            current_chapter = new_chap_num
+            max_chapter_seen = new_chap_num
+            buffer = []  # Start fresh for this chapter
+            continue
 
         if current_chapter is not None:
             # Sanitize line before adding
