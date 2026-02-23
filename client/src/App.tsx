@@ -439,7 +439,6 @@ function App() {
                                     data={tab.results}
                                     mobileMenuOpen={tab.id === activeTabId ? mobileMenuOpen : false}
                                     onCloseMobileMenu={tab.id === activeTabId ? closeMobileMenu : noop}
-                                    onToggleMobileMenu={tab.id === activeTabId ? () => setMobileMenuOpen(prev => !prev) : noop}
                                     isActive={tab.id === activeTabId}
                                     tabId={tab.id}
                                     isNewSearch={tab.isNewSearch || false}
