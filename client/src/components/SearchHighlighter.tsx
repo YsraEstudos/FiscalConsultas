@@ -97,6 +97,18 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
                 // Normalize to merge adjacent text nodes
                 parent.normalize();
             });
+
+            const wrappers = container.querySelectorAll('span[data-sh-wrapper]');
+            wrappers.forEach(wrapper => {
+                const parent = wrapper.parentNode;
+                if (!parent) return;
+
+                while (wrapper.firstChild) {
+                    parent.insertBefore(wrapper.firstChild, wrapper);
+                }
+                parent.removeChild(wrapper);
+                parent.normalize();
+            });
         };
 
         cleanup();
@@ -109,7 +121,7 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
                 acceptNode: (node) => {
                     // Ignore text inside scripts, styles, or our own marks
                     const parent = node.parentElement;
-                    if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE' || parent.hasAttribute('data-sh-term'))) {
+                    if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE' || parent.hasAttribute('data-sh-term') || parent.hasAttribute('data-sh-wrapper'))) {
                         return NodeFilter.FILTER_REJECT;
                     }
                     if (!node.nodeValue?.trim()) return NodeFilter.FILTER_REJECT;
@@ -156,6 +168,7 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
 
             if (termFoundInNode) {
                 const wrapper = document.createElement('span');
+                wrapper.setAttribute('data-sh-wrapper', '1');
                 wrapper.innerHTML = htmlToInject;
                 parent.replaceChild(wrapper, textNode);
 

@@ -16,17 +16,19 @@
     font-family: inherit;
     font-size: 0.9rem;
     color: var(--text-primary);
-    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* stylelint-disable selector-pseudo-class-no-unknown -- CSS Modules :global(...) */
 :global(body.dark-mode) .container,
 :global(.dark) .container {
     background: var(--bg-secondary, #1e1e1e);
     border: 1px solid rgb(255 255 255 / 10%);
     box-shadow: 0 8px 30px rgb(0 0 0 / 40%), 0 4px 10px rgb(0 0 0 / 20%);
 }
+/* stylelint-enable selector-pseudo-class-no-unknown */
 
-@keyframes slideUp {
+@keyframes slide-up {
     from {
         opacity: 0;
         transform: translate(-50%, 1rem) scale(0.95);
