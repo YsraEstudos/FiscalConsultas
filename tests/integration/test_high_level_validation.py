@@ -20,9 +20,9 @@ def test_database_integrity():
     # Verificar Capítulos
     cursor.execute("SELECT COUNT(*) FROM chapters")
     chapter_count = cursor.fetchone()[0]
-    assert (
-        chapter_count >= 97
-    ), f"Esperado ao menos 97 capítulos, encontrado {chapter_count}"
+    assert chapter_count >= 97, (
+        f"Esperado ao menos 97 capítulos, encontrado {chapter_count}"
+    )
 
     conn.close()
 

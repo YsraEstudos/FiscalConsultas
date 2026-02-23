@@ -120,6 +120,6 @@ def test_perf_cold_start_p95(benchmark, cold_start_measure):
 
     samples_ms = [v * 1000.0 for v in benchmark.stats.stats.data]
     p95 = _percentile(samples_ms, 95)
-    assert (
-        p95 <= COLD_START_P95_MS
-    ), f"cold-start p95={p95:.0f}ms > {COLD_START_P95_MS:.0f}ms"
+    assert p95 <= COLD_START_P95_MS, (
+        f"cold-start p95={p95:.0f}ms > {COLD_START_P95_MS:.0f}ms"
+    )

@@ -78,25 +78,25 @@ class TestMultiLetterUnits:
     def test_multi_letter_unit_highlighted(self, unit: str):
         text = f"Valor de 100 {unit} no teste"
         out = HtmlRenderer.inject_unit_highlights(text)
-        assert _has_highlight(
-            out, unit
-        ), f"Unidade '{unit}' deveria ser destacada em: {out}"
+        assert _has_highlight(out, unit), (
+            f"Unidade '{unit}' deveria ser destacada em: {out}"
+        )
 
     @pytest.mark.parametrize("unit", ["µm", "nm", "µF", "pF", "nF", "mF", "µH", "mH"])
     def test_unicode_prefix_units(self, unit: str):
         text = f"Componente de 100 {unit}"
         out = HtmlRenderer.inject_unit_highlights(text)
-        assert _has_highlight(
-            out, unit
-        ), f"Unidade '{unit}' deveria ser destacada em: {out}"
+        assert _has_highlight(out, unit), (
+            f"Unidade '{unit}' deveria ser destacada em: {out}"
+        )
 
     @pytest.mark.parametrize("unit", ["Ω", "kΩ", "MΩ", "ohm"])
     def test_resistance_units(self, unit: str):
         text = f"Resistor de 10 {unit}"
         out = HtmlRenderer.inject_unit_highlights(text)
-        assert _has_highlight(
-            out, unit
-        ), f"Unidade '{unit}' deveria ser destacada em: {out}"
+        assert _has_highlight(out, unit), (
+            f"Unidade '{unit}' deveria ser destacada em: {out}"
+        )
 
     def test_temperature_units(self):
         for unit in ["°C", "ºC", "°F", "Kelvin"]:
@@ -156,17 +156,17 @@ class TestSingleLetterUnits:
     def test_single_letter_after_digit(self, unit: str):
         text = f"Valor de 100 {unit} no componente"
         out = HtmlRenderer.inject_unit_highlights(text)
-        assert _has_highlight(
-            out, unit
-        ), f"'{unit}' após dígito deveria ser destacada em: {out}"
+        assert _has_highlight(out, unit), (
+            f"'{unit}' após dígito deveria ser destacada em: {out}"
+        )
 
     @pytest.mark.parametrize("unit", ["W", "V", "A", "K", "m", "l", "t", "g", "N", "J"])
     def test_single_letter_without_digit_not_highlighted(self, unit: str):
         text = f"Texto {unit} sem contexto numérico"
         out = HtmlRenderer.inject_unit_highlights(text)
-        assert _no_highlight(
-            out, unit
-        ), f"'{unit}' SEM dígito antes NÃO deveria ser destacada em: {out}"
+        assert _no_highlight(out, unit), (
+            f"'{unit}' SEM dígito antes NÃO deveria ser destacada em: {out}"
+        )
 
     def test_bar_after_digit_highlighted(self):
         out = HtmlRenderer.inject_unit_highlights("Pressão de 100 bar")

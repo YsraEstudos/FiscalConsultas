@@ -48,9 +48,9 @@ class TestRendererRegex:
 
         # Verifica se o ID foi injetado
         expected_id = 'id="pos-85-17"'
-        assert (
-            expected_id in rendered
-        ), f"ID não encontrado no HTML gerado:\n{rendered[:200]}..."
+        assert expected_id in rendered, (
+            f"ID não encontrado no HTML gerado:\n{rendered[:200]}..."
+        )
 
     def test_regex_false_positives(self):
         """Garante que não casamos números no meio de frases."""
