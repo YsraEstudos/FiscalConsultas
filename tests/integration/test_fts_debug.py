@@ -32,6 +32,7 @@ async def test_fts_debug_smoke():
         pytest.skip("Tabela FTS 'search_index' não existe; índice ainda não foi criado")
 
     db = DatabaseAdapter(db_file)
+    results: list[object] = []
     try:
         results = await db.fts_search("bomb* submersivel*", limit=10)
     except DatabaseError as e:
