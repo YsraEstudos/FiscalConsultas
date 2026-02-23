@@ -1,9 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
-
 from backend.infrastructure.repositories.tipi_repository import TipiRepository
-
 
 pytestmark = pytest.mark.unit
 

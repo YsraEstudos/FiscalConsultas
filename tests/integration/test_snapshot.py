@@ -56,7 +56,7 @@ def run_snapshot():
                     if data.get("type") == "text"
                     else data.get("total_capitulos")
                 ),
-                # Store full data for deep comparison if needed, but hash is usually enough for regression  # noqa: E501
+                # Store full data for deep comparison if needed (hash usually covers regressions)
                 "data_preview": str(data)[:100],
             }
             print(f"✅ (Type: {data.get('type')})")

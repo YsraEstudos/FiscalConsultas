@@ -1,20 +1,20 @@
-import pytest
-from fastapi.testclient import TestClient
-from fastapi import HTTPException
 import json
 from copy import deepcopy
 from pathlib import Path
 from uuid import uuid4
-from starlette.requests import Request
 
+import pytest
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
+from sqlmodel import col
+from starlette.requests import Request
 
 from backend.config.settings import settings
 from backend.domain.sqlmodels import Subscription, Tenant
 from backend.infrastructure.db_engine import get_session
 from backend.presentation.routes import webhooks
 from backend.server.app import app
-
 
 pytestmark = pytest.mark.integration
 
@@ -137,8 +137,8 @@ async def _read_subscription_state(tenant_id: str):
         tenant = await session.get(Tenant, tenant_id)
         result = await session.execute(
             select(Subscription).where(
-                Subscription.provider == "asaas",
-                Subscription.tenant_id == tenant_id,
+                col(Subscription.provider) == "asaas",
+                col(Subscription.tenant_id) == tenant_id,
             )
         )
         subscriptions = result.scalars().all()

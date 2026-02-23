@@ -1,5 +1,4 @@
 import pytest
-
 from scripts.rebuild_index import extract_chapter_sections as extract_sections_rebuild
 from scripts.setup_database import extract_chapter_sections as extract_sections_setup
 

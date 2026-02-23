@@ -94,6 +94,22 @@ export function useTabs() {
         ));
     }, []);
 
+    const reorderTabs = useCallback((draggedTabId: string, targetTabId: string) => {
+        if (draggedTabId === targetTabId) return;
+
+        setTabs(prev => {
+            const sourceIndex = prev.findIndex(tab => tab.id === draggedTabId);
+            const targetIndex = prev.findIndex(tab => tab.id === targetTabId);
+
+            if (sourceIndex < 0 || targetIndex < 0) return prev;
+
+            const next = [...prev];
+            const [movedTab] = next.splice(sourceIndex, 1);
+            next.splice(targetIndex, 0, movedTab);
+            return next;
+        });
+    }, []);
+
     const activeTab = useMemo(() => tabs.find(t => t.id === activeTabId) || tabs[0], [tabs, activeTabId]);
     const tabsById = useMemo(() => new Map(tabs.map(tab => [tab.id, tab])), [tabs]);
 
@@ -105,7 +121,8 @@ export function useTabs() {
         createTab,
         closeTab,
         switchTab,
-        updateTab
+        updateTab,
+        reorderTabs
     };
 }
 

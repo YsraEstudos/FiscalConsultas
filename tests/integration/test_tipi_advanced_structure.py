@@ -1,6 +1,7 @@
 import sqlite3
-import pytest
 from pathlib import Path
+
+import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DB_PATH = PROJECT_ROOT / "database" / "tipi.db"
@@ -32,22 +33,23 @@ def test_chapter_84_sorting_invariant(db_connection):
     Verifica se a query ordenada por ncm_sort retorna a ordem topológica correta.
     """
     cursor = db_connection.cursor()
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT ncm, ncm_sort 
         FROM tipi_positions 
         WHERE capitulo = '84' 
         ORDER BY ncm_sort
-    """)
+    """
+    )
     rows = cursor.fetchall()
 
     ncms = [r["ncm"] for r in rows]
 
     # Encontrar índices chave
-    try:
-        idx_8413 = ncms.index("84.13")
-        idx_8414 = ncms.index("84.14")
-    except ValueError:
-        pytest.fail("84.13 ou 84.14 não encontrados na DB")
+    assert "84.13" in ncms, "84.13 não encontrado na DB"
+    assert "84.14" in ncms, "84.14 não encontrado na DB"
+    idx_8413 = ncms.index("84.13")
+    idx_8414 = ncms.index("84.14")
 
     # REGRA: 84.14 deve vir DEPOIS de todos os filhos de 84.13
     # Vamos verificar se existem itens com prefixo 8413 entre 84.13 e 84.14

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import sqlite3
 import sys
@@ -16,9 +17,15 @@ from backend.config.settings import settings
 from backend.server.app import app
 from backend.utils.text_processor import NeshTextProcessor
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOT_PATH = PROJECT_ROOT / "snapshots" / "baseline_v1.json"
+LOGGER = logging.getLogger(__name__)
+
+_COUNT_QUERIES: dict[str, str] = {
+    "chapters": "SELECT COUNT(*) FROM chapters",
+    "search_index": "SELECT COUNT(*) FROM search_index",
+    "tipi_positions": "SELECT COUNT(*) FROM tipi_positions",
+}
 
 
 def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
@@ -30,8 +37,12 @@ def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
 
 
 def _count_rows(conn: sqlite3.Connection, table_name: str) -> int:
+    query = _COUNT_QUERIES.get(table_name)
+    if not query:
+        return 0
+
     try:
-        cur = conn.execute(f"SELECT COUNT(*) FROM {table_name}")
+        cur = conn.execute(query)
         return int(cur.fetchone()[0])
     except sqlite3.Error:
         return 0
@@ -565,8 +576,8 @@ def ensure_test_databases():
         from backend.infrastructure.db_engine import close_db
 
         asyncio.run(close_db())
-    except Exception:
-        pass
+    except Exception as exc:
+        LOGGER.debug("Failed to close shared DB engine during test bootstrap: %s", exc)
 
     nesh_db_path = Path(CONFIG.db_path)
     tipi_db_path = Path(settings.database.tipi_path)

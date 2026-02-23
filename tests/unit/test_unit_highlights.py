@@ -4,10 +4,9 @@ Validam a regex MEASUREMENT_UNITS e o método inject_unit_highlights.
 """
 
 import re
+
 import pytest
-
 from backend.presentation.renderer import HtmlRenderer
-
 
 # ═══════════════════════════════════════════════════════════════════
 # Helpers

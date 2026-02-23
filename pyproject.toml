@@ -34,3 +34,24 @@ dev = [
     "requests>=2.32",
     "ruff>=0.11",
 ]
+
+[tool.pyright]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+include = ["backend", "tests", "migrations", "scripts"]
+exclude = [
+    "client",
+    "node_modules",
+    "megalinter-reports",
+    ".git",
+    ".venv",
+    ".pytest_cache",
+    ".ruff_cache",
+]
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+exclude = "(^client/|^node_modules/|^megalinter-reports/)"

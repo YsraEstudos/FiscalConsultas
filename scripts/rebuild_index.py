@@ -146,7 +146,7 @@ def create_database(chapters: dict):
     # 2. Tabela FTS (Busca Textual)
     # ncm: identificador principal (capítulo ou posição)
     # display_text: texto original para exibição (título/descrição)
-    # type: 'chapter' ou 'position'
+    # item_type: 'chapter' ou 'position'
     # description: para busca
     # search_index: coluna mágica onde inserimos o texto processado (stemmed)
     cursor.execute(
