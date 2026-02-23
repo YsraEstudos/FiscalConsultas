@@ -3,12 +3,16 @@ services:
     image: redis:7-alpine
     container_name: nesh-redis
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     command:
       - "redis-server"
       - "--save"
-      - ""  # disable RDB snapshots for cache-only usage
+      - "" # disable RDB snapshots for cache-only usage
       - "--appendonly"
       - "no"
       - "--maxmemory"
@@ -25,6 +29,16 @@ services:
     image: postgres:15
     container_name: nesh-postgres
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+      - FOWNER
+      - SETGID
+      - SETUID
     env_file:
       - .env
     environment:
@@ -32,7 +46,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-nesh_db}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     command:
@@ -49,21 +63,36 @@ services:
       - "effective_io_concurrency=200"
       - "-c"
       - "max_parallel_workers_per_gather=2"
-    shm_size: '256mb'
+    shm_size: "256mb"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-nesh_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   pgadmin:
     image: dpage/pgadmin4
     container_name: nesh-pgadmin
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     env_file:
       - .env
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_LISTEN_PORT: 8080
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:8080"
     depends_on:
       - db
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/misc/ping', timeout=5)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 10
 
 volumes:
   postgres_data:

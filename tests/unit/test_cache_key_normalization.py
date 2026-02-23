@@ -1,12 +1,24 @@
 """Tests for search-route cache-key normalization."""
 
-from backend.presentation.routes.search import _normalize_query_for_cache
+from starlette.requests import Request
+
+from backend.presentation.routes.search import _accepts_gzip, _normalize_query_for_cache
 from backend.utils.cache import weak_etag
 from backend.utils.ncm_utils import is_code_query
 
 
 def _normalize_query(ncm: str) -> str:
     return _normalize_query_for_cache(ncm, is_code_query=is_code_query(ncm))
+
+
+def _build_request_with_accept_encoding(value: str) -> Request:
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/search",
+        "headers": [(b"accept-encoding", value.encode("latin-1"))],
+    }
+    return Request(scope)
 
 
 class TestCodeQueryNormalization:
@@ -46,3 +58,21 @@ class TestTextQueryNormalization:
 
     def test_different_terms_different_key(self):
         assert _normalize_query("capacitor") != _normalize_query("resistor")
+
+
+class TestAcceptsGzip:
+    def test_accepts_plain_gzip(self):
+        request = _build_request_with_accept_encoding("gzip")
+        assert _accepts_gzip(request) is True
+
+    def test_rejects_gzip_with_zero_quality(self):
+        request = _build_request_with_accept_encoding("gzip;q=0")
+        assert _accepts_gzip(request) is False
+
+    def test_accepts_wildcard_with_positive_quality(self):
+        request = _build_request_with_accept_encoding("*;q=1")
+        assert _accepts_gzip(request) is True
+
+    def test_rejects_gzip_and_wildcard_with_zero_quality(self):
+        request = _build_request_with_accept_encoding("gzip;q=0,*;q=0")
+        assert _accepts_gzip(request) is False

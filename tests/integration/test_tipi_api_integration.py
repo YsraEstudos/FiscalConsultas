@@ -1,5 +1,5 @@
-from backend.presentation.tipi_renderer import TipiRenderer
 from backend.presentation.renderer import HtmlRenderer
+from backend.presentation.tipi_renderer import TipiRenderer
 
 
 class TestTipiApiIntegration:

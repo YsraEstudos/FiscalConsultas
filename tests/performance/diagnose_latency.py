@@ -3,11 +3,11 @@ Diagnostic script: profile each layer of the NCM lookup pipeline.
 Identifies where the ~114ms are spent (DB? cache? serialization? GZip? TestClient?).
 """
 
-import time
-import sys
-import os
-import json
 import gzip
+import json
+import os
+import sys
+import time
 
 # Force test mode before any backend imports
 os.environ.setdefault("NESH_ENV", "test")
@@ -20,9 +20,9 @@ settings.database.postgres_url = None
 settings.cache.enable_redis = False
 
 import orjson  # noqa: E402
-from starlette.testclient import TestClient  # noqa: E402
-from backend.server.app import app  # noqa: E402
 from backend.config import CONFIG  # noqa: E402
+from backend.server.app import app  # noqa: E402
+from starlette.testclient import TestClient  # noqa: E402
 
 
 def measure(label, fn, rounds=50):

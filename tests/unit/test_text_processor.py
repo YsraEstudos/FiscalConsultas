@@ -1,7 +1,5 @@
 import pytest
-
 from backend.utils.text_processor import NeshTextProcessor, PortugueseStemmer
-
 
 pytestmark = pytest.mark.unit
 

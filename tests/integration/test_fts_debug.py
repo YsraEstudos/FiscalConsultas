@@ -1,9 +1,9 @@
 import os
-import pytest
-import aiosqlite
 
-from backend.infrastructure.database import DatabaseAdapter
+import aiosqlite
+import pytest
 from backend.config.exceptions import DatabaseError
+from backend.infrastructure.database import DatabaseAdapter
 
 
 async def _fts_table_exists(db_file: str) -> bool:
@@ -32,6 +32,7 @@ async def test_fts_debug_smoke():
         pytest.skip("Tabela FTS 'search_index' não existe; índice ainda não foi criado")
 
     db = DatabaseAdapter(db_file)
+    results: list[object] = []
     try:
         results = await db.fts_search("bomb* submersivel*", limit=10)
     except DatabaseError as e:

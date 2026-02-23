@@ -6,7 +6,7 @@ import { ResultDisplay } from './components/ResultDisplay';
 import { TabsBar } from './components/TabsBar';
 import { ResultSkeleton } from './components/ResultSkeleton';
 import { TabPanel } from './components/Tabs/TabPanel';
-import { useTabs } from './hooks/useTabs';
+import { useTabs, type Tab } from './hooks/useTabs';
 import { useCrossChapterNotes } from './context/CrossChapterNoteContext';
 import { useSearch } from './hooks/useSearch';
 import { useHistory } from './hooks/useHistory';
@@ -384,6 +384,7 @@ function App() {
                 doc={activeTab?.document || 'nesh'}
                 setDoc={setDoc}
                 searchKey={`${activeTabId}-${activeTab?.document || 'nesh'}`}
+                onMenuOpen={() => setMobileMenuOpen(true)}
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 onOpenTutorial={() => setIsTutorialOpen(true)}
                 onOpenStats={() => setIsStatsOpen(true)}
@@ -438,13 +439,11 @@ function App() {
                                     data={tab.results}
                                     mobileMenuOpen={tab.id === activeTabId ? mobileMenuOpen : false}
                                     onCloseMobileMenu={tab.id === activeTabId ? closeMobileMenu : noop}
-                                    onToggleMobileMenu={tab.id === activeTabId ? () => setMobileMenuOpen(prev => !prev) : noop}
                                     isActive={tab.id === activeTabId}
                                     tabId={tab.id}
                                     isNewSearch={tab.isNewSearch || false}
-                                    latestTextQuery={tab.latestTextQuery}
                                     onConsumeNewSearch={(incomingTabId, finalScrollTop) => {
-                                        const updates: any = { isNewSearch: false };
+                                        const updates: Partial<Tab> = { isNewSearch: false };
                                         if (typeof finalScrollTop === 'number') {
                                             updates.scrollTop = finalScrollTop;
                                         }

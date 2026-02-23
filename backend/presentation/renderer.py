@@ -4,14 +4,14 @@ Transforma dados brutos em conteúdo formatado para o frontend.
 """
 
 import re
-from html.parser import HTMLParser
 from functools import lru_cache
+from html.parser import HTMLParser
 from typing import Callable, Dict
 
 from ..config.constants import RegexPatterns
 from ..config.logging_config import renderer_logger as logger
-from ..domain import SearchResult
 from ..data.glossary_manager import glossary_manager
+from ..domain import SearchResult
 from ..utils.id_utils import generate_anchor_id
 
 
@@ -320,7 +320,7 @@ class HtmlRenderer:
                 normal_lines.clear()
 
         def _flush_current_list():
-            nonlocal is_list, list_items
+            nonlocal is_list
             if is_list and list_items:
                 type_attr = f' type="{list_type}"' if list_type != "1" else ""
                 html_parts.append(
@@ -955,7 +955,8 @@ class HtmlRenderer:
 
         if not rendered_notes_block:
             notas_html = cls._render_general_notes(
-                data.get("notas_gerais", ""), data["capitulo"]
+                str(data.get("notas_gerais") or ""),
+                data["capitulo"],
             )
             if notas_html:
                 html += notas_html

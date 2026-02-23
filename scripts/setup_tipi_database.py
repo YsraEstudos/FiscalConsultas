@@ -7,8 +7,8 @@ Estrutura do Excel (4 colunas):
     NCM | EX | Descrição | Alíquota (%)
 """
 
-import sqlite3
 import re
+import sqlite3
 from pathlib import Path
 
 try:
@@ -123,6 +123,9 @@ def parse_tipi_xlsx(filepath: Path):
     print(f"Abrindo {filepath}...")
     wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
     ws = wb.active
+    if ws is None:
+        wb.close()
+        raise RuntimeError("A planilha TIPI não possui aba ativa.")
 
     chapters = {}
     positions = []
@@ -130,6 +133,7 @@ def parse_tipi_xlsx(filepath: Path):
 
     rows_processed = 0
     rows_skipped = 0
+    orphan_exceptions = 0
 
     for row_num, row in enumerate(
         ws.iter_rows(min_row=HEADER_ROW + 1, values_only=True), start=HEADER_ROW + 1
@@ -180,6 +184,11 @@ def parse_tipi_xlsx(filepath: Path):
 
         if has_ex:
             ex_num = str(ex_raw).strip()
+            if not last_ncm:
+                # Linha "Ex" sem NCM base prévio não é confiável para hierarquia.
+                orphan_exceptions += 1
+                rows_skipped += 1
+                continue
             # Criar NCM único para a exceção
             ncm_key = f"{ncm_formatted} Ex {ex_num}"
             parent_ncm = last_ncm  # Vincula à posição anterior
@@ -231,6 +240,7 @@ def parse_tipi_xlsx(filepath: Path):
     print("Processamento concluído:")
     print(f"  - Linhas processadas: {rows_processed}")
     print(f"  - Linhas ignoradas: {rows_skipped}")
+    print(f"  - Exceções órfãs ignoradas: {orphan_exceptions}")
     print(f"  - Capítulos: {len(chapters)}")
 
     return {"chapters": list(chapters.values()), "positions": positions}
@@ -241,45 +251,55 @@ def populate_database(conn, data):
     cursor = conn.cursor()
 
     # Inserir capítulos
-    for ch in data["chapters"]:
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO tipi_chapters (codigo, titulo, secao, notas)
-            VALUES (?, ?, ?, ?)
-        """,
-            (ch["codigo"], ch["titulo"], ch["secao"], ch["notas"]),
-        )
+    chapter_rows = [
+        (ch["codigo"], ch["titulo"], ch["secao"], ch["notas"])
+        for ch in data["chapters"]
+    ]
+    cursor.executemany(
+        """
+        INSERT OR REPLACE INTO tipi_chapters (codigo, titulo, secao, notas)
+        VALUES (?, ?, ?, ?)
+    """,
+        chapter_rows,
+    )
 
     # Inserir posições
-    for pos in data["positions"]:
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO tipi_positions (ncm, capitulo, descricao, aliquota, nivel, parent_ncm, ncm_sort)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                pos["ncm"],
-                pos["capitulo"],
-                pos["descricao"],
-                pos["aliquota"],
-                pos["nivel"],
-                pos["parent_ncm"],
-                pos["ncm_sort"],
-            ),
+    position_rows = [
+        (
+            pos["ncm"],
+            pos["capitulo"],
+            pos["descricao"],
+            pos["aliquota"],
+            pos["nivel"],
+            pos["parent_ncm"],
+            pos["ncm_sort"],
         )
+        for pos in data["positions"]
+    ]
+    cursor.executemany(
+        """INSERT OR REPLACE INTO tipi_positions
+        (ncm, capitulo, descricao, aliquota, nivel, parent_ncm, ncm_sort)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """,
+        position_rows,
+    )
 
-        # Inserir no índice FTS (sem exceções para manter busca limpa)
-        cursor.execute(
-            """
-            INSERT INTO tipi_fts (ncm, capitulo, descricao, aliquota)
-            VALUES (?, ?, ?, ?)
-        """,
-            (pos["ncm"], pos["capitulo"], pos["descricao"], pos["aliquota"]),
-        )
+    # Inserir no índice FTS em lote
+    fts_rows = [
+        (pos["ncm"], pos["capitulo"], pos["descricao"], pos["aliquota"])
+        for pos in data["positions"]
+    ]
+    cursor.executemany(
+        """
+        INSERT INTO tipi_fts (ncm, capitulo, descricao, aliquota)
+        VALUES (?, ?, ?, ?)
+    """,
+        fts_rows,
+    )
 
     conn.commit()
     print(
-        f"Inseridos {len(data['chapters'])} capítulos e {len(data['positions'])} posições"
+        f"Inseridos {len(data['chapters'])} capítulos e {len(data['positions'])} posições"  # noqa: E501
     )
 
 
@@ -307,10 +327,10 @@ def verify_results(conn):
     # Verificar capítulo 84.13
     print("\nOK Amostra do capítulo 84.13:")
     cursor.execute("""
-        SELECT ncm, descricao, aliquota, nivel 
-        FROM tipi_positions 
+        SELECT ncm, descricao, aliquota, nivel
+        FROM tipi_positions
         WHERE ncm LIKE '8413%' OR ncm LIKE '84.13%'
-        ORDER BY ncm 
+        ORDER BY ncm
         LIMIT 15
     """)
     for ncm, desc, aliq, nivel in cursor.fetchall():

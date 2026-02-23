@@ -1,4 +1,4 @@
-from backend.presentation.renderer import _get_position_pattern, HtmlRenderer
+from backend.presentation.renderer import HtmlRenderer, _get_position_pattern
 
 
 class TestRendererRegex:

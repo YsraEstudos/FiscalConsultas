@@ -1,9 +1,7 @@
 import pytest
-from starlette.requests import Request
-
 from backend.config.exceptions import ValidationError
 from backend.server import error_handlers
-
+from starlette.requests import Request
 
 pytestmark = pytest.mark.unit
 
