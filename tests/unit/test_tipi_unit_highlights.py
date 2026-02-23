@@ -150,9 +150,9 @@ class TestTipiNewUnits:
         html = TipiRenderer.render_text_results(
             _make_text_result(f"Produto com especificação de 50 {unit}")
         )
-        assert _has_highlight(
-            html, unit
-        ), f"'{unit}' deveria ser destacada em text_results"
+        assert _has_highlight(html, unit), (
+            f"'{unit}' deveria ser destacada em text_results"
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════
