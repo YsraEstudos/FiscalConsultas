@@ -6,7 +6,7 @@ import { ResultDisplay } from './components/ResultDisplay';
 import { TabsBar } from './components/TabsBar';
 import { ResultSkeleton } from './components/ResultSkeleton';
 import { TabPanel } from './components/Tabs/TabPanel';
-import { useTabs } from './hooks/useTabs';
+import { useTabs, type Tab } from './hooks/useTabs';
 import { useCrossChapterNotes } from './context/CrossChapterNoteContext';
 import { useSearch } from './hooks/useSearch';
 import { useHistory } from './hooks/useHistory';
@@ -392,6 +392,7 @@ function App() {
                 history={history}
                 onClearHistory={clearHistory}
                 onRemoveHistory={removeFromHistory}
+                onMenuOpen={() => setMobileMenuOpen(true)}
                 isLoading={activeTab?.loading}
             >
                 <TabsBar
@@ -444,7 +445,7 @@ function App() {
                                     isNewSearch={tab.isNewSearch || false}
                                     latestTextQuery={tab.latestTextQuery}
                                     onConsumeNewSearch={(incomingTabId, finalScrollTop) => {
-                                        const updates: any = { isNewSearch: false };
+                                        const updates: Partial<Tab> = { isNewSearch: false };
                                         if (typeof finalScrollTop === 'number') {
                                             updates.scrollTop = finalScrollTop;
                                         }
