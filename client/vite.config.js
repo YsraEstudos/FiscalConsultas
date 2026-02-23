@@ -29,7 +29,6 @@ export default defineConfig({
         'src/components/CommentPanel.tsx',
         'src/components/CommentDrawer.tsx',
         'src/services/commentService.ts',
-        'src/services/commentService.ts',
       ],
       thresholds: {
         lines: 80,
