@@ -9,7 +9,7 @@
     align-items: center;
     justify-content: center;
     z-index: 1000;
-    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
     backdrop-filter: blur(5px);
     opacity: 0;
     visibility: hidden;
@@ -48,7 +48,7 @@
     font-size: 1.5rem;
     font-weight: 700;
     background: var(--accent-gradient);
-    background-clip: text;
+    -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
 }
@@ -224,7 +224,7 @@
 }
 
 .slider {
-    appearance: none;
+    -webkit-appearance: none;
     appearance: none;
     width: 100%;
     height: 6px;
@@ -234,7 +234,7 @@
 }
 
 .slider::-webkit-slider-thumb {
-    appearance: none;
+    -webkit-appearance: none;
     appearance: none;
     width: 18px;
     height: 18px;
