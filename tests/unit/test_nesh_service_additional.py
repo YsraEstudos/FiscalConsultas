@@ -1,10 +1,8 @@
 from contextlib import asynccontextmanager
 
-import pytest
-
 import backend.services.nesh_service as nesh_service_module
+import pytest
 from backend.services.nesh_service import NeshService
-
 
 pytestmark = pytest.mark.unit
 

@@ -4,9 +4,9 @@ Inclui unidades tradicionais e novas unidades expandidas.
 """
 
 import re
+
 import pytest
 from backend.presentation.tipi_renderer import TipiRenderer
-
 
 # ═══════════════════════════════════════════════════════════════════
 # Helpers

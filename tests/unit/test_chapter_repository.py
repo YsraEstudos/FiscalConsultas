@@ -1,9 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
-
 from backend.infrastructure.repositories.chapter_repository import ChapterRepository
-
 
 pytestmark = pytest.mark.unit
 

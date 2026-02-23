@@ -1,9 +1,7 @@
 import logging
 
 import pytest
-
 from backend.config import logging_config
-
 
 pytestmark = pytest.mark.unit
 

@@ -7,11 +7,13 @@ interface TabsBarProps {
     activeTabId: string;
     onSwitch: (tabId: string) => void;
     onClose: (e: React.MouseEvent, tabId: string) => void;
+    onReorder: (draggedTabId: string, targetTabId: string) => void;
     onNewTab: () => void;
 }
 
-export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch, onClose, onNewTab }: TabsBarProps) {
+export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch, onClose, onReorder, onNewTab }: TabsBarProps) {
     const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+    const draggedTabIdRef = useRef<string | null>(null);
 
     // Scroll to active tab when it changes
     useEffect(() => {
@@ -30,6 +32,7 @@ export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch
             {tabs.map(tab => (
                 <div
                     key={tab.id}
+                    draggable
                     ref={(el) => {
                         if (el) {
                             tabRefs.current.set(tab.id, el);
@@ -41,6 +44,24 @@ export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch
                     className={`${styles.tabButton} ${activeTabId === tab.id ? styles.tabButtonActive : ''}`}
                     data-document={tab.document}
                     onClick={() => onSwitch(tab.id)}
+                    onDragStart={(e) => {
+                        draggedTabIdRef.current = tab.id;
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', tab.id);
+                    }}
+                    onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                    }}
+                    onDrop={(e) => {
+                        e.preventDefault();
+                        const draggedTabId = draggedTabIdRef.current || e.dataTransfer.getData('text/plain');
+                        if (!draggedTabId) return;
+                        onReorder(draggedTabId, tab.id);
+                    }}
+                    onDragEnd={() => {
+                        draggedTabIdRef.current = null;
+                    }}
                     onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();

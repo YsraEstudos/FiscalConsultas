@@ -225,6 +225,7 @@ interface ResultDisplayProps {
     tabId: string;
     initialScrollTop?: number;
     onPersistScroll?: (tabId: string, scrollTop: number) => void;
+    latestTextQuery?: string;
     /** Flag indicando nova busca - ativa auto-scroll */
     isNewSearch: boolean;
     /** Callback para consumir flag após auto-scroll, recebendo opcionalmente o scroll final */
@@ -241,6 +242,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     tabId,
     initialScrollTop,
     onPersistScroll,
+    latestTextQuery,
     isNewSearch,
     onConsumeNewSearch,
     onContentReady
@@ -966,7 +968,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             <div className={styles.content} ref={containerRef} id={containerId}>
                 <TextSearchResults
                     results={(data.results as SearchResultItem[]) || null}
-                    query={data.query || ""}
+                    query={latestTextQuery || data.query || ""}
                     onResultClick={(ncm: string) => window.nesh.smartLinkSearch(ncm)}
                     scrollParentRef={containerRef}
                 />
@@ -1072,7 +1074,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                         onNavigate={handleNavigate}
                         isOpen={mobileMenuOpen}
                         onClose={onCloseMobileMenu}
-                        searchQuery={data.query || data.ncm}
+                        searchQuery={latestTextQuery || data.query || data.ncm}
                         activeAnchorId={activeAnchorId}
                     />
                 </div>

@@ -1,5 +1,6 @@
 import os
 import socket
+import sqlite3
 import subprocess
 import sys
 import time
@@ -7,7 +8,6 @@ from urllib.parse import urlparse
 
 import httpx
 import pytest
-import sqlite3
 from backend.config import CONFIG
 from backend.config.settings import settings
 

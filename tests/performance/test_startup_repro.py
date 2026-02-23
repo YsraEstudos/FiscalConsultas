@@ -1,6 +1,7 @@
 import time
-from fastapi.testclient import TestClient
+
 from backend.server.app import app
+from fastapi.testclient import TestClient
 
 
 def test_startup_performance():

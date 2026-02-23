@@ -6,7 +6,7 @@ import { ResultDisplay } from './components/ResultDisplay';
 import { TabsBar } from './components/TabsBar';
 import { ResultSkeleton } from './components/ResultSkeleton';
 import { TabPanel } from './components/Tabs/TabPanel';
-import { useTabs } from './hooks/useTabs';
+import { useTabs, type Tab } from './hooks/useTabs';
 import { useCrossChapterNotes } from './context/CrossChapterNoteContext';
 import { useSearch } from './hooks/useSearch';
 import { useHistory } from './hooks/useHistory';
@@ -42,6 +42,7 @@ function App() {
         createTab,
         closeTab,
         switchTab,
+        reorderTabs,
         updateTab
     } = useTabs();
 
@@ -399,6 +400,7 @@ function App() {
                     activeTabId={activeTabId}
                     onSwitch={switchTab}
                     onClose={closeTab}
+                    onReorder={reorderTabs}
                     onNewTab={() => createTab(activeTab?.document || 'nesh')}
                 />
 
@@ -441,7 +443,7 @@ function App() {
                                     tabId={tab.id}
                                     isNewSearch={tab.isNewSearch || false}
                                     onConsumeNewSearch={(incomingTabId, finalScrollTop) => {
-                                        const updates: any = { isNewSearch: false };
+                                        const updates: Partial<Tab> = { isNewSearch: false };
                                         if (typeof finalScrollTop === 'number') {
                                             updates.scrollTop = finalScrollTop;
                                         }

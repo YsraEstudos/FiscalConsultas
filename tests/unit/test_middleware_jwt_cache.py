@@ -1,7 +1,5 @@
 import pytest
-
 from backend.server import middleware
-
 
 pytestmark = pytest.mark.unit
 
