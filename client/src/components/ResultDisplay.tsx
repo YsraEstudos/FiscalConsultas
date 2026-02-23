@@ -221,7 +221,6 @@ interface ResultDisplayProps {
     data: ResultData | null;
     mobileMenuOpen: boolean;
     onCloseMobileMenu: () => void;
-    onToggleMobileMenu?: () => void;
     isActive: boolean;
     tabId: string;
     initialScrollTop?: number;
@@ -239,7 +238,6 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     data,
     mobileMenuOpen,
     onCloseMobileMenu,
-    onToggleMobileMenu,
     isActive,
     tabId,
     initialScrollTop,
@@ -249,7 +247,6 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     onConsumeNewSearch,
     onContentReady
 }: ResultDisplayProps) {
-    void onToggleMobileMenu;
     const { sidebarPosition } = useSettings();
     const { userName, userImageUrl, isSignedIn, isLoading: isAuthLoading, userId } = useAuth();
     const containerRef = useRef<HTMLDivElement>(null);
