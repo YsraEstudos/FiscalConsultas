@@ -6,7 +6,7 @@ import pytest
 pytestmark = pytest.mark.snapshot
 
 # List of test cases to verify against snapshot
-# Ideally, we could extract these keys from the snapshot itself if we want full coverage,
+# Ideally, we could extract these keys from the snapshot itself if we want full coverage,  # noqa: E501
 # but keeping the explicit list allows us to know what *should* be there.
 TEST_CASES = [
     "85",
@@ -27,8 +27,8 @@ def test_snapshot_exists(snapshot_data):
     """
     Ensure the snapshot file was loaded and has content.
     """
-    assert "cases" in snapshot_data
-    assert len(snapshot_data["cases"]) > 0
+    assert "cases" in snapshot_data  # nosec B101
+    assert len(snapshot_data["cases"]) > 0  # nosec B101
 
 
 @pytest.mark.parametrize("query", TEST_CASES)
@@ -43,7 +43,7 @@ def test_search_regression(client, snapshot_data, query):
 
     # 2. Make request using TestClient
     response = client.get(f"/api/search?ncm={query}")
-    assert response.status_code == 200
+    assert response.status_code == 200  # nosec B101
     data = response.json()
 
     # 3. Validation Logic
@@ -67,29 +67,33 @@ def test_search_regression(client, snapshot_data, query):
     pass
 
     # Validate count
-    # Handle both 'results' list length and 'total_capitulos' depending on response structure
+    # Handle both 'results' list length and 'total_capitulos' depending on response structure  # noqa: E501
     expected_count = expected.get("count")
 
     # Note: original script logic had a specific check:
-    # len(data.get("results", [])) != expected.get("count") and data.get("total_capitulos") != expected.get("count")
+    # len(data.get("results", [])) != expected.get("count") and data.get("total_capitulos") != expected.get("count")  # noqa: E501
     # We replicate strict check here:
 
     if data.get("type") == "code":
         # For NCM code lookup, we look at total_capitulos
-        # (Though sometimes results count matches too, total_capitulos is the source of truth for chapters found)
-        assert data.get("total_capitulos") == expected_count, (
-            f"Count mismatch for '{query}' (code). Expected {expected_count}, got {data.get('total_capitulos')}"
-        )
+        # (Though sometimes results count matches too, total_capitulos is the source of truth for chapters found)  # noqa: E501
+        assert (  # nosec B101
+            data.get("total_capitulos") == expected_count
+        ), (
+            f"Count mismatch for '{query}' (code). Expected {expected_count}, got {data.get('total_capitulos')}"  # noqa: E501
+        )  # noqa: E501
     else:
         # For FTS (text), we count the items in 'results' list
-        # Note: 'total_capitulos' is 0 for FTS queries in nesh_service.py, so we must ignore it.
-        # We also tolerate if count is slightly off (e.g. 20 vs 22) if it's within margin,
+        # Note: 'total_capitulos' is 0 for FTS queries in nesh_service.py, so we must ignore it.  # noqa: E501
+        # We also tolerate if count is slightly off (e.g. 20 vs 22) if it's within margin,  # noqa: E501
         # but for regression strictness we'll assert exact match/greater.
         # Actually, let's just assert it is NOT zero if expected > 0.
         current_len = len(data.get("results", []))
         # If snapshot had 22 and we have 20 (limit), that's acceptable.
         if expected_count > 0:
-            assert current_len > 0, f"Expected results for '{query}' but got 0"
+            assert current_len > 0, (  # nosec B101
+                f"Expected results for '{query}' but got 0"
+            )
 
         # If we want strict count check (assuming snapshot was same limit):
         # assert current_len == expected_count

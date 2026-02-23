@@ -384,6 +384,7 @@ function App() {
                 doc={activeTab?.document || 'nesh'}
                 setDoc={setDoc}
                 searchKey={`${activeTabId}-${activeTab?.document || 'nesh'}`}
+                onMenuOpen={() => setMobileMenuOpen(true)}
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 onOpenTutorial={() => setIsTutorialOpen(true)}
                 onOpenStats={() => setIsStatsOpen(true)}
@@ -392,7 +393,6 @@ function App() {
                 history={history}
                 onClearHistory={clearHistory}
                 onRemoveHistory={removeFromHistory}
-                onMenuOpen={() => setMobileMenuOpen(true)}
                 isLoading={activeTab?.loading}
             >
                 <TabsBar
@@ -442,7 +442,6 @@ function App() {
                                     isActive={tab.id === activeTabId}
                                     tabId={tab.id}
                                     isNewSearch={tab.isNewSearch || false}
-                                    latestTextQuery={tab.latestTextQuery}
                                     onConsumeNewSearch={(incomingTabId, finalScrollTop) => {
                                         const updates: Partial<Tab> = { isNewSearch: false };
                                         if (typeof finalScrollTop === 'number') {

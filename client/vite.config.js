@@ -7,8 +7,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true,
+        target: 'http://127.0.0.1:8000', // NOSONAR: local dev proxy,
+        changeOrigin: true
       }
     }
   },
@@ -28,6 +28,7 @@ export default defineConfig({
         '**/*.module.css',
         'src/components/CommentPanel.tsx',
         'src/components/CommentDrawer.tsx',
+        'src/services/commentService.ts',
         'src/services/commentService.ts',
       ],
       thresholds: {

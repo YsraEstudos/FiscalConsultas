@@ -10,8 +10,8 @@ Adds:
 - GIN indexes on tsvector columns (PostgreSQL only) for sub-ms FTS
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "006_precomputed_columns_and_gin"
 down_revision = "005_performance_indexes"

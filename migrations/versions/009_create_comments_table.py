@@ -9,8 +9,8 @@ This migration ensures it exists for Postgres deployments managed by Alembic,
 and adds any columns that may be missing (e.g. moderation_note).
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "009_create_comments_table"
 down_revision = "008_add_comment_profile_fields"

@@ -8,11 +8,11 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run --exclude tests/performance/**",
+    "test": "vitest run --exclude \"tests/performance/**\"",
     "test:all": "vitest run",
     "test:perf": "vitest run tests/performance",
-    "test:watch": "vitest --exclude tests/performance/**",
-    "test:coverage": "vitest run --coverage --exclude tests/performance/**",
+    "test:watch": "vitest --exclude \"tests/performance/**\"",
+    "test:coverage": "vitest run --coverage --exclude \"tests/performance/**\"",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
