@@ -2,11 +2,9 @@ from types import SimpleNamespace
 
 import jwt
 import pytest
-from fastapi.responses import JSONResponse
-
 from backend.infrastructure.db_engine import tenant_context
 from backend.server import middleware
-
+from fastapi.responses import JSONResponse
 
 pytestmark = pytest.mark.unit
 

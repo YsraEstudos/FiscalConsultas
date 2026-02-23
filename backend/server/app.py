@@ -1,29 +1,29 @@
+import logging
+import os
+from contextlib import asynccontextmanager
+from typing import Any, cast
+
+from backend.config import CONFIG, setup_logging
+from backend.config.exceptions import NeshError
+from backend.config.settings import settings
+from backend.data.glossary_manager import init_glossary
+from backend.infrastructure import DatabaseAdapter
+from backend.infrastructure.redis_client import redis_cache
+
+# Import New Routers
+from backend.presentation.routes import auth, comments, search, system, tipi, webhooks
+from backend.server.error_handlers import (
+    generic_exception_handler,
+    nesh_exception_handler,
+)
+from backend.server.middleware import TenantMiddleware
+from backend.services.ai_service import AiService
+from backend.services.tipi_service import TipiService
+from backend.utils.frontend_check import verify_frontend_build
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
-from contextlib import asynccontextmanager
-import os
-import logging
-
-from backend.config import CONFIG, setup_logging
-from backend.config.settings import settings
-from backend.config.exceptions import NeshError
-from backend.infrastructure import DatabaseAdapter
-from backend.services.ai_service import AiService
-from backend.services.tipi_service import TipiService
-from backend.server.error_handlers import (
-    nesh_exception_handler,
-    generic_exception_handler,
-)
-from backend.infrastructure.redis_client import redis_cache
-
-from backend.data.glossary_manager import init_glossary
-from backend.utils.frontend_check import verify_frontend_build
-
-# Import New Routers
-from backend.presentation.routes import auth, search, system, tipi, webhooks, comments
-from backend.server.middleware import TenantMiddleware
 
 """
 Módulo do Servidor (API Handler).
@@ -86,6 +86,8 @@ async def lifespan(app: FastAPI):
         app.state.service = await NeshService.create_with_repository()
         logger.info("NeshService initialized in Repository mode (Postgres/RLS)")
     else:
+        if app.state.db is None:
+            raise RuntimeError("DatabaseAdapter não inicializado para modo SQLite")
         app.state.service = NeshService(app.state.db)
         logger.info("NeshService initialized in Legacy mode (SQLite)")
 
@@ -110,7 +112,7 @@ async def lifespan(app: FastAPI):
                 result = await session.execute(
                     text("SELECT COUNT(*) FROM tipi_positions")
                 )
-                count = result.scalar()
+                count = int(result.scalar() or 0)
                 tipi_has_data = count > 0
                 logger.info(f"TIPI PostgreSQL: {count} positions found")
         except Exception as e:
@@ -122,7 +124,8 @@ async def lifespan(app: FastAPI):
         else:
             app.state.tipi_service = TipiService()
             logger.info(
-                "TipiService initialized in SQLite mode (tipi.db - TIPI data not in Postgres yet)"
+                "TipiService initialized in SQLite mode "
+                "(tipi.db - TIPI data not in Postgres yet)"
             )
     else:
         app.state.tipi_service = TipiService()
@@ -158,8 +161,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Nesh API", version="4.2", lifespan=lifespan)
 
 # --- Global Exception Handlers ---
-app.add_exception_handler(NeshError, nesh_exception_handler)
-app.add_exception_handler(Exception, generic_exception_handler)
+app.add_exception_handler(NeshError, cast(Any, nesh_exception_handler))
+app.add_exception_handler(Exception, cast(Any, generic_exception_handler))
 
 # --- Middleware ---
 # GZip (Architecture Improvement)
@@ -178,7 +181,8 @@ cors_origins = settings.server.cors_allowed_origins or [
     "http://127.0.0.1:5173",
 ]
 
-# Dev convenience: allow local-network Vite hosts on :5173 without opening broad CORS in production.
+# Dev convenience: allow local-network Vite hosts on :5173
+# without opening broad CORS in production.
 cors_allow_origin_regex = None
 if settings.server.env == "development":
     cors_allow_origin_regex = (
@@ -235,5 +239,8 @@ else:
     @app.get("/")
     async def read_root():
         return {
-            "message": "Nesh API running. Frontend not found. Run 'npm run build' in client/ folder."
+            "message": (
+                "Nesh API running. Frontend not found. "
+                "Run 'npm run build' in client/ folder."
+            )
         }

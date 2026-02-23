@@ -3,7 +3,8 @@ Renderer para dados da TIPI.
 Gera HTML com destaque de alíquotas por cor.
 """
 
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 from ..utils.id_utils import generate_anchor_id
 from .renderer import HtmlRenderer
 
@@ -101,11 +102,11 @@ class TipiRenderer:
 
         element_id = generate_anchor_id(codigo)
 
-        return f'''<article class="tipi-position {indent_class}" id="{element_id}" data-ncm="{ncm}" aria-label="NCM {codigo}">
+        return f"""<article class="tipi-position {indent_class}" id="{element_id}" data-ncm="{ncm}" aria-label="NCM {codigo}">
     <span class="tipi-ncm smart-link" data-ncm="{ncm}" role="link" tabindex="0">{codigo}</span>
     <span class="tipi-desc">{descricao}</span>
     <span class="tipi-aliquota {aliq_class}" data-tooltip="{tooltip}" aria-label="{tooltip}">{aliq_display}</span>
-</article>'''
+</article>"""
 
     @classmethod
     def render_chapter(cls, chapter: Dict[str, Any]) -> str:
@@ -153,12 +154,12 @@ class TipiRenderer:
             if aliq and aliq.isdigit():
                 aliq += "%"
 
-            items.append(f'''
+            items.append(f"""
 <div class="tipi-result-item" data-ncm="{r.get("ncm", "")}">
     <span class="tipi-result-ncm smart-link" data-ncm="{r.get("ncm", "")}">{r.get("ncm", "")}</span>
     <span class="tipi-result-cap">Cap. {r.get("capitulo", "")}</span>
     <span class="tipi-result-desc">{HtmlRenderer.inject_exclusion_highlights(HtmlRenderer.inject_unit_highlights(r.get("descricao", "")))}</span>
     <span class="tipi-result-aliq {aliq_class}">{aliq}</span>
-</div>''')
+</div>""")
 
         return f'<div class="tipi-results-list">{"".join(items)}</div>'

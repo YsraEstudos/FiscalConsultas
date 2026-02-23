@@ -1,11 +1,11 @@
 import os
 import sqlite3
 import tempfile
-import pytest
 from pathlib import Path
 
-from backend.services.tipi_service import TipiService
+import pytest
 from backend.presentation.tipi_renderer import TipiRenderer
+from backend.services.tipi_service import TipiService
 
 
 @pytest.mark.asyncio

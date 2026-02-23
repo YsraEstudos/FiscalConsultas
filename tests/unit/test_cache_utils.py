@@ -1,10 +1,8 @@
 import builtins
 
 import pytest
-from starlette.requests import Request
-
 from backend.utils.cache import cache_scope_key, weak_etag
-
+from starlette.requests import Request
 
 pytestmark = pytest.mark.unit
 
