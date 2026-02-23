@@ -127,8 +127,14 @@ describe('SearchHighlighter', () => {
     });
 
     it('permite alternar entre palavras e navegar entre ocorrências', async () => {
-        // Intercept scrollIntoView
-        window.HTMLElement.prototype.scrollIntoView = vi.fn();
+        if (!window.HTMLElement.prototype.scrollIntoView) {
+            Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', {
+                value: () => { },
+                configurable: true,
+                writable: true
+            });
+        }
+        const scrollSpy = vi.spyOn(window.HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => { });
 
         render(
             <SearchHighlighter
@@ -149,7 +155,7 @@ describe('SearchHighlighter', () => {
         fireEvent.click(nextBtn);
         progress = screen.getByText("2 / 2");
         expect(progress).toBeInTheDocument();
-        expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
+        expect(scrollSpy).toHaveBeenCalled();
 
         // Navigate Prev
         fireEvent.click(prevBtn);
