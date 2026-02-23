@@ -46,11 +46,10 @@ def test_chapter_84_sorting_invariant(db_connection):
     ncms = [r["ncm"] for r in rows]
 
     # Encontrar índices chave
-    try:
-        idx_8413 = ncms.index("84.13")
-        idx_8414 = ncms.index("84.14")
-    except ValueError:
-        pytest.fail("84.13 ou 84.14 não encontrados na DB")
+    assert "84.13" in ncms, "84.13 não encontrado na DB"
+    assert "84.14" in ncms, "84.14 não encontrado na DB"
+    idx_8413 = ncms.index("84.13")
+    idx_8414 = ncms.index("84.14")
 
     # REGRA: 84.14 deve vir DEPOIS de todos os filhos de 84.13
     # Vamos verificar se existem itens com prefixo 8413 entre 84.13 e 84.14
