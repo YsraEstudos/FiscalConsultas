@@ -9,31 +9,41 @@ Observações de contrato (importante para o frontend):
 """
 
 import asyncio
-import aiosqlite
-from pathlib import Path
 from collections import OrderedDict
 from contextlib import asynccontextmanager
-from typing import Dict, Any, List, Tuple, Optional
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Tuple, cast
 
-from ..config.logging_config import service_logger as logger
-from ..config.exceptions import DatabaseError
+import aiosqlite
+
 from ..config.constants import CacheConfig
-from ..utils.id_utils import generate_anchor_id
+from ..config.exceptions import DatabaseError
+from ..config.logging_config import service_logger as logger
 from ..utils import ncm_utils
+from ..utils.id_utils import generate_anchor_id
 from ..utils.payload_cache_metrics import PayloadCacheMetrics
 
 # Caminho do banco de dados TIPI
 TIPI_DB_PATH = Path(__file__).parent.parent.parent / "database" / "tipi.db"
+TIPI_SORT_WITH_NCM = "ncm_sort, ncm"
+TIPI_SORT_FALLBACK = "ncm"
+TIPI_ALLOWED_TABLES = {"tipi_positions", "tipi_chapters", "tipi_fts"}
 
 # SQLModel Repository imports (optional - for new code paths)
+get_session = None
 try:
-    from ..infrastructure.repositories.tipi_repository import TipiRepository
     from ..infrastructure.db_engine import get_session
+    from ..infrastructure.repositories.tipi_repository import TipiRepository
 
     _REPO_AVAILABLE = True
 except ImportError:
     _REPO_AVAILABLE = False
     TipiRepository = None
+
+if TYPE_CHECKING:
+    from ..infrastructure.repositories.tipi_repository import (
+        TipiRepository as _TipiRepo,
+    )
 
 
 class TipiService:
@@ -57,7 +67,7 @@ class TipiService:
         self,
         db_path: Path = TIPI_DB_PATH,
         *,
-        repository: "TipiRepository" = None,
+        repository: "_TipiRepo | None" = None,
         repository_factory=None,
     ):
         """
@@ -102,11 +112,15 @@ class TipiService:
         """
         if not _REPO_AVAILABLE:
             raise RuntimeError("Repository não disponível. Instale sqlmodel.")
+        if get_session is None:
+            raise RuntimeError("Session factory não disponível.")
+        session_factory = get_session
+        repository_cls = cast("type[_TipiRepo]", TipiRepository)
 
         @asynccontextmanager
         async def repo_factory():
-            async with get_session() as session:
-                yield TipiRepository(session)
+            async with session_factory() as session:
+                yield repository_cls(session)
 
         return cls(repository_factory=repo_factory)
 
@@ -117,7 +131,7 @@ class TipiService:
         return self._cache_lock
 
     @asynccontextmanager
-    async def _get_repo(self):
+    async def _get_repo(self) -> AsyncIterator["_TipiRepo | None"]:
         """Get repository via direct instance or factory."""
         if self._repository is not None:
             yield self._repository
@@ -165,6 +179,8 @@ class TipiService:
         self, conn: aiosqlite.Connection, table: str
     ) -> set[str]:
         """Return a cached set of column names for a table."""
+        if table not in TIPI_ALLOWED_TABLES:
+            raise ValueError(f"Tabela não permitida para inspeção de schema: {table}")
         if table in self._schema_columns_cache:
             return self._schema_columns_cache[table]
 
@@ -173,6 +189,22 @@ class TipiService:
         cols = {row["name"] for row in rows}
         self._schema_columns_cache[table] = cols
         return cols
+
+    def _get_order_by(self, cols: set[str]) -> str:
+        """Resolve ORDER BY com base no schema disponível."""
+        return TIPI_SORT_WITH_NCM if "ncm_sort" in cols else TIPI_SORT_FALLBACK
+
+    @staticmethod
+    def _enforce_cache_limit(
+        cache: OrderedDict[Any, Any],
+        max_size: int,
+        metrics: PayloadCacheMetrics,
+    ) -> None:
+        """Evict oldest entries until cache reaches max_size."""
+        limit = max(max_size, 0)
+        while len(cache) > limit:
+            cache.popitem(last=False)
+            metrics.record_eviction()
 
     async def close(self):
         """Fecha todas as conexões do pool."""
@@ -197,10 +229,12 @@ class TipiService:
             conn = await self._get_connection()
             try:
                 cursor = await conn.execute("SELECT COUNT(*) FROM tipi_chapters")
-                chapters = (await cursor.fetchone())[0]
+                chapters_row = await cursor.fetchone()
+                chapters = chapters_row[0] if chapters_row else 0
 
                 cursor = await conn.execute("SELECT COUNT(*) FROM tipi_positions")
-                positions = (await cursor.fetchone())[0]
+                positions_row = await cursor.fetchone()
+                positions = positions_row[0] if positions_row else 0
 
                 return {"ok": True, "chapters": chapters, "positions": positions}
             finally:
@@ -254,29 +288,24 @@ class TipiService:
                     async with self._get_cache_lock():
                         self._chapter_positions_cache[cap_num] = rows
                         self._chapter_positions_cache_metrics.record_set()
-                        if (
-                            len(self._chapter_positions_cache)
-                            > CacheConfig.TIPI_CHAPTER_CACHE_SIZE
-                        ):
-                            self._chapter_positions_cache.popitem(last=False)
-                            self._chapter_positions_cache_metrics.record_eviction()
+                        self._enforce_cache_limit(
+                            self._chapter_positions_cache,
+                            CacheConfig.TIPI_CHAPTER_CACHE_SIZE,
+                            self._chapter_positions_cache_metrics,
+                        )
                     return rows
 
         conn = await self._get_connection()
         try:
-            # Check for ncm_sort column availability
             cols = await self._get_table_columns(conn, "tipi_positions")
-            order_by = "ncm_sort, ncm" if "ncm_sort" in cols else "ncm"
-
-            cursor = await conn.execute(
-                f"""
+            order_by = self._get_order_by(cols)
+            sql = f"""
                 SELECT ncm, capitulo, descricao, aliquota, nivel
                 FROM tipi_positions
                 WHERE capitulo = ?
                 ORDER BY {order_by}
-                """,
-                (cap_num,),
-            )
+                """  # nosec B608
+            cursor = await conn.execute(sql, (cap_num,))
             rows = await cursor.fetchall()
             result = tuple(dict(row) for row in rows)
 
@@ -284,12 +313,11 @@ class TipiService:
             async with self._get_cache_lock():
                 self._chapter_positions_cache[cap_num] = result
                 self._chapter_positions_cache_metrics.record_set()
-                if (
-                    len(self._chapter_positions_cache)
-                    > CacheConfig.TIPI_CHAPTER_CACHE_SIZE
-                ):
-                    self._chapter_positions_cache.popitem(last=False)
-                    self._chapter_positions_cache_metrics.record_eviction()
+                self._enforce_cache_limit(
+                    self._chapter_positions_cache,
+                    CacheConfig.TIPI_CHAPTER_CACHE_SIZE,
+                    self._chapter_positions_cache_metrics,
+                )
             return result
         finally:
             await self._release_connection(conn)
@@ -323,30 +351,23 @@ class TipiService:
         conn = await self._get_connection()
         try:
             cols = await self._get_table_columns(conn, "tipi_positions")
-            order_by = "ncm_sort, ncm" if "ncm_sort" in cols else "ncm"
+            order_by = self._get_order_by(cols)
 
-            # Construir condições SQL dinâmicas
-            # NCM limpo (sem pontos) começa com prefix OU é um dos ancestrais
-            # Usamos REPLACE para remover pontos do NCM antes de comparar
             conditions = ["REPLACE(ncm, '.', '') LIKE ? || '%'"]
             params = [prefix]
 
-            # Adicionar condições para cada ancestral
             for ancestor in ancestor_prefixes:
                 conditions.append("REPLACE(ncm, '.', '') = ?")
                 params.append(ancestor)
 
             where_clause = " OR ".join(conditions)
-
-            cursor = await conn.execute(
-                f"""
+            sql = f"""
                 SELECT ncm, capitulo, descricao, aliquota, nivel
                 FROM tipi_positions
                 WHERE capitulo = ? AND ({where_clause})
                 ORDER BY {order_by}
-                """,
-                (cap_num, *params),
-            )
+                """  # nosec B608
+            cursor = await conn.execute(sql, (cap_num, *params))
             rows = await cursor.fetchall()
             return tuple(dict(row) for row in rows)
         finally:
@@ -480,9 +501,11 @@ class TipiService:
         async with self._get_cache_lock():
             self._code_search_cache[cache_key] = result
             self._code_search_cache_metrics.record_set()
-            if len(self._code_search_cache) > CacheConfig.TIPI_RESULT_CACHE_SIZE:
-                self._code_search_cache.popitem(last=False)
-                self._code_search_cache_metrics.record_eviction()
+            self._enforce_cache_limit(
+                self._code_search_cache,
+                CacheConfig.TIPI_RESULT_CACHE_SIZE,
+                self._code_search_cache_metrics,
+            )
 
         return result
 
@@ -508,7 +531,8 @@ class TipiService:
         conn = await self._get_connection()
         try:
             # Busca FTS
-            fts_query = f'"{query}"'  # Busca exata primeiro
+            escaped_query = query.replace('"', '""')
+            fts_query = f'"{escaped_query}"'  # Busca exata primeiro
             cursor = await conn.execute(
                 """
                 SELECT ncm, capitulo, descricao, aliquota
@@ -526,7 +550,10 @@ class TipiService:
             if len(results) < 5:
                 words = query.split()
                 if len(words) > 1:
-                    and_query = " AND ".join(words)
+                    quoted_tokens = [
+                        '"' + word.replace('"', '""') + '"' for word in words
+                    ]
+                    and_query = " AND ".join(quoted_tokens)
                     cursor = await conn.execute(
                         """
                         SELECT ncm, capitulo, descricao, aliquota

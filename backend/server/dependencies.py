@@ -1,9 +1,8 @@
-from fastapi import Request
-
 from backend.infrastructure.database import DatabaseAdapter
+from backend.services.ai_service import AiService
 from backend.services.nesh_service import NeshService
 from backend.services.tipi_service import TipiService
-from backend.services.ai_service import AiService
+from fastapi import Request
 
 
 async def get_db(request: Request) -> DatabaseAdapter:

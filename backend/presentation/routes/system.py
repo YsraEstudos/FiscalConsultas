@@ -1,13 +1,13 @@
-from typing import Annotated
-from fastapi import APIRouter, Depends, Query, Request, HTTPException
 import re
 import time
+from typing import Annotated
 
-from backend.services import NeshService
+from backend.config.settings import is_valid_admin_token, reload_settings, settings
 from backend.server.dependencies import get_nesh_service
-from backend.config.settings import settings, reload_settings, is_valid_admin_token
 from backend.server.middleware import decode_clerk_jwt
+from backend.services import NeshService
 from backend.utils.auth import extract_bearer_token, is_admin_payload
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 router = APIRouter()
 
@@ -91,8 +91,8 @@ async def get_status(request: Request):
         db_stats = await db.check_connection()
     else:
         try:
-            from sqlalchemy import text
             from backend.infrastructure.db_engine import get_session
+            from sqlalchemy import text
 
             async with get_session() as session:
                 chapters_count = await session.execute(

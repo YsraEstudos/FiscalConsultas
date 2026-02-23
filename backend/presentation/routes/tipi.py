@@ -1,20 +1,19 @@
-from typing import Annotated
-from fastapi import APIRouter, Depends, Query, Request
-from starlette.responses import Response
-from collections import OrderedDict
 import gzip
 import threading
-from backend.services.tipi_service import TipiService
-from backend.server.dependencies import get_tipi_service
+from collections import OrderedDict
+from typing import Annotated, Any, Mapping
+
+import orjson as _orjson  # pyright: ignore[reportMissingImports]
 from backend.config.constants import SearchConfig, ViewMode
 from backend.config.exceptions import ValidationError
 from backend.config.logging_config import server_logger as logger
+from backend.presentation.renderer import HtmlRenderer
+from backend.server.dependencies import get_tipi_service
+from backend.services.tipi_service import TipiService
 from backend.utils.cache import cache_scope_key, weak_etag
 from backend.utils.payload_cache_metrics import tipi_payload_cache_metrics
-from backend.presentation.renderer import HtmlRenderer
-
-import orjson as _orjson
-
+from fastapi import APIRouter, Depends, Query, Request
+from starlette.responses import Response
 
 JSON_MEDIA_TYPE = "application/json"
 _TIPI_CODE_PAYLOAD_CACHE_MAX = 16
@@ -22,7 +21,9 @@ _tipi_code_payload_cache: OrderedDict[str, tuple[bytes, bytes]] = OrderedDict()
 _tipi_code_payload_cache_lock = threading.Lock()
 
 
-def _orjson_response(content: dict, headers: dict[str, str] | None = None) -> Response:
+def _orjson_response(
+    content: Mapping[str, Any], headers: dict[str, str] | None = None
+) -> Response:
     body = _orjson.dumps(content)
     resp = Response(content=body, media_type=JSON_MEDIA_TYPE)
     if headers:
@@ -56,7 +57,7 @@ def _accepts_gzip(request: Request) -> bool:
     return "gzip" in accept_encoding
 
 
-def _apply_highlights_code_search(results: dict) -> None:
+def _apply_highlights_code_search(results: dict[str, Any]) -> None:
     for cap_data in results.values():
         if not isinstance(cap_data, dict):
             continue
@@ -77,8 +78,8 @@ def _apply_highlights_text_search(results: list) -> None:
             item["descricao"] = desc
 
 
-def _apply_highlights_to_descriptions(result: dict) -> None:
-    """Aplica highlights de unidades e exclusões nas descrições TIPI antes de serializar.
+def _apply_highlights_to_descriptions(result: dict[str, Any]) -> None:
+    """Aplica highlights de unidades e exclusões antes de serializar.
 
     Percorre as duas estruturas possíveis de resposta:
     - code search: result["results"][cap]["posicoes"][i]["descricao"]
@@ -96,7 +97,7 @@ def _apply_highlights_to_descriptions(result: dict) -> None:
         _apply_highlights_text_search(results)
 
 
-def get_payload_cache_metrics() -> dict[str, float | int]:
+def get_payload_cache_metrics() -> dict[str, str | float | int]:
     snapshot = tipi_payload_cache_metrics.snapshot(
         current_size=len(_tipi_code_payload_cache),
         max_size=_TIPI_CODE_PAYLOAD_CACHE_MAX,
@@ -128,7 +129,10 @@ async def tipi_search(
     view_mode: Annotated[
         ViewMode,
         Query(
-            description="Modo de visualização: 'chapter' (completo) ou 'family' (apenas família NCM)",
+            description=(
+                "Modo de visualização: 'chapter' (completo) "
+                "ou 'family' (apenas família NCM)"
+            ),
         ),
     ] = ViewMode.FAMILY,
 ):
@@ -184,7 +188,8 @@ async def tipi_search(
         "Vary": "Authorization, X-Tenant-Id, Accept-Encoding",
     }
 
-    # Same strategy used in /api/search: keep pre-serialized payloads for hot TIPI code lookups.
+    # Same strategy used in /api/search:
+    # keep pre-serialized payloads for hot TIPI code lookups.
     if result.get("type") == "code":
         payload_key = f"{cache_key}:{view_mode.value}:{ncm}"
         cache_status = "MISS"

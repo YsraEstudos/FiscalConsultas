@@ -4,7 +4,7 @@ from datetime import datetime
 
 import requests
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8000"  # NOSONAR - local test endpoint
 SNAPSHOT_FILE = "snapshots/baseline_v1.json"
 
 TEST_CASES = [
@@ -37,7 +37,7 @@ def run_snapshot():
             url = f"{BASE_URL}/api/search?ncm={query}"
             print(f"Fetching: {query.ljust(20)}", end="")
 
-            resp = requests.get(url)
+            resp = requests.get(url, timeout=10)
             data = resp.json()
 
             # Remove timestamp/dynamic fields if any (currently none, but good practice)
@@ -56,7 +56,7 @@ def run_snapshot():
                     if data.get("type") == "text"
                     else data.get("total_capitulos")
                 ),
-                # Store full data for deep comparison if needed, but hash is usually enough for regression
+                # Store full data for deep comparison if needed (hash usually covers regressions)
                 "data_preview": str(data)[:100],
             }
             print(f"✅ (Type: {data.get('type')})")

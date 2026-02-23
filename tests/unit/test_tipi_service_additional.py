@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 import backend.services.tipi_service as tipi_module
@@ -195,6 +196,15 @@ async def test_get_table_columns_uses_cache(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_table_columns_rejects_unknown_table():
+    service = TipiService()
+    conn = _FakeConn()
+
+    with pytest.raises(ValueError, match="Tabela não permitida"):
+        await service._get_table_columns(conn, "users")
+
+
+@pytest.mark.asyncio
 async def test_get_chapter_positions_repository_mode_normalizes_and_evicts(monkeypatch):
     service = TipiService(repository=_FakeRepo())
     monkeypatch.setattr(tipi_module.CacheConfig, "TIPI_CHAPTER_CACHE_SIZE", 0)
@@ -203,6 +213,18 @@ async def test_get_chapter_positions_repository_mode_normalizes_and_evicts(monke
     assert rows[0]["capitulo"] == "85"
     assert rows[0]["nivel"] == 0
     assert service._chapter_positions_cache == {}
+
+
+@pytest.mark.asyncio
+async def test_get_chapter_positions_cache_respects_exact_capacity(monkeypatch):
+    service = TipiService(repository=_FakeRepo())
+    monkeypatch.setattr(tipi_module.CacheConfig, "TIPI_CHAPTER_CACHE_SIZE", 1)
+
+    await service._get_chapter_positions("85")
+    assert list(service._chapter_positions_cache.keys()) == ["85"]
+
+    await service._get_chapter_positions("84")
+    assert list(service._chapter_positions_cache.keys()) == ["84"]
 
 
 @pytest.mark.asyncio
@@ -320,6 +342,32 @@ async def test_search_by_code_evicts_code_cache_when_limit_is_zero(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_search_by_code_cache_respects_exact_capacity(monkeypatch):
+    service = TipiService()
+
+    async def _fake_chapter_positions(cap_num):
+        await asyncio.sleep(0)
+        return (
+            {
+                "ncm": f"{cap_num}.17",
+                "capitulo": cap_num,
+                "descricao": "Telefone",
+                "aliquota": "0",
+                "nivel": 1,
+            },
+        )
+
+    monkeypatch.setattr(service, "_get_chapter_positions", _fake_chapter_positions)
+    monkeypatch.setattr(tipi_module.CacheConfig, "TIPI_RESULT_CACHE_SIZE", 1)
+
+    await service.search_by_code("85")
+    assert list(service._code_search_cache.keys()) == [("85", "family")]
+
+    await service.search_by_code("84")
+    assert list(service._code_search_cache.keys()) == [("84", "family")]
+
+
+@pytest.mark.asyncio
 async def test_search_text_repository_mode_returns_repo_payload():
     service = TipiService(repository=_FakeRepo())
     payload = await service.search_text("telefone", limit=10)
@@ -372,6 +420,35 @@ async def test_search_text_sqlite_mode_runs_and_query_fallback(monkeypatch):
     assert payload["total"] == 2
     assert payload["results"][0]["ncm"] == "84.13"
     assert any(params and "AND" in str(params[0]) for _query, params in conn.executed)
+
+
+@pytest.mark.asyncio
+async def test_search_text_sqlite_mode_escapes_quotes_in_match_queries(monkeypatch):
+    service = TipiService()
+    conn = _FakeConn(scripted_rows=[[], []])
+
+    async def _fake_get_connection():
+        await asyncio.sleep(0)
+        return conn
+
+    async def _fake_release(_conn):
+        await asyncio.sleep(0)
+        return None
+
+    monkeypatch.setattr(service, "_get_connection", _fake_get_connection)
+    monkeypatch.setattr(service, "_release_connection", _fake_release)
+
+    payload = await service.search_text('motor "bomba"', limit=10)
+
+    assert payload["total"] == 0
+    assert len(conn.executed) == 2
+
+    exact_query = conn.executed[0][1][0]
+    fallback_query = conn.executed[1][1][0]
+    assert exact_query.startswith('"') and exact_query.endswith('"')
+    assert '""' in exact_query
+    assert " AND " in fallback_query
+    assert '"motor"' in fallback_query
 
 
 @pytest.mark.asyncio
