@@ -45,7 +45,7 @@ def run_snapshot():
 
             # Store hash + brief summary for size
             content_str = json.dumps(data, sort_keys=True)
-            content_hash = hashlib.md5(content_str.encode("utf-8")).hexdigest()
+            content_hash = hashlib.sha256(content_str.encode("utf-8")).hexdigest()
 
             results[query] = {
                 "status": resp.status_code,
