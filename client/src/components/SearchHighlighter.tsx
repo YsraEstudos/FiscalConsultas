@@ -229,7 +229,7 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
                 while (wrapper.firstChild) {
                     parent.insertBefore(wrapper.firstChild, wrapper);
                 }
-                parent.removeChild(wrapper);
+                wrapper.remove();
                 parent.normalize();
             });
         };
@@ -244,7 +244,7 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
                 acceptNode: (node) => {
                     // Ignore text inside scripts, styles, or our own marks
                     const parent = node.parentElement;
-                    if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE' || parent.hasAttribute('data-sh-term') || parent.hasAttribute('data-sh-wrapper'))) {
+                    if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE' || parent.dataset.shTerm !== undefined || parent.dataset.shWrapper !== undefined)) {
                         return NodeFilter.FILTER_REJECT;
                     }
                     if (!node.nodeValue?.trim()) return NodeFilter.FILTER_REJECT;
@@ -291,9 +291,9 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
 
             if (termFoundInNode) {
                 const wrapper = document.createElement('span');
-                wrapper.setAttribute('data-sh-wrapper', '1');
+                wrapper.dataset.shWrapper = '1';
                 wrapper.innerHTML = htmlToInject;
-                parent.replaceChild(wrapper, textNode);
+                textNode.replaceWith(wrapper);
 
                 // Now collect the newly inserted marks
                 const marks = wrapper.querySelectorAll('mark[data-sh-term]');
@@ -418,7 +418,7 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
         const currentIndex = activeIndices[activeTerm] || 0;
         const match = matches[activeTerm][currentIndex];
 
-        if (match && match.node) {
+        if (match?.node) {
             // Remove active class from all
             document.querySelectorAll('mark[data-sh-term].active').forEach(n => n.classList.remove('active'));
             // Add to current

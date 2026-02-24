@@ -27,7 +27,7 @@ describe('SearchHighlighter', () => {
 
     afterEach(() => {
         if (containerRef.current) {
-            document.body.removeChild(containerRef.current);
+            containerRef.current.remove();
         }
         vi.restoreAllMocks();
     });
