@@ -1,3 +1,5 @@
+import base64
+import json
 from types import SimpleNamespace
 
 import jwt
@@ -67,6 +69,33 @@ def test_token_cache_key_is_stable():
     k3 = middleware._token_cache_key("abcd")
     assert k1 == k2
     assert k1 != k3
+
+
+def test_safe_get_unverified_claims_parses_payload_and_handles_malformed():
+    header = (
+        base64.urlsafe_b64encode(
+            json.dumps({"alg": "none", "typ": "JWT"}, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        )
+        .decode("ascii")
+        .rstrip("=")
+    )
+    payload = (
+        base64.urlsafe_b64encode(
+            json.dumps(
+                {"sub": "user_1", "org_id": "org_1"}, separators=(",", ":")
+            ).encode("utf-8")
+        )
+        .decode("ascii")
+        .rstrip("=")
+    )
+    token = f"{header}.{payload}.sig"
+
+    claims = middleware._safe_get_unverified_claims(token)
+    assert claims == {"sub": "user_1", "org_id": "org_1"}
+    assert middleware._safe_get_unverified_claims("not-a-jwt") == {}
+    assert middleware._safe_get_unverified_claims("a.b") == {}
 
 
 def test_get_jwks_client_caches_instance(monkeypatch):
@@ -391,16 +420,25 @@ async def test_decode_clerk_jwt_rejects_when_not_development_and_no_jwks(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_decode_clerk_jwt_rejects_dev_without_debug(monkeypatch):
+async def test_decode_clerk_jwt_rejects_dev_without_jwks_and_does_not_decode(
+    monkeypatch,
+):
     middleware._jwt_decode_cache.clear()
     monkeypatch.setattr(middleware, "get_jwks_client", lambda: None)
     monkeypatch.setattr(middleware.settings.server, "env", "development", raising=False)
-    monkeypatch.setattr(
-        middleware.settings.features, "debug_mode", False, raising=False
-    )
+    monkeypatch.setattr(middleware.settings.features, "debug_mode", True, raising=False)
     monkeypatch.setattr(middleware.logger, "error", lambda _msg: None)
 
+    decode_called = {"value": False}
+
+    def _should_not_decode(*_args, **_kwargs):
+        decode_called["value"] = True
+        raise AssertionError("jwt.decode should not run when JWKS is unavailable")
+
+    monkeypatch.setattr(middleware.jwt, "decode", _should_not_decode)
+
     assert (await middleware.decode_clerk_jwt("token")) is None
+    assert decode_called["value"] is False
 
 
 @pytest.mark.asyncio
