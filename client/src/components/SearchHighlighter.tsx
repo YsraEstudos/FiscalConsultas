@@ -28,11 +28,11 @@ const BLOCK_ELEMENTS = new Set(['P', 'LI', 'DIV', 'TD', 'TH', 'BLOCKQUOTE', 'H1'
 
 function escapeHtmlAttribute(value: string): string {
     return value
-        .replace(/&/g, '&amp;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+        .replaceAll('&', '&amp;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
 }
 
 /**
@@ -40,7 +40,7 @@ function escapeHtmlAttribute(value: string): string {
  * e.g. "centrífuga" → "centrifuga", "ação" → "acao"
  */
 function stripDiacritics(text: string): string {
-    return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return text.normalize('NFD').replaceAll(/[\u0300-\u036f]/g, '');
 }
 
 /**
@@ -55,7 +55,7 @@ function buildAccentInsensitivePattern(term: string): string {
     return term
         .split('')
         .map(ch => {
-            const escaped = ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const escaped = ch.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
             return ACCENT_MAP[ch] || escaped;
         })
         .join('');
@@ -189,7 +189,7 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
         if (!query) return [];
         // Split by spaces, strip punctuation, strip accents, filter short words
         const words = stripDiacritics(query.toLowerCase())
-            .replace(/[.,;:[\](){}]/g, ' ')
+            .replaceAll(/[.,;:[\](){}]/g, ' ')
             .split(/\s+/)
             .filter(w => w.length > 2 || query.length <= 2);
 
@@ -275,7 +275,10 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
             // Simple highlighting: we process each term over the text content
             // To handle multiple terms per node properly, we create a wrapper and innerHTML replace
             const originalText = textNode.nodeValue || '';
-            let htmlToInject = originalText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            let htmlToInject = originalText
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;');
 
             let termFoundInNode = false;
 
@@ -287,7 +290,7 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
                     termFoundInNode = true;
                     const safeTerm = escapeHtmlAttribute(term);
                     // Use $& to insert the matched text, avoiding issues with $1 in some environments
-                    htmlToInject = htmlToInject.replace(regex, `<mark data-sh-term="${safeTerm}" class="search-highlight search-highlight-partial">$&</mark>`);
+                    htmlToInject = htmlToInject.replaceAll(regex, `<mark data-sh-term="${safeTerm}" class="search-highlight search-highlight-partial">$&</mark>`);
                 }
             });
 
@@ -357,10 +360,10 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
     }, [isContentReady, query, contentContainerRef]);
 
     const resolveSubpositionKey = (node: HTMLElement, container: HTMLElement): string | null => {
-        const tipiPosition = node.closest('article.tipi-position[id]') as HTMLElement | null;
+        const tipiPosition = node.closest<HTMLElement>('article.tipi-position[id]');
         if (tipiPosition?.id) return tipiPosition.id;
 
-        const directPosAnchor = node.closest('[id^="pos-"]') as HTMLElement | null;
+        const directPosAnchor = node.closest<HTMLElement>('[id^="pos-"]');
         if (directPosAnchor?.id) return directPosAnchor.id;
 
         const neshAnchors = container.querySelectorAll<HTMLElement>('h3[id^="pos-"], h4[id^="pos-"], h3.nesh-section[id], h4.nesh-subsection[id]');
