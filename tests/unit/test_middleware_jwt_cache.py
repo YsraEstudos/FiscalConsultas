@@ -18,13 +18,20 @@ async def test_cached_token_is_rejected_when_expired(monkeypatch):
 
     monkeypatch.setattr(middleware.time, "monotonic", lambda: 10.1)
     monkeypatch.setattr(middleware.time, "time", lambda: 101.0)
+    monkeypatch.setattr(middleware.settings.server, "env", "production", raising=False)
+    monkeypatch.setattr(
+        middleware.settings.auth, "clerk_clock_skew_seconds", 0, raising=False
+    )
 
     assert (await middleware.decode_clerk_jwt(sample_jwt)) is None
     assert token_hash not in middleware._jwt_decode_cache
 
 
 @pytest.mark.asyncio
-async def test_no_jwks_in_development_rejects_without_decoding(monkeypatch):
+async def test_no_jwks_in_development_rejects_without_decoding(
+    monkeypatch,
+    should_not_decode_factory,
+):
     sample_jwt = "dev-token-no-jwks"
     token_hash = middleware._token_cache_key(sample_jwt)
 
@@ -33,13 +40,8 @@ async def test_no_jwks_in_development_rejects_without_decoding(monkeypatch):
     monkeypatch.setattr(middleware.settings.server, "env", "development", raising=False)
     monkeypatch.setattr(middleware.settings.features, "debug_mode", True, raising=False)
 
-    decode_called = {"value": False}
-
-    def _should_not_decode(*_args, **_kwargs):
-        decode_called["value"] = True
-        raise AssertionError("jwt.decode should not run when JWKS is unavailable")
-
-    monkeypatch.setattr(middleware.jwt, "decode", _should_not_decode)
+    should_not_decode, decode_called = should_not_decode_factory()
+    monkeypatch.setattr(middleware.jwt, "decode", should_not_decode)
     monkeypatch.setattr(middleware.time, "monotonic", lambda: 15.0)
     monkeypatch.setattr(middleware.time, "time", lambda: 121.0)
 

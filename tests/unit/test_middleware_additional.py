@@ -57,10 +57,12 @@ def test_get_payload_exp_variants():
 
 def test_is_payload_expired_variants(monkeypatch):
     monkeypatch.setattr(middleware.time, "time", lambda: 100.0)
-    assert middleware._is_payload_expired({"exp": 99}) is True
-    assert middleware._is_payload_expired({"exp": 101}) is False
-    assert middleware._is_payload_expired({"exp": "bad"}) is True
-    assert middleware._is_payload_expired({}) is False
+    assert middleware._is_payload_expired({"exp": 99}, 0) is True
+    assert middleware._is_payload_expired({"exp": 101}, 0) is False
+    assert middleware._is_payload_expired({"exp": "bad"}, 0) is True
+    assert middleware._is_payload_expired({}, 0) is False
+    assert middleware._is_payload_expired({"exp": 99}, 2) is False
+    assert middleware._is_payload_expired({"exp": 98}, 2) is True
 
 
 def test_token_cache_key_is_stable():
@@ -422,6 +424,7 @@ async def test_decode_clerk_jwt_rejects_when_not_development_and_no_jwks(monkeyp
 @pytest.mark.asyncio
 async def test_decode_clerk_jwt_rejects_dev_without_jwks_and_does_not_decode(
     monkeypatch,
+    should_not_decode_factory,
 ):
     middleware._jwt_decode_cache.clear()
     monkeypatch.setattr(middleware, "get_jwks_client", lambda: None)
@@ -429,13 +432,8 @@ async def test_decode_clerk_jwt_rejects_dev_without_jwks_and_does_not_decode(
     monkeypatch.setattr(middleware.settings.features, "debug_mode", True, raising=False)
     monkeypatch.setattr(middleware.logger, "error", lambda _msg: None)
 
-    decode_called = {"value": False}
-
-    def _should_not_decode(*_args, **_kwargs):
-        decode_called["value"] = True
-        raise AssertionError("jwt.decode should not run when JWKS is unavailable")
-
-    monkeypatch.setattr(middleware.jwt, "decode", _should_not_decode)
+    should_not_decode, decode_called = should_not_decode_factory()
+    monkeypatch.setattr(middleware.jwt, "decode", should_not_decode)
 
     assert (await middleware.decode_clerk_jwt("token")) is None
     assert decode_called["value"] is False

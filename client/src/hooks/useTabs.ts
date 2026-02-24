@@ -44,6 +44,18 @@ const createLoadedChaptersByDoc = (): Record<DocType, string[]> => ({
   tipi: [],
 });
 
+type TabReference = string | number;
+
+const resolveTabIndex = (tabs: Tab[], tabReference: TabReference): number => {
+  if (typeof tabReference === "number") {
+    return Number.isInteger(tabReference) ? tabReference : -1;
+  }
+  return tabs.findIndex((tab) => tab.id === tabReference);
+};
+
+const isTabIndexWithinBounds = (tabs: Tab[], tabIndex: number): boolean =>
+  tabIndex >= 0 && tabIndex < tabs.length;
+
 export function useTabs() {
   const [tabs, setTabs] = useState<Tab[]>([
     {
@@ -110,21 +122,12 @@ export function useTabs() {
       if (draggedTabId === targetTabId) return;
 
       setTabs((prev) => {
-        const resolveIndex = (value: string | number): number => {
-          if (typeof value === "number") {
-            return Number.isInteger(value) ? value : -1;
-          }
-          return prev.findIndex((tab) => tab.id === value);
-        };
-
-        const sourceIndex = resolveIndex(draggedTabId);
-        const targetIndex = resolveIndex(targetTabId);
+        const sourceIndex = resolveTabIndex(prev, draggedTabId);
+        const targetIndex = resolveTabIndex(prev, targetTabId);
 
         if (
-          sourceIndex < 0 ||
-          targetIndex < 0 ||
-          sourceIndex >= prev.length ||
-          targetIndex >= prev.length
+          !isTabIndexWithinBounds(prev, sourceIndex) ||
+          !isTabIndexWithinBounds(prev, targetIndex)
         ) {
           return prev;
         }

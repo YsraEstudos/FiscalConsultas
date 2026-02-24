@@ -291,14 +291,14 @@ def _get_payload_exp(payload: dict) -> Optional[float]:
         return None
 
 
-def _is_payload_expired(payload: dict) -> bool:
+def _is_payload_expired(payload: dict, leeway_seconds: int) -> bool:
     exp = payload.get("exp")
     if exp is None:
         return False
     exp_value = _get_payload_exp(payload)
     if exp_value is None:
         return True
-    return time.time() >= exp_value
+    return time.time() >= (exp_value + max(0, leeway_seconds))
 
 
 def _token_cache_key(token: str) -> str:
@@ -314,6 +314,7 @@ async def decode_clerk_jwt(token: str) -> Optional[dict]:
         Payload decodificado ou None se inválido/expirado.
     """
     _jwt_failure_reason_ctx.set(None)
+    leeway_seconds = _effective_clock_skew_seconds()
 
     # Performance: Check cache first
     global _jwt_decode_cache
@@ -323,7 +324,7 @@ async def decode_clerk_jwt(token: str) -> Optional[dict]:
     if cached:
         payload, cached_at, exp_epoch = cached
         if now_monotonic - cached_at < _JWT_CACHE_TTL:
-            if exp_epoch is not None and time.time() >= exp_epoch:
+            if exp_epoch is not None and time.time() >= (exp_epoch + leeway_seconds):
                 del _jwt_decode_cache[token_hash]
                 _log_jwt_failure(
                     reason="expired_cache",
@@ -343,7 +344,6 @@ async def decode_clerk_jwt(token: str) -> Optional[dict]:
     expected_issuer = _resolve_expected_issuer()
     expected_audience = _resolve_expected_audience()
     expected_azp = _resolve_expected_azp()
-    leeway_seconds = _effective_clock_skew_seconds()
 
     try:
         jwks_client = get_jwks_client()
@@ -380,7 +380,7 @@ async def decode_clerk_jwt(token: str) -> Optional[dict]:
             **decode_kwargs,
         )
 
-        if _is_payload_expired(payload):
+        if _is_payload_expired(payload, leeway_seconds):
             _log_jwt_failure(
                 reason="expired_payload",
                 token_snapshot=token_snapshot,
