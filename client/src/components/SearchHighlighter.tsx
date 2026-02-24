@@ -186,12 +186,15 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
     const [isVisible, setIsVisible] = useState(true);
 
     const normalizedTerms = useMemo(() => {
-        if (!query) return [];
+        const trimmedQuery = query?.trim() ?? '';
+        if (!trimmedQuery) return [];
+
         // Split by spaces, strip punctuation, strip accents, filter short words
-        const words = stripDiacritics(query.toLowerCase())
+        const words = stripDiacritics(trimmedQuery.toLowerCase())
             .replaceAll(/[.,;:[\](){}]/g, ' ')
             .split(/\s+/)
-            .filter(w => w.length > 2 || query.length <= 2);
+            .filter(token => token.length > 0)
+            .filter(token => token.length > 2 || trimmedQuery.length <= 2);
 
         return Array.from(new Set(words)); // Unique accent-free terms
     }, [query]);
@@ -201,7 +204,11 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
         if (!isContentReady || !contentContainerRef.current || normalizedTerms.length === 0) {
             setMatches({});
             setTerms([]);
+            setActiveTerm(null);
+            setActiveIndices({});
+            setMatchQuality('NENHUM');
             setCoOccurrenceCount(0);
+            setCoOccurrenceScope('subposition');
             return;
         }
 
@@ -272,47 +279,101 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
             let parent = textNode.parentNode;
             if (!parent) return;
 
-            // Simple highlighting: we process each term over the text content
-            // To handle multiple terms per node properly, we create a wrapper and innerHTML replace
             const originalText = textNode.nodeValue || '';
-            let htmlToInject = originalText
-                .replaceAll('&', '&amp;')
-                .replaceAll('<', '&lt;')
-                .replaceAll('>', '&gt;');
+            if (!originalText) return;
 
-            let termFoundInNode = false;
+            type MatchRange = { start: number; end: number; term: string; priority: number };
+            const allRanges: MatchRange[] = [];
 
-            normalizedTerms.forEach(term => {
-                // Build accent-insensitive regex so "centrif" matches "centríf"
+            normalizedTerms.forEach((term, priority) => {
                 const accentPattern = buildAccentInsensitivePattern(term);
-                const regex = new RegExp(`(${accentPattern})`, 'gi');
-                if (regex.test(originalText)) {
-                    termFoundInNode = true;
-                    const safeTerm = escapeHtmlAttribute(term);
-                    // Use $& to insert the matched text, avoiding issues with $1 in some environments
-                    htmlToInject = htmlToInject.replaceAll(regex, `<mark data-sh-term="${safeTerm}" class="search-highlight search-highlight-partial">$&</mark>`);
+                if (!accentPattern) return;
+
+                const regex = new RegExp(accentPattern, 'gi');
+                let match = regex.exec(originalText);
+                while (match) {
+                    const matchedText = match[0];
+                    if (!matchedText) {
+                        regex.lastIndex += 1;
+                        match = regex.exec(originalText);
+                        continue;
+                    }
+
+                    allRanges.push({
+                        start: match.index,
+                        end: match.index + matchedText.length,
+                        term,
+                        priority
+                    });
+                    match = regex.exec(originalText);
                 }
             });
 
-            if (termFoundInNode) {
-                const wrapper = document.createElement('span');
-                wrapper.dataset.shWrapper = '1';
-                wrapper.innerHTML = htmlToInject;
-                textNode.replaceWith(wrapper);
+            if (allRanges.length === 0) return;
 
-                // Now collect the newly inserted marks
-                const marks = wrapper.querySelectorAll('mark[data-sh-term]');
-                marks.forEach(mark => {
-                    const matchedTerm = (mark as HTMLElement).dataset.shTerm;
-                    if (matchedTerm && newMatches[matchedTerm]) {
-                        newMatches[matchedTerm].push({
-                            node: mark as HTMLElement,
-                            term: matchedTerm,
-                            index: newMatches[matchedTerm].length
-                        });
+            const rankedRanges = [...allRanges].sort((a, b) => {
+                const lengthDiff = (b.end - b.start) - (a.end - a.start);
+                if (lengthDiff !== 0) return lengthDiff;
+                const priorityDiff = a.priority - b.priority;
+                if (priorityDiff !== 0) return priorityDiff;
+                return a.start - b.start;
+            });
+
+            const occupied = new Array(originalText.length).fill(false);
+            const selectedRanges: MatchRange[] = [];
+
+            for (const range of rankedRanges) {
+                let overlaps = false;
+                for (let i = range.start; i < range.end; i += 1) {
+                    if (occupied[i]) {
+                        overlaps = true;
+                        break;
                     }
-                });
+                }
+                if (overlaps) continue;
+
+                for (let i = range.start; i < range.end; i += 1) {
+                    occupied[i] = true;
+                }
+                selectedRanges.push(range);
             }
+
+            if (selectedRanges.length === 0) return;
+
+            selectedRanges.sort((a, b) => a.start - b.start);
+
+            const htmlParts: string[] = [];
+            let cursor = 0;
+            for (const range of selectedRanges) {
+                if (range.start > cursor) {
+                    htmlParts.push(escapeHtmlAttribute(originalText.slice(cursor, range.start)));
+                }
+                const safeTerm = escapeHtmlAttribute(range.term);
+                const matchedText = escapeHtmlAttribute(originalText.slice(range.start, range.end));
+                htmlParts.push(`<mark data-sh-term="${safeTerm}" class="search-highlight search-highlight-partial">${matchedText}</mark>`);
+                cursor = range.end;
+            }
+            if (cursor < originalText.length) {
+                htmlParts.push(escapeHtmlAttribute(originalText.slice(cursor)));
+            }
+
+            const wrapper = document.createElement('span');
+            wrapper.dataset.shWrapper = '1';
+            wrapper.innerHTML = htmlParts.join('');
+            textNode.replaceWith(wrapper);
+
+            // Now collect the newly inserted marks
+            const marks = wrapper.querySelectorAll('mark[data-sh-term]');
+            marks.forEach(mark => {
+                const matchedTerm = (mark as HTMLElement).dataset.shTerm;
+                if (matchedTerm && newMatches[matchedTerm]) {
+                    newMatches[matchedTerm].push({
+                        node: mark as HTMLElement,
+                        term: matchedTerm,
+                        index: newMatches[matchedTerm].length
+                    });
+                }
+            });
         });
 
         // Restore correct forward order since we processed backwards
@@ -428,7 +489,7 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
 
     // Handle scroll to active match
     useEffect(() => {
-        if (!activeTerm || matches[activeTerm]?.length === 0) return;
+        if (!activeTerm || (matches[activeTerm]?.length ?? 0) === 0) return;
 
         const currentIndex = activeIndices[activeTerm] || 0;
         const match = matches[activeTerm][currentIndex];
@@ -452,11 +513,12 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
     const handleNext = useCallback(() => {
         if (!activeTerm) return;
         setActiveIndices(prev => {
-            const max = matches[activeTerm].length;
+            const max = matches?.[activeTerm]?.length ?? 0;
             if (max === 0) return prev;
+            const current = Number.isFinite(prev?.[activeTerm]) ? prev[activeTerm] : 0;
             return {
                 ...prev,
-                [activeTerm]: (prev[activeTerm] + 1) % max
+                [activeTerm]: (current + 1) % max
             };
         });
     }, [activeTerm, matches]);
@@ -464,11 +526,12 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
     const handlePrev = useCallback(() => {
         if (!activeTerm) return;
         setActiveIndices(prev => {
-            const max = matches[activeTerm].length;
+            const max = matches?.[activeTerm]?.length ?? 0;
             if (max === 0) return prev;
+            const current = Number.isFinite(prev?.[activeTerm]) ? prev[activeTerm] : 0;
             return {
                 ...prev,
-                [activeTerm]: (prev[activeTerm] - 1 + max) % max
+                [activeTerm]: (current - 1 + max) % max
             };
         });
     }, [activeTerm, matches]);
@@ -519,6 +582,7 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
             <div className={styles.termsContainer}>
                 {terms.map(term => (
                     <button
+                        type="button"
                         key={term}
                         className={`${styles.termPill} ${activeTerm === term ? styles.active : ''}`}
                         onClick={() => setActiveTerm(term)}
@@ -534,16 +598,16 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
                     <span className={styles.navProgress}>
                         {(activeIndices[activeTerm] || 0) + 1} / {matches[activeTerm].length}
                     </span>
-                    <button className={styles.navButton} onClick={handlePrev} disabled={matches[activeTerm].length <= 1} title="Navegar para a ocorrência anterior">
+                    <button type="button" className={styles.navButton} onClick={handlePrev} disabled={matches[activeTerm].length <= 1} aria-label="Navegar para a ocorrência anterior">
                         <ChevronUp size={18} />
                     </button>
-                    <button className={styles.navButton} onClick={handleNext} disabled={matches[activeTerm].length <= 1} title="Navegar para a próxima ocorrência">
+                    <button type="button" className={styles.navButton} onClick={handleNext} disabled={matches[activeTerm].length <= 1} aria-label="Navegar para a próxima ocorrência">
                         <ChevronDown size={18} />
                     </button>
                 </div>
             )}
 
-            <button className={styles.closeButton} onClick={() => setIsVisible(false)} aria-label="Fechar busca de página">
+            <button type="button" className={styles.closeButton} onClick={() => setIsVisible(false)} aria-label="Fechar busca de página">
                 <X size={18} />
             </button>
         </div>

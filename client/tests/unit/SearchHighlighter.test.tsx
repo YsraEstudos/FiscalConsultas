@@ -144,8 +144,8 @@ describe('SearchHighlighter', () => {
             />
         );
 
-        const nextBtn = await screen.findByTitle("Navegar para a próxima ocorrência");
-        const prevBtn = await screen.findByTitle("Navegar para a ocorrência anterior");
+        const nextBtn = await screen.findByRole('button', { name: "Navegar para a próxima ocorrência" });
+        const prevBtn = await screen.findByRole('button', { name: "Navegar para a ocorrência anterior" });
 
         // The initial progress should be 1 / 2
         let progress = screen.getByText("1 / 2");
