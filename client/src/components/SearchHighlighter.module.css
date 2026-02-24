@@ -1,0 +1,188 @@
+/* Floating action bar container */
+.container {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    background: var(--bg-primary, #fff);
+    border: 1px solid var(--border-color, rgb(0 0 0 / 10%));
+    border-radius: 12px;
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    box-shadow: 0 8px 30px rgb(0 0 0 / 12%), 0 4px 10px rgb(0 0 0 / 8%);
+    font-family: inherit;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* stylelint-disable selector-pseudo-class-no-unknown -- CSS Modules :global(...) */
+:global(body.dark-mode) .container,
+:global(.dark) .container {
+    background: var(--bg-secondary, #1e1e1e);
+    border: 1px solid rgb(255 255 255 / 10%);
+    box-shadow: 0 8px 30px rgb(0 0 0 / 40%), 0 4px 10px rgb(0 0 0 / 20%);
+}
+/* stylelint-enable selector-pseudo-class-no-unknown */
+
+@keyframes slide-up {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 1rem) scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0) scale(1);
+    }
+}
+
+.matchQuality {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-right: 0.75rem;
+    border-right: 1px solid var(--border-color);
+    font-weight: 600;
+}
+
+.qualityAlto {
+    color: var(--success, #10b981);
+}
+
+.qualityPequeno {
+    color: var(--warning, #f59e0b);
+}
+
+.qualityNenhum {
+    color: var(--error, #ef4444);
+}
+
+.coOccurrenceLabel {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary, rgb(0 0 0 / 5%));
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+}
+
+.termsContainer {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.termPill {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 8px;
+    background: var(--bg-tertiary, rgb(0 0 0 / 4%));
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.termPill:hover {
+    background: var(--bg-hover, rgb(0 0 0 / 8%));
+    color: var(--text-primary);
+}
+
+.termPill.active {
+    background: var(--accent-primary, #4f46e5);
+    color: #fff;
+    border-color: var(--accent-primary, #4f46e5);
+    box-shadow: 0 2px 8px rgb(99 102 241 / 30%);
+}
+
+.termCount {
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: rgb(0 0 0 / 10%);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    min-width: 1.2rem;
+    text-align: center;
+}
+
+.termPill.active .termCount {
+    background: #312e81;
+    color: #fff;
+}
+
+.navigation {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding-left: 0.75rem;
+    border-left: 1px solid var(--border-color, rgb(0 0 0 / 10%));
+}
+
+.navProgress {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-right: 0.5rem;
+    min-width: 3.5rem;
+    text-align: center;
+}
+
+.navButton {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+}
+
+.navButton:hover:not(:disabled) {
+    background: var(--bg-tertiary, rgb(0 0 0 / 5%));
+    color: var(--text-primary);
+}
+
+.navButton:active:not(:disabled) {
+    transform: scale(0.95);
+}
+
+.navButton:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.closeButton {
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    color: var(--text-secondary);
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    margin-left: 0.25rem;
+    transition: all 0.2s ease;
+}
+
+.closeButton:hover {
+    background: rgb(239 68 68 / 10%);
+    color: var(--error, #ef4444);
+}
+
+.closeButton:active {
+    transform: scale(0.95);
+}
