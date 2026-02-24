@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { SearchHighlighter } from '../../src/components/SearchHighlighter';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -128,7 +128,7 @@ describe('SearchHighlighter', () => {
 
     it('permite alternar entre palavras e navegar entre ocorrências', async () => {
         // Intercept scrollIntoView
-        window.HTMLElement.prototype.scrollIntoView = vi.fn();
+        globalThis.HTMLElement.prototype.scrollIntoView = vi.fn();
 
         render(
             <SearchHighlighter
@@ -149,7 +149,7 @@ describe('SearchHighlighter', () => {
         fireEvent.click(nextBtn);
         progress = screen.getByText("2 / 2");
         expect(progress).toBeInTheDocument();
-        expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
+        expect(globalThis.HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
 
         // Navigate Prev
         fireEvent.click(prevBtn);

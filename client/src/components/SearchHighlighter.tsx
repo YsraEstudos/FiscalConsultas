@@ -46,7 +46,7 @@ function buildAccentInsensitivePattern(term: string): string {
     return term
         .split('')
         .map(ch => {
-            const escaped = ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const escaped = ch.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
             return ACCENT_MAP[ch] || escaped;
         })
         .join('');
@@ -84,7 +84,9 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
 
         const container = contentContainerRef.current;
         const newMatches: Record<string, MatchInstance[]> = {};
-        normalizedTerms.forEach(t => newMatches[t] = []);
+        normalizedTerms.forEach(t => {
+            newMatches[t] = [];
+        });
 
         // Function to clean up previous custom highlights ONLY
         const cleanup = () => {
@@ -95,6 +97,20 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
                 // Replace the mark with its text content
                 parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
                 // Normalize to merge adjacent text nodes
+                parent.normalize();
+            });
+
+            const wrappers = container.querySelectorAll('span[data-sh-wrapper="true"]');
+            wrappers.forEach(wrapper => {
+                const parent = wrapper.parentNode;
+                if (!parent) return;
+
+                const fragment = document.createDocumentFragment();
+                while (wrapper.firstChild) {
+                    fragment.appendChild(wrapper.firstChild);
+                }
+
+                parent.replaceChild(fragment, wrapper);
                 parent.normalize();
             });
         };
@@ -156,6 +172,7 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
 
             if (termFoundInNode) {
                 const wrapper = document.createElement('span');
+                wrapper.setAttribute('data-sh-wrapper', 'true');
                 wrapper.innerHTML = htmlToInject;
                 parent.replaceChild(wrapper, textNode);
 
@@ -177,7 +194,9 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
         // Restore correct forward order since we processed backwards
         normalizedTerms.forEach(term => {
             newMatches[term].reverse();
-            newMatches[term].forEach((match, idx) => match.index = idx);
+            newMatches[term].forEach((match, idx) => {
+                match.index = idx;
+            });
         });
 
         setTerms(normalizedTerms);
@@ -185,7 +204,11 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
 
         // Initialize active indices
         const indices: Record<string, number> = {};
-        let activeT = activeTerm;
+        let activeT = (
+            activeTerm &&
+            normalizedTerms.includes(activeTerm) &&
+            (newMatches[activeTerm]?.length ?? 0) > 0
+        ) ? activeTerm : null;
 
         normalizedTerms.forEach(term => {
             indices[term] = 0;
@@ -195,7 +218,11 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
         });
 
         setActiveIndices(indices);
-        if (activeT) setActiveTerm(activeT);
+        if (activeT) {
+            setActiveTerm(activeT);
+        } else {
+            setActiveTerm(null);
+        }
 
         // 3. Calculate Match Quality + Co-occurrence intelligence
         const qualityInsights = calculateMatchQuality(newMatches, normalizedTerms);
@@ -208,17 +235,23 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isContentReady, query, contentContainerRef]);
 
-    const resolveSubpositionKey = (node: HTMLElement, container: HTMLElement): string | null => {
-        const tipiPosition = node.closest('article.tipi-position[id]') as HTMLElement | null;
+    const resolveSubpositionKey = (
+        node: HTMLElement,
+        container: HTMLElement,
+        neshAnchors: readonly HTMLElement[] = []
+    ): string | null => {
+        const tipiPosition = node.closest<HTMLElement>('article.tipi-position[id]');
         if (tipiPosition?.id) return tipiPosition.id;
 
-        const directPosAnchor = node.closest('[id^="pos-"]') as HTMLElement | null;
+        const directPosAnchor = node.closest<HTMLElement>('[id^="pos-"]');
         if (directPosAnchor?.id) return directPosAnchor.id;
 
-        const neshAnchors = container.querySelectorAll<HTMLElement>('h3[id^="pos-"], h4[id^="pos-"], h3.nesh-section[id], h4.nesh-subsection[id]');
+        const anchors = neshAnchors.length > 0
+            ? neshAnchors
+            : Array.from(container.querySelectorAll<HTMLElement>('h3[id^="pos-"], h4[id^="pos-"], h3.nesh-section[id], h4.nesh-subsection[id]'));
         let nearestBefore: HTMLElement | null = null;
 
-        for (const anchor of neshAnchors) {
+        for (const anchor of anchors) {
             if (!anchor.id) continue;
             if (anchor === node || anchor.contains(node)) return anchor.id;
 
@@ -252,10 +285,11 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
         // Fallback maps for content where we cannot resolve a subposition anchor.
         const blockTermMap = new Map<HTMLElement, Set<string>>();
         const chapterTermMap = new Map<HTMLElement, Set<string>>();
+        const neshAnchors = Array.from(container.querySelectorAll<HTMLElement>('h3[id^="pos-"], h4[id^="pos-"], h3.nesh-section[id], h4.nesh-subsection[id]'));
 
         allTerms.forEach(term => {
             currentMatches[term]?.forEach(match => {
-                const subpositionKey = resolveSubpositionKey(match.node, container);
+                const subpositionKey = resolveSubpositionKey(match.node, container, neshAnchors);
                 if (subpositionKey) {
                     if (!subpositionTermMap.has(subpositionKey)) {
                         subpositionTermMap.set(subpositionKey, new Set());
@@ -301,7 +335,7 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
 
         for (const [block, termsInBlock] of blockTermMap.entries()) {
             if (termsInBlock.size === allTerms.length) {
-                const blockSubposition = resolveSubpositionKey(block, container);
+                const blockSubposition = resolveSubpositionKey(block, container, neshAnchors);
                 if (!blockSubposition) {
                     // Legacy/fallback scenario with no subposition anchors.
                     // Count block-level co-occurrence to avoid losing signal completely.
@@ -321,7 +355,7 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
         // Fallback ALTO: all terms in same block when no subposition can be resolved.
         for (const [block, termsInBlock] of blockTermMap.entries()) {
             if (termsInBlock.size === allTerms.length) {
-                const blockSubposition = resolveSubpositionKey(block, container);
+                const blockSubposition = resolveSubpositionKey(block, container, neshAnchors);
                 if (!blockSubposition) {
                     return { matchQuality: 'ALTO' as const, coOccurrenceCount, coOccurrenceScope };
                 }
@@ -347,7 +381,12 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
 
         if (match && match.node) {
             // Remove active class from all
-            document.querySelectorAll('mark[data-sh-term].active').forEach(n => n.classList.remove('active'));
+            const container = contentContainerRef.current;
+            if (container) {
+                container.querySelectorAll('mark[data-sh-term].active').forEach(n => {
+                    n.classList.remove('active');
+                });
+            }
             // Add to current
             match.node.classList.add('active');
 
