@@ -24,9 +24,8 @@ Funcao: `decode_clerk_jwt`.
 
 Comportamento:
 
-- producao: valida assinatura com JWKS (`AUTH__CLERK_DOMAIN`).
-- desenvolvimento:
-  - so aceita decode sem assinatura quando `settings.features.debug_mode=true`.
+- producao e desenvolvimento: valida assinatura com JWKS (`AUTH__CLERK_DOMAIN`).
+- sem JWKS valido, o token e recusado.
 - tokens expirados/invalidos retornam `None`.
 
 Cache interno:
@@ -127,7 +126,7 @@ Fluxo recomendado:
 
 1. cache de JWT e provisioning sao in-memory (nao compartilhados entre multiplas instancias).
 2. ausencia de middleware dedicado para headers de seguranca HTTP (CSP, HSTS, X-Frame-Options, etc.).
-3. fluxo dev com decode sem assinatura (aceitavel so em debug, mas sensivel se mal configurado).
+3. ambientes sem `AUTH__CLERK_DOMAIN` nao validam JWT e podem bloquear fluxos autenticados.
 4. `TenantMiddleware` usa task background sem observabilidade forte de falha.
 5. endpoint `/api/auth/me` e publico por design (retorna apenas `authenticated`), mas depende de contrato claro para nao crescer escopo sensivel no futuro.
 
