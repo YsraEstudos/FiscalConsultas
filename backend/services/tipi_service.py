@@ -97,8 +97,8 @@ class TipiService:
         )
         self._cache_lock: Optional[asyncio.Lock] = None  # Lazy init
 
-        mode = "Repository" if self._use_repository else "aiosqlite"
-        logger.info(f"TipiService inicializado (modo: {mode})")
+        self.mode = "Repository" if self._use_repository else "aiosqlite"
+        logger.info(f"TipiService inicializado (modo: {self.mode})")
 
     @classmethod
     async def create_with_repository(cls) -> "TipiService":
