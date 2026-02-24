@@ -8,6 +8,15 @@ Este roadmap organiza a evolução do Nesh de uma ferramenta de busca estática 
 
 Transformar a busca de palavras-chave em **busca de intenção**, integrando múltiplos domínios (NCM, NBS, UNSPSC) e permitindo colaboração ativa (Assinaturas e Comentários).
 
+## 🏛️ Os Pilares do Estado da Arte (The North Star)
+
+Para atingir o nível de excelência técnica, o projeto deve perseguir estes quatro pilares:
+
+- **Qualidade de Código (SonarQube/Linters):** Código limpo, legível e que segue padrões.
+- **Observabilidade e Resiliência:** O sistema avisa quando está morrendo? Ele se recupera sozinho? (Logs, Metrics, Tracing).
+- **Testes Automatizados (Cobertura e Qualidade):** Não apenas a porcentagem de cobertura que o Sonar indica, mas se os testes de fato garantem que o software funciona sob estresse.
+- **Velocidade de Entrega (CI/CD):** O quão rápido e seguro é o caminho do código da sua máquina para a mão do usuário.
+
 ---
 
 ## Fase 0: Fundação de Segurança (Imediato)
