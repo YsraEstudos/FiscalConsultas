@@ -130,8 +130,8 @@ Regras de compatibilidade importantes:
 
 - Middleware `TenantMiddleware` protege rotas `/api/*` (exceto rotas publicas definidas).
 - JWT Clerk:
-  - producao: validacao via JWKS (`AUTH__CLERK_DOMAIN`).
-  - desenvolvimento: decode sem assinatura so com `debug_mode=true`.
+  - validacao de assinatura via JWKS (`AUTH__CLERK_DOMAIN`) em qualquer ambiente.
+  - em desenvolvimento, fallback de tenant (`_tenant` query param ou `org_default`) continua disponivel para debug local.
 - Multi-tenant:
   - org_id extraido do JWT e colocado em `tenant_context`.
   - provisioning best-effort de `Tenant`/`User` local via task assincrona.
