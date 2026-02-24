@@ -84,6 +84,6 @@ Manutenção e monitoramento pós-lançamento.
 
 ## 📅 Roadmap de Produção
 
-* **Semana 1**: Docker, Deploy em Staging e HTTPS.
+- **Semana 1**: Docker, Deploy em Staging e HTTPS.
 - **Semana 2**: SEO, Jurídico e Integração Asaas Produção.
 - **Semana 3**: Testes de carga, Auditoria de Segurança e **Go-Live**.

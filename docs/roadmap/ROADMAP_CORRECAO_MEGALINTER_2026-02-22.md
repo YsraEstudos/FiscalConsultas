@@ -103,7 +103,7 @@ Linters que passaram (importante para manter):
 
 ## 5) Plano por Fases (com estimativa)
 
-## Fase 0 - Rebaseline Limpo (0.5-1h)
+### Fase 0 - Rebaseline Limpo (0.5-1h)
 
 Objetivo:
 
@@ -119,7 +119,7 @@ Saida esperada:
 
 - Queda forte em `devskim`, `kingfisher`, possivelmente `trivy/grype`.
 
-## Fase 1 - Confiabilidade da Pipeline (2-4h)
+### Fase 1 - Confiabilidade da Pipeline (2-4h)
 
 Objetivo:
 
@@ -137,7 +137,7 @@ Saida esperada:
 
 - Queda de falhas "1 erro" e menor flakiness de CI.
 
-## Fase 2 - Seguranca Real (4-8h)
+### Fase 2 - Seguranca Real (4-8h)
 
 Objetivo:
 
@@ -154,7 +154,7 @@ Saida esperada:
 
 - Security findings realmente acionaveis tratados.
 
-## Fase 3 - Tipagem e Qualidade Python (1-2 dias)
+### Fase 3 - Tipagem e Qualidade Python (1-2 dias)
 
 Objetivo:
 
@@ -171,7 +171,7 @@ Saida esperada:
 
 - Backend com tipagem e lint mais estavel.
 
-## Fase 4 - Hardening Infra e Regras de Gate (0.5-1 dia)
+### Fase 4 - Hardening Infra e Regras de Gate (0.5-1 dia)
 
 Objetivo:
 
@@ -264,4 +264,3 @@ Atualizar este roadmap apos a proxima execucao completa do MegaLinter com o novo
 - novo total por linter
 - delta de tempo total
 - delta de falso positivo por scanner de repositorio
-
