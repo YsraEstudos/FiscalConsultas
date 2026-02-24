@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { SearchHighlighter } from '../../src/components/SearchHighlighter';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -127,14 +127,14 @@ describe('SearchHighlighter', () => {
     });
 
     it('permite alternar entre palavras e navegar entre ocorrências', async () => {
-        if (!window.HTMLElement.prototype.scrollIntoView) {
-            Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', {
+        if (!globalThis.HTMLElement.prototype.scrollIntoView) {
+            Object.defineProperty(globalThis.HTMLElement.prototype, 'scrollIntoView', {
                 value: () => { },
                 configurable: true,
                 writable: true
             });
         }
-        const scrollSpy = vi.spyOn(window.HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => { });
+        const scrollSpy = vi.spyOn(globalThis.HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => { });
 
         render(
             <SearchHighlighter
