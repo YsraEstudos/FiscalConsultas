@@ -34,6 +34,72 @@ def _request_for_path(path: str) -> Request:
     return Request({"type": "http", "method": "GET", "path": path, "headers": []})
 
 
+class _FakeNeshService:
+    def __init__(self, db=None):
+        self.db = db
+
+    async def prewarm_cache(self):
+        return 0
+
+    @classmethod
+    async def create_with_repository(cls):
+        return cls()
+
+
+class _FakeTipiService:
+    created_repo = False
+
+    def __init__(self):
+        self.mode = "sqlite"
+
+    @classmethod
+    async def create_with_repository(cls):
+        cls.created_repo = True
+        obj = cls()
+        obj.mode = "repo"
+        return obj
+
+
+class _FakeAiService:
+    pass
+
+
+@pytest.fixture
+def core_mocks(monkeypatch):
+    fake_calls = {
+        "glossary": False,
+        "frontend": False,
+        "redis_closed": False,
+        "redis_connected": False,
+    }
+
+    async def _redis_close():
+        fake_calls["redis_closed"] = True
+        app_module.redis_cache._client = None
+
+    async def _redis_connect():
+        fake_calls["redis_connected"] = True
+        app_module.redis_cache._client = object()
+
+    monkeypatch.setattr(app_module, "AiService", _FakeAiService)
+    monkeypatch.setattr(
+        app_module,
+        "init_glossary",
+        lambda _root: fake_calls.__setitem__("glossary", True),
+    )
+    monkeypatch.setattr(
+        app_module,
+        "verify_frontend_build",
+        lambda _root: fake_calls.__setitem__("frontend", True),
+    )
+    monkeypatch.setattr(app_module.redis_cache, "close", _redis_close)
+    monkeypatch.setattr(app_module.redis_cache, "connect", _redis_connect)
+
+    _FakeTipiService.created_repo = False
+
+    return fake_calls
+
+
 @pytest.mark.asyncio
 async def test_no_cache_html_sets_headers_for_html_paths_only():
     async def _next(_request):
@@ -56,27 +122,13 @@ async def test_no_cache_html_sets_headers_for_html_paths_only():
 
 
 @pytest.mark.asyncio
-async def test_lifespan_sqlite_init_db_failure_keeps_startup_and_shutdown(monkeypatch):
+async def test_lifespan_sqlite_init_db_failure_keeps_startup_and_shutdown(
+    monkeypatch, core_mocks
+):
     fake_db = _FakeDbAdapter("db.sqlite")
-    fake_calls = {"glossary": False, "frontend": False, "redis_closed": False}
-
-    class _FakeNeshService:
-        def __init__(self, db):
-            self.db = db
-
-    class _FakeTipiService:
-        def __init__(self):
-            self.mode = "sqlite"
-
-    class _FakeAiService:
-        pass
 
     async def _init_db_fail():
         raise RuntimeError("unsupported sqlite extension")
-
-    async def _redis_close():
-        fake_calls["redis_closed"] = True
-        app_module.redis_cache._client = None
 
     monkeypatch.setattr(app_module.settings.database, "engine", "sqlite")
     monkeypatch.setattr(app_module.settings.cache, "enable_redis", False)
@@ -89,18 +141,6 @@ async def test_lifespan_sqlite_init_db_failure_keeps_startup_and_shutdown(monkey
     ) if hasattr(app_module, "tipi_service_module") else monkeypatch.setattr(
         app_module, "TipiService", _FakeTipiService
     )
-    monkeypatch.setattr(app_module, "AiService", _FakeAiService)
-    monkeypatch.setattr(
-        app_module,
-        "init_glossary",
-        lambda _root: fake_calls.__setitem__("glossary", True),
-    )
-    monkeypatch.setattr(
-        app_module,
-        "verify_frontend_build",
-        lambda _root: fake_calls.__setitem__("frontend", True),
-    )
-    monkeypatch.setattr(app_module.redis_cache, "close", _redis_close)
 
     app = _FakeApp()
     async with app_module.lifespan(app):
@@ -109,27 +149,18 @@ async def test_lifespan_sqlite_init_db_failure_keeps_startup_and_shutdown(monkey
         assert app.state.tipi_service.mode == "sqlite"
         assert isinstance(app.state.ai_service, _FakeAiService)
         assert fake_db.pool_ready is True
-        assert fake_calls["glossary"] is True
-        assert fake_calls["frontend"] is True
+        assert core_mocks["glossary"] is True
+        assert core_mocks["frontend"] is True
 
     assert fake_db.closed is True
-    assert fake_calls["redis_closed"] is True
+    assert core_mocks["redis_closed"] is True
 
 
 @pytest.mark.asyncio
-async def test_lifespan_sqlite_handles_import_error_for_db_engine(monkeypatch):
+async def test_lifespan_sqlite_handles_import_error_for_db_engine(
+    monkeypatch, core_mocks
+):
     fake_db = _FakeDbAdapter("db.sqlite")
-
-    class _FakeNeshService:
-        def __init__(self, db):
-            self.db = db
-
-    class _FakeTipiService:
-        def __init__(self):
-            pass
-
-    class _FakeAiService:
-        pass
 
     real_import = builtins.__import__
 
@@ -137,9 +168,6 @@ async def test_lifespan_sqlite_handles_import_error_for_db_engine(monkeypatch):
         if name == "backend.infrastructure.db_engine" and "init_db" in (fromlist or ()):
             raise ImportError("simulated missing db_engine")
         return real_import(name, globals, locals, fromlist, level)
-
-    async def _redis_close():
-        app_module.redis_cache._client = None
 
     monkeypatch.setattr(app_module.settings.database, "engine", "sqlite")
     monkeypatch.setattr(app_module.settings.cache, "enable_redis", False)
@@ -150,10 +178,6 @@ async def test_lifespan_sqlite_handles_import_error_for_db_engine(monkeypatch):
     ) if hasattr(app_module, "tipi_service_module") else monkeypatch.setattr(
         app_module, "TipiService", _FakeTipiService
     )
-    monkeypatch.setattr(app_module, "AiService", _FakeAiService)
-    monkeypatch.setattr(app_module, "init_glossary", lambda _root: None)
-    monkeypatch.setattr(app_module, "verify_frontend_build", lambda _root: None)
-    monkeypatch.setattr(app_module.redis_cache, "close", _redis_close)
     monkeypatch.setattr(builtins, "__import__", _fake_import)
 
     app = _FakeApp()
@@ -165,29 +189,17 @@ async def test_lifespan_sqlite_handles_import_error_for_db_engine(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_lifespan_sqlite_init_db_success_closes_sqlmodel_engine(monkeypatch):
+async def test_lifespan_sqlite_init_db_success_closes_sqlmodel_engine(
+    monkeypatch, core_mocks
+):
     fake_db = _FakeDbAdapter("db.sqlite")
     close_db_called = {"value": False}
-
-    class _FakeNeshService:
-        def __init__(self, db):
-            self.db = db
-
-    class _FakeTipiService:
-        def __init__(self):
-            pass
-
-    class _FakeAiService:
-        pass
 
     async def _init_db_ok():
         return None
 
     async def _close_db_ok():
         close_db_called["value"] = True
-
-    async def _redis_close():
-        app_module.redis_cache._client = None
 
     monkeypatch.setattr(app_module.settings.database, "engine", "sqlite")
     monkeypatch.setattr(app_module.settings.cache, "enable_redis", False)
@@ -200,10 +212,6 @@ async def test_lifespan_sqlite_init_db_success_closes_sqlmodel_engine(monkeypatc
     ) if hasattr(app_module, "tipi_service_module") else monkeypatch.setattr(
         app_module, "TipiService", _FakeTipiService
     )
-    monkeypatch.setattr(app_module, "AiService", _FakeAiService)
-    monkeypatch.setattr(app_module, "init_glossary", lambda _root: None)
-    monkeypatch.setattr(app_module, "verify_frontend_build", lambda _root: None)
-    monkeypatch.setattr(app_module.redis_cache, "close", _redis_close)
 
     app = _FakeApp()
     async with app_module.lifespan(app):
@@ -214,29 +222,12 @@ async def test_lifespan_sqlite_init_db_success_closes_sqlmodel_engine(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(monkeypatch):
-    redis_events = {"connected": False, "closed": False}
-
-    class _FakeNeshService:
+async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
+    monkeypatch, core_mocks
+):
+    class _FailingPrewarmNeshService(_FakeNeshService):
         async def prewarm_cache(self):
             raise RuntimeError("prewarm failed")
-
-        @classmethod
-        async def create_with_repository(cls):
-            return cls()
-
-    class _FakeTipiService:
-        @classmethod
-        async def create_with_repository(cls):
-            obj = cls()
-            obj.mode = "repo"
-            return obj
-
-        def __init__(self):
-            self.mode = "sqlite"
-
-    class _FakeAiService:
-        pass
 
     class _ScalarResult:
         def __init__(self, value):
@@ -253,14 +244,6 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(monke
     async def _fake_get_session():
         yield _Session()
 
-    async def _redis_connect():
-        redis_events["connected"] = True
-        app_module.redis_cache._client = object()
-
-    async def _redis_close():
-        redis_events["closed"] = True
-        app_module.redis_cache._client = None
-
     async def _close_db_fail():
         raise RuntimeError("close failed")
 
@@ -268,59 +251,32 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(monke
     monkeypatch.setattr(app_module.settings.cache, "enable_redis", True)
     monkeypatch.setattr(db_engine, "get_session", _fake_get_session)
     monkeypatch.setattr(db_engine, "close_db", _close_db_fail)
-    monkeypatch.setattr(nesh_service_module, "NeshService", _FakeNeshService)
+    monkeypatch.setattr(nesh_service_module, "NeshService", _FailingPrewarmNeshService)
     monkeypatch.setattr(
         app_module.tipi_service_module, "TipiService", _FakeTipiService
     ) if hasattr(app_module, "tipi_service_module") else monkeypatch.setattr(
         app_module, "TipiService", _FakeTipiService
     )
-    monkeypatch.setattr(app_module, "AiService", _FakeAiService)
-    monkeypatch.setattr(app_module, "init_glossary", lambda _root: None)
-    monkeypatch.setattr(app_module, "verify_frontend_build", lambda _root: None)
-    monkeypatch.setattr(app_module.redis_cache, "connect", _redis_connect)
-    monkeypatch.setattr(app_module.redis_cache, "close", _redis_close)
 
     app = _FakeApp()
     async with app_module.lifespan(app):
         assert app.state.db is None
         assert app.state.sqlmodel_enabled is True
-        assert isinstance(app.state.service, _FakeNeshService)
+        assert isinstance(app.state.service, _FailingPrewarmNeshService)
         assert getattr(app.state.tipi_service, "mode") == "repo"
-        assert redis_events["connected"] is True
+        assert core_mocks["redis_connected"] is True
 
-    assert redis_events["closed"] is True
+    assert core_mocks["redis_closed"] is True
 
 
 @pytest.mark.asyncio
 async def test_lifespan_postgres_tipi_count_failure_falls_back_to_sqlite_mode(
-    monkeypatch,
+    monkeypatch, core_mocks
 ):
-    class _FakeNeshService:
-        @classmethod
-        async def create_with_repository(cls):
-            return cls()
-
-    class _FakeTipiService:
-        created_repo = False
-
-        @classmethod
-        async def create_with_repository(cls):
-            cls.created_repo = True
-            return cls()
-
-        def __init__(self):
-            self.mode = "sqlite-fallback"
-
-    class _FakeAiService:
-        pass
-
     @asynccontextmanager
     async def _broken_get_session():
         raise RuntimeError("tipi count failed")
         yield
-
-    async def _redis_close():
-        app_module.redis_cache._client = None
 
     async def _close_db_ok():
         return None
@@ -335,13 +291,9 @@ async def test_lifespan_postgres_tipi_count_failure_falls_back_to_sqlite_mode(
     ) if hasattr(app_module, "tipi_service_module") else monkeypatch.setattr(
         app_module, "TipiService", _FakeTipiService
     )
-    monkeypatch.setattr(app_module, "AiService", _FakeAiService)
-    monkeypatch.setattr(app_module, "init_glossary", lambda _root: None)
-    monkeypatch.setattr(app_module, "verify_frontend_build", lambda _root: None)
-    monkeypatch.setattr(app_module.redis_cache, "close", _redis_close)
 
     app = _FakeApp()
     async with app_module.lifespan(app):
         assert app.state.sqlmodel_enabled is True
-        assert app.state.tipi_service.mode == "sqlite-fallback"
+        assert app.state.tipi_service.mode == "sqlite"
         assert _FakeTipiService.created_repo is False
