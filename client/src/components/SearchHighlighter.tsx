@@ -207,7 +207,9 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
 
         const container = contentContainerRef.current;
         const newMatches: Record<string, MatchInstance[]> = {};
-        normalizedTerms.forEach(t => newMatches[t] = []);
+        normalizedTerms.forEach(t => {
+            newMatches[t] = [];
+        });
 
         // Function to clean up previous custom highlights ONLY
         const cleanup = () => {
@@ -313,7 +315,9 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
         // Restore correct forward order since we processed backwards
         normalizedTerms.forEach(term => {
             newMatches[term].reverse();
-            newMatches[term].forEach((match, idx) => match.index = idx);
+            newMatches[term].forEach((match, idx) => {
+                match.index = idx;
+            });
         });
 
         setTerms(normalizedTerms);
@@ -321,7 +325,11 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
 
         // Initialize active indices
         const indices: Record<string, number> = {};
-        let activeT = activeTerm;
+        let activeT = (
+            activeTerm &&
+            normalizedTerms.includes(activeTerm) &&
+            (newMatches[activeTerm]?.length ?? 0) > 0
+        ) ? activeTerm : null;
 
         normalizedTerms.forEach(term => {
             indices[term] = 0;
@@ -331,7 +339,11 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
         });
 
         setActiveIndices(indices);
-        if (activeT) setActiveTerm(activeT);
+        if (activeT) {
+            setActiveTerm(activeT);
+        } else {
+            setActiveTerm(null);
+        }
 
         // 3. Calculate Match Quality + Co-occurrence intelligence
         const qualityInsights = calculateMatchQuality(newMatches, normalizedTerms);
@@ -420,7 +432,12 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
 
         if (match?.node) {
             // Remove active class from all
-            document.querySelectorAll('mark[data-sh-term].active').forEach(n => n.classList.remove('active'));
+            const container = contentContainerRef.current;
+            if (container) {
+                container.querySelectorAll('mark[data-sh-term].active').forEach(n => {
+                    n.classList.remove('active');
+                });
+            }
             // Add to current
             match.node.classList.add('active');
 
