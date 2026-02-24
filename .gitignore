@@ -85,3 +85,4 @@ tipi_tree_dump.html
 # Coverage HTML report
 htmlcov/
 
+*_output.txt
