@@ -44,12 +44,26 @@ const createLoadedChaptersByDoc = (): Record<DocType, string[]> => ({
   tipi: [],
 });
 
+let fallbackTabIdCounter = 0;
+
 const generateTabId = (): string => {
-  const randomId = globalThis.crypto?.randomUUID?.();
+  const cryptoObj = globalThis.crypto;
+  const randomId = cryptoObj?.randomUUID?.();
   if (randomId) {
     return `tab-${randomId}`;
   }
-  return `tab-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+  if (cryptoObj?.getRandomValues) {
+    const bytes = new Uint8Array(16);
+    cryptoObj.getRandomValues(bytes);
+    const hex = Array.from(bytes, (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    return `tab-${hex}`;
+  }
+
+  fallbackTabIdCounter += 1;
+  return `tab-${Date.now()}-${fallbackTabIdCounter.toString(36)}`;
 };
 
 type TabReference = string | number;

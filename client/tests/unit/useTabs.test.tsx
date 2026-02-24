@@ -3,6 +3,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useTabs } from "../../src/hooks/useTabs";
 
+const mockRandomUuid = (...values: string[]) => {
+  const spy = vi.spyOn(globalThis.crypto, "randomUUID");
+  for (const value of values) {
+    spy.mockReturnValueOnce(value);
+  }
+  if (values.length === 1) {
+    spy.mockReturnValue(values[0]);
+  }
+  return spy;
+};
+
 describe("useTabs", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -23,8 +34,7 @@ describe("useTabs", () => {
   });
 
   it("creates tabs with deterministic id and switches active tab", () => {
-    const uuidSpy = vi.spyOn(globalThis.crypto, "randomUUID");
-    uuidSpy.mockReturnValueOnce("171").mockReturnValueOnce("172");
+    const uuidSpy = mockRandomUuid("171", "172");
 
     const { result } = renderHook(() => useTabs());
 
@@ -60,9 +70,7 @@ describe("useTabs", () => {
   });
 
   it("updates only the target tab", () => {
-    const uuidSpy = vi
-      .spyOn(globalThis.crypto, "randomUUID")
-      .mockReturnValue("300");
+    const uuidSpy = mockRandomUuid("300");
     const { result } = renderHook(() => useTabs());
 
     act(() => {
@@ -109,9 +117,7 @@ describe("useTabs", () => {
   });
 
   it("closes non-active tab without changing active selection", () => {
-    const uuidSpy = vi
-      .spyOn(globalThis.crypto, "randomUUID")
-      .mockReturnValue("400");
+    const uuidSpy = mockRandomUuid("400");
     const { result } = renderHook(() => useTabs());
 
     act(() => {
@@ -132,8 +138,7 @@ describe("useTabs", () => {
   });
 
   it("closes active tab selecting previous tab when available", () => {
-    const uuidSpy = vi.spyOn(globalThis.crypto, "randomUUID");
-    uuidSpy.mockReturnValueOnce("501").mockReturnValueOnce("502");
+    const uuidSpy = mockRandomUuid("501", "502");
     const { result } = renderHook(() => useTabs());
 
     act(() => {
@@ -156,9 +161,7 @@ describe("useTabs", () => {
   });
 
   it("closes first active tab selecting fallback first remaining tab", () => {
-    const uuidSpy = vi
-      .spyOn(globalThis.crypto, "randomUUID")
-      .mockReturnValue("601");
+    const uuidSpy = mockRandomUuid("601");
     const { result } = renderHook(() => useTabs());
 
     act(() => {
@@ -178,8 +181,7 @@ describe("useTabs", () => {
   });
 
   it("reorders tabs within bounds and ignores invalid indices", () => {
-    const uuidSpy = vi.spyOn(globalThis.crypto, "randomUUID");
-    uuidSpy.mockReturnValueOnce("701").mockReturnValueOnce("702");
+    const uuidSpy = mockRandomUuid("701", "702");
     const { result } = renderHook(() => useTabs());
 
     act(() => {
