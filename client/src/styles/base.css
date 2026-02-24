@@ -9,7 +9,7 @@
 }
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
     background: var(--bg-primary);
     color: var(--text-primary);
     min-height: 100vh;
@@ -27,7 +27,7 @@ body {
 }
 
 /* Mobile Consolidation */
-@media (max-width: 768px) {
+@media (width <= 768px) {
     .info-grid {
         grid-template-columns: 1fr;
     }

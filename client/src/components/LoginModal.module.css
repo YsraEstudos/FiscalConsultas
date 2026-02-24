@@ -24,7 +24,7 @@
 
 .input:focus {
     border-color: var(--accent-primary);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+    box-shadow: 0 0 0 3px rgb(99 102 241 / 20%);
 }
 
 .actions {
@@ -62,7 +62,7 @@
 
 .submitButton:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+    box-shadow: 0 4px 15px rgb(99 102 241 / 40%);
 }
 
 .submitButton:disabled {

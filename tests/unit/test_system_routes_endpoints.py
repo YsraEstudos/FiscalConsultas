@@ -209,7 +209,9 @@ async def test_debug_anchors_returns_404_when_debug_mode_is_disabled(monkeypatch
     request = _build_request("/api/debug/anchors")
 
     with pytest.raises(HTTPException) as exc:
-        await system.debug_anchors(request, "8517", _FakeNeshService({}))
+        await system.debug_anchors(
+            request=request, ncm="8517", service=_FakeNeshService({})
+        )
 
     assert exc.value.status_code == 404
 
@@ -225,7 +227,9 @@ async def test_debug_anchors_returns_403_for_non_admin(monkeypatch):
     request = _build_request("/api/debug/anchors")
 
     with pytest.raises(HTTPException) as exc:
-        await system.debug_anchors(request, "8517", _FakeNeshService({}))
+        await system.debug_anchors(
+            request=request, ncm="8517", service=_FakeNeshService({})
+        )
 
     assert exc.value.status_code == 403
 

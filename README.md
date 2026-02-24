@@ -29,10 +29,11 @@ cd ..
 
 ### 1.1) Ativar MegaLinter local no commit (pre-commit)
 
-O projeto roda MegaLinter localmente via hook de commit.
+O projeto roda MegaLinter localmente via hook de commit (pre-commit).
 
 ```powershell
-uv run pre-commit install
+uv tool install pre-commit
+pre-commit install
 ```
 
 A partir disso, todo `git commit` executa o MegaLinter antes de criar o commit.
@@ -43,6 +44,8 @@ Além disso, o repositório também possui workflow de MegaLinter em Pull Reques
 Uso local e CI:
 - Local: útil para feedback rápido antes do push, com saída em `megalinter-reports/`.
 - PR/CI: o workflow de MegaLinter roda em PRs para `main` e publica resultado como check + logs/artifacts no GitHub Actions.
+- PR Smart (`pull_request`): valida apenas diff do PR com linters/scanners selecionados para alto sinal.
+- Full Audit (`workflow_dispatch` e `schedule`): valida codebase completa.
 - Enforcement: se bloqueia merge depende das regras de branch protection/checks obrigatórios do repositório.
 
 Executar apenas mudanças do branch (modo diff):

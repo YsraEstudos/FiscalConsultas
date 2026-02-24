@@ -87,7 +87,6 @@
 
 /* Dark mode overrides */
 @media (prefers-color-scheme: dark) {
-
     .skeletonTitle,
     .skeletonBadge,
     .skeletonSidebarItem,

@@ -420,6 +420,60 @@ describe('ResultDisplay advanced behavior', () => {
     });
   });
 
+  it('replaces text-query highlights on query change without accumulating wrappers', async () => {
+    const baseData = {
+      type: 'code' as const,
+      query: '8517',
+      markdown: '<h3 id="pos-85-17">Item 8517</h3><p>Motor bomba motor</p>',
+      resultados: {
+        '85': {
+          capitulo: '85',
+          posicao_alvo: '85.17',
+          posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+        },
+      },
+    };
+
+    const { container, rerender } = render(
+      <ResultDisplay
+        data={baseData}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-query-highlight"
+        latestTextQuery="motor"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      const marks = container.querySelectorAll('mark[data-text-query-highlight="true"]');
+      expect(marks).toHaveLength(2);
+      expect(Array.from(marks).every((mark) => mark.textContent?.toLowerCase() === 'motor')).toBe(true);
+    });
+
+    rerender(
+      <ResultDisplay
+        data={baseData}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-query-highlight"
+        latestTextQuery="bomba"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      const marks = container.querySelectorAll('mark[data-text-query-highlight="true"]');
+      expect(marks).toHaveLength(1);
+      expect(marks[0]?.textContent?.toLowerCase()).toBe('bomba');
+      expect(container.querySelectorAll('mark mark')).toHaveLength(0);
+    });
+  });
+
   it('uses chunked rendering path for very large payloads', async () => {
     const longChunk = 'x'.repeat(51000);
     const data = {
