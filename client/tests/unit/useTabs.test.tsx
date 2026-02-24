@@ -201,8 +201,8 @@ describe("useTabs", () => {
 
     expect(result.current.tabs.map((tab) => tab.id)).toEqual([
       "tab-701",
-      "tab-702",
       "tab-1",
+      "tab-702",
     ]);
 
     act(() => {
@@ -212,8 +212,8 @@ describe("useTabs", () => {
 
     expect(result.current.tabs.map((tab) => tab.id)).toEqual([
       "tab-701",
-      "tab-702",
       "tab-1",
+      "tab-702",
     ]);
     uuidSpy.mockRestore();
   });

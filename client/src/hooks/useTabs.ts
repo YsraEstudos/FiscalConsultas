@@ -156,7 +156,9 @@ export function useTabs() {
 
         const next = [...prev];
         const [movedTab] = next.splice(sourceIndex, 1);
-        next.splice(targetIndex, 0, movedTab);
+        const correctedInsertIndex =
+          sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+        next.splice(correctedInsertIndex, 0, movedTab);
         return next;
       });
     },
