@@ -1,6 +1,6 @@
 # Nesh / Fiscal - AI_CONTEXT
 
-Atualizado em: 2026-02-17
+Atualizado em: 2026-02-22
 Base desta revisao: leitura direta de backend/frontend/scripts/docs no estado atual do repositório.
 
 ## 1) Proposito
@@ -22,7 +22,6 @@ A UX e orientada por navegacao rapida (abas, smart-links, menu contextual, autos
   - lifespan: inicializa `NeshService`, `TipiService`, `AiService`, `Redis`, glossario.
 - Frontend entrypoint real: `client/src/main.tsx`
   - exige `VITE_CLERK_PUBLISHABLE_KEY`.
-- `main.py` na raiz e placeholder (imprime "Hello from fiscal!") e nao representa runtime da aplicacao.
 
 ## 3) Mapa Arquitetural Atual
 
@@ -181,23 +180,30 @@ CI observado em `.github/workflows/tests.yml`:
 - Job backend:
   - Python `3.13`
   - `uv sync --group dev`
-  - Ruff apenas em arquivos `.py` alterados no diff do push/PR
-  - `uv run pytest -q --cov=backend --cov-report=xml --cov-report=term-missing`
+  - `uv run ruff format --check`
+  - `uv run ruff check`
+  - `uv run --with pyright pyright migrations`
+  - `uv run --with pylint pylint migrations/env.py migrations/versions/001_initial.py migrations/versions/006_precomputed_columns_and_gin.py --disable=all --enable=E,F --disable=E0401,E1101`
+  - `uv run pytest -q --cov=backend --cov-report=xml --cov-report=term-missing --cov-fail-under=70`
 - Job frontend:
   - Node `22`
   - `npm ci`
   - `npm run lint`
   - `npm run type-check`
-  - `npm test`
   - `npm run test:coverage`
 
-## 11) Drift Documental (importante)
+CI adicional em `.github/workflows/megalinter.yml`:
 
-Inconsistencias atuais entre docs e codigo:
+- `pull_request` (`PR Smart`): `VALIDATE_ALL_CODEBASE=false` e linters/scanners selecionados para diff de PR.
+- `workflow_dispatch` e `schedule` (`Full Audit`): `VALIDATE_ALL_CODEBASE=true` para varredura completa.
+- `PYTHON_PYLINT` e `PYTHON_PYRIGHT` ficam fora do PR Smart e sao cobertos no workflow de testes do backend.
 
-1. `README.md` declara Python `3.10+`, mas `pyproject.toml` exige `>=3.13`.
-2. `README.md` sugere `requirements.txt`/`requirements-dev.txt`, arquivos inexistentes no snapshot.
-3. `README.md` aponta roadmap em `docs/ROADMAP.md`, mas o caminho ativo atual e `docs/roadmap/ROADMAP.md`.
+## 11) Drift Documental (status atual)
+
+Status:
+
+1. Sem drift critico identificado entre README, workflows e configuracao ativa de CI.
+2. O ponto de atencao e manter este documento sincronizado quando o escopo do `PR Smart` mudar.
 
 ## 12) Divida Tecnica Estrutural (resumo)
 
