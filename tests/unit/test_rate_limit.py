@@ -1,7 +1,6 @@
 import backend.server.rate_limit as rate_limit
-from backend.server.rate_limit import SlidingWindowRateLimiter
-
 import pytest
+from backend.server.rate_limit import SlidingWindowRateLimiter
 
 pytestmark = pytest.mark.unit
 

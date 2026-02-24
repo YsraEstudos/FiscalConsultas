@@ -17,7 +17,7 @@
     align-items: center;
     gap: 1rem;
     padding: 1rem 1.5rem;
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(251, 191, 36, 0.08) 100%);
+    background: linear-gradient(135deg, rgb(245 158 11 / 15%) 0%, rgb(251 191 36 / 8%) 100%);
     border-bottom: 1px solid var(--border-color);
     font-size: 1.1rem;
     font-weight: 600;
@@ -55,7 +55,7 @@
 }
 
 .tipi-position:hover {
-    background: rgba(99, 102, 241, 0.08);
+    background: rgb(99 102 241 / 8%);
 }
 
 /* Níveis de indentação TIPI */
@@ -115,33 +115,33 @@
 
 /* Aliquota Color Classes */
 .aliquot-zero {
-    background: rgba(34, 197, 94, 0.2);
+    background: rgb(34 197 94 / 20%);
     color: #22c55e;
-    border: 1px solid rgba(34, 197, 94, 0.3);
+    border: 1px solid rgb(34 197 94 / 30%);
 }
 
 .aliquot-nt {
-    background: rgba(148, 163, 184, 0.2);
+    background: rgb(148 163 184 / 20%);
     color: #94a3b8;
-    border: 1px solid rgba(148, 163, 184, 0.3);
+    border: 1px solid rgb(148 163 184 / 30%);
 }
 
 .aliquot-low {
-    background: rgba(59, 130, 246, 0.2);
+    background: rgb(59 130 246 / 20%);
     color: #60a5fa;
-    border: 1px solid rgba(59, 130, 246, 0.3);
+    border: 1px solid rgb(59 130 246 / 30%);
 }
 
 .aliquot-med {
-    background: rgba(250, 204, 21, 0.2);
+    background: rgb(250 204 21 / 20%);
     color: #facc15;
-    border: 1px solid rgba(250, 204, 21, 0.3);
+    border: 1px solid rgb(250 204 21 / 30%);
 }
 
 .aliquot-high {
-    background: rgba(239, 68, 68, 0.2);
+    background: rgb(239 68 68 / 20%);
     color: #f87171;
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    border: 1px solid rgb(239 68 68 / 30%);
 }
 
 /* TIPI Text Search Results */
@@ -166,7 +166,7 @@
 
 .tipi-result-item:hover {
     border-color: var(--accent-primary);
-    background: rgba(99, 102, 241, 0.08);
+    background: rgb(99 102 241 / 8%);
 }
 
 .tipi-result-ncm {
@@ -212,7 +212,7 @@
     border-radius: 6px;
     font-size: 0.8rem;
     white-space: nowrap;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 30%);
     border: 1px solid var(--border-color);
     z-index: 100;
     opacity: 0;
@@ -239,9 +239,11 @@ article.tipi-position {
     border-radius: 8px;
     transition: background 0.2s ease, transform 0.2s ease;
     will-change: transform;
+
     /* GPU acceleration for hover */
     position: relative;
     z-index: 0;
+
     /* For pseudo-element flash */
 }
 
@@ -258,6 +260,7 @@ article.tipi-position:hover {
 }
 
 /* --- TIPI Flash Highlight (GPU-Optimized) --- */
+
 /* Uses pseudo-element with opacity for compositor-only animation */
 .tipi-position::after,
 article.tipi-position::after {
@@ -265,8 +268,8 @@ article.tipi-position::after {
     position: absolute;
     inset: -4px;
     border-radius: 12px;
-    background: linear-gradient(135deg, rgba(251, 191, 36, 0.4), rgba(251, 191, 36, 0.2));
-    border: 2px solid rgba(251, 191, 36, 0.6);
+    background: linear-gradient(135deg, rgb(251 191 36 / 40%), rgb(251 191 36 / 20%));
+    border: 2px solid rgb(251 191 36 / 60%);
     opacity: 0;
     pointer-events: none;
     z-index: 0;
@@ -279,7 +282,6 @@ article.tipi-position>* {
 }
 
 @keyframes tipi-flash-gpu {
-
     0%,
     22%,
     44% {

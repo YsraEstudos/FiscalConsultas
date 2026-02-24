@@ -8,8 +8,7 @@
     border: 1px solid var(--border-color);
     border-radius: 10px;
     padding: 6px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 10px 40px rgb(0 0 0 / 50%);
     backdrop-filter: blur(10px);
     animation: contextFadeIn 0.15s ease-out;
 }
@@ -43,7 +42,7 @@
 }
 
 .item:hover {
-    background: rgba(99, 102, 241, 0.15);
+    background: rgb(99 102 241 / 15%);
     color: var(--text-primary);
 }
 
