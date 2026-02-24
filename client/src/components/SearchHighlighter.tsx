@@ -8,6 +8,15 @@ interface MatchInstance {
     index: number;
 }
 
+type MatchQuality = 'ALTO' | 'PEQUENO' | 'NENHUM';
+type CoOccurrenceScope = 'subposition' | 'block';
+
+interface MatchQualityResult {
+    matchQuality: MatchQuality;
+    coOccurrenceCount: number;
+    coOccurrenceScope: CoOccurrenceScope;
+}
+
 interface SearchHighlighterProps {
     query?: string | null;
     contentContainerRef: React.RefObject<HTMLElement | null>;
@@ -52,14 +61,128 @@ function buildAccentInsensitivePattern(term: string): string {
         .join('');
 }
 
+type ResolveSubpositionKeyFn = (node: HTMLElement, container: HTMLElement) => string | null;
+
+function getNoMatchResult(): MatchQualityResult {
+    return { matchQuality: 'NENHUM', coOccurrenceCount: 0, coOccurrenceScope: 'subposition' };
+}
+
+function addTermToMap<K>(map: Map<K, Set<string>>, key: K, term: string): void {
+    const existing = map.get(key);
+    if (existing) {
+        existing.add(term);
+        return;
+    }
+    map.set(key, new Set([term]));
+}
+
+function isChapterElement(element: HTMLElement): boolean {
+    return element.id?.startsWith('cap-') || element.id?.startsWith('chapter-') || element.classList.contains('tipi-chapter');
+}
+
+function findClosestContext(node: HTMLElement, rootContainer: HTMLElement): { closestBlock: HTMLElement | null; closestChapter: HTMLElement | null } {
+    let current: HTMLElement | null = node;
+    let closestBlock: HTMLElement | null = null;
+    let closestChapter: HTMLElement | null = null;
+
+    while (current && current !== rootContainer) {
+        if (!closestBlock && BLOCK_ELEMENTS.has(current.tagName)) {
+            closestBlock = current;
+        }
+        if (isChapterElement(current)) {
+            closestChapter = current;
+        }
+        current = current.parentElement;
+    }
+
+    return { closestBlock, closestChapter };
+}
+
+function buildTermMaps(
+    currentMatches: Record<string, MatchInstance[]>,
+    allTerms: string[],
+    container: HTMLElement,
+    resolveSubpositionKey: ResolveSubpositionKeyFn
+): {
+    subpositionTermMap: Map<string, Set<string>>;
+    blockTermMap: Map<HTMLElement, Set<string>>;
+    chapterTermMap: Map<HTMLElement, Set<string>>;
+} {
+    const subpositionTermMap = new Map<string, Set<string>>();
+    const blockTermMap = new Map<HTMLElement, Set<string>>();
+    const chapterTermMap = new Map<HTMLElement, Set<string>>();
+
+    for (const term of allTerms) {
+        const matchesForTerm = currentMatches[term] ?? [];
+        for (const match of matchesForTerm) {
+            const subpositionKey = resolveSubpositionKey(match.node, container);
+            if (subpositionKey) {
+                addTermToMap(subpositionTermMap, subpositionKey, term);
+            }
+
+            const { closestBlock, closestChapter } = findClosestContext(match.node, container);
+            if (closestBlock) {
+                addTermToMap(blockTermMap, closestBlock, term);
+            }
+            if (closestChapter) {
+                addTermToMap(chapterTermMap, closestChapter, term);
+            }
+        }
+    }
+
+    return { subpositionTermMap, blockTermMap, chapterTermMap };
+}
+
+function countEntriesWithAllTerms<K>(map: Map<K, Set<string>>, requiredTermCount: number): number {
+    let count = 0;
+    for (const terms of map.values()) {
+        if (terms.size === requiredTermCount) {
+            count += 1;
+        }
+    }
+    return count;
+}
+
+function analyzeBlockCoOccurrence(
+    blockTermMap: Map<HTMLElement, Set<string>>,
+    requiredTermCount: number,
+    container: HTMLElement,
+    resolveSubpositionKey: ResolveSubpositionKeyFn
+): { highBlocksWithoutSubposition: number; hasFallbackHighBlock: boolean } {
+    let highBlocksWithoutSubposition = 0;
+    let hasFallbackHighBlock = false;
+
+    for (const [block, termsInBlock] of blockTermMap.entries()) {
+        if (termsInBlock.size !== requiredTermCount) {
+            continue;
+        }
+        if (resolveSubpositionKey(block, container)) {
+            continue;
+        }
+        highBlocksWithoutSubposition += 1;
+        hasFallbackHighBlock = true;
+    }
+
+    return { highBlocksWithoutSubposition, hasFallbackHighBlock };
+}
+
+function hasChapterLevelCoOccurrence(chapterTermMap: Map<HTMLElement, Set<string>>, requiredTermCount: number): boolean {
+    for (const termsInChapter of chapterTermMap.values()) {
+        if (termsInChapter.size === requiredTermCount) {
+            return true;
+        }
+    }
+    return false;
+}
+
 export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, contentContainerRef, isContentReady }) => {
     const [matches, setMatches] = useState<Record<string, MatchInstance[]>>({});
     const [terms, setTerms] = useState<string[]>([]);
     const [activeTerm, setActiveTerm] = useState<string | null>(null);
     const [activeIndices, setActiveIndices] = useState<Record<string, number>>({});
-    const [matchQuality, setMatchQuality] = useState<'ALTO' | 'PEQUENO' | 'NENHUM'>('NENHUM');
+    const [matchQuality, setMatchQuality] = useState<MatchQuality>('NENHUM');
     const [coOccurrenceCount, setCoOccurrenceCount] = useState(0);
-    const [coOccurrenceScope, setCoOccurrenceScope] = useState<'subposition' | 'block'>('subposition');
+    const [coOccurrenceScope, setCoOccurrenceScope] = useState<CoOccurrenceScope>('subposition');
     const [isVisible, setIsVisible] = useState(true);
 
     const normalizedTerms = useMemo(() => {
@@ -248,107 +371,44 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
         return nearestBefore?.id || null;
     };
 
-    const calculateMatchQuality = (currentMatches: Record<string, MatchInstance[]>, allTerms: string[]) => {
+    const calculateMatchQuality = (currentMatches: Record<string, MatchInstance[]>, allTerms: string[]): MatchQualityResult => {
         if (allTerms.length < 2) {
-            return { matchQuality: 'NENHUM' as const, coOccurrenceCount: 0, coOccurrenceScope: 'subposition' as const };
+            return getNoMatchResult();
         }
 
         const container = contentContainerRef.current;
         if (!container) {
-            return { matchQuality: 'NENHUM' as const, coOccurrenceCount: 0, coOccurrenceScope: 'subposition' as const };
+            return getNoMatchResult();
         }
 
-        // Map NCM subpositions to the set of terms found inside them.
-        // This is the primary signal for "alta correspondência".
-        const subpositionTermMap = new Map<string, Set<string>>();
+        const { subpositionTermMap, blockTermMap, chapterTermMap } = buildTermMaps(
+            currentMatches,
+            allTerms,
+            container,
+            resolveSubpositionKey
+        );
 
-        // Fallback maps for content where we cannot resolve a subposition anchor.
-        const blockTermMap = new Map<HTMLElement, Set<string>>();
-        const chapterTermMap = new Map<HTMLElement, Set<string>>();
+        const requiredTermCount = allTerms.length;
+        const highSubpositionsCount = countEntriesWithAllTerms(subpositionTermMap, requiredTermCount);
+        const { highBlocksWithoutSubposition, hasFallbackHighBlock } = analyzeBlockCoOccurrence(
+            blockTermMap,
+            requiredTermCount,
+            container,
+            resolveSubpositionKey
+        );
 
-        allTerms.forEach(term => {
-            currentMatches[term]?.forEach(match => {
-                const subpositionKey = resolveSubpositionKey(match.node, container);
-                if (subpositionKey) {
-                    if (!subpositionTermMap.has(subpositionKey)) {
-                        subpositionTermMap.set(subpositionKey, new Set());
-                    }
-                    subpositionTermMap.get(subpositionKey)!.add(term);
-                }
+        const coOccurrenceCount = highSubpositionsCount > 0 ? highSubpositionsCount : highBlocksWithoutSubposition;
+        const coOccurrenceScope: CoOccurrenceScope = highSubpositionsCount > 0 ? 'subposition' : 'block';
 
-                // Find closest paragraph/block and chapter (fallback/secondary signals)
-                let current: HTMLElement | null = match.node;
-                let closestBlock: HTMLElement | null = null;
-                let closestChapter: HTMLElement | null = null;
-
-                while (current && current !== contentContainerRef.current) {
-                    if (!closestBlock && BLOCK_ELEMENTS.has(current.tagName)) {
-                        closestBlock = current;
-                    }
-                    if (current.id?.startsWith('cap-') || current.id?.startsWith('chapter-') || current.classList.contains('tipi-chapter')) {
-                        closestChapter = current;
-                    }
-                    current = current.parentElement;
-                }
-
-                if (closestBlock) {
-                    if (!blockTermMap.has(closestBlock)) blockTermMap.set(closestBlock, new Set());
-                    blockTermMap.get(closestBlock)!.add(term);
-                }
-
-                if (closestChapter) {
-                    if (!chapterTermMap.has(closestChapter)) chapterTermMap.set(closestChapter, new Set());
-                    chapterTermMap.get(closestChapter)!.add(term);
-                }
-            });
-        });
-
-        const highSubpositions = new Set<string>();
-        let highBlocksWithoutSubposition = 0;
-
-        for (const [subpositionKey, termsInSubposition] of subpositionTermMap.entries()) {
-            if (termsInSubposition.size === allTerms.length) {
-                highSubpositions.add(subpositionKey);
-            }
+        if (highSubpositionsCount > 0 || hasFallbackHighBlock) {
+            return { matchQuality: 'ALTO', coOccurrenceCount, coOccurrenceScope };
         }
 
-        for (const [block, termsInBlock] of blockTermMap.entries()) {
-            if (termsInBlock.size === allTerms.length) {
-                const blockSubposition = resolveSubpositionKey(block, container);
-                if (!blockSubposition) {
-                    // Legacy/fallback scenario with no subposition anchors.
-                    // Count block-level co-occurrence to avoid losing signal completely.
-                    highBlocksWithoutSubposition += 1;
-                }
-            }
+        if (hasChapterLevelCoOccurrence(chapterTermMap, requiredTermCount)) {
+            return { matchQuality: 'PEQUENO', coOccurrenceCount, coOccurrenceScope };
         }
 
-        const coOccurrenceCount = highSubpositions.size > 0 ? highSubpositions.size : highBlocksWithoutSubposition;
-        const coOccurrenceScope = highSubpositions.size > 0 ? 'subposition' as const : 'block' as const;
-
-        // ALTO: all terms coexist in at least one NCM subposition.
-        if (highSubpositions.size > 0) {
-            return { matchQuality: 'ALTO' as const, coOccurrenceCount, coOccurrenceScope };
-        }
-
-        // Fallback ALTO: all terms in same block when no subposition can be resolved.
-        for (const [block, termsInBlock] of blockTermMap.entries()) {
-            if (termsInBlock.size === allTerms.length) {
-                const blockSubposition = resolveSubpositionKey(block, container);
-                if (!blockSubposition) {
-                    return { matchQuality: 'ALTO' as const, coOccurrenceCount, coOccurrenceScope };
-                }
-            }
-        }
-
-        // PEQUENO: terms coexist only at chapter level.
-        for (const termsInChapter of chapterTermMap.values()) {
-            if (termsInChapter.size === allTerms.length) {
-                return { matchQuality: 'PEQUENO' as const, coOccurrenceCount, coOccurrenceScope };
-            }
-        }
-
-        return { matchQuality: 'NENHUM' as const, coOccurrenceCount, coOccurrenceScope };
+        return { matchQuality: 'NENHUM', coOccurrenceCount, coOccurrenceScope };
     };
 
     // Handle scroll to active match
