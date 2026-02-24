@@ -44,6 +44,14 @@ const createLoadedChaptersByDoc = (): Record<DocType, string[]> => ({
   tipi: [],
 });
 
+const generateTabId = (): string => {
+  const randomId = globalThis.crypto?.randomUUID?.();
+  if (randomId) {
+    return `tab-${randomId}`;
+  }
+  return `tab-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
 type TabReference = string | number;
 
 const resolveTabIndex = (tabs: Tab[], tabReference: TabReference): number => {
@@ -71,7 +79,7 @@ export function useTabs() {
   const [activeTabId, setActiveTabId] = useState<string>("tab-1");
 
   const createTab = useCallback((document: DocType = "nesh") => {
-    const newTabId = `tab-${Date.now()}`;
+    const newTabId = generateTabId();
     const newTab: Tab = {
       id: newTabId,
       title: "Nova busca",
