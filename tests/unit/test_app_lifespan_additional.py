@@ -47,15 +47,14 @@ class _FakeNeshService:
 
 
 class _FakeTipiService:
-    created_repo = False
-
     def __init__(self):
         self.mode = "sqlite"
+        self.created_repo = False
 
     @classmethod
     async def create_with_repository(cls):
-        cls.created_repo = True
         obj = cls()
+        obj.created_repo = True
         obj.mode = "repo"
         return obj
 
@@ -95,7 +94,12 @@ def core_mocks(monkeypatch):
     monkeypatch.setattr(app_module.redis_cache, "close", _redis_close)
     monkeypatch.setattr(app_module.redis_cache, "connect", _redis_connect)
 
-    _FakeTipiService.created_repo = False
+    if hasattr(app_module, "tipi_service_module"):
+        monkeypatch.setattr(
+            app_module.tipi_service_module, "TipiService", _FakeTipiService
+        )
+    else:
+        monkeypatch.setattr(app_module, "TipiService", _FakeTipiService)
 
     return fake_calls
 
@@ -136,11 +140,6 @@ async def test_lifespan_sqlite_init_db_failure_keeps_startup_and_shutdown(
     monkeypatch.setattr(db_engine, "init_db", _init_db_fail)
     monkeypatch.setattr(db_engine, "close_db", lambda: None)
     monkeypatch.setattr(nesh_service_module, "NeshService", _FakeNeshService)
-    monkeypatch.setattr(
-        app_module.tipi_service_module, "TipiService", _FakeTipiService
-    ) if hasattr(app_module, "tipi_service_module") else monkeypatch.setattr(
-        app_module, "TipiService", _FakeTipiService
-    )
 
     app = _FakeApp()
     async with app_module.lifespan(app):
@@ -173,11 +172,6 @@ async def test_lifespan_sqlite_handles_import_error_for_db_engine(
     monkeypatch.setattr(app_module.settings.cache, "enable_redis", False)
     monkeypatch.setattr(app_module, "DatabaseAdapter", lambda _path: fake_db)
     monkeypatch.setattr(nesh_service_module, "NeshService", _FakeNeshService)
-    monkeypatch.setattr(
-        app_module.tipi_service_module, "TipiService", _FakeTipiService
-    ) if hasattr(app_module, "tipi_service_module") else monkeypatch.setattr(
-        app_module, "TipiService", _FakeTipiService
-    )
     monkeypatch.setattr(builtins, "__import__", _fake_import)
 
     app = _FakeApp()
@@ -207,11 +201,6 @@ async def test_lifespan_sqlite_init_db_success_closes_sqlmodel_engine(
     monkeypatch.setattr(db_engine, "init_db", _init_db_ok)
     monkeypatch.setattr(db_engine, "close_db", _close_db_ok)
     monkeypatch.setattr(nesh_service_module, "NeshService", _FakeNeshService)
-    monkeypatch.setattr(
-        app_module.tipi_service_module, "TipiService", _FakeTipiService
-    ) if hasattr(app_module, "tipi_service_module") else monkeypatch.setattr(
-        app_module, "TipiService", _FakeTipiService
-    )
 
     app = _FakeApp()
     async with app_module.lifespan(app):
@@ -252,18 +241,13 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
     monkeypatch.setattr(db_engine, "get_session", _fake_get_session)
     monkeypatch.setattr(db_engine, "close_db", _close_db_fail)
     monkeypatch.setattr(nesh_service_module, "NeshService", _FailingPrewarmNeshService)
-    monkeypatch.setattr(
-        app_module.tipi_service_module, "TipiService", _FakeTipiService
-    ) if hasattr(app_module, "tipi_service_module") else monkeypatch.setattr(
-        app_module, "TipiService", _FakeTipiService
-    )
 
     app = _FakeApp()
     async with app_module.lifespan(app):
         assert app.state.db is None
         assert app.state.sqlmodel_enabled is True
         assert isinstance(app.state.service, _FailingPrewarmNeshService)
-        assert getattr(app.state.tipi_service, "mode") == "repo"
+        assert app.state.tipi_service.mode == "repo"
         assert core_mocks["redis_connected"] is True
 
     assert core_mocks["redis_closed"] is True
@@ -286,14 +270,9 @@ async def test_lifespan_postgres_tipi_count_failure_falls_back_to_sqlite_mode(
     monkeypatch.setattr(db_engine, "get_session", _broken_get_session)
     monkeypatch.setattr(db_engine, "close_db", _close_db_ok)
     monkeypatch.setattr(nesh_service_module, "NeshService", _FakeNeshService)
-    monkeypatch.setattr(
-        app_module.tipi_service_module, "TipiService", _FakeTipiService
-    ) if hasattr(app_module, "tipi_service_module") else monkeypatch.setattr(
-        app_module, "TipiService", _FakeTipiService
-    )
 
     app = _FakeApp()
     async with app_module.lifespan(app):
         assert app.state.sqlmodel_enabled is True
         assert app.state.tipi_service.mode == "sqlite"
-        assert _FakeTipiService.created_repo is False
+        assert app.state.tipi_service.created_repo is False
