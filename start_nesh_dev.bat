@@ -34,6 +34,7 @@ shift
 goto parse_args
 :args_done
 
+where docker >nul 2>&1
 if errorlevel 1 (
     set "CHK_DOCKER_CLI=FALHA"
     set "FAIL_REASON=Docker CLI nao encontrado no PATH."
@@ -97,24 +98,10 @@ if errorlevel 1 (
     goto fail
 )
 
-call :wait_compose_service "db" 30
+call :wait_all_compose_services "db redis pgadmin" 30
 if errorlevel 1 (
     set "CHK_DOCKER_STACK=FALHA"
-    set "FAIL_REASON=Servico Docker 'db' nao ficou pronto."
-    goto fail
-)
-
-call :wait_compose_service "redis" 30
-if errorlevel 1 (
-    set "CHK_DOCKER_STACK=FALHA"
-    set "FAIL_REASON=Servico Docker 'redis' nao ficou pronto."
-    goto fail
-)
-
-call :wait_compose_service "pgadmin" 30
-if errorlevel 1 (
-    set "CHK_DOCKER_STACK=FALHA"
-    set "FAIL_REASON=Servico Docker 'pgadmin' nao ficou pronto."
+    set "FAIL_REASON=Servicos Docker 'db', 'redis' ou 'pgadmin' nao ficaram prontos."
     goto fail
 )
 set "CHK_DOCKER_STACK=OK"
@@ -150,12 +137,16 @@ start "Nesh Backend Server" cmd /k "uv run Nesh.py"
 echo.
 echo [6/8] Verificando dependencias Frontend...
 cd client
-call npm install >nul 2>&1
-if errorlevel 1 (
-    cd ..
-    set "CHK_NPM=FALHA"
-    set "FAIL_REASON=Falha no npm install em client."
-    goto fail
+if not exist "node_modules\" (
+    call npm install
+    if errorlevel 1 (
+        cd ..
+        set "CHK_NPM=FALHA"
+        set "FAIL_REASON=Falha no npm install em client."
+        goto fail
+    )
+) else (
+    echo [INFO] node_modules encontrada. Pulando npm install.
 )
 
 echo.
@@ -210,22 +201,26 @@ echo Checklist salvo em: %CHECKLIST_FILE%
 pause
 exit /b 1
 
-:wait_compose_service
-set "SERVICE_NAME=%~1"
+:wait_all_compose_services
+set "SERVICE_LIST=%~1"
 set /a MAX_ATTEMPTS=%~2
 if "%MAX_ATTEMPTS%"=="" set /a MAX_ATTEMPTS=30
 set /a ATTEMPT=0
 
-:wait_compose_service_loop
+:wait_all_compose_services_loop
 set /a ATTEMPT+=1
-set "SERVICE_RUNNING="
-for /f "delims=" %%S in ('docker compose ps --status running --services 2^>nul') do (
-    if /I "%%S"=="%SERVICE_NAME%" set "SERVICE_RUNNING=1"
+set "ALL_RUNNING=1"
+for %%A in (%SERVICE_LIST%) do (
+    set "SERVICE_RUNNING="
+    for /f "delims=" %%S in ('docker compose ps --status running --services 2^>nul') do (
+        if /I "%%S"=="%%A" set "SERVICE_RUNNING=1"
+    )
+    if not defined SERVICE_RUNNING set "ALL_RUNNING=0"
 )
-if defined SERVICE_RUNNING exit /b 0
+if "!ALL_RUNNING!"=="1" exit /b 0
 if !ATTEMPT! GEQ !MAX_ATTEMPTS! exit /b 1
 timeout /t 2 >nul
-goto wait_compose_service_loop
+goto wait_all_compose_services_loop
 
 :wait_http_ready
 set "TARGET_URL=%~1"
