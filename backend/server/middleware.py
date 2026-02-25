@@ -9,6 +9,7 @@ Este middleware:
 """
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
@@ -98,18 +99,15 @@ def _safe_get_unverified_header(token: str) -> dict[str, Any]:
 
 def _safe_get_unverified_claims(token: str) -> dict[str, Any]:
     try:
-        # NOSONAR: unverified claims are used only for observability/debug logs, never auth decisions.
-        claims = jwt.decode(
-            token,
-            options={
-                "verify_signature": False,
-                "verify_exp": False,
-                "verify_nbf": False,
-                "verify_iat": False,
-                "verify_aud": False,
-                "verify_iss": False,
-            },
-        )
+        # Parse JWT payload directly for observability only. Never use these claims
+        # for authentication/authorization decisions.
+        parts = token.split(".")
+        if len(parts) < 2:
+            return {}
+        payload_segment = parts[1]
+        padded_payload = payload_segment + ("=" * (-len(payload_segment) % 4))
+        decoded_payload = base64.urlsafe_b64decode(padded_payload.encode("ascii"))
+        claims = json.loads(decoded_payload.decode("utf-8"))
         if isinstance(claims, dict):
             return claims
     except Exception:
@@ -293,14 +291,14 @@ def _get_payload_exp(payload: dict) -> Optional[float]:
         return None
 
 
-def _is_payload_expired(payload: dict) -> bool:
+def _is_payload_expired(payload: dict, leeway_seconds: int) -> bool:
     exp = payload.get("exp")
     if exp is None:
         return False
     exp_value = _get_payload_exp(payload)
     if exp_value is None:
         return True
-    return time.time() >= exp_value
+    return time.time() >= (exp_value + max(0, leeway_seconds))
 
 
 def _token_cache_key(token: str) -> str:
@@ -316,6 +314,7 @@ async def decode_clerk_jwt(token: str) -> Optional[dict]:
         Payload decodificado ou None se inválido/expirado.
     """
     _jwt_failure_reason_ctx.set(None)
+    leeway_seconds = _effective_clock_skew_seconds()
 
     # Performance: Check cache first
     global _jwt_decode_cache
@@ -325,7 +324,7 @@ async def decode_clerk_jwt(token: str) -> Optional[dict]:
     if cached:
         payload, cached_at, exp_epoch = cached
         if now_monotonic - cached_at < _JWT_CACHE_TTL:
-            if exp_epoch is not None and time.time() >= exp_epoch:
+            if exp_epoch is not None and time.time() >= (exp_epoch + leeway_seconds):
                 del _jwt_decode_cache[token_hash]
                 _log_jwt_failure(
                     reason="expired_cache",
@@ -345,69 +344,43 @@ async def decode_clerk_jwt(token: str) -> Optional[dict]:
     expected_issuer = _resolve_expected_issuer()
     expected_audience = _resolve_expected_audience()
     expected_azp = _resolve_expected_azp()
-    leeway_seconds = _effective_clock_skew_seconds()
 
     try:
         jwks_client = get_jwks_client()
-
-        if jwks_client:
-            # Produção/Dev com Clerk domain configurado: validar assinatura via JWKS.
-            signing_key = await asyncio.to_thread(
-                jwks_client.get_signing_key_from_jwt, token
-            )
-
-            decode_kwargs: dict[str, Any] = {
-                "algorithms": ["RS256"],
-                "leeway": leeway_seconds,
-                "options": {
-                    "verify_aud": bool(expected_audience),
-                    # nbf/iat são validados manualmente abaixo para logging detalhado.
-                    "verify_nbf": False,
-                    "verify_iat": False,
-                },
-            }
-            if expected_audience:
-                decode_kwargs["audience"] = expected_audience
-
-            payload = jwt.decode(
-                token,
-                signing_key.key,
-                **decode_kwargs,
-            )
-        elif settings.server.env != "development":
+        if not jwks_client:
             logger.error("Clerk domain não configurado; JWT não pode ser validado")
             _log_jwt_failure(
                 reason="jwks_unavailable",
                 token_snapshot=token_snapshot,
-                error="AUTH__CLERK_DOMAIN ausente ou inválido em ambiente não-development",
+                error="AUTH__CLERK_DOMAIN ausente ou inválido",
             )
             return None
-        elif not settings.features.debug_mode:
-            logger.error(
-                "JWT sem assinatura só é permitido em development com debug_mode=true"
-            )
-            _log_jwt_failure(
-                reason="unsigned_token_forbidden",
-                token_snapshot=token_snapshot,
-                error="Token sem assinatura recusado fora de debug_mode",
-            )
-            return None
-        else:
-            # Desenvolvimento/debug somente: decode sem assinatura para diagnóstico local.
-            # Nunca usar payload sem assinatura para autenticação/autorização em produção.
-            payload = jwt.decode(  # NOSONAR: dev-only unsigned decode, gated by env=development and debug_mode=true.
-                token,
-                options={
-                    "verify_signature": False,
-                    "verify_exp": False,
-                    "verify_nbf": False,
-                    "verify_iat": False,
-                    "verify_aud": False,
-                    "verify_iss": False,
-                },
-            )
 
-        if _is_payload_expired(payload):
+        # Produção/Dev com Clerk domain configurado: validar assinatura via JWKS.
+        signing_key = await asyncio.to_thread(
+            jwks_client.get_signing_key_from_jwt, token
+        )
+
+        decode_kwargs: dict[str, Any] = {
+            "algorithms": ["RS256"],
+            "leeway": leeway_seconds,
+            "options": {
+                "verify_aud": bool(expected_audience),
+                # nbf/iat são validados manualmente abaixo para logging detalhado.
+                "verify_nbf": False,
+                "verify_iat": False,
+            },
+        }
+        if expected_audience:
+            decode_kwargs["audience"] = expected_audience
+
+        payload = jwt.decode(
+            token,
+            signing_key.key,
+            **decode_kwargs,
+        )
+
+        if _is_payload_expired(payload, leeway_seconds):
             _log_jwt_failure(
                 reason="expired_payload",
                 token_snapshot=token_snapshot,
