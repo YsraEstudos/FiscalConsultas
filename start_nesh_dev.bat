@@ -151,12 +151,23 @@ start "Nesh Backend Server" cmd /k "uv run Nesh.py"
 echo.
 echo [6/8] Verificando dependencias Frontend...
 cd client
-call npm install
-if errorlevel 1 (
-    cd ..
-    set "CHK_NPM=FALHA"
-    set "FAIL_REASON=Falha no npm install em client."
-    goto fail
+set "NEED_INSTALL=0"
+if not exist "node_modules\" set "NEED_INSTALL=1"
+if "!NEED_INSTALL!"=="0" (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "if ((Get-Item 'package-lock.json').LastWriteTime -gt (Get-Item 'node_modules').LastWriteTime) { exit 1 } else { exit 0 }" && set "LOCKFILE_HAS_CHANGES=0" || set "LOCKFILE_HAS_CHANGES=1"
+    if "!LOCKFILE_HAS_CHANGES!"=="1" set "NEED_INSTALL=1"
+)
+if "!NEED_INSTALL!"=="1" (
+    echo [INFO] Instalando dependencias do frontend...
+    call npm install
+    if errorlevel 1 (
+        cd ..
+        set "CHK_NPM=FALHA"
+        set "FAIL_REASON=Falha no npm install em client."
+        goto fail
+    )
+) else (
+    echo [INFO] node_modules atualizada. Pulando npm install.
 )
 
 echo.
@@ -219,9 +230,14 @@ set /a ATTEMPT=0
 
 :wait_compose_service_loop
 set /a ATTEMPT+=1
-for /f "delims=" %%S in ('docker compose ps --status running --services 2^>nul') do (
-    if /I "%%S"=="!SERVICE_NAME!" exit /b 0
+set "SVC_READY=0"
+for /f "tokens=1,2" %%A in ('docker compose ps --format "{{.Service}} {{.Health}}" 2^>nul') do (
+    if /I "%%A"=="!SERVICE_NAME!" (
+        if /I "%%B"=="healthy" set "SVC_READY=1"
+        if /I "%%B"=="" set "SVC_READY=1"
+    )
 )
+if "!SVC_READY!"=="1" exit /b 0
 if !ATTEMPT! GEQ !MAX_ATTEMPTS! exit /b 1
 timeout /t 2 >nul
 goto wait_compose_service_loop
