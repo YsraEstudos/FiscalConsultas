@@ -231,10 +231,10 @@ set /a ATTEMPT=0
 :wait_compose_service_loop
 set /a ATTEMPT+=1
 set "SVC_READY=0"
-for /f "tokens=1,2" %%A in ('docker compose ps --format "{{.Service}} {{.Health}}" 2^>nul') do (
+:: Parse JSON output using PowerShell to flatten entries for the FOR loop
+for /f "tokens=1,2" %%A in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "docker compose ps --format json | ConvertFrom-Json | ForEach-Object { $h = $_.Health; if(-not $h){ $h='none' }; \"$($_.Service) $h\" }" 2^>nul') do (
     if /I "%%A"=="!SERVICE_NAME!" (
         if /I "%%B"=="healthy" set "SVC_READY=1"
-        if /I "%%B"=="" set "SVC_READY=1"
     )
 )
 if "!SVC_READY!"=="1" exit /b 0
