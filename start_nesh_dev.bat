@@ -154,7 +154,7 @@ cd client
 set "NEED_INSTALL=0"
 if not exist "node_modules\" set "NEED_INSTALL=1"
 if "!NEED_INSTALL!"=="0" (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "if ((Get-Item 'package-lock.json').LastWriteTime -gt (Get-Item 'node_modules').LastWriteTime) { exit 1 } else { exit 0 }" && set "LOCKFILE_HAS_CHANGES=0" || set "LOCKFILE_HAS_CHANGES=1"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "if (-not (Test-Path 'package-lock.json')) { exit 1 }; if ((Get-Item 'package-lock.json').LastWriteTime -gt (Get-Item 'node_modules').LastWriteTime) { exit 1 } else { exit 0 }" && set "LOCKFILE_HAS_CHANGES=0" || set "LOCKFILE_HAS_CHANGES=1"
     if "!LOCKFILE_HAS_CHANGES!"=="1" set "NEED_INSTALL=1"
 )
 if "!NEED_INSTALL!"=="1" (
