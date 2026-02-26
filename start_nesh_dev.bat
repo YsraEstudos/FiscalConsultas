@@ -34,6 +34,7 @@ shift
 goto parse_args
 :args_done
 
+where docker >nul 2>&1
 if errorlevel 1 (
     set "CHK_DOCKER_CLI=FALHA"
     set "FAIL_REASON=Docker CLI nao encontrado no PATH."
@@ -97,24 +98,24 @@ if errorlevel 1 (
     goto fail
 )
 
-call :wait_compose_service "db" 30
+call :wait_compose_service db 30
 if errorlevel 1 (
     set "CHK_DOCKER_STACK=FALHA"
-    set "FAIL_REASON=Servico Docker 'db' nao ficou pronto."
+    set "FAIL_REASON=Servico Docker 'db' nao esta pronto."
     goto fail
 )
 
-call :wait_compose_service "redis" 30
+call :wait_compose_service redis 30
 if errorlevel 1 (
     set "CHK_DOCKER_STACK=FALHA"
-    set "FAIL_REASON=Servico Docker 'redis' nao ficou pronto."
+    set "FAIL_REASON=Servico Docker 'redis' nao esta pronto."
     goto fail
 )
 
-call :wait_compose_service "pgadmin" 30
+call :wait_compose_service pgadmin 30
 if errorlevel 1 (
     set "CHK_DOCKER_STACK=FALHA"
-    set "FAIL_REASON=Servico Docker 'pgadmin' nao ficou pronto."
+    set "FAIL_REASON=Servico Docker 'pgadmin' nao esta pronto."
     goto fail
 )
 set "CHK_DOCKER_STACK=OK"
@@ -150,12 +151,23 @@ start "Nesh Backend Server" cmd /k "uv run Nesh.py"
 echo.
 echo [6/8] Verificando dependencias Frontend...
 cd client
-call npm install >nul 2>&1
-if errorlevel 1 (
-    cd ..
-    set "CHK_NPM=FALHA"
-    set "FAIL_REASON=Falha no npm install em client."
-    goto fail
+set "NEED_INSTALL=0"
+if not exist "node_modules\" set "NEED_INSTALL=1"
+if "!NEED_INSTALL!"=="0" (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "if (-not (Test-Path 'package-lock.json')) { exit 1 }; if ((Get-Item 'package-lock.json').LastWriteTime -gt (Get-Item 'node_modules').LastWriteTime) { exit 1 } else { exit 0 }" && set "LOCKFILE_HAS_CHANGES=0" || set "LOCKFILE_HAS_CHANGES=1"
+    if "!LOCKFILE_HAS_CHANGES!"=="1" set "NEED_INSTALL=1"
+)
+if "!NEED_INSTALL!"=="1" (
+    echo [INFO] Instalando dependencias do frontend...
+    call npm install
+    if errorlevel 1 (
+        cd ..
+        set "CHK_NPM=FALHA"
+        set "FAIL_REASON=Falha no npm install em client."
+        goto fail
+    )
+) else (
+    echo [INFO] node_modules atualizada. Pulando npm install.
 )
 
 echo.
@@ -218,11 +230,14 @@ set /a ATTEMPT=0
 
 :wait_compose_service_loop
 set /a ATTEMPT+=1
-set "SERVICE_RUNNING="
-for /f "delims=" %%S in ('docker compose ps --status running --services 2^>nul') do (
-    if /I "%%S"=="%SERVICE_NAME%" set "SERVICE_RUNNING=1"
+set "SVC_READY=0"
+:: Parse JSON output using PowerShell to flatten entries for the FOR loop
+for /f "tokens=1,2" %%A in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "docker compose ps --format json | ConvertFrom-Json | ForEach-Object { $h = $_.Health; if(-not $h){ $h='none' }; \"$($_.Service) $h\" }" 2^>nul') do (
+    if /I "%%A"=="!SERVICE_NAME!" (
+        if /I "%%B"=="healthy" set "SVC_READY=1"
+    )
 )
-if defined SERVICE_RUNNING exit /b 0
+if "!SVC_READY!"=="1" exit /b 0
 if !ATTEMPT! GEQ !MAX_ATTEMPTS! exit /b 1
 timeout /t 2 >nul
 goto wait_compose_service_loop
