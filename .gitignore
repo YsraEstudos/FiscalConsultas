@@ -46,6 +46,8 @@ Thumbs.db
 # Logs and Test results
 *.log
 test_results*.txt
+*_runs.txt
+git_diff.txt
 .coverage
 .coverage.*
 coverage.xml
