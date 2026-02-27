@@ -95,7 +95,7 @@ export const Sidebar = React.memo(function Sidebar({
     if (!results) return { items: [], codeToIndex: {}, anchorToIndex: {} };
 
     const sortedChapters = Object.values(results).sort(
-      (a, b) => parseInt(a.capitulo) - parseInt(b.capitulo),
+      (a, b) => Number.parseInt(a.capitulo, 10) - Number.parseInt(b.capitulo, 10),
     );
 
     const flatList: SidebarItem[] = [];
@@ -161,7 +161,7 @@ export const Sidebar = React.memo(function Sidebar({
         // Map normalize code to index for fast lookup
         // Store both raw "8417.10" and clean "841710"
         indexMap[pos.codigo] = currentIndex;
-        indexMap[pos.codigo.replace(/\./g, "")] = currentIndex;
+        indexMap[pos.codigo.replaceAll(".", "")] = currentIndex;
         anchorMap[generateAnchorId(pos.codigo)] = currentIndex;
       });
     });
@@ -199,12 +199,12 @@ export const Sidebar = React.memo(function Sidebar({
     if (lastScrolledQueryRef.current === normalizedQuery) return; // Prevent re-scroll on same query
 
     const cleanQuery = isTipi
-      ? rawQuery.replace(/\D/g, "")
-      : normalizedQuery.replace(/\./g, "");
+      ? rawQuery.replaceAll(/\D/g, "")
+      : normalizedQuery.replaceAll(".", "");
 
     debug.log("[Sidebar Autoscroll] Look for:", normalizedQuery);
 
-    const cleanRaw = rawQuery.replace(/\D/g, "");
+    const cleanRaw = rawQuery.replaceAll(/\D/g, "");
     // Strategy:
     // 1. Exact Code Match needed? Check indexMap
     // 2. Fallback to clean codes
@@ -232,7 +232,7 @@ export const Sidebar = React.memo(function Sidebar({
       const foundItemIndex = items.findIndex(
         (item) =>
           item.type === "item" &&
-          item.pos.codigo.replace(/\D/g, "").startsWith(cleanQuery),
+          item.pos.codigo.replaceAll(/\D/g, "").startsWith(cleanQuery),
       );
       if (foundItemIndex !== -1) targetIndex = foundItemIndex;
     }
