@@ -52,7 +52,7 @@ describe("SettingsContext", () => {
   beforeEach(() => {
     localStorage.clear();
     document.body.className = "";
-    document.documentElement.removeAttribute("data-theme");
+    delete document.documentElement.dataset.theme;
     document.documentElement.style.fontSize = "";
   });
 
@@ -94,7 +94,7 @@ describe("SettingsContext", () => {
       SIDEBAR_POSITION.RIGHT,
     );
 
-    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+    expect(document.documentElement.dataset.theme).toBe("light");
     expect(document.documentElement.style.fontSize).toBe("18px");
     expect(document.body.classList.contains("disable-unit-highlights")).toBe(
       true,
