@@ -246,7 +246,11 @@ class HtmlRenderer:
     _INLINE_WHITESPACE = {" ", "\t"}
     _BULLET_MARKERS = {"•", "·", "○", "o"}
     # NESH convention: (+) indicates subposition explanatory note exists
-    RE_PLUS_ARTIFACT = re.compile(r"\s*\(\+\)\s*")
+    _PLUS_ARTIFACT = "(+)"
+    _PLUS_ARTIFACT_REPLACEMENT = (
+        ' <span class="nesh-subpos-indicator" '
+        'title="Existe Nota Explicativa de subposição">†</span> '
+    )
 
     @staticmethod
     def clean_content(content: str) -> str:
@@ -265,10 +269,7 @@ class HtmlRenderer:
         # Converte notação de colchetes do PDF para Unicode: [3] → ³, [2] → ²
         content = HtmlRenderer._replace_bracket_superscripts(content)
         # Converte artefato NESH (+) em indicador semântico com tooltip
-        content = HtmlRenderer.RE_PLUS_ARTIFACT.sub(
-            ' <span class="nesh-subpos-indicator" title="Existe Nota Explicativa de subposição">†</span> ',
-            content,
-        )
+        content = HtmlRenderer._replace_plus_artifact(content)
         # Remove referências internas do documento NESH (ex: XV-7324-1)
         content = HtmlRenderer.RE_NESH_INTERNAL_REF.sub("", content)
         # Remove linhas com apenas código NCM isolado (duplicatas do código com descrição)
@@ -308,6 +309,37 @@ class HtmlRenderer:
     )
 
     @classmethod
+    def _replace_plus_artifact(cls, text: str) -> str:
+        """Replace NESH (+) marker and adjacent inline spaces by semantic indicator.
+
+        Only inline whitespace (space/tab) around the marker is consumed;
+        line breaks remain untouched to preserve paragraph boundaries.
+        """
+        output: list[str] = []
+        index = 0
+        marker_size = len(cls._PLUS_ARTIFACT)
+        size = len(text)
+
+        while index < size:
+            marker_index = text.find(cls._PLUS_ARTIFACT, index)
+            if marker_index == -1:
+                output.append(text[index:])
+                break
+
+            output.append(text[index:marker_index])
+            if output and output[-1] and output[-1][-1] in cls._INLINE_WHITESPACE:
+                output[-1] = output[-1][:-1]
+
+            after_index = marker_index + marker_size
+            while after_index < size and text[after_index] in cls._INLINE_WHITESPACE:
+                after_index += 1
+
+            output.append(cls._PLUS_ARTIFACT_REPLACEMENT)
+            index = after_index
+
+        return "".join(output)
+
+    @classmethod
     def _consume_inline_whitespace(cls, text: str, index: int) -> int:
         size = len(text)
         while index < size and text[index] in cls._INLINE_WHITESPACE:
@@ -338,7 +370,11 @@ class HtmlRenderer:
 
     @classmethod
     def _replace_bracket_superscripts(cls, text: str) -> str:
-        """Replace [2]/[3] (with optional inline spaces) by unicode superscripts in linear time."""
+        """Replace [2]/[3] variants (e.g. [2], [ 3 ]) by unicode superscripts.
+
+        Only inline whitespace is accepted inside brackets and before the token.
+        Unsupported bracket tokens are left unchanged.
+        """
         output: list[str] = []
         index = 0
         size = len(text)

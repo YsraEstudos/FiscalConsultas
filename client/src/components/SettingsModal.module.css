@@ -251,6 +251,21 @@
   background: var(--accent-primary);
 }
 
+.slider::-moz-range-thumb {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: var(--accent-secondary);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.15s ease-in-out;
+}
+
+.slider::-moz-range-thumb:hover {
+  background: var(--accent-primary);
+}
+
 @media (width <=768px) {
   .grid {
     grid-template-columns: 1fr;

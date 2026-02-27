@@ -102,6 +102,7 @@ class DatabaseAdapter:
     # Pool compartilhado (singleton por db_path)
     _pools: Dict[str, ConnectionPool] = {}
     _pools_lock: Optional[asyncio.Lock] = None
+    _FTS_RESERVED_OPERATORS = {"AND", "OR", "NOT", "NEAR"}
 
     @classmethod
     def _get_pools_lock(cls) -> asyncio.Lock:
@@ -464,8 +465,35 @@ class DatabaseAdapter:
                 SELECT codigo, descricao, {anchor_projection}
                 FROM positions
                 WHERE chapter_num = ?
-                ORDER BY CAST(SUBSTR(codigo, 1, 2) AS INTEGER),
-                         CAST(SUBSTR(codigo, 4, 2) AS INTEGER)
+                -- Sort code segments numerically (major.minor.subminor)
+                -- so 2-part and 3-part HS/NCM codes keep deterministic order.
+                ORDER BY
+                    CAST(COALESCE(NULLIF(SUBSTR(codigo, 1, INSTR(codigo || '.', '.') - 1), ''), '0') AS INTEGER),
+                    CAST(COALESCE(NULLIF(
+                        SUBSTR(
+                            SUBSTR(codigo, INSTR(codigo || '.', '.') + 1),
+                            1,
+                            INSTR(SUBSTR(codigo, INSTR(codigo || '.', '.') + 1) || '.', '.') - 1
+                        ),
+                        ''
+                    ), '0') AS INTEGER),
+                    CAST(COALESCE(NULLIF(
+                        SUBSTR(
+                            SUBSTR(
+                                SUBSTR(codigo, INSTR(codigo || '.', '.') + 1),
+                                INSTR(SUBSTR(codigo, INSTR(codigo || '.', '.') + 1) || '.', '.') + 1
+                            ),
+                            1,
+                            INSTR(
+                                SUBSTR(
+                                    SUBSTR(codigo, INSTR(codigo || '.', '.') + 1),
+                                    INSTR(SUBSTR(codigo, INSTR(codigo || '.', '.') + 1) || '.', '.') + 1
+                                ) || '.',
+                                '.'
+                            ) - 1
+                        ),
+                        ''
+                    ), '0') AS INTEGER)
             """,  # nosec B608 - anchor_projection é whitelist interna
                 (chapter_num,),
             )
@@ -651,7 +679,13 @@ class DatabaseAdapter:
         if len(words) < 2:
             return []
 
-        near_query = f"NEAR({' '.join(words)}, {distance})"
+        sanitized_words = [
+            token for word in words if (token := self._sanitize_fts_token(word))
+        ]
+        if len(sanitized_words) < 2:
+            return []
+
+        near_query = f"NEAR({' '.join(sanitized_words)}, {distance})"
         logger.debug(f"FTS NEAR search: '{near_query}'")
 
         # NEAR pode falhar se o índice não suportar ou query for inválida
@@ -683,3 +717,30 @@ class DatabaseAdapter:
         except Exception as e:
             logger.debug(f"FTS NEAR falhou (ignorado): {e}")
             return []
+
+    @classmethod
+    def _sanitize_fts_token(cls, token: str) -> str:
+        """Sanitize token for FTS5 MATCH query, avoiding operators/special chars."""
+        stripped = token.strip()
+        if not stripped:
+            return ""
+
+        cleaned_chars: list[str] = []
+        for char in stripped:
+            if char.isalnum() or char in {"_", "-", "."}:
+                cleaned_chars.append(char)
+            elif char in {'"', "(", ")", ":", "*", "^", "~"}:
+                continue
+            else:
+                cleaned_chars.append(" ")
+
+        normalized = " ".join("".join(cleaned_chars).split())
+        if not normalized:
+            return ""
+
+        primary = normalized.split(" ", 1)[0]
+        if primary.upper() in cls._FTS_RESERVED_OPERATORS:
+            return ""
+
+        escaped = primary.replace('"', '""')
+        return f'"{escaped}"'
