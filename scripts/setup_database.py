@@ -128,6 +128,21 @@ def read_nesh_content() -> tuple[str | None, str | None, str | None]:
     return None, None, None
 
 
+def _replace_bracket_superscripts(text: str) -> str:
+    """Converte padrões comuns de colchetes ([2]/[3]) para superscript Unicode."""
+    # Com espaço antes (evita sobrar espaço em casos como "cm [3]")
+    text = text.replace(" [3 ]", "³")
+    text = text.replace(" [3]", "³")
+    text = text.replace(" [2 ]", "²")
+    text = text.replace(" [2]", "²")
+    # Sem espaço antes
+    text = text.replace("[3 ]", "³")
+    text = text.replace("[3]", "³")
+    text = text.replace("[2 ]", "²")
+    text = text.replace("[2]", "²")
+    return text
+
+
 def _clean_position_description(desc: str) -> str:
     """
     Clean and normalize a position description extracted from source content.
@@ -142,19 +157,16 @@ def _clean_position_description(desc: str) -> str:
         cleaned (str): The normalized description string.
     """
     # Remove artefato (+) da convenção NESH (indica Nota Explicativa de subposição)
-    desc = re.sub(r"\s*\(\+\)\s*", " ", desc)
+    desc = desc.replace("(+)", " ")
     # Remove marcadores de bold do markdown (**)
     desc = desc.replace("**", "")
-    # Remove ponto final isolado com espaços
-    desc = re.sub(r"\s*\.\s*$", "", desc)
     # Converte notação de colchetes do PDF: [3] → ³, [2] → ²
-    desc = re.sub(
-        r"\s?\[\s*([23])\s*\]",
-        lambda m: {"2": "²", "3": "³"}[m.group(1)],
-        desc,
-    )
+    desc = _replace_bracket_superscripts(desc)
     # Normaliza espaços múltiplos
-    desc = re.sub(r"\s{2,}", " ", desc).strip()
+    desc = " ".join(desc.split())
+    # Remove ponto final isolado no final da descrição
+    if desc.endswith("."):
+        desc = desc[:-1].rstrip()
     return desc
 
 
@@ -260,13 +272,7 @@ def _sanitize_source_content(content: str) -> str:
     Returns:
         str: The sanitized text with bracketed superscripts converted to Unicode superscripts.
     """
-    superscript_map = {"2": "²", "3": "³"}
-    content = re.sub(
-        r"\s?\[\s*([23])\s*\]",
-        lambda m: superscript_map[m.group(1)],
-        content,
-    )
-    return content
+    return _replace_bracket_superscripts(content)
 
 
 def parse_nesh_content(content: str) -> dict:
