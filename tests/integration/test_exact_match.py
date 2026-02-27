@@ -142,7 +142,7 @@ def test_chapter_84():
     conn.close()
 
     # Assert that we found matches (test validation)
-    assert len(matches) >= 0, "Search should complete without error"
+    assert isinstance(matches, list), "Search should complete without error"
 
 
 def test_position_content():
