@@ -243,8 +243,9 @@ class HtmlRenderer:
     RE_STRAY_LIST_MARKER = re.compile(r"^\s*-\s*\*?\s*$", re.MULTILINE)
     RE_STRAY_STAR_MARKER = re.compile(r"^\s*\*\s*$", re.MULTILINE)
     # Superscript bracket notation from PDF extraction: [2] → ², [3] → ³
-    # Also consumes optional space before the bracket (e.g. "cm [3]" → "cm³")
-    RE_SUPERSCRIPT_BRACKET = re.compile(r"\s?\[\s*([23])\s*\]")
+    # Restrito a whitespace inline (espaço/tab) para não consumir quebras de linha.
+    # Ex.: "cm [3]" → "cm³", preservando estrutura de parágrafos/listas.
+    RE_SUPERSCRIPT_BRACKET = re.compile(r"[ \t]?\[[ \t]*([23])[ \t]*\]")
     _SUPERSCRIPT_MAP = {"2": "²", "3": "³"}
     # NESH convention: (+) indicates subposition explanatory note exists
     RE_PLUS_ARTIFACT = re.compile(r"\s*\(\+\)\s*")
@@ -253,12 +254,12 @@ class HtmlRenderer:
     def clean_content(content: str) -> str:
         """
         Normalize and clean raw chapter text for HTML rendering.
-        
+
         Performs several cleanup transformations: converts PDF-style bracketed superscripts (e.g., "[2]" → "²"), replaces the subposition artifact marker "(+)" with a semantic indicator, removes internal NESH references and stray list markers, normalizes blank lines and spaces, and trims each line.
-        
+
         Parameters:
             content (str): Raw chapter text to be cleaned.
-        
+
         Returns:
             str: Cleaned text with consistent formatting, suitable for subsequent HTML rendering.
         """
