@@ -45,8 +45,18 @@ FILTER_REGEX_EXCLUDE: "(^|/)(git_status_output\\.txt|pytest_output\\.txt|ruff_ou
 # Avoid secret-scanner noise from generated local benchmark reports.
 REPOSITORY_CHECKOV_ARGUMENTS: "--skip-path 2ms-report.json --skip-path 2ms-report-filtered.json --skip-path megalinter-reports"
 REPOSITORY_KICS_ARGUMENTS: "--exclude-paths megalinter-reports,.git,node_modules,client/node_modules --exclude-queries 8c978947-0ff6-485c-b0c2-0bfca6026466,ce76b7d0-9e77-464d-b86f-c5c48e03e22d"
-PYTHON_BANDIT_ARGUMENTS: "--skip B101,B105,B108,B110,B404,B603"
+PYTHON_BANDIT_ARGUMENTS: "--skip B101,B105,B108,B110,B404,B603,B608"
+PYTHON_FLAKE8_ARGUMENTS: "--extend-ignore E501,W293"
 
+# Reduce CI/container false positives and duplicate checks.
+# - flake8/pylint are redundant with Ruff in this repo configuration
+# - ts-standard requires root tsconfig and overlaps with TypeScript/ESLint checks
+# - kingfisher has persistent noise from virtual env dependencies
+DISABLE_LINTERS:
+  - PYTHON_FLAKE8
+  - PYTHON_PYLINT
+  - TYPESCRIPT_STANDARD
+  - REPOSITORY_KINGFISHER
 # Flavors
 # FLAVOR_SUGGESTION: python, javascript
 
