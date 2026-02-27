@@ -49,95 +49,140 @@ setup_logging()
 logger = logging.getLogger("server")
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    project_root = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    )
+def _resolve_project_root() -> str:
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+
+async def _init_primary_database(app: FastAPI) -> None:
     logger.info("Initializing Database...")
     if settings.database.is_postgres:
+        # Postgres path usa SQLAlchemy/Repository; o adapter legado não é necessário.
         app.state.db = None
-    else:
-        app.state.db = DatabaseAdapter(CONFIG.db_path)
-        # Ensure pool is created (optional, but good for check)
-        await app.state.db._ensure_pool()
+        return
 
-    # SQLModel engine init
+    app.state.db = DatabaseAdapter(CONFIG.db_path)
+    # Cria pool cedo para falhar rápido em startup caso o arquivo/caminho esteja inválido.
+    await app.state.db._ensure_pool()
+
+
+async def _init_sqlmodel_engine(app: FastAPI) -> None:
+    # SQLModel é opcional no modo legado; tratamos fallback para não bloquear startup em SQLite.
     try:
         from backend.infrastructure.db_engine import init_db
-
-        if settings.database.is_postgres:
-            # Em Postgres, o schema deve ser gerenciado apenas por Alembic
-            app.state.sqlmodel_enabled = True
-            logger.info("SQLModel engine ready (Postgres migrations via Alembic)")
-        else:
-            try:
-                await init_db()
-                app.state.sqlmodel_enabled = True
-                logger.info("SQLModel engine initialized (SQLite)")
-            except Exception as e:
-                # Alguns ambientes SQLite não suportam tipos específicos (ex: TSVECTOR).
-                # Nesses casos, seguimos com o adaptador legado sem interromper startup.
-                app.state.sqlmodel_enabled = False
-                logger.warning("SQLModel init skipped (SQLite incompatibility): %s", e)
     except ImportError:
         app.state.sqlmodel_enabled = False
         logger.debug("SQLModel not available, using legacy DatabaseAdapter")
+        return
 
+    if settings.database.is_postgres:
+        # Em Postgres, migrations são responsabilidade do Alembic.
+        app.state.sqlmodel_enabled = True
+        logger.info("SQLModel engine ready (Postgres migrations via Alembic)")
+        return
+
+    try:
+        await init_db()
+        app.state.sqlmodel_enabled = True
+        logger.info("SQLModel engine initialized (SQLite)")
+    except Exception as e:
+        app.state.sqlmodel_enabled = False
+        logger.warning("SQLModel init skipped (SQLite incompatibility): %s", e)
+
+
+async def _init_nesh_service(app: FastAPI) -> None:
     logger.info("Initializing Services...")
     from backend.services.nesh_service import NeshService
 
     if settings.database.is_postgres:
-        # Criamos o serviço no modo Repository para suporte a RLS
+        # Repository mode suporta RLS e isolamento por tenant no Postgres.
         app.state.service = await NeshService.create_with_repository()
         logger.info("NeshService initialized in Repository mode (Postgres/RLS)")
-    else:
-        if app.state.db is None:
-            raise RuntimeError("DatabaseAdapter não inicializado para modo SQLite")
-        app.state.service = NeshService(app.state.db)
-        logger.info("NeshService initialized in Legacy mode (SQLite)")
+        return
 
-    if settings.cache.enable_redis:
-        await redis_cache.connect()
-        if redis_cache.available:
-            try:
-                warmed = await app.state.service.prewarm_cache()
-                logger.info("Chapter cache prewarmed: %s capítulos", warmed)
-            except Exception as e:
-                logger.warning("Cache prewarm failed: %s", e)
+    if app.state.db is None:
+        raise RuntimeError("DatabaseAdapter não inicializado para modo SQLite")
+    app.state.service = NeshService(app.state.db)
+    logger.info("NeshService initialized in Legacy mode (SQLite)")
 
-    if settings.database.is_postgres:
-        # Verificar se tipi_positions tem dados no PostgreSQL
-        # Se não tiver, usar fallback para SQLite (tipi.db) que é mais rápido
-        tipi_has_data = False
-        try:
-            from backend.infrastructure.db_engine import get_session
-            from sqlalchemy import text
 
-            async with get_session() as session:
-                result = await session.execute(
-                    text("SELECT COUNT(*) FROM tipi_positions")
-                )
-                count = int(result.scalar() or 0)
-                tipi_has_data = count > 0
-                logger.info(f"TIPI PostgreSQL: {count} positions found")
-        except Exception as e:
-            logger.warning(f"Could not check tipi_positions table: {e}")
+async def _init_cache_warmup(app: FastAPI) -> None:
+    if not settings.cache.enable_redis:
+        return
 
-        if tipi_has_data:
-            app.state.tipi_service = await TipiService.create_with_repository()
-            logger.info("TipiService initialized in Repository mode (Postgres)")
-        else:
-            app.state.tipi_service = TipiService()
-            logger.info(
-                "TipiService initialized in SQLite mode "
-                "(tipi.db - TIPI data not in Postgres yet)"
-            )
-    else:
+    await redis_cache.connect()
+    if not redis_cache.available:
+        return
+
+    try:
+        warmed = await app.state.service.prewarm_cache()
+        logger.info("Chapter cache prewarmed: %s capítulos", warmed)
+    except Exception as e:
+        # Prewarm é otimização: não deve derrubar startup.
+        logger.warning("Cache prewarm failed: %s", e)
+
+
+async def _postgres_tipi_has_data() -> bool:
+    try:
+        from backend.infrastructure.db_engine import get_session
+        from sqlalchemy import text
+
+        async with get_session() as session:
+            result = await session.execute(text("SELECT COUNT(*) FROM tipi_positions"))
+            count = int(result.scalar() or 0)
+        logger.info("TIPI PostgreSQL: %s positions found", count)
+        return count > 0
+    except Exception as e:
+        logger.warning("Could not check tipi_positions table: %s", e)
+        return False
+
+
+async def _init_tipi_service(app: FastAPI) -> None:
+    if not settings.database.is_postgres:
         app.state.tipi_service = TipiService()
         logger.info("TipiService initialized in Legacy mode (SQLite)")
+        return
+
+    if await _postgres_tipi_has_data():
+        app.state.tipi_service = await TipiService.create_with_repository()
+        logger.info("TipiService initialized in Repository mode (Postgres)")
+        return
+
+    # Fallback temporário: enquanto a carga TIPI no Postgres não estiver completa.
+    app.state.tipi_service = TipiService()
+    logger.info(
+        "TipiService initialized in SQLite mode "
+        "(tipi.db - TIPI data not in Postgres yet)"
+    )
+
+
+async def _shutdown_resources(app: FastAPI) -> None:
+    logger.info("Shutting down...")
+
+    if hasattr(app.state, "db") and app.state.db:
+        await app.state.db.close()
+
+    await redis_cache.close()
+
+    if not getattr(app.state, "sqlmodel_enabled", False):
+        return
+
+    try:
+        from backend.infrastructure.db_engine import close_db
+
+        await close_db()
+        logger.info("SQLModel engine closed")
+    except Exception as e:
+        logger.warning("Error closing SQLModel engine: %s", e)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    project_root = _resolve_project_root()
+    await _init_primary_database(app)
+    await _init_sqlmodel_engine(app)
+    await _init_nesh_service(app)
+    await _init_cache_warmup(app)
+    await _init_tipi_service(app)
     app.state.ai_service = AiService()
 
     logger.info("Initializing Glossary...")
@@ -148,22 +193,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown
-    logger.info("Shutting down...")
-    if hasattr(app.state, "db") and app.state.db:
-        await app.state.db.close()
-
-    await redis_cache.close()
-
-    # Close SQLModel engine if initialized
-    if getattr(app.state, "sqlmodel_enabled", False):
-        try:
-            from backend.infrastructure.db_engine import close_db
-
-            await close_db()
-            logger.info("SQLModel engine closed")
-        except Exception as e:
-            logger.warning(f"Error closing SQLModel engine: {e}")
+    await _shutdown_resources(app)
 
 
 app = FastAPI(title="Nesh API", version="4.2", lifespan=lifespan)
