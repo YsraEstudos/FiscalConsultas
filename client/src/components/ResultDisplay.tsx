@@ -230,14 +230,8 @@ function unwrapQueryHighlights(container: HTMLElement) {
     });
 }
 
-function highlightTermInContainer(container: HTMLElement, term: string): number {
-    const normalizedTerm = term.trim();
-    if (normalizedTerm.length < TERM_HIGHLIGHT_MIN_LENGTH) return 0;
-
-    const matcher = new RegExp(escapeRegex(normalizedTerm), 'i');
-    const splitRegex = new RegExp(`(${escapeRegex(normalizedTerm)})`, 'gi');
+function collectHighlightableTextNodes(container: HTMLElement, matcher: RegExp): Text[] {
     const textNodes: Text[] = [];
-
     const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
         acceptNode: (node) => {
             const value = node.nodeValue || '';
@@ -250,7 +244,7 @@ function highlightTermInContainer(container: HTMLElement, term: string): number 
             if (!matcher.test(value)) return NodeFilter.FILTER_REJECT;
 
             return NodeFilter.FILTER_ACCEPT;
-        }
+        },
     });
 
     let currentNode = walker.nextNode();
@@ -258,6 +252,48 @@ function highlightTermInContainer(container: HTMLElement, term: string): number 
         textNodes.push(currentNode as Text);
         currentNode = walker.nextNode();
     }
+
+    return textNodes;
+}
+
+function buildHighlightedFragment(
+    parts: string[],
+    normalizedLowerTerm: string,
+    highlightedCount: number,
+): { fragment: DocumentFragment; replaced: boolean; highlightedCount: number } {
+    const fragment = document.createDocumentFragment();
+    let replaced = false;
+    let nextCount = highlightedCount;
+
+    for (const part of parts) {
+        if (!part) continue;
+
+        const canHighlight = nextCount < TERM_HIGHLIGHT_MAX_MATCHES
+            && part.toLowerCase() === normalizedLowerTerm;
+        if (!canHighlight) {
+            fragment.appendChild(document.createTextNode(part));
+            continue;
+        }
+
+        const mark = document.createElement('mark');
+        mark.setAttribute(TERM_MARK_ATTR, 'true');
+        mark.className = 'search-highlight search-highlight-partial';
+        mark.textContent = part;
+        fragment.appendChild(mark);
+        nextCount += 1;
+        replaced = true;
+    }
+
+    return { fragment, replaced, highlightedCount: nextCount };
+}
+
+function highlightTermInContainer(container: HTMLElement, term: string): number {
+    const normalizedTerm = term.trim();
+    if (normalizedTerm.length < TERM_HIGHLIGHT_MIN_LENGTH) return 0;
+
+    const matcher = new RegExp(escapeRegex(normalizedTerm), 'i');
+    const splitRegex = new RegExp(`(${escapeRegex(normalizedTerm)})`, 'gi');
+    const textNodes = collectHighlightableTextNodes(container, matcher);
 
     let highlightedCount = 0;
     const normalizedLowerTerm = normalizedTerm.toLowerCase();
@@ -269,24 +305,12 @@ function highlightTermInContainer(container: HTMLElement, term: string): number 
         const parts = text.split(splitRegex);
         if (parts.length < 3) continue;
 
-        const fragment = document.createDocumentFragment();
-        let replaced = false;
-
-        for (const part of parts) {
-            if (!part) continue;
-
-            if (part.toLowerCase() === normalizedLowerTerm && highlightedCount < TERM_HIGHLIGHT_MAX_MATCHES) {
-                const mark = document.createElement('mark');
-                mark.setAttribute(TERM_MARK_ATTR, 'true');
-                mark.className = 'search-highlight search-highlight-partial';
-                mark.textContent = part;
-                fragment.appendChild(mark);
-                highlightedCount += 1;
-                replaced = true;
-            } else {
-                fragment.appendChild(document.createTextNode(part));
-            }
-        }
+        const { fragment, replaced, highlightedCount: nextCount } = buildHighlightedFragment(
+            parts,
+            normalizedLowerTerm,
+            highlightedCount,
+        );
+        highlightedCount = nextCount;
 
         if (!replaced || !node.parentNode) continue;
         node.parentNode.replaceChild(fragment, node);
@@ -320,6 +344,348 @@ interface ResultDisplayProps {
     onConsumeNewSearch: (tabId: string, finalScrollTop?: number) => void;
     /** Callback to notify parent when content is ready (for coordinated loading) */
     onContentReady?: (tabId: string) => void;
+}
+
+type TargetState = string | string[] | null;
+
+type MarkupRenderRefs = {
+    contentRef: React.RefObject<HTMLDivElement | null>;
+    renderedMarkupKeyRef: React.MutableRefObject<string | null>;
+    lastMarkupRef: React.MutableRefObject<string | null>;
+    lastHtmlRef: React.MutableRefObject<string | null>;
+};
+
+type MarkupRenderOptions = {
+    rawMarkdown: string;
+    markupToRender: string;
+    isActive: boolean;
+    isContentReady: boolean;
+    refs: MarkupRenderRefs;
+    setIsContentReady: React.Dispatch<React.SetStateAction<boolean>>;
+};
+
+const SECTION_TYPES: ChapterSectionType[] = ['titulo', 'notas', 'consideracoes', 'definicoes'];
+const CHUNK_SIZE_THRESHOLD = 50_000;
+
+function scheduleIdleTask(callback: () => void): number {
+    if (typeof requestIdleCallback === 'function') {
+        return requestIdleCallback(callback, { timeout: 100 });
+    }
+    return setTimeout(callback, 16) as unknown as number;
+}
+
+function cancelIdleTask(taskId: number) {
+    if (typeof cancelIdleCallback === 'function') {
+        cancelIdleCallback(taskId);
+        return;
+    }
+    clearTimeout(taskId);
+}
+
+function appendMarkupChunk(container: HTMLElement, htmlChunk: string) {
+    const template = document.createElement('template');
+    template.innerHTML = htmlChunk;
+    container.appendChild(template.content);
+}
+
+function normalizeDigits(value: string): string {
+    return value.replace(/\D/g, '');
+}
+
+function areStringArraysEqual(left: string[], right: string[]): boolean {
+    return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function buildAnchorCandidatesFromDigits(digits: string): string[] {
+    if (digits.length < 4) return [];
+
+    const head4 = digits.slice(0, 4);
+    const candidates = [`pos-${head4.slice(0, 2)}-${head4.slice(2)}`, `pos-${head4}`];
+    if (digits.length >= 6) {
+        candidates.push(`pos-${digits.slice(0, 4)}-${digits.slice(4, 6)}`);
+    }
+    if (digits.length >= 8) {
+        candidates.push(`pos-${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`);
+    }
+    return candidates;
+}
+
+function resolveNcmToScroll(data: ResultData | null): string | null {
+    if (!data) return null;
+    return data.ncm || data.query || null;
+}
+
+function resolveMarkupToRender(
+    rawMarkdown: string,
+    codeResults: Record<string, any> | null,
+): string {
+    if (rawMarkdown) return rawMarkdown;
+    if (!codeResults) return '';
+    if (isTipiResults(codeResults)) {
+        return renderTipiFallback(codeResults);
+    }
+
+    console.warn('[ResultDisplay] Fallback NeshRenderer used - backend should send markdown');
+    return NeshRenderer.renderFullResponse(codeResults);
+}
+
+function getCachedRawMarkup(
+    cacheKey: string,
+    shouldParseMarkdown: boolean,
+    markupToRender: string,
+    lastMarkupRef: React.MutableRefObject<string | null>,
+    lastHtmlRef: React.MutableRefObject<string | null>,
+): string {
+    const cachedRawMarkup = cacheGet(sharedRawMarkupCache, cacheKey);
+    if (cachedRawMarkup) return cachedRawMarkup;
+
+    const reusableMarkup = lastMarkupRef.current === cacheKey ? lastHtmlRef.current : null;
+    const nextRawMarkup = reusableMarkup
+        ? reusableMarkup
+        // @ts-ignore - marked types might mismatch slightly depending on version
+        : (shouldParseMarkdown ? (marked.parse(markupToRender) as string) : markupToRender);
+    cacheSet(sharedRawMarkupCache, cacheKey, nextRawMarkup);
+    return nextRawMarkup;
+}
+
+function getFinalMarkup(rawMarkdown: string, rawMarkup: string, cacheKey: string): string {
+    if (rawMarkdown) return rawMarkup;
+
+    const cachedSanitizedMarkup = cacheGet(sharedSanitizedMarkupCache, cacheKey);
+    if (cachedSanitizedMarkup) return cachedSanitizedMarkup;
+
+    const sanitizedMarkup = sanitizeHtml(rawMarkup);
+    cacheSet(sharedSanitizedMarkupCache, cacheKey, sanitizedMarkup);
+    return sanitizedMarkup;
+}
+
+function renderSmallMarkup(
+    contentRef: React.RefObject<HTMLDivElement | null>,
+    finalMarkup: string,
+    cacheKey: string,
+    renderedMarkupKeyRef: React.MutableRefObject<string | null>,
+    setIsContentReady: React.Dispatch<React.SetStateAction<boolean>>,
+): () => void {
+    const frameId = requestAnimationFrame(() => {
+        if (!contentRef.current) return;
+        const template = document.createElement('template');
+        template.innerHTML = finalMarkup;
+        contentRef.current.replaceChildren(template.content);
+        renderedMarkupKeyRef.current = cacheKey;
+        setIsContentReady(true);
+    });
+
+    return () => cancelAnimationFrame(frameId);
+}
+
+function renderChunkedMarkup(
+    contentRef: React.RefObject<HTMLDivElement | null>,
+    finalMarkup: string,
+    cacheKey: string,
+    renderedMarkupKeyRef: React.MutableRefObject<string | null>,
+    setIsContentReady: React.Dispatch<React.SetStateAction<boolean>>,
+): () => void {
+    const chunks = finalMarkup.split(/(?=<hr\s*\/?>)/i);
+    const pendingIdleIds: number[] = [];
+    let cancelled = false;
+
+    const frameId = requestAnimationFrame(() => {
+        if (cancelled || !contentRef.current) return;
+
+        contentRef.current.textContent = '';
+        if (chunks.length > 0) {
+            appendMarkupChunk(contentRef.current, chunks[0]);
+        }
+
+        // Marca o conteúdo como pronto após o primeiro chunk para liberar auto-scroll cedo.
+        renderedMarkupKeyRef.current = cacheKey;
+        setIsContentReady(true);
+
+        const enqueueChunk = (index: number) => {
+            if (index >= chunks.length) return;
+
+            const idleId = scheduleIdleTask(() => {
+                if (cancelled || !contentRef.current) return;
+                appendMarkupChunk(contentRef.current, chunks[index]);
+                enqueueChunk(index + 1);
+            });
+            pendingIdleIds.push(idleId);
+        };
+
+        enqueueChunk(1);
+    });
+
+    return () => {
+        cancelled = true;
+        cancelAnimationFrame(frameId);
+        pendingIdleIds.forEach(cancelIdleTask);
+    };
+}
+
+function renderMarkupContent(options: MarkupRenderOptions): (() => void) | undefined {
+    const { rawMarkdown, markupToRender, isActive, isContentReady, refs, setIsContentReady } = options;
+    const container = refs.contentRef.current;
+    if (!container) return undefined;
+
+    const shouldParseMarkdown = !!rawMarkdown && isLikelyLegacyMarkdown(markupToRender);
+    const cacheKey = `${shouldParseMarkdown ? 'md' : 'html'}:${markupToRender}`;
+    const isAlreadyRendered = refs.renderedMarkupKeyRef.current === cacheKey && container.childNodes.length > 0;
+
+    if (isAlreadyRendered) {
+        if (!isContentReady) setIsContentReady(true);
+        return undefined;
+    }
+
+    // Evita render custoso em abas inativas; o conteúdo é re-hidratado ao ativar a aba.
+    if (!isActive) {
+        container.textContent = '';
+        setIsContentReady(false);
+        return undefined;
+    }
+
+    setIsContentReady(false);
+    const rawMarkup = getCachedRawMarkup(
+        cacheKey,
+        shouldParseMarkdown,
+        markupToRender,
+        refs.lastMarkupRef,
+        refs.lastHtmlRef,
+    );
+    refs.lastMarkupRef.current = cacheKey;
+    refs.lastHtmlRef.current = rawMarkup;
+
+    const finalMarkup = getFinalMarkup(rawMarkdown, rawMarkup, cacheKey);
+    if (finalMarkup.length <= CHUNK_SIZE_THRESHOLD) {
+        return renderSmallMarkup(refs.contentRef, finalMarkup, cacheKey, refs.renderedMarkupKeyRef, setIsContentReady);
+    }
+
+    return renderChunkedMarkup(refs.contentRef, finalMarkup, cacheKey, refs.renderedMarkupKeyRef, setIsContentReady);
+}
+
+function getWrapperClasses(
+    stylesMap: typeof styles,
+    sidebarCollapsed: boolean,
+    mobileMenuOpen: boolean,
+    sidebarPosition: 'left' | 'right',
+): string {
+    return [
+        stylesMap.wrapper,
+        sidebarCollapsed ? stylesMap.sidebarCollapsed : '',
+        mobileMenuOpen ? stylesMap.sidebarOpen : '',
+        sidebarPosition === 'left' ? stylesMap.sidebarLeft : '',
+    ].filter(Boolean).join(' ');
+}
+
+function getSidebarToggleIcon(sidebarPosition: 'left' | 'right', sidebarCollapsed: boolean): string {
+    if (sidebarPosition === 'left') {
+        return sidebarCollapsed ? '▶' : '◀';
+    }
+    return sidebarCollapsed ? '◀' : '▶';
+}
+
+function getSidebarToggleLabel(sidebarCollapsed: boolean): string {
+    return sidebarCollapsed ? 'Expandir navegação' : 'Recolher navegação';
+}
+
+function getContentVisibilityClass(stylesMap: typeof styles, isContentReady: boolean): string {
+    return isContentReady ? stylesMap.contentVisible : stylesMap.contentHidden;
+}
+
+function getCommentToggleClassName(stylesMap: typeof styles, commentsEnabled: boolean): string {
+    if (!commentsEnabled) return stylesMap.commentToggle;
+    return `${stylesMap.commentToggle} ${stylesMap.commentToggleActive}`;
+}
+
+function getCommentToggleLabel(commentsEnabled: boolean): string {
+    return commentsEnabled ? 'Desativar comentários' : 'Ativar comentários';
+}
+
+function findAnchorIdInChapter(
+    chapter: any,
+    normalizedQuery: string,
+    existingPrefix: string | null,
+): { exactMatch: string | null; prefixMatch: string | null } {
+    const positions = Array.isArray(chapter?.posicoes) ? chapter.posicoes : [];
+    let prefixMatch = existingPrefix;
+
+    for (const pos of positions) {
+        const codigo = (pos?.codigo || pos?.ncm || '').toString();
+        if (!codigo) continue;
+
+        const normalizedCodigo = normalizeDigits(codigo);
+        if (normalizedCodigo === normalizedQuery) {
+            return {
+                exactMatch: pos?.anchor_id || generateAnchorId(codigo),
+                prefixMatch,
+            };
+        }
+
+        if (!prefixMatch && normalizedCodigo.startsWith(normalizedQuery)) {
+            prefixMatch = pos?.anchor_id || generateAnchorId(codigo);
+        }
+    }
+
+    return { exactMatch: null, prefixMatch };
+}
+
+function getStructuredSectionIds(capitulo: string, secoes: Record<string, unknown>): string[] {
+    const ids: string[] = [];
+    for (const sectionType of SECTION_TYPES) {
+        const sectionContent = (secoes[sectionType] || '').toString().trim();
+        if (!sectionContent) continue;
+        ids.push(`chapter-${capitulo}-${sectionType}`);
+    }
+    return ids;
+}
+
+function resolveAutoScrollCandidates(
+    ncmToScroll: string,
+    codeResults: Record<string, any> | null,
+    findAnchorIdForQuery: (resultados: any, query: string) => string | null,
+    getPosicaoAlvoFromResultados: (resultados: any) => string | null,
+): string[] {
+    const posicaoAlvo = codeResults ? getPosicaoAlvoFromResultados(codeResults) : null;
+    const anchorFromResultados = codeResults ? findAnchorIdForQuery(codeResults, ncmToScroll) : null;
+    const exactId = anchorFromResultados
+        || (posicaoAlvo ? generateAnchorId(posicaoAlvo) : null)
+        || generateAnchorId(ncmToScroll);
+
+    const candidates = [exactId];
+    candidates.push(...buildAnchorCandidatesFromDigits(normalizeDigits(ncmToScroll)));
+    return Array.from(new Set(candidates));
+}
+
+function getNextTargetState(prev: TargetState, nextCandidates: string[]): TargetState {
+    const prevArray = Array.isArray(prev) ? prev : (prev ? [prev] : []);
+    if (areStringArraysEqual(prevArray, nextCandidates)) {
+        return prev;
+    }
+    return nextCandidates;
+}
+
+function getNextVisibleAnchorId(entries: IntersectionObserverEntry[]): string | null {
+    const visible = entries
+        .filter(entry => entry.isIntersecting)
+        .sort((left, right) => left.boundingClientRect.top - right.boundingClientRect.top);
+    return visible[0]?.target?.id || null;
+}
+
+function scheduleActiveAnchorUpdate(
+    nextAnchorId: string,
+    activeAnchorIdRef: React.MutableRefObject<string | null>,
+    anchorRafRef: React.MutableRefObject<number | null>,
+    setActiveAnchorId: React.Dispatch<React.SetStateAction<string | null>>,
+) {
+    if (nextAnchorId === activeAnchorIdRef.current) return;
+
+    if (anchorRafRef.current !== null) {
+        cancelAnimationFrame(anchorRafRef.current);
+    }
+
+    anchorRafRef.current = requestAnimationFrame(() => {
+        anchorRafRef.current = null;
+        setActiveAnchorId(prev => (prev === nextAnchorId ? prev : nextAnchorId));
+    });
 }
 
 export const ResultDisplay = React.memo(function ResultDisplay({
@@ -522,7 +888,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     const findAnchorIdForQuery = useCallback((resultados: any, query: string) => {
         if (!resultados || typeof resultados !== 'object') return null;
 
-        const normalizedQuery = query.replace(/\D/g, '');
+        const normalizedQuery = normalizeDigits(query);
         if (!normalizedQuery) return null;
 
         const chapters = Object.values(resultados) as any[];
@@ -530,24 +896,12 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         let prefixMatch: string | null = null;
 
         for (const chapter of chapters) {
-            const positions = Array.isArray(chapter?.posicoes) ? chapter.posicoes : [];
-            for (const pos of positions) {
-                const codigo = (pos?.codigo || pos?.ncm || '').toString();
-                if (!codigo) continue;
-                const normalizedCodigo = codigo.replace(/\D/g, '');
-
-                // Exact match has priority
-                if (normalizedCodigo === normalizedQuery) {
-                    exactMatch = pos?.anchor_id || generateAnchorId(codigo);
-                    break; // Found exact, stop searching
-                }
-
-                // Prefix match as fallback (first one wins)
-                if (!prefixMatch && normalizedCodigo && normalizedCodigo.startsWith(normalizedQuery)) {
-                    prefixMatch = pos?.anchor_id || generateAnchorId(codigo);
-                }
+            const match = findAnchorIdInChapter(chapter, normalizedQuery, prefixMatch);
+            if (match.exactMatch) {
+                exactMatch = match.exactMatch;
+                break;
             }
-            if (exactMatch) break; // Exit outer loop too
+            prefixMatch = match.prefixMatch;
         }
 
         return exactMatch || prefixMatch;
@@ -571,19 +925,13 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             if (!capitulo) continue;
 
             const secoes = chapter?.secoes;
-            let hasStructuredSections = false;
-
             if (secoes && typeof secoes === 'object') {
-                const sectionTypes: ChapterSectionType[] = ['titulo', 'notas', 'consideracoes', 'definicoes'];
-                for (const sectionType of sectionTypes) {
-                    const sectionContent = (secoes[sectionType] || '').toString().trim();
-                    if (!sectionContent) continue;
-                    hasStructuredSections = true;
-                    ids.push(`chapter-${capitulo}-${sectionType}`);
-                }
+                const structuredSectionIds = getStructuredSectionIds(capitulo, secoes as Record<string, unknown>);
+                ids.push(...structuredSectionIds);
+                if (structuredSectionIds.length > 0) continue;
             }
 
-            if (!hasStructuredSections && (chapter?.notas_gerais || '').toString().trim()) {
+            if ((chapter?.notas_gerais || '').toString().trim()) {
                 ids.push(`chapter-${capitulo}-notas`);
             }
         }
@@ -650,51 +998,15 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     useEffect(() => {
         if (!data) return;
 
-        let ncmToScroll: string | null = null;
-
-        // 1. Explicit NCM from backend or query
-        if (data.ncm || data.query) {
-            ncmToScroll = data.ncm || data.query || null;
-        }
-
+        const ncmToScroll = resolveNcmToScroll(data);
         if (ncmToScroll) {
-            const posicaoAlvo = codeResults ? getPosicaoAlvoFromResultados(codeResults) : null;
-            const anchorFromResultados = codeResults ? findAnchorIdForQuery(codeResults, ncmToScroll) : null;
-            const exactId = anchorFromResultados || (posicaoAlvo ? generateAnchorId(posicaoAlvo) : null) || generateAnchorId(ncmToScroll);
-            const candidates = [exactId];
-
-            // Secondary: If input is raw digits, also try formatted variations
-            const digits = ncmToScroll.replace(/\D/g, '');
-            // Always generate fallback candidates for partial matches
-            if (digits.length >= 4) {
-                const head4 = digits.slice(0, 4);
-                // 8517 -> pos-85-17 (Common NESH anchor)
-                candidates.push(`pos-${head4.slice(0, 2)}-${head4.slice(2)}`);
-                // 8517 -> pos-8517 (Alternate)
-                candidates.push(`pos-${head4}`);
-
-                if (digits.length >= 6) {
-                    // 851710 -> pos-8517-10
-                    candidates.push(`pos-${digits.slice(0, 4)}-${digits.slice(4, 6)}`);
-                }
-
-                if (digits.length >= 8) {
-                    // 85171000 -> pos-8517-10-00
-                    candidates.push(`pos-${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`);
-                }
-            }
-
-            // Prevent infinite loop: Only update if targets actually changed
-            setTargetId(prev => {
-                const prevArray = Array.isArray(prev) ? prev : (prev ? [prev] : []);
-                const newArray = Array.from(new Set(candidates));
-
-                if (prevArray.length === newArray.length &&
-                    prevArray.every((val, i) => val === newArray[i])) {
-                    return prev;
-                }
-                return newArray;
-            });
+            const candidates = resolveAutoScrollCandidates(
+                ncmToScroll,
+                codeResults,
+                findAnchorIdForQuery,
+                getPosicaoAlvoFromResultados,
+            );
+            setTargetId(prev => getNextTargetState(prev, candidates));
         } else {
             setTargetId(prev => prev ? null : prev);
         }
@@ -817,164 +1129,36 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         if (!contentRef.current) return;
 
         const rawMarkdown = typeof data?.markdown === 'string' ? data.markdown.trim() : '';
-        const isTipi = isTipiResults(codeResults || null);
-
-        // Determine markup to render with fallbacks
-        let markupToRender = rawMarkdown;
+        const markupToRender = resolveMarkupToRender(rawMarkdown, codeResults);
 
         if (!markupToRender) {
-            if (isTipi && codeResults) {
-                // TIPI fallback rendering
-                markupToRender = renderTipiFallback(codeResults);
-            } else if (codeResults) {
-                // NESH client-side rendering
-                console.warn('[ResultDisplay] Fallback NeshRenderer used - backend should send markdown');
-                markupToRender = NeshRenderer.renderFullResponse(codeResults);
-            }
-        }
-
-        if (!markupToRender) {
-            if (contentRef.current) contentRef.current.textContent = '';
+            contentRef.current.textContent = '';
             renderedMarkupKeyRef.current = null;
             setIsContentReady(true);
             return;
         }
 
         try {
-            const shouldParseMarkdown = !!rawMarkdown && isLikelyLegacyMarkdown(markupToRender);
-            const cacheKey = `${shouldParseMarkdown ? 'md' : 'html'}:${markupToRender}`;
-            const container = contentRef.current!;
-            const isAlreadyRendered = renderedMarkupKeyRef.current === cacheKey && container.childNodes.length > 0;
-
-            if (isAlreadyRendered) {
-                if (!isContentReady) {
-                    setIsContentReady(true);
-                }
-                return;
-            }
-
-            if (!isActive && !isAlreadyRendered) {
-                // Clear stale markup for this tab until it is activated.
-                container.textContent = '';
-                setIsContentReady(false);
-                return;
-            }
-
-            setIsContentReady(false);
-
-            let rawMarkup = cacheGet(sharedRawMarkupCache, cacheKey);
-            if (!rawMarkup) {
-                if (lastMarkupRef.current === cacheKey && lastHtmlRef.current) {
-                    rawMarkup = lastHtmlRef.current;
-                } else {
-                    // Legacy compatibility: parse markdown only when markdown tokens are detected.
-                    // Primary path expects backend pure HTML.
-                    // @ts-ignore - marked types might mismatch slightly depending on version
-                    rawMarkup = shouldParseMarkdown ? (marked.parse(markupToRender) as string) : markupToRender;
-                }
-                // Legacy compatibility: parse markdown only when markdown tokens are detected.
-                // Primary path expects backend pure HTML.
-                cacheSet(sharedRawMarkupCache, cacheKey, rawMarkup);
-            }
-            lastMarkupRef.current = cacheKey;
-            lastHtmlRef.current = rawMarkup;
-
-            // Performance: Skip DOMPurify for trusted backend HTML (saves ~800ms on large NESH chapters).
-            // Only sanitize for fallback client-rendered content (NeshRenderer / renderTipiFallback).
-            let finalMarkup: string;
-            if (rawMarkdown) {
-                // Backend-served HTML: already safe from HtmlRenderer/TipiRenderer
-                finalMarkup = rawMarkup;
-            } else {
-                // Fallback client-rendered: sanitize for safety
-                let sanitizedMarkup = cacheGet(sharedSanitizedMarkupCache, cacheKey);
-                if (!sanitizedMarkup) {
-                    sanitizedMarkup = sanitizeHtml(rawMarkup);
-                    cacheSet(sharedSanitizedMarkupCache, cacheKey, sanitizedMarkup);
-                }
-                finalMarkup = sanitizedMarkup;
-            }
-
-            // ---------------------------------------------------------------
-            // Chunked rendering: split HTML at <hr> boundaries (chapter-level)
-            // to avoid a single massive DOM insertion that causes forced reflow.
-            // First chunk is rendered immediately for fast first paint; remaining
-            // chunks are queued via requestIdleCallback / setTimeout fallback.
-            // ---------------------------------------------------------------
-            const CHUNK_SIZE_THRESHOLD = 50_000; // Only chunk if > 50KB
-            const htmlLength = finalMarkup.length;
-
-            if (htmlLength <= CHUNK_SIZE_THRESHOLD) {
-                // Small payload: render in one shot (TIPI, small chapters)
-                const frameId = requestAnimationFrame(() => {
-                    if (!contentRef.current) return;
-                    const template = document.createElement('template');
-                    template.innerHTML = finalMarkup;
-                    contentRef.current.replaceChildren(template.content);
-                    renderedMarkupKeyRef.current = cacheKey;
-                    setIsContentReady(true);
-                });
-                return () => cancelAnimationFrame(frameId);
-            }
-
-            // Large payload: split at <hr> tags (chapter boundaries)
-            const chunks = finalMarkup.split(/(?=<hr\s*\/?>)/i);
-            const pendingIdleIds: number[] = [];
-            let cancelled = false;
-
-            const frameId = requestAnimationFrame(() => {
-                if (cancelled || !contentRef.current) return;
-
-                // Clear previous content and insert first chunk immediately
-                contentRef.current.textContent = '';
-                if (chunks.length > 0) {
-                    const template = document.createElement('template');
-                    template.innerHTML = chunks[0];
-                    contentRef.current.appendChild(template.content);
-                }
-
-                renderedMarkupKeyRef.current = cacheKey;
-                // Signal contentReady after the first chunk so auto-scroll can begin
-                setIsContentReady(true);
-
-                // Queue remaining chunks via requestIdleCallback
-                const enqueueChunk = (index: number) => {
-                    if (index >= chunks.length) return;
-
-                    const scheduleFn = typeof requestIdleCallback === 'function'
-                        ? (cb: () => void) => requestIdleCallback(cb, { timeout: 100 })
-                        : (cb: () => void) => setTimeout(cb, 16) as unknown as number;
-
-                    const idleId = scheduleFn(() => {
-                        if (cancelled || !contentRef.current) return;
-                        const template = document.createElement('template');
-                        template.innerHTML = chunks[index];
-                        contentRef.current.appendChild(template.content);
-                        enqueueChunk(index + 1);
-                    });
-                    pendingIdleIds.push(idleId as number);
-                };
-
-                enqueueChunk(1);
+            return renderMarkupContent({
+                rawMarkdown,
+                markupToRender,
+                isActive,
+                isContentReady,
+                refs: {
+                    contentRef,
+                    renderedMarkupKeyRef,
+                    lastMarkupRef,
+                    lastHtmlRef,
+                },
+                setIsContentReady,
             });
-
-            return () => {
-                cancelled = true;
-                cancelAnimationFrame(frameId);
-                const cancelIdle = typeof cancelIdleCallback === 'function'
-                    ? cancelIdleCallback
-                    : (id: number) => clearTimeout(id);
-                pendingIdleIds.forEach(id => cancelIdle(id));
-            };
-
-
         } catch (e) {
             console.error("Content render error:", e);
             if (contentRef.current) contentRef.current.innerText = 'Error rendering content.';
             renderedMarkupKeyRef.current = null;
             setIsContentReady(true);
         }
-    }, [codeResults, data?.type, data?.markdown, isActive, contentRef]);
+    }, [codeResults, data?.type, data?.markdown, isActive, isContentReady]);
 
     // Ensure target anchor exists by using data-ncm as fallback
     useEffect(() => {
@@ -1047,22 +1231,9 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
         const observer = new IntersectionObserver(
             (entries) => {
-                const visible = entries
-                    .filter(entry => entry.isIntersecting)
-                    .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-
-                const nextAnchorId = visible[0]?.target?.id;
-                if (!nextAnchorId || nextAnchorId === activeAnchorIdRef.current) {
-                    return;
-                }
-
-                if (anchorRafRef.current !== null) {
-                    cancelAnimationFrame(anchorRafRef.current);
-                }
-                anchorRafRef.current = requestAnimationFrame(() => {
-                    anchorRafRef.current = null;
-                    setActiveAnchorId(prev => (prev === nextAnchorId ? prev : nextAnchorId));
-                });
+                const nextAnchorId = getNextVisibleAnchorId(entries);
+                if (!nextAnchorId) return;
+                scheduleActiveAnchorUpdate(nextAnchorId, activeAnchorIdRef, anchorRafRef, setActiveAnchorId);
             },
             {
                 root: containerRef.current,
@@ -1097,12 +1268,12 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
     // Default: Code View (Markdown + Sidebar)
     // Layout: Grid with content and sidebar (position from settings)
-    const wrapperClasses = [
-        styles.wrapper,
-        sidebarCollapsed ? styles.sidebarCollapsed : '',
-        mobileMenuOpen ? styles.sidebarOpen : '',
-        sidebarPosition === 'left' ? styles.sidebarLeft : ''
-    ].filter(Boolean).join(' ');
+    const wrapperClasses = getWrapperClasses(styles, sidebarCollapsed, mobileMenuOpen, sidebarPosition);
+    const sidebarToggleLabel = getSidebarToggleLabel(sidebarCollapsed);
+    const sidebarToggleIcon = getSidebarToggleIcon(sidebarPosition, sidebarCollapsed);
+    const contentVisibilityClass = getContentVisibilityClass(styles, isContentReady);
+    const commentToggleLabel = getCommentToggleLabel(commentsEnabled);
+    const commentToggleClasses = getCommentToggleClassName(styles, commentsEnabled);
     const shouldRenderSidebar = isContentReady && isActive && !!codeResults;
 
     return (
@@ -1111,16 +1282,14 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             <button
                 className={styles.sidebarToggle}
                 onClick={toggleSidebar}
-                aria-label={sidebarCollapsed ? 'Expandir navegação' : 'Recolher navegação'}
+                aria-label={sidebarToggleLabel}
             >
-                {sidebarPosition === 'left'
-                    ? (sidebarCollapsed ? '▶' : '◀')
-                    : (sidebarCollapsed ? '◀' : '▶')}
+                {sidebarToggleIcon}
             </button>
 
             {/* Content scroll container - Coluna 1 */}
             <div
-                className={`${styles.content} ${isContentReady ? styles.contentVisible : styles.contentHidden} markdown-body`}
+                className={`${styles.content} ${contentVisibilityClass} markdown-body`}
                 ref={(el) => {
                     // containerRef = scroll container (para scroll tracking e texto selection)
                     (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
@@ -1153,10 +1322,10 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
             {/* Toggle de Comentários */}
             <button
-                className={`${styles.commentToggle} ${commentsEnabled ? styles.commentToggleActive : ''}`}
+                className={commentToggleClasses}
                 onClick={toggleComments}
-                aria-label={commentsEnabled ? 'Desativar comentários' : 'Ativar comentários'}
-                title={commentsEnabled ? 'Desativar comentários' : 'Ativar comentários'}
+                aria-label={commentToggleLabel}
+                title={commentToggleLabel}
             >
                 💬
             </button>

@@ -144,7 +144,14 @@ export function CommentDrawer({
             )}
 
             {/* Backdrop */}
-            {open && <div className={styles.backdrop} onClick={onClose} />}
+            {open && (
+                <div
+                    className={styles.backdrop}
+                    onMouseDown={(e) => {
+                        if (e.target === e.currentTarget) onClose();
+                    }}
+                />
+            )}
 
             {/* Drawer */}
             <div className={`${styles.drawer} ${open ? styles.drawerOpen : ''}`}>
