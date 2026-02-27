@@ -22,6 +22,13 @@ class ProfileService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def _get_user_in_tenant(self, user_id: str, tenant_id: str) -> User:
+        user_query = select(User).where(User.id == user_id).where(User.tenant_id == tenant_id)
+        user = (await self.session.execute(user_query)).scalar_one_or_none()
+        if not user:
+            raise ValueError(f"Usuário {user_id} não encontrado")
+        return user
+
     async def get_profile(
         self,
         user_id: str,
@@ -34,9 +41,7 @@ class ProfileService:
         Combina dados do User (DB local) com contagens de comentários.
         O image_url vem do Clerk JWT (não armazenamos avatar localmente).
         """
-        user = await self.session.get(User, user_id)
-        if not user:
-            raise ValueError(f"Usuário {user_id} não encontrado")
+        user = await self._get_user_in_tenant(user_id, tenant_id)
 
         tenant = await self.session.get(Tenant, tenant_id)
 
@@ -72,11 +77,10 @@ class ProfileService:
         user_id: str,
         tenant_id: str,
         data: UserProfileUpdate,
+        image_url: Optional[str] = None,
     ) -> dict:
         """Atualiza a bio do usuário."""
-        user = await self.session.get(User, user_id)
-        if not user:
-            raise ValueError(f"Usuário {user_id} não encontrado")
+        user = await self._get_user_in_tenant(user_id, tenant_id)
         if not user.is_active:
             raise ValueError(f"Conta desativada para {user_id}")
 
@@ -86,7 +90,7 @@ class ProfileService:
         await self.session.refresh(user)
 
         logger.info("Bio atualizada para user=%s tenant=%s", user_id, tenant_id)
-        return await self.get_profile(user_id, tenant_id)
+        return await self.get_profile(user_id, tenant_id, image_url=image_url)
 
     async def get_contributions(
         self,
@@ -152,9 +156,7 @@ class ProfileService:
         Retorna dados mínimos para o hover tooltip em comentários.
         O count de comentários é filtrado pelo tenant para evitar vazamento cross-tenant.
         """
-        user = await self.session.get(User, user_id)
-        if not user:
-            raise ValueError(f"Usuário {user_id} não encontrado")
+        user = await self._get_user_in_tenant(user_id, tenant_id)
 
         # Count total approved comments scoped to the caller's tenant
         count_query = (
@@ -182,9 +184,7 @@ class ProfileService:
         3. A chamada real ao Clerk Backend API para eliminar a conta Clerk
            é feita no router (requer HTTP client + secret key).
         """
-        user = await self.session.get(User, user_id)
-        if not user:
-            raise ValueError(f"Usuário {user_id} não encontrado")
+        user = await self._get_user_in_tenant(user_id, tenant_id)
 
         # Soft delete: marca como inativo
         user.is_active = False

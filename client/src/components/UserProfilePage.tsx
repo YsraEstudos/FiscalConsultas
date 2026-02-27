@@ -4,7 +4,7 @@
  * Tabs: Perfil | Contribuições | Sessões | Organização (admin)
  * Integra dados da API customizada + componentes nativos do Clerk.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, type MouseEvent } from 'react';
 import { UserProfile, OrganizationProfile } from '@clerk/clerk-react';
 import { useAuth } from '../context/AuthContext';
 import { useIsAdmin } from '../hooks/useIsAdmin';
@@ -182,27 +182,52 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
     const [contribHasNext, setContribHasNext] = useState(false);
     const [contribSearch, setContribSearch] = useState('');
     const [contribLoading, setContribLoading] = useState(false);
+    const latestContribReqRef = useRef(0);
 
     // Delete account state
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleteStep, setDeleteStep] = useState(0); // 0: initial, 1: first confirm, 2: deleting
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
+    const closeDeleteConfirm = useCallback(() => {
+        setShowDeleteConfirm(false);
+        setDeleteStep(0);
+        setDeleteConfirmText('');
+    }, []);
+
+    const handleMainBackdropClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+        if (showDeleteConfirm) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeDeleteConfirm();
+            return;
+        }
+        onClose();
+    }, [showDeleteConfirm, closeDeleteConfirm, onClose]);
+
+    const handleConfirmBackdropClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
+        closeDeleteConfirm();
+    }, [closeDeleteConfirm]);
+
     // Close on ESC
     useEffect(() => {
         const handleEsc = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                if (showDeleteConfirm) {
-                    setShowDeleteConfirm(false);
-                    setDeleteStep(0);
-                } else {
-                    onClose();
-                }
+            if (e.key !== 'Escape') return;
+
+            if (showDeleteConfirm) {
+                e.preventDefault();
+                e.stopPropagation();
+                closeDeleteConfirm();
+                return;
             }
+
+            onClose();
         };
         if (isOpen) globalThis.addEventListener('keydown', handleEsc);
         return () => globalThis.removeEventListener('keydown', handleEsc);
-    }, [isOpen, onClose, showDeleteConfirm]);
+    }, [isOpen, onClose, showDeleteConfirm, closeDeleteConfirm]);
 
     // Fetch profile on open
     useEffect(() => {
@@ -219,24 +244,36 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
 
     // Fetch contributions
     const fetchContributions = useCallback(async (page: number, search: string) => {
+        latestContribReqRef.current += 1;
+        const requestId = latestContribReqRef.current;
         setContribLoading(true);
         try {
             const data = await getMyContributions({ page, page_size: 15, search: search || undefined });
-            setContributions(data.items);
-            setContribTotal(data.total);
-            setContribHasNext(data.has_next);
-            setContribPage(data.page);
+            if (requestId === latestContribReqRef.current) {
+                setContributions(data.items);
+                setContribTotal(data.total);
+                setContribHasNext(data.has_next);
+                setContribPage(data.page);
+            }
         } catch (err) {
-            console.error('Failed to load contributions:', err);
+            if (requestId === latestContribReqRef.current) {
+                console.error('Failed to load contributions:', err);
+            }
         } finally {
-            setContribLoading(false);
+            if (requestId === latestContribReqRef.current) {
+                setContribLoading(false);
+            }
         }
     }, []);
 
     useEffect(() => {
         if (isOpen && activeTab === 'contributions') {
             fetchContributions(contribPage, contribSearch);
+            return () => {
+                latestContribReqRef.current += 1;
+            };
         }
+        return undefined;
     }, [isOpen, activeTab, contribPage, contribSearch, fetchContributions]);
 
     if (!isOpen) return null;
@@ -288,7 +325,7 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
             <button
                 type="button"
                 className={styles.backdrop}
-                onClick={onClose}
+                onClick={handleMainBackdropClick}
                 aria-label="Fechar perfil"
             />
 
@@ -409,7 +446,11 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
                                         <p>Ao desativar sua conta, seus dados de perfil serão removidos e você perderá acesso ao sistema.</p>
                                         <button
                                             className={styles.deleteBtn}
-                                            onClick={() => setShowDeleteConfirm(true)}
+                                            onClick={() => {
+                                                setDeleteStep(0);
+                                                setDeleteConfirmText('');
+                                                setShowDeleteConfirm(true);
+                                            }}
                                         >
                                             Desativar Minha Conta
                                         </button>
@@ -478,7 +519,7 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
                     <button
                         type="button"
                         className={styles.confirmBackdrop}
-                        onClick={() => { setShowDeleteConfirm(false); setDeleteStep(0); }}
+                        onClick={handleConfirmBackdropClick}
                         aria-label="Fechar confirmação"
                     />
                     <dialog
@@ -492,7 +533,7 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
                                 <h3>⚠️ Desativar Conta</h3>
                                 <p>Tem certeza que deseja desativar sua conta? Esta ação não pode ser desfeita facilmente.</p>
                                 <div className={styles.confirmActions}>
-                                    <button className={styles.cancelBtn} onClick={() => { setShowDeleteConfirm(false); setDeleteStep(0); }}>
+                                    <button className={styles.cancelBtn} onClick={closeDeleteConfirm}>
                                         Cancelar
                                     </button>
                                     <button className={styles.confirmDeleteBtn} onClick={() => setDeleteStep(1)}>
@@ -515,7 +556,7 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
                                     autoFocus
                                 />
                                 <div className={styles.confirmActions}>
-                                    <button className={styles.cancelBtn} onClick={() => { setShowDeleteConfirm(false); setDeleteStep(0); setDeleteConfirmText(''); }}>
+                                    <button className={styles.cancelBtn} onClick={closeDeleteConfirm}>
                                         Cancelar
                                     </button>
                                     <button
