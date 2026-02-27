@@ -45,6 +45,9 @@ class User(SQLModel, table=True):
     id: str = Field(primary_key=True, description="ID do usuário (ex: Clerk user_id)")
     email: str = Field(unique=True, index=True, max_length=255)
     full_name: Optional[str] = Field(default=None, max_length=255)
+    bio: Optional[str] = Field(
+        default=None, sa_column=Column(Text), description="Mini-bio do usuário"
+    )
     tenant_id: str = Field(foreign_key="tenants.id", index=True)
     is_active: bool = Field(default=True)
 

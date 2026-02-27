@@ -82,7 +82,12 @@ export function SettingsProvider({
       }
 
       const savedSize = localStorage.getItem(STORAGE_KEYS.FONT_SIZE);
-      if (savedSize) setFontSize(Number.parseInt(savedSize, 10));
+      if (savedSize) {
+        const parsedSize = Number.parseInt(savedSize, 10);
+        if (!Number.isNaN(parsedSize)) {
+          setFontSize(parsedSize);
+        }
+      }
 
       const savedHighlight = localStorage.getItem(STORAGE_KEYS.HIGHLIGHT);
       if (savedHighlight !== null)
