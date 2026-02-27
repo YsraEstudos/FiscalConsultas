@@ -147,6 +147,13 @@ class RegexPatterns:
         r"mm³|mm3|mm²|mm2|"
         r"cm³|cm3|cm²|cm2|"
         r"m³|m3|m²|m2|"
+        # Fallback: bracket notation from PDF extraction ([3]→³, [2]→²)
+        # Matches patterns like "cm [3]", "m [2]", "mm [3]", "dm [3]"
+        r"mm\s*\[\s*3\s*\]|mm\s*\[\s*2\s*\]|"
+        r"cm\s*\[\s*3\s*\]|cm\s*\[\s*2\s*\]|"
+        r"dm\s*\[\s*3\s*\]|"
+        r"m\s*\[\s*3\s*\]|m\s*\[\s*2\s*\]|"
+        r"g/cm\s*\[\s*3\s*\]|g/m\s*\[\s*2\s*\]|"
         # Comprimento (DEPOIS dos compostos para não consumir cm antes de cm³)
         r"km|cm|mm|µm|nm|"
         # Área

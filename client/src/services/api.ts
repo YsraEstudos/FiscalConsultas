@@ -565,3 +565,38 @@ export const fetchChapterNotes = async (chapter: string): Promise<{
     const response = await api.get(`/nesh/chapter/${encodeURIComponent(chapter)}/notes`);
     return response.data;
 };
+
+// ============================================================
+// PROFILE API
+// ============================================================
+
+export const getMyProfile = async (): Promise<any> => {
+    const response = await api.get('/profile/me');
+    return response.data;
+};
+
+export const updateMyProfile = async (data: { bio: string | null }): Promise<any> => {
+    const response = await api.patch('/profile/me', data);
+    return response.data;
+};
+
+export const getMyContributions = async (params: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    status?: string;
+}): Promise<any> => {
+    const response = await api.get('/profile/me/contributions', { params });
+    return response.data;
+};
+
+export const getUserCard = async (userId: string): Promise<any> => {
+    const response = await api.get(`/profile/${encodeURIComponent(userId)}/card`);
+    return response.data;
+};
+
+export const deleteMyAccount = async (): Promise<any> => {
+    const response = await api.delete('/profile/me');
+    return response.data;
+};
+

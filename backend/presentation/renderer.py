@@ -242,19 +242,34 @@ class HtmlRenderer:
     # Alguns capítulos trazem artefatos de lista no texto fonte (ex: "- *" sozinho).
     RE_STRAY_LIST_MARKER = re.compile(r"^\s*-\s*\*?\s*$", re.MULTILINE)
     RE_STRAY_STAR_MARKER = re.compile(r"^\s*\*\s*$", re.MULTILINE)
+    _SUPERSCRIPT_MAP = {"2": "²", "3": "³"}
+    _INLINE_WHITESPACE = {" ", "\t"}
+    _BULLET_MARKERS = {"•", "·", "○", "o"}
+    # NESH convention: (+) indicates subposition explanatory note exists
+    _PLUS_ARTIFACT = "(+)"
+    _PLUS_ARTIFACT_REPLACEMENT = (
+        ' <span class="nesh-subpos-indicator" '
+        'title="Existe Nota Explicativa de subposição">†</span> '
+    )
 
     @staticmethod
     def clean_content(content: str) -> str:
         """
-        Limpa conteúdo removendo marcadores de página, referências internas e espaços extras.
+        Normalize and clean raw chapter text for HTML rendering.
 
-        Args:
-            content: Texto bruto do capítulo
+        Performs several cleanup transformations: converts PDF-style bracketed superscripts (e.g., "[2]" → "²"), replaces the subposition artifact marker "(+)" with a semantic indicator, removes internal NESH references and stray list markers, normalizes blank lines and spaces, and trims each line.
+
+        Parameters:
+            content (str): Raw chapter text to be cleaned.
 
         Returns:
-            Texto limpo com formatação consistente
+            str: Cleaned text with consistent formatting, suitable for subsequent HTML rendering.
         """
         content = HtmlRenderer.RE_CLEAN_PAGE.sub("", content)
+        # Converte notação de colchetes do PDF para Unicode: [3] → ³, [2] → ²
+        content = HtmlRenderer._replace_bracket_superscripts(content)
+        # Converte artefato NESH (+) em indicador semântico com tooltip
+        content = HtmlRenderer._replace_plus_artifact(content)
         # Remove referências internas do documento NESH (ex: XV-7324-1)
         content = HtmlRenderer.RE_NESH_INTERNAL_REF.sub("", content)
         # Remove linhas com apenas código NCM isolado (duplicatas do código com descrição)
@@ -284,8 +299,6 @@ class HtmlRenderer:
     RE_INDENTED_LINE = re.compile(r"^(\s{4,})(.+)$", re.MULTILINE)
     RE_BOLD_ONLY_LINE = re.compile(r"^\s*\*\*(.+?)\*\*\s*$")
     RE_BOLD_INLINE = re.compile(r"^\s*\*\*(.+?)\*\*\s+(.+)$")
-    RE_BULLET_ONLY = re.compile(r"^\s*[•·○]\s*$")
-    RE_BULLET_ITEM = re.compile(r"^\s*[•·○]\s+(.+)$")
     RE_BOLD_MARKDOWN = re.compile(r"\*\*(.+?)\*\*")
     RE_CHAPTER_HEADER = re.compile(
         r"^\s*CAP[ÍI]TULO\s+(\d{1,2})\s*$", re.IGNORECASE | re.MULTILINE
@@ -294,6 +307,113 @@ class HtmlRenderer:
         r"^\s*(?:\*\*)?\s*SEÇÃO\s+([IVXLCDM]+)\s*(?:\*\*)?\s*$",
         re.IGNORECASE | re.MULTILINE,
     )
+
+    @classmethod
+    def _replace_plus_artifact(cls, text: str) -> str:
+        """Replace NESH (+) marker and adjacent inline spaces by semantic indicator.
+
+        Only inline whitespace (space/tab) around the marker is consumed;
+        line breaks remain untouched to preserve paragraph boundaries.
+        """
+        output: list[str] = []
+        index = 0
+        marker_size = len(cls._PLUS_ARTIFACT)
+        size = len(text)
+
+        while index < size:
+            marker_index = text.find(cls._PLUS_ARTIFACT, index)
+            if marker_index == -1:
+                output.append(text[index:])
+                break
+
+            output.append(text[index:marker_index])
+            if output and output[-1] and output[-1][-1] in cls._INLINE_WHITESPACE:
+                output[-1] = output[-1][:-1]
+
+            after_index = marker_index + marker_size
+            while after_index < size and text[after_index] in cls._INLINE_WHITESPACE:
+                after_index += 1
+
+            output.append(cls._PLUS_ARTIFACT_REPLACEMENT)
+            index = after_index
+
+        return "".join(output)
+
+    @classmethod
+    def _consume_inline_whitespace(cls, text: str, index: int) -> int:
+        size = len(text)
+        while index < size and text[index] in cls._INLINE_WHITESPACE:
+            index += 1
+        return index
+
+    @classmethod
+    def _parse_superscript_token(
+        cls, text: str, index: int
+    ) -> tuple[str, int] | None:
+        if text[index] != "[":
+            return None
+
+        digit_index = cls._consume_inline_whitespace(text, index + 1)
+        if digit_index >= len(text):
+            return None
+
+        digit = text[digit_index]
+        replacement = cls._SUPERSCRIPT_MAP.get(digit)
+        if replacement is None:
+            return None
+
+        close_index = cls._consume_inline_whitespace(text, digit_index + 1)
+        if close_index >= len(text) or text[close_index] != "]":
+            return None
+
+        return replacement, close_index + 1
+
+    @classmethod
+    def _replace_bracket_superscripts(cls, text: str) -> str:
+        """Replace [2]/[3] variants (e.g. [2], [ 3 ]) by unicode superscripts.
+
+        Only inline whitespace is accepted inside brackets and before the token.
+        Unsupported bracket tokens are left unchanged.
+        """
+        output: list[str] = []
+        index = 0
+        size = len(text)
+
+        while index < size:
+            parsed_token = cls._parse_superscript_token(text, index)
+            if parsed_token is None:
+                output.append(text[index])
+                index += 1
+                continue
+
+            replacement, next_index = parsed_token
+
+            if output and output[-1] in cls._INLINE_WHITESPACE:
+                output.pop()
+
+            output.append(replacement)
+            index = next_index
+
+        return "".join(output)
+
+    @classmethod
+    def _extract_bullet_content(cls, line: str) -> str | None:
+        """Extract bullet item text from a line using deterministic parsing (no regex)."""
+        stripped = line.strip()
+        if not stripped:
+            return None
+
+        marker = stripped[0]
+        if marker not in cls._BULLET_MARKERS:
+            return None
+
+        tail = stripped[1:]
+        if not tail:
+            return ""
+        if not tail[0].isspace():
+            return None
+
+        return tail.strip()
 
     @classmethod
     def _match_list_item(cls, line: str) -> tuple[str, str] | None:
@@ -309,9 +429,9 @@ class HtmlRenderer:
     @classmethod
     def _process_list_block(cls, lines: list[str], html_parts: list[str]) -> None:
         is_list = False
-        list_type = None
-        list_items = []
-        normal_lines = []
+        list_type: str | None = None
+        list_items: list[str] = []
+        normal_lines: list[str] = []
 
         def _flush_normal_lines():
             if normal_lines:
@@ -839,11 +959,14 @@ class HtmlRenderer:
         """Normalizes bold-only lines (titles) and bullet artifacts."""
         normalized_lines = []
         for line in content.split("\n"):
-            if cls.RE_BULLET_ONLY.match(line):
+            bullet_content = cls._extract_bullet_content(line)
+            if bullet_content == "":
                 continue
-            bullet_match = cls.RE_BULLET_ITEM.match(line)
-            if bullet_match:
-                normalized_lines.append(f"- {bullet_match.group(1).strip()}")
+            if bullet_content is not None:
+                # Skip single-char captures — PDF artifact (e.g. "o" from degraded ○)
+                if len(bullet_content) <= 1:
+                    continue
+                normalized_lines.append(f"- {bullet_content}")
                 continue
 
             bold_only = cls.RE_BOLD_ONLY_LINE.match(line)
