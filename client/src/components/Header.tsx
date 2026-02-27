@@ -22,6 +22,7 @@ interface HeaderProps {
     onOpenStats: () => void;
     onOpenComparator: () => void;
     onOpenModerate: () => void;
+    onOpenProfile: () => void;
     history: HistoryItem[];
     onClearHistory: () => void;
     onRemoveHistory: (term: string) => void;
@@ -39,6 +40,7 @@ export function Header({
     onOpenStats,
     onOpenComparator,
     onOpenModerate,
+    onOpenProfile,
     history,
     onClearHistory,
     onRemoveHistory,
@@ -198,6 +200,9 @@ export function Header({
                                         <strong>{userName || 'Usuário'}</strong>
                                         <span>{userEmail || 'Conta autenticada'}</span>
                                     </div>
+                                    <button onClick={() => { setIsMenuOpen(false); onOpenProfile(); }}>
+                                        <span>👤</span> Meu Perfil
+                                    </button>
                                     <button className={styles.logoutMenuButton} onClick={handleLogoutClick}>
                                         <span>🚪</span> Sair da conta
                                     </button>
