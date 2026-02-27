@@ -69,18 +69,13 @@ export function SettingsModal({
     <div
       className={`${styles.modal} ${isOpen ? styles.active : ""}`}
       onClick={onClose}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
-      }}
-      role="presentation"
     >
       {" "}
       {/* NOSONAR */}
-      <div
+      <dialog
+        open
         className={styles.content}
         onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
         aria-labelledby="settings-modal-title"
         onKeyDown={(e) => {
           if (e.key === "Escape") onClose();
@@ -284,7 +279,7 @@ export function SettingsModal({
             </button>
           </div>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }

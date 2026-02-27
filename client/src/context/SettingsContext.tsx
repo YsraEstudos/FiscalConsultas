@@ -3,6 +3,8 @@ import {
   useContext,
   useState,
   useEffect,
+  useMemo,
+  useCallback,
   ReactNode,
 } from "react";
 import {
@@ -46,7 +48,9 @@ const SettingsContext = createContext<SettingsContextType | null>(null);
  * @param children - React nodes that will receive the settings context
  * @returns The SettingsContext provider element wrapping the given children
  */
-export function SettingsProvider({ children }: { children: ReactNode }) {
+export function SettingsProvider({
+  children,
+}: Readonly<{ children: ReactNode }>) {
   // State
   const [theme, setTheme] = useState<string>(DEFAULTS.THEME);
   const [accentColor, setAccentColor] = useState<AccentColor>(
@@ -78,18 +82,18 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       }
 
       const savedSize = localStorage.getItem(STORAGE_KEYS.FONT_SIZE);
-      if (savedSize) setFontSize(parseInt(savedSize));
+      if (savedSize) setFontSize(Number.parseInt(savedSize, 10));
 
       const savedHighlight = localStorage.getItem(STORAGE_KEYS.HIGHLIGHT);
       if (savedHighlight !== null)
         setHighlightEnabled(savedHighlight === "true");
 
       const savedAdmin = localStorage.getItem(STORAGE_KEYS.ADMIN_MODE);
-      if (savedAdmin !== null) {
-        setAdminMode(savedAdmin === "true");
-      } else {
+      if (savedAdmin === null) {
         // First time visit -> Default to TRUE (Admin on by default)
         setAdminMode(true);
+      } else {
+        setAdminMode(savedAdmin === "true");
       }
 
       const savedTipiView = localStorage.getItem(
@@ -117,12 +121,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Persist & Apply Effects
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.THEME, theme);
-    document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.dataset.theme = theme;
   }, [theme]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.ACCENT_COLOR, accentColor);
-    document.documentElement.setAttribute("data-accent", accentColor);
+    document.documentElement.dataset.accent = accentColor;
   }, [accentColor]);
 
   useEffect(() => {
@@ -158,16 +162,24 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [sidebarPosition]);
 
   // Actions
-  const updateTheme = (newTheme: string) => setTheme(newTheme);
-  const updateAccentColor = (color: AccentColor) => setAccentColor(color);
-  const updateFontSize = (newSize: number) => setFontSize(newSize);
-  const toggleHighlight = () => setHighlightEnabled((prev) => !prev);
-  const toggleAdminMode = () => setAdminMode((prev) => !prev);
-  const updateTipiViewMode = (mode: TipiViewMode) => setTipiViewMode(mode);
-  const updateSidebarPosition = (position: SidebarPosition) =>
-    setSidebarPosition(position);
+  const updateTheme = useCallback((newTheme: string) => setTheme(newTheme), []);
+  const updateAccentColor = useCallback(
+    (color: AccentColor) => setAccentColor(color),
+    [],
+  );
+  const updateFontSize = useCallback((newSize: number) => setFontSize(newSize), []);
+  const toggleHighlight = useCallback(() => setHighlightEnabled((prev) => !prev), []);
+  const toggleAdminMode = useCallback(() => setAdminMode((prev) => !prev), []);
+  const updateTipiViewMode = useCallback(
+    (mode: TipiViewMode) => setTipiViewMode(mode),
+    [],
+  );
+  const updateSidebarPosition = useCallback(
+    (position: SidebarPosition) => setSidebarPosition(position),
+    [],
+  );
 
-  const restoreDefaults = () => {
+  const restoreDefaults = useCallback(() => {
     setTheme(DEFAULTS.THEME);
     setAccentColor(DEFAULTS.ACCENT_COLOR);
     setFontSize(DEFAULTS.FONT_SIZE);
@@ -175,28 +187,47 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setAdminMode(DEFAULTS.ADMIN_MODE);
     setTipiViewMode(DEFAULTS.TIPI_VIEW_MODE);
     setSidebarPosition(DEFAULTS.SIDEBAR_POSITION);
-  };
+  }, []);
+
+  const contextValue = useMemo(
+    () => ({
+      theme,
+      accentColor,
+      fontSize,
+      highlightEnabled,
+      adminMode,
+      tipiViewMode,
+      sidebarPosition,
+      updateTheme,
+      updateAccentColor,
+      updateFontSize,
+      toggleHighlight,
+      toggleAdminMode,
+      updateTipiViewMode,
+      updateSidebarPosition,
+      restoreDefaults,
+    }),
+    [
+      theme,
+      accentColor,
+      fontSize,
+      highlightEnabled,
+      adminMode,
+      tipiViewMode,
+      sidebarPosition,
+      updateTheme,
+      updateAccentColor,
+      updateFontSize,
+      toggleHighlight,
+      toggleAdminMode,
+      updateTipiViewMode,
+      updateSidebarPosition,
+      restoreDefaults,
+    ],
+  );
 
   return (
-    <SettingsContext.Provider
-      value={{
-        theme,
-        accentColor,
-        fontSize,
-        highlightEnabled,
-        adminMode,
-        tipiViewMode,
-        sidebarPosition,
-        updateTheme,
-        updateAccentColor,
-        updateFontSize,
-        toggleHighlight,
-        toggleAdminMode,
-        updateTipiViewMode,
-        updateSidebarPosition,
-        restoreDefaults,
-      }}
-    >
+    <SettingsContext.Provider value={contextValue}>
       {children}
     </SettingsContext.Provider>
   );
@@ -217,4 +248,4 @@ export function useSettings() {
 }
 
 // Re-export type for convenience
-export type { TipiViewMode };
+export type { TipiViewMode } from "../constants";

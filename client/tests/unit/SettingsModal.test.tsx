@@ -143,10 +143,10 @@ describe("SettingsModal Component", () => {
       <SettingsModal isOpen={true} onClose={onClose} />,
     );
 
-    fireEvent.keyDown(window, { key: "Enter" });
+    fireEvent.keyDown(globalThis, { key: "Enter" });
     expect(onClose).not.toHaveBeenCalled();
 
-    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(globalThis, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
 
     const modal = container.firstElementChild as HTMLElement;
