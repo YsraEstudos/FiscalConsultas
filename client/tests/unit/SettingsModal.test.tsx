@@ -139,9 +139,7 @@ describe("SettingsModal Component", () => {
 
   it("closes on ESC and backdrop click, but not when clicking inside content", () => {
     const onClose = vi.fn();
-    const { container } = render(
-      <SettingsModal isOpen={true} onClose={onClose} />,
-    );
+    render(<SettingsModal isOpen={true} onClose={onClose} />);
 
     fireEvent.keyDown(globalThis, { key: "Enter" });
     expect(onClose).not.toHaveBeenCalled();
@@ -149,9 +147,10 @@ describe("SettingsModal Component", () => {
     fireEvent.keyDown(globalThis, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
 
-    const modal = container.firstElementChild as HTMLElement;
-    expect(modal).not.toBeNull();
-    fireEvent.click(modal);
+    const backdrop = screen.getByRole("button", {
+      name: "Fechar configurações",
+    });
+    fireEvent.click(backdrop);
     expect(onClose).toHaveBeenCalledTimes(2);
 
     fireEvent.click(screen.getByText("Tema"));
