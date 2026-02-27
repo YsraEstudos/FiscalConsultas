@@ -11,7 +11,15 @@ from backend.infrastructure import DatabaseAdapter
 from backend.infrastructure.redis_client import redis_cache
 
 # Import New Routers
-from backend.presentation.routes import auth, comments, search, system, tipi, webhooks
+from backend.presentation.routes import (
+    auth,
+    comments,
+    profile,
+    search,
+    system,
+    tipi,
+    webhooks,
+)
 from backend.server.error_handlers import (
     generic_exception_handler,
     nesh_exception_handler,
@@ -221,6 +229,7 @@ app.include_router(
 app.include_router(system.router, prefix="/api", tags=["System"])
 app.include_router(webhooks.router, prefix="/api/webhooks", tags=["Webhooks"])
 app.include_router(comments.router, prefix="/api", tags=["Comments"])
+app.include_router(profile.router, prefix="/api", tags=["Profile"])
 
 
 # --- Static Files / Frontend ---
