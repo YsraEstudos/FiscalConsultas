@@ -484,10 +484,11 @@ class DatabaseAdapter:
             logger.debug(
                 f"Capítulo {chapter_num}: {len(positions)} posições (2 queries)"
             )
-            sections: Optional[Dict[str, Any]] = {
+            sections_map: Dict[str, Any] = {
                 col: first_row[col] for col in CHAPTER_NOTES_SECTION_COLUMNS
             }
-            if not self._has_section_content(sections):
+            sections: Optional[Dict[str, Any]] = sections_map
+            if not self._has_section_content(sections_map):
                 sections = None
 
             return {

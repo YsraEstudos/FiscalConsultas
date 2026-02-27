@@ -327,9 +327,9 @@ class HtmlRenderer:
     @classmethod
     def _process_list_block(cls, lines: list[str], html_parts: list[str]) -> None:
         is_list = False
-        list_type = None
-        list_items = []
-        normal_lines = []
+        list_type: str | None = None
+        list_items: list[str] = []
+        normal_lines: list[str] = []
 
         def _flush_normal_lines():
             if normal_lines:
