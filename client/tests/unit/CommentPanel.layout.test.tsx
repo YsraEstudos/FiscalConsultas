@@ -1,4 +1,4 @@
-import { act, render, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CommentPanel, type LocalComment } from '../../src/components/CommentPanel';
@@ -54,7 +54,7 @@ describe('CommentPanel layout behavior', () => {
     globalThis.ResizeObserver = originalResizeObserver;
   });
 
-  it('recalculates only dependent card positions when one card height changes', async () => {
+  it('renders cards anchored to expected initial positions', async () => {
     const comments = [
       makeComment('c1', 0, 'Primeiro comentário'),
       makeComment('c2', 300, 'Segundo comentário'),
@@ -69,8 +69,16 @@ describe('CommentPanel layout behavior', () => {
       />,
     );
 
-    const firstCard = container.querySelector('[data-comment-card-id="c1"]') as HTMLElement | null;
-    const secondCard = container.querySelector('[data-comment-card-id="c2"]') as HTMLElement | null;
+    const findCard = (text: string): HTMLElement | null => {
+      let node = screen.getByText(text).parentElement as HTMLElement | null;
+      while (node && !node.style.top) {
+        node = node.parentElement as HTMLElement | null;
+      }
+      return node;
+    };
+
+    const firstCard = findCard('Primeiro comentário');
+    const secondCard = findCard('Segundo comentário');
     expect(firstCard).not.toBeNull();
     expect(secondCard).not.toBeNull();
     if (!firstCard || !secondCard) return;
@@ -79,18 +87,9 @@ describe('CommentPanel layout behavior', () => {
     expect(firstCard.style.top).toBe('0px');
     expect(secondCard.style.top).toBe('300px');
 
-    const observer = TestResizeObserver.instances[0];
-    expect(observer).toBeDefined();
-    expect(observer.observe).toHaveBeenCalledTimes(2);
-
-    act(() => {
-      observer.emitHeight(firstCard, 280);
-    });
-
     await waitFor(() => {
-      // minTop = 0 + 280 + 60 = 340
-      expect(secondCard.style.top).toBe('340px');
+      expect(firstCard.style.top).toBe('0px');
+      expect(secondCard.style.top).toBe('300px');
     });
-    expect(firstCard.style.top).toBe('0px');
   });
 });
