@@ -386,25 +386,23 @@ function setMemoryCacheEntry<T>(key: string, entry: CacheEntry<T>): void {
 }
 
 function normalizeCodeResponseAliases<T>(data: T): T {
-    if (!data || typeof data !== 'object') return data;
+    if (data && typeof data === 'object') {
+        const candidate = data as {
+            type?: string;
+            results?: unknown;
+            resultados?: unknown;
+        };
 
-    const candidate = data as {
-        type?: string;
-        results?: unknown;
-        resultados?: unknown;
-    };
-
-    if (candidate.type !== 'code' || !candidate.results || candidate.resultados) {
-        return data;
+        if (candidate.type === 'code' && candidate.results && !candidate.resultados) {
+            Object.defineProperty(candidate, 'resultados', {
+                get() {
+                    return this.results;
+                },
+                enumerable: false,
+                configurable: true
+            });
+        }
     }
-
-    Object.defineProperty(candidate, 'resultados', {
-        get() {
-            return this.results;
-        },
-        enumerable: false,
-        configurable: true
-    });
 
     return data;
 }

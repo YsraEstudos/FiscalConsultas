@@ -257,10 +257,13 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
 async def test_lifespan_postgres_tipi_count_failure_falls_back_to_sqlite_mode(
     monkeypatch, core_mocks
 ):
+    class _BrokenSession:
+        async def execute(self, _query):
+            raise RuntimeError("tipi count failed")
+
     @asynccontextmanager
     async def _broken_get_session():
-        raise RuntimeError("tipi count failed")
-        yield
+        yield _BrokenSession()
 
     async def _close_db_ok():
         return None

@@ -71,6 +71,47 @@ def _normalize_tipi_status(raw_stats: dict | None) -> dict:
     return payload
 
 
+async def _collect_db_status(request: Request) -> tuple[dict, float]:
+    db = getattr(request.app.state, "db", None)
+    start = time.perf_counter()
+
+    if db:
+        db_stats = await db.check_connection()
+        latency_ms = round((time.perf_counter() - start) * 1000, 2)
+        return db_stats, latency_ms
+
+    try:
+        from backend.infrastructure.db_engine import get_session
+        from sqlalchemy import text
+
+        async with get_session() as session:
+            chapters_count = await session.execute(text("SELECT COUNT(*) FROM chapters"))
+            positions_count = await session.execute(
+                text("SELECT COUNT(*) FROM positions")
+            )
+        db_stats = {
+            "status": "online",
+            "chapters": int(chapters_count.scalar() or 0),
+            "positions": int(positions_count.scalar() or 0),
+        }
+    except Exception as e:
+        db_stats = {"status": "error", "error": str(e)}
+
+    latency_ms = round((time.perf_counter() - start) * 1000, 2)
+    return db_stats, latency_ms
+
+
+async def _collect_tipi_status(request: Request) -> dict:
+    tipi_service = getattr(request.app.state, "tipi_service", None)
+    if tipi_service is None:
+        return {"status": "error", "error": "TIPI service unavailable"}
+
+    try:
+        return await tipi_service.check_connection()
+    except Exception as tipi_err:
+        return {"status": "error", "error": str(tipi_err)}
+
+
 @router.get("/status")
 async def get_status(request: Request):
     """
@@ -82,43 +123,8 @@ async def get_status(request: Request):
 
     Retorna versão da API e estado atual dos serviços.
     """
-    # Access state directly from request
-    db = getattr(request.app.state, "db", None)
-    tipi_service = getattr(request.app.state, "tipi_service", None)
-
-    start = time.perf_counter()
-    if db:
-        db_stats = await db.check_connection()
-    else:
-        try:
-            from backend.infrastructure.db_engine import get_session
-            from sqlalchemy import text
-
-            async with get_session() as session:
-                chapters_count = await session.execute(
-                    text("SELECT COUNT(*) FROM chapters")
-                )
-                positions_count = await session.execute(
-                    text("SELECT COUNT(*) FROM positions")
-                )
-            db_stats = {
-                "status": "online",
-                "chapters": int(chapters_count.scalar() or 0),
-                "positions": int(positions_count.scalar() or 0),
-            }
-        except Exception as e:
-            db_stats = {"status": "error", "error": str(e)}
-    db_latency_ms = round((time.perf_counter() - start) * 1000, 2)
-
-    # TIPI status - captura erros localmente para agregação
-    tipi_stats = None
-    if tipi_service is None:
-        tipi_stats = {"status": "error", "error": "TIPI service unavailable"}
-    else:
-        try:
-            tipi_stats = await tipi_service.check_connection()
-        except Exception as tipi_err:
-            tipi_stats = {"status": "error", "error": str(tipi_err)}
+    db_stats, db_latency_ms = await _collect_db_status(request)
+    tipi_stats = await _collect_tipi_status(request)
 
     normalized_db = _normalize_db_status(db_stats, db_latency_ms)
     normalized_tipi = _normalize_tipi_status(tipi_stats)
@@ -139,7 +145,10 @@ async def get_status(request: Request):
     return status
 
 
-@router.get("/cache-metrics")
+@router.get(
+    "/cache-metrics",
+    responses={403: {"description": "Forbidden (admin-only endpoint)."}},
+)
 async def get_cache_metrics(request: Request):
     """
     Métricas de hit/miss dos payload caches de /api/search e /api/tipi/search.
@@ -170,11 +179,17 @@ async def get_cache_metrics(request: Request):
     }
 
 
-@router.get("/debug/anchors")
+@router.get(
+    "/debug/anchors",
+    responses={
+        403: {"description": "Forbidden (admin-only endpoint)."},
+        404: {"description": "Not found when debug mode is disabled."},
+    },
+)
 async def debug_anchors(
     request: Request,
     service: Annotated[NeshService, Depends(get_nesh_service)],
-    ncm: str = Query(..., description="Código NCM para debug de anchors"),
+    ncm: Annotated[str, Query(description="Código NCM para debug de anchors")],
 ):
     """
     DEBUG: Retorna o HTML renderizado e lista todos os IDs injetados.
@@ -207,7 +222,10 @@ async def debug_anchors(
     }
 
 
-@router.post("/admin/reload-secrets")
+@router.post(
+    "/admin/reload-secrets",
+    responses={403: {"description": "Forbidden (admin-only endpoint)."}},
+)
 async def reload_secrets(request: Request):
     """
     Recarrega secrets de env/.env sem reiniciar o servidor.
