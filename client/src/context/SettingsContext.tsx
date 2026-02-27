@@ -36,6 +36,16 @@ interface SettingsContextType {
 
 const SettingsContext = createContext<SettingsContextType | null>(null);
 
+/**
+ * Provides the SettingsContext and manages persistent user preferences and UI side effects.
+ *
+ * Initializes settings from localStorage, persists changes back to localStorage, applies related
+ * DOM attributes and classes (theme, accent color, font size, highlight visibility, admin mode,
+ * tipi view mode, and sidebar position), and exposes update/restore actions to consumers.
+ *
+ * @param children - React nodes that will receive the settings context
+ * @returns The SettingsContext provider element wrapping the given children
+ */
 export function SettingsProvider({ children }: { children: ReactNode }) {
   // State
   const [theme, setTheme] = useState<string>(DEFAULTS.THEME);
@@ -192,6 +202,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Accesses the settings context value from the nearest SettingsProvider.
+ *
+ * @returns The current SettingsContext value.
+ * @throws If called outside of a SettingsProvider.
+ */
 export function useSettings() {
   const context = useContext(SettingsContext);
   if (!context) {

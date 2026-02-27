@@ -14,6 +14,18 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
+/**
+ * Renders the user settings modal with controls for appearance, functionality, navigation, and TIPI view.
+ *
+ * The modal includes theme selection, accent color picker, font-size slider, result highlighting toggle,
+ * optional developer mode toggle for admins, sidebar position selection, TIPI view mode selection, and a
+ * "Restore Defaults" action. The modal closes when the backdrop is clicked, the close button is pressed,
+ * or the Escape key is pressed.
+ *
+ * @param isOpen - Whether the modal is visible
+ * @param onClose - Callback invoked to close the modal
+ * @returns The settings modal element when `isOpen` is true, `null` otherwise
+ */
 export function SettingsModal({
   isOpen,
   onClose,
