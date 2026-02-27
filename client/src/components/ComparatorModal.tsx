@@ -118,8 +118,13 @@ export function ComparatorModal({ isOpen, onClose, defaultDoc = 'nesh' }: Compar
     if (!isOpen) return null;
 
     return (
-        <div className={styles.overlay} onClick={onClose}>
-            <div className={styles.content} onClick={(e) => e.stopPropagation()}>
+        <div
+            className={styles.overlay}
+            onMouseDown={(e) => {
+                if (e.target === e.currentTarget) onClose();
+            }}
+        >
+            <div className={styles.content}>
                 <div className={styles.header}>
                     <div className={styles.headerTitle}>
                         <h2 className={styles.headerHeading}>⚖️ Comparar NCMs</h2>
