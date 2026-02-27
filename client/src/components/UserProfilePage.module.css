@@ -3,18 +3,30 @@
    Premium dark-theme design with glassmorphism
    =========================================== */
 
+/* Outer fixed wrapper — creates stacking context; no background (backdrop button does that) */
 .overlay {
     position: fixed;
     inset: 0;
     z-index: 1000;
-    background: rgba(15, 15, 26, 0.85);
-    -webkit-backdrop-filter: blur(8px);
-    backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
     justify-content: center;
     animation: fadeIn 0.2s ease;
     padding: 1rem;
+}
+
+/* Clickable backdrop button — sits below the dialog panel */
+.backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 15, 26, 0.85);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: default;
+    z-index: 0;
 }
 
 @keyframes fadeIn {
@@ -39,6 +51,10 @@
     flex-direction: column;
     overflow: hidden;
     animation: slideUp 0.25s ease;
+    /* Stack above backdrop button; override <dialog> UA defaults */
+    position: relative;
+    z-index: 1;
+    padding: 0;
 }
 
 @keyframes slideUp {
@@ -461,15 +477,27 @@
 
 /* ─── Delete Confirm Modal ─────────────────── */
 
-.confirmOverlay {
+/* Outer fixed wrapper for the delete-confirm dialog */
+.confirmWrapper {
     position: fixed;
     inset: 0;
     z-index: 1100;
-    background: rgba(15, 15, 26, 0.9);
     display: flex;
     align-items: center;
     justify-content: center;
     animation: fadeIn 0.15s ease;
+}
+
+/* Backdrop button for the confirm dialog */
+.confirmBackdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 15, 26, 0.9);
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: default;
+    z-index: 0;
 }
 
 .confirmBox {
@@ -480,6 +508,9 @@
     max-width: 420px;
     width: 90%;
     text-align: center;
+    /* Stack above confirmBackdrop; override <dialog> UA defaults */
+    position: relative;
+    z-index: 1;
 }
 
 .confirmBox h3 {

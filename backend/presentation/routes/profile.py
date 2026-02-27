@@ -6,7 +6,7 @@ autenticação via decode_clerk_jwt.
 """
 
 import logging
-from typing import Annotated, Optional
+from typing import Annotated
 
 from backend.config.settings import settings
 from backend.infrastructure.db_engine import get_db
@@ -133,14 +133,16 @@ async def update_my_profile(
 async def get_my_contributions(
     request: Request,
     service: Annotated[ProfileService, Depends(_get_service)],
-    page: int = Query(1, ge=1, description="Página"),
-    page_size: int = Query(20, ge=1, le=100, description="Itens por página"),
-    search: Optional[str] = Query(None, max_length=200, description="Busca por texto"),
-    status_filter: Optional[str] = Query(
-        None,
-        alias="status",
-        description="Filtrar por status (pending, approved, rejected, private)",
-    ),
+    page: Annotated[int, Query(ge=1, description="Página")] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100, description="Itens por página")] = 20,
+    search: Annotated[str | None, Query(max_length=200, description="Busca por texto")] = None,
+    status_filter: Annotated[
+        str | None,
+        Query(
+            alias="status",
+            description="Filtrar por status (pending, approved, rejected, private)",
+        ),
+    ] = None,
 ):
     """Lista paginada de contribuições (comentários) do usuário."""
     payload = await _require_payload(request)
@@ -178,10 +180,11 @@ async def get_user_card(
     service: Annotated[ProfileService, Depends(_get_service)],
 ):
     """Mini-card público de um usuário para hover tooltip."""
-    await _require_payload(request)
+    payload = await _require_payload(request)
+    tenant_id = _resolve_tenant(payload)
 
     try:
-        card = await service.get_user_card(user_id)
+        card = await service.get_user_card(user_id, tenant_id)
         return UserCardResponse(**card)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e  # NOSONAR
