@@ -3,6 +3,8 @@
    Includes Info Section, Results, and Markdown
    =========================================== */
 
+/* stylelint-disable no-descending-specificity, no-duplicate-selectors */
+
 /* Info Section */
 .info-section {
   background: var(--bg-secondary);
@@ -286,10 +288,10 @@
 
 /* Flash highlight for navigation */
 .flash-highlight {
-  animation: flashHighlight 2s ease-out;
+  animation: flash-highlight 2s ease-out;
 }
 
-@keyframes flashHighlight {
+@keyframes flash-highlight {
   0% {
     background: rgb(99 102 241 / 30%);
   }
@@ -431,7 +433,7 @@
 /* Highlight units - inherits from global .highlight-unit, adds markdown-specific styles */
 .markdown-body .highlight-unit {
   background-color: rgb(59 130 246 / 20%);
-  color: #93c5fd;
+  color: var(--text-primary);
   padding: 0 3px;
   border-radius: 3px;
   font-family: "JetBrains Mono", monospace;
@@ -475,7 +477,7 @@
   padding: 0;
   margin: -1px;
   overflow: hidden;
-  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
   white-space: nowrap;
   border-width: 0;
 }

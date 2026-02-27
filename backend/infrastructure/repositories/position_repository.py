@@ -4,7 +4,9 @@ Repository para operações de Position (NCM) com suporte dual SQLite/PostgreSQL
 
 from typing import Any, List, Optional, cast
 
-from sqlalchemy import func, or_, select, text, cast as sa_cast, Integer
+from sqlalchemy import Integer
+from sqlalchemy import cast as sa_cast
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...config.settings import settings
@@ -49,10 +51,10 @@ class PositionRepository:
     async def get_by_chapter(self, chapter_num: str) -> List[PositionRead]:
         """
         List all positions for a given chapter, ordered by HS code numeric components.
-        
+
         Parameters:
             chapter_num (str): Chapter number (e.g., "85").
-        
+
         Returns:
             List[PositionRead]: PositionRead objects containing codigo, descricao, and anchor_id ordered by HS code.
         """
