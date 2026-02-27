@@ -14,6 +14,7 @@ import { extractChapter } from './utils/chapterDetection';
 import { isCodeSearchResponse } from './types/api.types';
 import { useSettings } from './context/SettingsContext';
 import { NotePanel } from './components/NotePanel';
+import { UserProfilePage } from './components/UserProfilePage';
 import styles from './App.module.css';
 
 import { ModalManager } from './components/ModalManager';
@@ -53,6 +54,7 @@ function App() {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [isComparatorOpen, setIsComparatorOpen] = useState(false);
     const [isModerateOpen, setIsModerateOpen] = useState(false);
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [noteModal, setNoteModal] = useState<{
         note: string;
         chapter: string;
@@ -390,6 +392,7 @@ function App() {
                 onOpenStats={() => setIsStatsOpen(true)}
                 onOpenComparator={() => setIsComparatorOpen(true)}
                 onOpenModerate={() => setIsModerateOpen(true)}
+                onOpenProfile={() => setIsProfileOpen(true)}
                 history={history}
                 onClearHistory={clearHistory}
                 onRemoveHistory={removeFromHistory}
@@ -467,6 +470,10 @@ function App() {
                     ))}
                 </div>
             </Layout>
+            <UserProfilePage
+                isOpen={isProfileOpen}
+                onClose={() => setIsProfileOpen(false)}
+            />
         </>
     );
 }

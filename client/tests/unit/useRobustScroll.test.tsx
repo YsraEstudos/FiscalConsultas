@@ -13,7 +13,7 @@ describe('useRobustScroll Hook', () => {
     });
 
     afterEach(() => {
-        document.body.removeChild(container);
+        container.remove();
         vi.restoreAllMocks();
     });
 
@@ -63,9 +63,9 @@ describe('useRobustScroll Hook', () => {
             vi.advanceTimersByTime(50);
         });
 
-        // Allow settle timers to complete
+        // Allow settle timer (300ms) and flash cleanup scheduling to complete
         act(() => {
-            vi.advanceTimersByTime(800);
+            vi.advanceTimersByTime(400);
         });
 
         expect(document.getElementById('future-element')?.scrollIntoView).toHaveBeenCalled();

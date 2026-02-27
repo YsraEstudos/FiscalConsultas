@@ -31,6 +31,18 @@ Para atingir o nível de excelência técnica, o projeto deve perseguir estes qu
 - [x] **[Seguranca] Hardening de HTTP**
   - CORS estrito, cabeçalhos de segurança (cache) e limitação de métodos.
 
+## Fase 0.5: Segurança Avançada (Futuro) 🔒
+
+*Melhorias contínuas baseadas no baseline atual de segurança.*
+
+- [ ] **[Seguranca] Rate Limit com Redis**
+  - Migrar o limiter de in-memory para Redis, tornando o rate limit escalável em múltiplos workers.
+- [ ] **[Seguranca] Hardening HTTP Estrito**
+  - Adicionar cabeçalhos de proteção (CSP, X-Frame-Options, HSTS, X-Content-Type-Options).
+  - Restringir `allow_methods` do CORS para apenas os métodos estritamente necessários.
+- [ ] **[Seguranca] Rotação Autenticada**
+  - Aplicar os prazos de rotação definidos no recém-criado `SECRETS_POLICY.md`.
+
 ## Fase 1: Modernização da Infraestrutura (Crítico) ✅
 
 *Substitui a dependência de SQLite por uma base robusta para dados "vivos".*

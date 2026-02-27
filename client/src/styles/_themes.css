@@ -1,0 +1,78 @@
+/* ===========================================
+   Theme & Accent Color Overrides
+   Uses data attributes on <html> to switch palettes.
+   Default (no attribute) = AMOLED dark + purple accent.
+   =========================================== */
+
+/* --- Light Mode --- */
+[data-theme="light"] {
+  --bg-primary: #f8f9fc;
+  --bg-secondary: #fff;
+  --bg-tertiary: #eef0f5;
+  --text-primary: #1a1a2e;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --border-color: #d1d5e0;
+}
+
+/* --- Accent Colors --- */
+
+/* Purple (default — matches :root in _variables.css) */
+[data-accent="purple"] {
+  --accent-primary: #6366f1;
+  --accent-secondary: #8b5cf6;
+  --accent-gradient: linear-gradient(
+    135deg,
+    #6366f1 0%,
+    #8b5cf6 50%,
+    #a855f7 100%
+  );
+}
+
+/* Pink */
+[data-accent="pink"] {
+  --accent-primary: #ec4899;
+  --accent-secondary: #f472b6;
+  --accent-gradient: linear-gradient(
+    135deg,
+    #db2777 0%,
+    #ec4899 50%,
+    #f472b6 100%
+  );
+}
+
+/* Green */
+[data-accent="green"] {
+  --accent-primary: #10b981;
+  --accent-secondary: #34d399;
+  --accent-gradient: linear-gradient(
+    135deg,
+    #059669 0%,
+    #10b981 50%,
+    #34d399 100%
+  );
+}
+
+/* Yellow */
+[data-accent="yellow"] {
+  --accent-primary: #f59e0b;
+  --accent-secondary: #fbbf24;
+  --accent-gradient: linear-gradient(
+    135deg,
+    #d97706 0%,
+    #f59e0b 50%,
+    #fbbf24 100%
+  );
+}
+
+/* Red */
+[data-accent="red"] {
+  --accent-primary: #ef4444;
+  --accent-secondary: #f87171;
+  --accent-gradient: linear-gradient(
+    135deg,
+    #dc2626 0%,
+    #ef4444 50%,
+    #f87171 100%
+  );
+}

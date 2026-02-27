@@ -87,9 +87,16 @@ def get_current_db_hash() -> str | None:
 
 def read_nesh_content() -> tuple[str | None, str | None, str | None]:
     """
-    Lê o conteúdo do arquivo Nesh.
-    Prioridade: Nesh.txt > Nesh.zip
-    Retorna: (conteudo, tipo_fonte, caminho_fonte)
+    Read the Nesh source content, preferring a plain TXT file over a ZIP archive.
+    
+    Returns:
+        tuple[str | None, str | None, str | None]: A tuple (content, source_type, source_path)
+            - content: the file content as a UTF-8 string, or `None` if no readable source was found.
+            - source_type: `"txt"` if read from Nesh.txt, `"zip"` if read from a .txt inside Nesh.zip, or `None` if not found.
+            - source_path: filesystem path to the source used (NESH_TXT or NESH_ZIP), or `None` if not found.
+    Notes:
+        - If a ZIP is used, the first `.txt` file found inside the archive is returned.
+        - If the ZIP file is corrupted, the function returns `(None, None, None)`.
     """
     # 1. Tenta ler TXT
     if os.path.exists(NESH_TXT):
@@ -121,20 +128,80 @@ def read_nesh_content() -> tuple[str | None, str | None, str | None]:
     return None, None, None
 
 
+def _replace_bracket_superscripts(text: str) -> str:
+    """Converte padrões comuns de colchetes ([2]/[3]) para superscript Unicode."""
+    # Com espaço antes (evita sobrar espaço em casos como "cm [3]")
+    text = text.replace(" [3 ]", "³")
+    text = text.replace(" [3]", "³")
+    text = text.replace(" [2 ]", "²")
+    text = text.replace(" [2]", "²")
+    # Sem espaço antes
+    text = text.replace("[3 ]", "³")
+    text = text.replace("[3]", "³")
+    text = text.replace("[2 ]", "²")
+    text = text.replace("[2]", "²")
+    return text
+
+
+def _clean_position_description(desc: str) -> str:
+    """
+    Clean and normalize a position description extracted from source content.
+    
+    Performs targeted removals and transformations commonly needed for NESH position text:
+    - Removes the NESH "(+)" subposition artifact and Markdown bold markers.
+    - Strips a trailing isolated period.
+    - Converts PDF-style bracketed superscripts `[2]` and `[3]` to `²` and `³`.
+    - Collapses multiple spaces and trims surrounding whitespace.
+    
+    Returns:
+        cleaned (str): The normalized description string.
+    """
+    # Remove artefato (+) da convenção NESH (indica Nota Explicativa de subposição)
+    desc = desc.replace("(+)", " ")
+    # Remove marcadores de bold do markdown (**)
+    desc = desc.replace("**", "")
+    # Converte notação de colchetes do PDF: [3] → ³, [2] → ²
+    desc = _replace_bracket_superscripts(desc)
+    # Normaliza espaços múltiplos
+    desc = " ".join(desc.split())
+    # Remove ponto final isolado no final da descrição
+    if desc.endswith("."):
+        desc = desc[:-1].rstrip()
+    return desc
+
+
 def extract_positions_from_chapter(chapter_content: str) -> list:
-    """Extrai as posições (ex: 01.01, 85.07) de um capítulo."""
+    """
+    Extracts unique position entries from a chapter's text.
+    
+    Scans the chapter content for lines that start with a two-digit dot two-digit code (e.g., "01.01" or "85.07") followed by a separator and a description. Accepts codes wrapped in markdown bold markers and different dash characters. For each distinct code, the first occurrence is kept; subsequent duplicates are ignored. Descriptions are cleaned and normalized, then truncated to 100 characters.
+    
+    Parameters:
+        chapter_content (str): Full text of a chapter to scan for position lines.
+    
+    Returns:
+        list[dict]: A list of dictionaries in the order found, each with:
+            - "codigo" (str): The position code (e.g., "01.01").
+            - "descricao" (str): The cleaned, truncated description for that code.
+    """
     # Aceita linhas com **bold** e diferentes tipos de hífen
     position_pattern = r"^\s*(?:\*\*)?(\d{2}\.\d{2})(?:\*\*)?\s*[\-–—]\s*"
     positions = []
+    seen_codes: set[str] = set()
 
     for line in chapter_content.split("\n"):
         match = re.match(position_pattern, line)
         if match:
             pos = match.group(1)
+            # Evita duplicatas: pega apenas a primeira ocorrência de cada código
+            if pos in seen_codes:
+                continue
+            seen_codes.add(pos)
             desc_match = re.match(
                 r"^\s*(?:\*\*)?\d{2}\.\d{2}(?:\*\*)?\s*[\-–—]\s*(.+)", line
             )
-            desc = desc_match.group(1)[:100] if desc_match else ""
+            raw_desc = desc_match.group(1) if desc_match else ""
+            desc = _clean_position_description(raw_desc)[:100]
             positions.append({"codigo": pos, "descricao": desc})
 
     return positions
@@ -142,8 +209,12 @@ def extract_positions_from_chapter(chapter_content: str) -> list:
 
 def extract_chapter_notes(chapter_content: str) -> str:
     """
-    Extrai as Notas (regras gerais) de um capítulo.
-    As notas ficam entre o título do capítulo e a primeira posição (XX.XX).
+    Extracts the general notes section for a chapter.
+    
+    Parses the text between the chapter title and the first position entry. Recognizes an explicit "Nota" or "Notas" header, or treats initial non-position text before the first position code (format "DD.DD -") as the notes section. Collapses runs of three or more consecutive newlines into two and trims leading/trailing whitespace.
+    
+    Returns:
+        notes_text (str): The extracted notes text with normalized blank lines; empty string if no notes were found.
     """
     lines = chapter_content.split("\n")
     notes_lines = []
@@ -189,9 +260,37 @@ def extract_chapter_notes(chapter_content: str) -> str:
     return notes_text.strip()
 
 
+def _sanitize_source_content(content: str) -> str:
+    """
+    Normalize PDF-extraction artifacts in source text by converting bracketed numeric superscripts to their Unicode superscript characters.
+    
+    This replaces occurrences like "[2]", "[2 ]", "[ 3]" with the corresponding superscript digits (² and ³), preserving surrounding text.
+    
+    Parameters:
+        content (str): Source text to sanitize, typically extracted from a PDF or raw text file.
+    
+    Returns:
+        str: The sanitized text with bracketed superscripts converted to Unicode superscripts.
+    """
+    return _replace_bracket_superscripts(content)
+
+
 def parse_nesh_content(content: str) -> dict:
-    """Faz o parsing do conteúdo e retorna dicionário de capítulos."""
+    """
+    Parse the full Nesh source text into a mapping of chapter numbers to chapter content.
+    
+    The function sanitizes common PDF-extraction artifacts (for example, bracketed superscripts) before locating chapters by lines like "Capítulo <number>". It also moves standalone "Seção <Roman>" headers that appear immediately after a chapter header into the following chapter to keep section headers with their intended chapter.
+    
+    Parameters:
+        content (str): Full raw Nesh text to parse.
+    
+    Returns:
+        dict: Mapping of two-digit chapter numbers (e.g., "01", "02") to the corresponding chapter text.
+    """
     print(f"   Conteúdo: {len(content):,} bytes, {content.count(chr(10)):,} linhas")
+
+    # Sanitiza artefatos de extração PDF (superscripts, etc.)
+    content = _sanitize_source_content(content)
 
     # Padrão para identificar início de capítulos
     chapter_pattern = r"\nCapítulo\s+(\d+)\r?\n"

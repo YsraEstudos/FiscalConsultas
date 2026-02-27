@@ -6,7 +6,7 @@ vi.mock('react-virtuoso', () => ({
     Virtuoso: ({ data, itemContent }: any) => (
         <div data-testid="virtuoso">
             {data.map((item: any, index: number) => (
-                <div key={index}>{itemContent(index, item)}</div>
+                <div key={`mock-item-${item?.type ?? 'unknown'}-${item?.pos?.codigo ?? item?.sectionType ?? item?.capitulo ?? index}-${index}`}>{itemContent(index, item)}</div>
             ))}
         </div>
     )
@@ -83,6 +83,26 @@ describe('Sidebar Component', () => {
         expect(chapters[0]).toHaveTextContent('Capítulo 01');
         expect(chapters[1]).toHaveTextContent('Capítulo 10');
         expect(chapters[2]).toHaveTextContent('Capítulo 85');
+    });
+
+    it('sorts positions numerically by HS code segments', () => {
+        const unsortedPositions = {
+            "84": {
+                capitulo: "84",
+                posicoes: [
+                    { codigo: "84.10", descricao: "Dez" },
+                    { codigo: "84.02", descricao: "Dois" },
+                    { codigo: "84.70", descricao: "Setenta" }
+                ]
+            }
+        };
+
+        render(
+            <Sidebar results={unsortedPositions} {...defaultProps} />
+        );
+
+        const positionCodes = screen.getAllByText(/84\./).map((el) => el.textContent);
+        expect(positionCodes).toEqual(['84.02', '84.10', '84.70']);
     });
 
     it('renders structured section items when secoes are present', () => {
