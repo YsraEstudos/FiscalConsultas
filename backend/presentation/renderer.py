@@ -302,8 +302,8 @@ class HtmlRenderer:
     RE_INDENTED_LINE = re.compile(r"^(\s{4,})(.+)$", re.MULTILINE)
     RE_BOLD_ONLY_LINE = re.compile(r"^\s*\*\*(.+?)\*\*\s*$")
     RE_BOLD_INLINE = re.compile(r"^\s*\*\*(.+?)\*\*\s+(.+)$")
-    RE_BULLET_ONLY = re.compile(r"^\s*[•·○]\s*$")
-    RE_BULLET_ITEM = re.compile(r"^\s*[•·○]\s+(.+)$")
+    RE_BULLET_ONLY = re.compile(r"^\s*[•·○o]\s*$")
+    RE_BULLET_ITEM = re.compile(r"^\s*[•·○o]\s+(.+)$")
     RE_BOLD_MARKDOWN = re.compile(r"\*\*(.+?)\*\*")
     RE_CHAPTER_HEADER = re.compile(
         r"^\s*CAP[ÍI]TULO\s+(\d{1,2})\s*$", re.IGNORECASE | re.MULTILINE
@@ -861,7 +861,11 @@ class HtmlRenderer:
                 continue
             bullet_match = cls.RE_BULLET_ITEM.match(line)
             if bullet_match:
-                normalized_lines.append(f"- {bullet_match.group(1).strip()}")
+                bullet_content = bullet_match.group(1).strip()
+                # Skip single-char captures — PDF artifact (e.g. "o" from degraded ○)
+                if len(bullet_content) <= 1:
+                    continue
+                normalized_lines.append(f"- {bullet_content}")
                 continue
 
             bold_only = cls.RE_BOLD_ONLY_LINE.match(line)
