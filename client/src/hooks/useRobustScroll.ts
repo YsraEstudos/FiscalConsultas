@@ -13,14 +13,7 @@ interface UseRobustScrollProps {
  * Hook to robustly scroll to an element by ID, handling:
  * 1. Special characters in IDs (dots, slashes)
  * 2. Dynamic content loading (MutationObserver)
- * 3. Layout reflows (Multiple attempts)
- * 4. Duplicate IDs (Smart selection based on tag priority)
-
-/**
- * Hook to robustly scroll to an element by ID, handling:
- * 1. Special characters in IDs (dots, slashes)
- * 2. Dynamic content loading (MutationObserver)
- * 3. Layout reflows (Multiple attempts)
+ * 3. Layout reflows (single safety re-scroll)
  * 4. Duplicate IDs (Smart selection based on tag priority)
  */
 export function useRobustScroll({
@@ -173,7 +166,8 @@ export function useRobustScroll({
       if (el) {
         doScroll(el);
 
-        // Single safety re-scroll after layout settles
+        // 300ms balances layout-settle reliability with UI responsiveness.
+        // Keep this timing aligned with useRobustScroll unit tests.
         settleRef.current = setTimeout(() => {
           const el2 = findTarget() || el;
           doScroll(el2);
