@@ -35,8 +35,8 @@ class _FakeProfileService:
             "pending_comment_count": 2,
         }
 
-    async def update_bio(self, user_id: str, tenant_id: str, data):
-        profile = await self.get_profile(user_id, tenant_id)
+    async def update_bio(self, user_id: str, tenant_id: str, data, image_url=None):
+        profile = await self.get_profile(user_id, tenant_id, image_url=image_url)
         profile["bio"] = data.bio
         return profile
 
@@ -64,7 +64,7 @@ class _FakeProfileService:
             "has_next": False,
         }
 
-    async def get_user_card(self, user_id: str):
+    async def get_user_card(self, user_id: str, tenant_id: str):
         return {
             "user_id": user_id,
             "full_name": "Card User",
@@ -103,6 +103,18 @@ async def _mock_decode_valid(_t):
 
 async def _mock_decode_none(_t):
     return None
+
+
+async def _mock_decode_without_sub(_t):
+    return {"org_id": "org_test"}
+
+
+async def _mock_decode_tenant_mismatch(_t):
+    return {
+        "sub": "user_test_123",
+        "org_id": "org_other",
+        "picture": "https://img.clerk.com/avatar.png",
+    }
 
 
 def _setup_mocks(monkeypatch):
@@ -254,3 +266,29 @@ def test_get_profile_uses_org_id_when_tenant_context_missing(client, monkeypatch
 
     assert response.status_code == 200
     assert response.json()["tenant_id"] == "org_test"
+
+
+def test_get_profile_rejects_payload_without_sub(client, monkeypatch):
+    monkeypatch.setattr(profile, "decode_clerk_jwt", _mock_decode_without_sub)
+    monkeypatch.setattr(profile, "get_current_tenant", lambda: "org_test")
+    app.dependency_overrides[profile._get_service] = lambda: _FakeProfileService()
+
+    response = client.get(
+        "/api/profile/me",
+        headers={"Authorization": "Bearer mock-token"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_get_profile_rejects_tenant_mismatch_between_context_and_jwt(client, monkeypatch):
+    monkeypatch.setattr(profile, "decode_clerk_jwt", _mock_decode_tenant_mismatch)
+    monkeypatch.setattr(profile, "get_current_tenant", lambda: "org_test")
+    app.dependency_overrides[profile._get_service] = lambda: _FakeProfileService()
+
+    response = client.get(
+        "/api/profile/me",
+        headers={"Authorization": "Bearer mock-token"},
+    )
+
+    assert response.status_code == 403

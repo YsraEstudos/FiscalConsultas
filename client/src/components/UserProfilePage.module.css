@@ -11,7 +11,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    animation: fadeIn 0.2s ease;
+    animation: fade-in 0.2s ease;
     padding: 1rem;
 }
 
@@ -29,7 +29,7 @@
     z-index: 0;
 }
 
-@keyframes fadeIn {
+@keyframes fade-in {
     from {
         opacity: 0;
     }
@@ -50,14 +50,14 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    animation: slideUp 0.25s ease;
+    animation: slide-up 0.25s ease;
     /* Stack above backdrop button; override <dialog> UA defaults */
     position: relative;
     z-index: 1;
     padding: 0;
 }
 
-@keyframes slideUp {
+@keyframes slide-up {
     from {
         opacity: 0;
         transform: translateY(16px);
@@ -265,7 +265,7 @@
 .savedMsg {
     font-size: 0.8rem;
     color: var(--success);
-    animation: fadeIn 0.3s ease;
+    animation: fade-in 0.3s ease;
 }
 
 /* ─── Stats Grid ───────────────────────────── */
@@ -485,7 +485,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    animation: fadeIn 0.15s ease;
+    animation: fade-in 0.15s ease;
 }
 
 /* Backdrop button for the confirm dialog */

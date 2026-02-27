@@ -23,6 +23,11 @@ interface CardData {
     comment_count: number;
 }
 
+function getInitials(name: string | null): string {
+    if (!name) return '?';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+}
+
 export function UserHoverCard({ userId, children, imageUrl }: Readonly<UserHoverCardProps>) {
     const [card, setCard] = useState<CardData | null>(null);
 
@@ -39,11 +44,6 @@ export function UserHoverCard({ userId, children, imageUrl }: Readonly<UserHover
 
         return () => { cancelled = true; };
     }, [userId]);
-
-    const getInitials = (name: string | null) => {
-        if (!name) return '?';
-        return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-    };
 
     const resolvedImage = imageUrl || card?.image_url;
 

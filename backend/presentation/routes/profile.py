@@ -53,6 +53,16 @@ async def _require_payload(request: Request) -> dict:
         raise HTTPException(
             status_code=401, detail="Token inválido ou expirado"
         )  # NOSONAR
+
+    if not payload.get("sub"):
+        reason = get_last_jwt_failure_reason()
+        if settings.server.env == "development" and reason:
+            raise HTTPException(  # NOSONAR
+                status_code=401, detail=f"Token inválido ou expirado ({reason})"
+            )
+        raise HTTPException(
+            status_code=401, detail="Token inválido ou expirado"
+        )  # NOSONAR
     return payload
 
 
@@ -62,9 +72,13 @@ def _get_service(session: Annotated[AsyncSession, Depends(get_db)]) -> ProfileSe
 
 def _resolve_tenant(payload: dict) -> str:
     """Resolve tenant_id do contexto ou do JWT claim."""
-    tenant_id = get_current_tenant()
-    if not tenant_id:
-        tenant_id = payload.get("org_id")
+    context_tenant_id = get_current_tenant()
+    payload_tenant_id = payload.get("org_id")
+
+    if context_tenant_id and payload_tenant_id and context_tenant_id != payload_tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant inválido para token")  # NOSONAR
+
+    tenant_id = context_tenant_id or payload_tenant_id
     if not tenant_id:
         raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
     return tenant_id
@@ -115,9 +129,10 @@ async def update_my_profile(
     payload = await _require_payload(request)
     user_id: str = payload.get("sub", "")
     tenant_id = _resolve_tenant(payload)
+    image_url = payload.get("image_url") or payload.get("picture")
 
     try:
-        profile = await service.update_bio(user_id, tenant_id, data)
+        profile = await service.update_bio(user_id, tenant_id, data, image_url=image_url)
         return UserProfileResponse(**profile)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e  # NOSONAR
