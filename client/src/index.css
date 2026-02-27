@@ -4,15 +4,15 @@
    =========================================== */
 
 /* 1. Core Variables & Base */
-@import url('./styles/_variables.css');
-@import url('./styles/base.css');
-
+@import url("./styles/_variables.css");
+@import url("./styles/_themes.css");
+@import url("./styles/base.css");
 
 /* 2. Content (backend-rendered HTML) */
-@import url('./styles/components/glossary.css');
-@import url('./styles/features/nesh.css');
-@import url('./styles/features/tipi.css');
+@import url("./styles/components/glossary.css");
+@import url("./styles/features/nesh.css");
+@import url("./styles/features/tipi.css");
 
 /* 3. Utilities */
-@import url('./styles/utilities/scrollbar.css');
-@import url('./styles/utilities/highlights.css');
+@import url("./styles/utilities/scrollbar.css");
+@import url("./styles/utilities/highlights.css");

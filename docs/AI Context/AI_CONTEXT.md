@@ -1,7 +1,7 @@
 # Nesh / Fiscal - AI_CONTEXT
 
-Atualizado em: 2026-02-22
-Base desta revisao: leitura direta de backend/frontend/scripts/docs no estado atual do repositório.
+Atualizado em: 2026-02-26
+Base desta revisao: leitura constante de backend/frontend/scripts/docs durante a migração para SaaS (PostgreSQL, Clerk JWT, Asaas).
 
 ## 1) Proposito
 
@@ -94,9 +94,8 @@ Rotas principais:
 - `GET /api/cache-metrics` (admin)
 - `GET /api/debug/anchors` (debug_mode + admin)
 - `GET /api/auth/me`
-- `POST /api/ai/chat`
-- `POST /api/admin/reload-secrets` (admin)
-- `POST /api/webhooks/asaas`
+- `POST /api/ai/chat` (Rate Limited 5req/min, Auth Required)
+- `POST /api/webhooks/asaas` (Provisiona Tenants localmente)
 
 Regras de compatibilidade importantes:
 
@@ -106,19 +105,19 @@ Regras de compatibilidade importantes:
 
 ## 6) Dados, Ingestao e Persistencia
 
-### 6.1 SQLite local
+### 6.1 PostgreSQL (Primary State)
+
+- Motor primário atual para os dados (habilitado por `DATABASE__ENGINE=postgresql`).
+- Configurado via `DATABASE__POSTGRES_URL` em prod/dev.
+- Controle de Schema estrito gerenciado por Alembic migrations (`migrations/`).
+- Engine RLS (Row-Level Security) ativo: `db_engine` injeta `app.current_tenant` da request via contextvar nas operações.
+
+### 6.2 SQLite local (Modo Desacoplado Dev/Fallback)
 
 - NESH: `database/nesh.db`
-  - tabelas chave: `chapters`, `positions`, `chapter_notes`, `search_index`.
 - TIPI: `database/tipi.db`
-  - tabelas chave: `tipi_chapters`, `tipi_positions`, `tipi_fts`.
-
-### 6.2 PostgreSQL
-
-- Habilitado por `DATABASE__ENGINE=postgresql`.
-- Schema evoluido por Alembic (`migrations/versions/*.py`).
-- `db_engine` injeta `app.current_tenant` em sessao para RLS.
-- `NeshService` pode rodar em modo repository; TIPI alterna entre repository e SQLite fallback conforme disponibilidade de dados em `tipi_positions`.
+- Serviço `NeshService` possui fallback para SQLite em caso de modo Legacy de Ingestão (offline fallback mode), através do `DatabaseAdapter` original.
+- Cuidado: Não é o target para transações reais de negócios como criação de Assinaturas e Usuários B2B.
 
 ### 6.3 Fontes de arquivos
 
@@ -128,19 +127,18 @@ Regras de compatibilidade importantes:
 
 ## 7) Seguranca e Tenancy
 
-- Middleware `TenantMiddleware` protege rotas `/api/*` (exceto rotas publicas definidas).
-- JWT Clerk:
-  - validacao de assinatura via JWKS (`AUTH__CLERK_DOMAIN`) em qualquer ambiente.
-  - em desenvolvimento, fallback de tenant (`_tenant` query param ou `org_default`) continua disponivel para debug local.
+- **Hardcoded Secrets Restritos**: Nenhuma credencial inserida no código; todas são injetadas (leia `SECRETS_POLICY.md` para regras ativas).
+- Middleware `TenantMiddleware` protege rotas `/api/*` (exceto `/api/auth/me`, `/api/webhooks`, `/api/status`).
+- JWT Clerk (`RS256` + `JWKS`):
+  - Autenticação migrou do session legada (desabilitada) para validação local assíncrona do JWKS (`AUTH__CLERK_DOMAIN`).
+  - Cache local de tokens JWKS válidos (60s).
+- Rate Limit & Anti-abuso:
+  - Rotas pesadas como `ai/chat` impõem limite via `SlidingWindowRateLimiter` (`ai_chat_rate_limiter`). Cache via Redis na infraestrutura é alvo previsto.
 - Multi-tenant:
-  - org_id extraido do JWT e colocado em `tenant_context`.
-  - provisioning best-effort de `Tenant`/`User` local via task assincrona.
-- Admin checks:
-  - `X-Admin-Token` atual/previous ou roles JWT (`admin|owner|superadmin`).
-- IA:
-  - `/api/ai/chat` exige JWT e rate limit por usuario/IP.
-- Webhook Asaas:
-  - token opcional, limite de payload e validacao de evento.
+  - `org_id` extraído do JWT para o `tenant_context`.
+  - Provisioning Best-Effort (sincronização fantasma) de entidades DB locais após verificação de autenticidade JWT.
+- Webhook Asaas para Pagamentos:
+  - Gera triggers para criação automática/ativação de tenants (`Subscription`).
 
 ## 8) Cache e Performance (estado atual)
 
