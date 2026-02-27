@@ -68,18 +68,17 @@ export function SettingsModal({
     // nosonar: ignoring non-interactive element click warning since this is a standard modal backdrop pattern
     <div
       className={`${styles.modal} ${isOpen ? styles.active : ""}`}
-      onClick={onClose}
     >
-      {" "}
-      {/* NOSONAR */}
+      <button
+        type="button"
+        className={styles.backdrop}
+        onClick={onClose}
+        aria-label="Fechar configurações"
+      />
       <dialog
         open
         className={styles.content}
-        onClick={(e) => e.stopPropagation()}
         aria-labelledby="settings-modal-title"
-        onKeyDown={(e) => {
-          if (e.key === "Escape") onClose();
-        }}
       >
         {" "}
         {/* NOSONAR */}
