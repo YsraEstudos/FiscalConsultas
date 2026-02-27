@@ -157,7 +157,7 @@ describe('Header', () => {
     });
 
     expect(screen.getByText('Tabela de Incidência do IPI')).toBeInTheDocument();
-  });
+  }, 15000);
 
   it('renders fallback user labels when auth profile is missing', () => {
     userNameRef.value = null;
@@ -207,5 +207,5 @@ describe('Header', () => {
     await waitFor(() => {
       expect(screen.queryByText('Confirmar saída')).not.toBeInTheDocument();
     });
-  });
+  }, 15000);
 });

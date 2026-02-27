@@ -220,6 +220,16 @@ vi.mock('../../src/components/NotePanel', () => ({
   ),
 }));
 
+vi.mock('../../src/components/UserProfilePage', () => ({
+  UserProfilePage: ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => (
+    <div data-testid="user-profile-page" data-open={String(Boolean(isOpen))}>
+      <button data-testid="user-profile-close" onClick={onClose}>
+        close-profile
+      </button>
+    </div>
+  ),
+}));
+
 vi.mock('../../src/hooks/useTabs', () => ({
   useTabs: () => ({
     tabs: mocks.tabsStateRef.value.tabs,
