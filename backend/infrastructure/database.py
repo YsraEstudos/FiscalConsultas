@@ -395,7 +395,7 @@ class DatabaseAdapter:
         )
         section_projection = section_select if has_sections else null_section_select
         notes_select = f"cn.notes_content, {parsed_notes_select}, {section_projection}"
-        sql = f"""SELECT 
+        sql = f"""SELECT
                     c.chapter_num,
                     c.content,
                     {notes_select}
@@ -436,7 +436,8 @@ class DatabaseAdapter:
                 SELECT codigo, descricao, {anchor_projection}
                 FROM positions
                 WHERE chapter_num = ?
-                ORDER BY codigo
+                ORDER BY CAST(SUBSTR(codigo, 1, 2) AS INTEGER),
+                         CAST(SUBSTR(codigo, 4, 2) AS INTEGER)
             """,
                 (chapter_num,),
             )
@@ -503,10 +504,10 @@ class DatabaseAdapter:
 
             cursor = await conn.execute(
                 f"""
-                SELECT ncm, display_text, type, description, {rank_sql["select"]} 
-                FROM search_index 
-                WHERE {content_col} MATCH ? 
-                ORDER BY {rank_sql["order"]} 
+                SELECT ncm, display_text, type, description, {rank_sql["select"]}
+                FROM search_index
+                WHERE {content_col} MATCH ?
+                ORDER BY {rank_sql["order"]}
                 LIMIT ?
             """,
                 (query, result_limit),
@@ -554,10 +555,10 @@ class DatabaseAdapter:
 
             cursor = await conn.execute(
                 f"""
-                SELECT 
+                SELECT
                     ncm, display_text, type, description, {rank_sql["select"]}
-                FROM search_index 
-                WHERE {content_col} MATCH ? 
+                FROM search_index
+                WHERE {content_col} MATCH ?
                 ORDER BY {rank_sql["order"]}
                 LIMIT ?
             """,
@@ -602,8 +603,8 @@ class DatabaseAdapter:
                 cursor = await conn.execute(
                     f"""
                     SELECT ncm, display_text, type, description, {rank_sql["select"]}
-                    FROM search_index 
-                    WHERE {content_col} MATCH ? 
+                    FROM search_index
+                    WHERE {content_col} MATCH ?
                     ORDER BY {rank_sql["order"]}
                     LIMIT ?
                 """,

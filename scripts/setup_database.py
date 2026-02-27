@@ -121,20 +121,45 @@ def read_nesh_content() -> tuple[str | None, str | None, str | None]:
     return None, None, None
 
 
+def _clean_position_description(desc: str) -> str:
+    """Limpa artefatos de markdown e notação NESH de descrições de posições."""
+    # Remove artefato (+) da convenção NESH (indica Nota Explicativa de subposição)
+    desc = re.sub(r"\s*\(\+\)\s*", " ", desc)
+    # Remove marcadores de bold do markdown (**)
+    desc = desc.replace("**", "")
+    # Remove ponto final isolado com espaços
+    desc = re.sub(r"\s*\.\s*$", "", desc)
+    # Converte notação de colchetes do PDF: [3] → ³, [2] → ²
+    desc = re.sub(
+        r"\s?\[\s*([23])\s*\]",
+        lambda m: {"2": "²", "3": "³"}[m.group(1)],
+        desc,
+    )
+    # Normaliza espaços múltiplos
+    desc = re.sub(r"\s{2,}", " ", desc).strip()
+    return desc
+
+
 def extract_positions_from_chapter(chapter_content: str) -> list:
-    """Extrai as posições (ex: 01.01, 85.07) de um capítulo."""
+    """Extrai as posições (ex: 01.01, 85.07) de um capítulo, sem duplicatas."""
     # Aceita linhas com **bold** e diferentes tipos de hífen
     position_pattern = r"^\s*(?:\*\*)?(\d{2}\.\d{2})(?:\*\*)?\s*[\-–—]\s*"
     positions = []
+    seen_codes: set[str] = set()
 
     for line in chapter_content.split("\n"):
         match = re.match(position_pattern, line)
         if match:
             pos = match.group(1)
+            # Evita duplicatas: pega apenas a primeira ocorrência de cada código
+            if pos in seen_codes:
+                continue
+            seen_codes.add(pos)
             desc_match = re.match(
                 r"^\s*(?:\*\*)?\d{2}\.\d{2}(?:\*\*)?\s*[\-–—]\s*(.+)", line
             )
-            desc = desc_match.group(1)[:100] if desc_match else ""
+            raw_desc = desc_match.group(1) if desc_match else ""
+            desc = _clean_position_description(raw_desc)[:100]
             positions.append({"codigo": pos, "descricao": desc})
 
     return positions
@@ -189,9 +214,28 @@ def extract_chapter_notes(chapter_content: str) -> str:
     return notes_text.strip()
 
 
+def _sanitize_source_content(content: str) -> str:
+    """Sanitiza conteúdo fonte antes do parsing de capítulos.
+
+    Converte artefatos de extração PDF para Unicode adequado:
+    - [3] / [3 ] → ³ (superscript 3, para cm³, m³, etc.)
+    - [2] / [2 ] → ² (superscript 2, para cm², m², etc.)
+    """
+    superscript_map = {"2": "²", "3": "³"}
+    content = re.sub(
+        r"\s?\[\s*([23])\s*\]",
+        lambda m: superscript_map[m.group(1)],
+        content,
+    )
+    return content
+
+
 def parse_nesh_content(content: str) -> dict:
     """Faz o parsing do conteúdo e retorna dicionário de capítulos."""
     print(f"   Conteúdo: {len(content):,} bytes, {content.count(chr(10)):,} linhas")
+
+    # Sanitiza artefatos de extração PDF (superscripts, etc.)
+    content = _sanitize_source_content(content)
 
     # Padrão para identificar início de capítulos
     chapter_pattern = r"\nCapítulo\s+(\d+)\r?\n"

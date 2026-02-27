@@ -242,6 +242,12 @@ class HtmlRenderer:
     # Alguns capítulos trazem artefatos de lista no texto fonte (ex: "- *" sozinho).
     RE_STRAY_LIST_MARKER = re.compile(r"^\s*-\s*\*?\s*$", re.MULTILINE)
     RE_STRAY_STAR_MARKER = re.compile(r"^\s*\*\s*$", re.MULTILINE)
+    # Superscript bracket notation from PDF extraction: [2] → ², [3] → ³
+    # Also consumes optional space before the bracket (e.g. "cm [3]" → "cm³")
+    RE_SUPERSCRIPT_BRACKET = re.compile(r"\s?\[\s*([23])\s*\]")
+    _SUPERSCRIPT_MAP = {"2": "²", "3": "³"}
+    # NESH convention: (+) indicates subposition explanatory note exists
+    RE_PLUS_ARTIFACT = re.compile(r"\s*\(\+\)\s*")
 
     @staticmethod
     def clean_content(content: str) -> str:
@@ -255,6 +261,15 @@ class HtmlRenderer:
             Texto limpo com formatação consistente
         """
         content = HtmlRenderer.RE_CLEAN_PAGE.sub("", content)
+        # Converte notação de colchetes do PDF para Unicode: [3] → ³, [2] → ²
+        content = HtmlRenderer.RE_SUPERSCRIPT_BRACKET.sub(
+            lambda m: HtmlRenderer._SUPERSCRIPT_MAP[m.group(1)], content
+        )
+        # Converte artefato NESH (+) em indicador semântico com tooltip
+        content = HtmlRenderer.RE_PLUS_ARTIFACT.sub(
+            ' <span class="nesh-subpos-indicator" title="Existe Nota Explicativa de subposição">†</span> ',
+            content,
+        )
         # Remove referências internas do documento NESH (ex: XV-7324-1)
         content = HtmlRenderer.RE_NESH_INTERNAL_REF.sub("", content)
         # Remove linhas com apenas código NCM isolado (duplicatas do código com descrição)

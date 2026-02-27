@@ -5,519 +5,534 @@
 
 /* Info Section */
 .info-section {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
-    padding: 2rem;
-    margin-bottom: 2rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 2rem;
+  margin-bottom: 2rem;
 }
 
 .info-title {
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin-bottom: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
 }
 
 .info-card {
-    background: var(--bg-tertiary);
-    border-radius: 10px;
-    padding: 1rem;
+  background: var(--bg-tertiary);
+  border-radius: 10px;
+  padding: 1rem;
 }
 
 .info-card code {
-    background: var(--bg-primary);
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    color: var(--accent-secondary);
+  background: var(--bg-primary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: var(--accent-secondary);
 }
 
 .info-card p {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
 }
 
 /* Markdown Styles Base */
 .markdown-body {
-    color: var(--text-primary);
-    line-height: 1.8;
-    contain: content;
+  color: var(--text-primary);
+  line-height: 1.8;
+  contain: content;
 
-    /* Performance: Isolate layout calculations */
+  /* Performance: Isolate layout calculations */
 }
 
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3 {
-    margin-top: 2rem;
-    margin-bottom: 1rem;
-    font-weight: 600;
-    color: var(--text-primary);
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .markdown-body h2 {
-    font-size: 1.5rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 2px solid var(--accent-primary);
+  font-size: 1.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--accent-primary);
 }
 
 .markdown-body hr {
-    border: none;
-    border-top: 1px solid var(--border-color);
-    margin: 2rem 0;
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 2rem 0;
 }
 
 .markdown-body p {
-    margin-bottom: 1rem;
+  margin-bottom: 1rem;
 }
 
 .markdown-body code {
-    background: var(--bg-tertiary);
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 0.9em;
-    color: var(--accent-secondary);
+  background: var(--bg-tertiary);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 0.9em;
+  color: var(--accent-secondary);
 }
 
 .markdown-body pre {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    padding: 1.5rem;
-    overflow: auto;
-    margin: 1rem 0;
-    max-height: 600px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 1.5rem;
+  overflow: auto;
+  margin: 1rem 0;
+  max-height: 600px;
 }
 
 .markdown-body pre code {
-    background: transparent;
-    padding: 0;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    line-height: 1.6;
-    white-space: pre-wrap;
-    overflow-wrap: break-word;
+  background: transparent;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
 .markdown-body blockquote {
-    background: transparent;
-    margin: 1rem 0;
-    padding: 0 1rem;
-    font-style: italic;
-    color: var(--text-secondary);
-    border-left: 2px solid var(--border-color);
+  background: transparent;
+  margin: 1rem 0;
+  padding: 0 1rem;
+  font-style: italic;
+  color: var(--text-secondary);
+  border-left: 2px solid var(--border-color);
 }
 
 .markdown-body em {
-    color: var(--text-secondary);
+  color: var(--text-secondary);
 }
 
 /* Chapter content formatting */
 .markdown-body h3 {
-    font-size: 1.2rem;
-    color: var(--accent-secondary);
-    margin-top: 1.5rem;
+  font-size: 1.2rem;
+  color: var(--accent-secondary);
+  margin-top: 1.5rem;
 }
 
 .markdown-body strong {
-    color: var(--accent-secondary);
+  color: var(--accent-secondary);
 }
 
 /* Regras Gerais - Seção Destacada */
 .markdown-body .regras-gerais {
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin: 1.5rem 0;
-    position: relative;
-    background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  position: relative;
+  background: var(--bg-secondary);
 }
 
 .markdown-body .regras-gerais::before {
-    content: '📋';
-    position: absolute;
-    top: -12px;
-    left: 20px;
-    background: var(--bg-secondary);
-    padding: 0 8px;
-    font-size: 1.2rem;
+  content: "📋";
+  position: absolute;
+  top: -12px;
+  left: 20px;
+  background: var(--bg-secondary);
+  padding: 0 8px;
+  font-size: 1.2rem;
 }
 
 .markdown-body .regras-gerais h3 {
-    color: var(--warning);
-    margin-top: 0;
-    margin-bottom: 1rem;
-    font-size: 1.1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+  color: var(--warning);
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .markdown-body .regras-gerais blockquote {
-    border-left: 2px solid var(--border-color);
-    background: transparent;
-    margin: 0.5rem 0;
-    padding: 0.75rem 1rem;
-    border-radius: 0 6px 6px 0;
-    font-size: 0.9rem;
-    line-height: 1.7;
+  border-left: 2px solid var(--border-color);
+  background: transparent;
+  margin: 0.5rem 0;
+  padding: 0.75rem 1rem;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.9rem;
+  line-height: 1.7;
 }
 
 .markdown-body .regras-gerais blockquote p {
-    margin: 0.25rem 0;
+  margin: 0.25rem 0;
 }
 
 /* Search History */
 .history-section {
-    margin-top: 1rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--border-color);
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
 }
 
 .history-title {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
 }
 
 .history-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .history-tag {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    padding: 0.3rem 0.75rem;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.2s;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
 .history-tag:hover {
-    background: var(--accent-primary);
-    color: white;
-    border-color: var(--accent-primary);
+  background: var(--accent-primary);
+  color: white;
+  border-color: var(--accent-primary);
 }
 
 /* --- NESH Paragraph Styles --- */
 .nesh-paragraph {
-    margin-bottom: 1rem;
-    line-height: 1.8;
-    color: var(--text-primary);
+  margin-bottom: 1rem;
+  line-height: 1.8;
+  color: var(--text-primary);
 }
 
 .nesh-paragraph:last-child {
-    margin-bottom: 0;
+  margin-bottom: 0;
 }
 
 /* --- NESH Heading Styles --- */
 .nesh-heading {
-    font-weight: 600;
-    font-size: 1.15rem;
-    margin-top: 1.5rem;
-    margin-bottom: 0.75rem;
-    color: var(--accent-secondary);
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 0.5rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+  font-weight: 600;
+  font-size: 1.15rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  color: var(--accent-secondary);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .nesh-heading .nesh-ncm {
-    background: var(--bg-tertiary);
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 0.9em;
-    color: var(--accent-primary);
+  background: var(--bg-tertiary);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 0.9em;
+  color: var(--accent-primary);
 }
 
 /* --- NESH List Styles --- */
 .nesh-list {
-    padding-left: 2rem;
-    margin: 1rem 0;
-    list-style-position: outside;
+  padding-left: 2rem;
+  margin: 1rem 0;
+  list-style-position: outside;
 }
 
 .nesh-list li {
-    margin-bottom: 0.5rem;
-    line-height: 1.7;
-    color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  line-height: 1.7;
+  color: var(--text-primary);
 }
 
 .nesh-list li::marker {
-    color: var(--accent-secondary);
-    font-weight: 600;
+  color: var(--accent-secondary);
+  font-weight: 600;
 }
 
 .nesh-list .nesh-list {
-    margin-top: 0.5rem;
-    margin-bottom: 0.5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 /* --- Shared Content Renderer Base --- */
 .content-renderer {
-    font-size: 1rem;
-    line-height: 1.8;
+  font-size: 1rem;
+  line-height: 1.8;
 }
 
 .content-renderer h2,
 .content-renderer h3 {
-    scroll-margin-top: var(--scroll-offset);
+  scroll-margin-top: var(--scroll-offset);
 
-    /* For sticky header offset */
+  /* For sticky header offset */
 }
 
 /* Flash highlight for navigation */
 .flash-highlight {
-    animation: flashHighlight 2s ease-out;
+  animation: flashHighlight 2s ease-out;
 }
 
 @keyframes flashHighlight {
-    0% {
-        background: rgb(99 102 241 / 30%);
-    }
+  0% {
+    background: rgb(99 102 241 / 30%);
+  }
 
-    100% {
-        background: transparent;
-    }
+  100% {
+    background: transparent;
+  }
 }
 
 /* --- NESH Position Card Styling --- */
 .markdown-body .nesh-section-card {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 1rem 1.25rem 1.25rem;
-    margin: 2rem 0 1rem;
-    position: relative;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1rem 1.25rem 1.25rem;
+  margin: 2rem 0 1rem;
+  position: relative;
 }
 
 .markdown-body h3.nesh-section {
-    margin: 0 0 0.75rem;
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    line-height: 1.5;
-    padding-right: 5.5rem;
-    overflow-wrap: anywhere;
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.5;
+  padding-right: 5.5rem;
+  overflow-wrap: anywhere;
 }
 
-.markdown-body .nesh-section-body>*:first-child {
-    margin-top: 0;
+.markdown-body .nesh-section-body > *:first-child {
+  margin-top: 0;
 }
 
 /* NCM Badge - top right corner (only for NESH sections) */
 .markdown-body .nesh-section-card::before {
-    content: attr(data-ncm);
-    position: absolute;
-    top: -10px;
-    right: 20px;
-    background: var(--accent-primary);
-    color: white;
-    font-size: 0.75rem;
-    font-weight: 700;
-    padding: 0.25rem 0.75rem;
-    border-radius: 4px;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    max-width: 5rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  content: attr(data-ncm);
+  position: absolute;
+  top: -10px;
+  right: 20px;
+  background: var(--accent-primary);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  max-width: 5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Subheadings converted from **TITLE** lines */
 .markdown-body .nesh-subheading {
-    margin: 1rem 0 0.5rem;
-    font-size: 1rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    color: var(--accent-secondary);
+  margin: 1rem 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--accent-secondary);
 }
 
 /* Inline bold titles (e.g., **Ressalvadas** texto...) */
 .markdown-body .nesh-inline-title {
-    font-weight: 700;
-    text-transform: uppercase;
-    color: var(--accent-secondary);
-    margin-right: 0.25rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--accent-secondary);
+  margin-right: 0.25rem;
 }
 
 /* Position content following h3 - clean style */
-.markdown-body h3+p,
-.markdown-body h3~p:not(.regras-gerais p) {
-    padding: 0.5rem 0;
-    margin: 0.5rem 0;
-    line-height: 1.8;
+.markdown-body h3 + p,
+.markdown-body h3 ~ p:not(.regras-gerais p) {
+  padding: 0.5rem 0;
+  margin: 0.5rem 0;
+  line-height: 1.8;
 }
 
 /* Exclusion sections - clean style */
 .markdown-body p:has(strong:first-child) {
-    font-weight: 700;
+  font-weight: 700;
 }
 
 .markdown-body p strong:first-child {
-    font-weight: 700;
+  font-weight: 700;
 }
 
 /* Lists in NESH content */
 .markdown-body ol,
 .markdown-body ul {
-    padding-left: 2rem;
-    margin: 1rem 0;
+  padding-left: 2rem;
+  margin: 1rem 0;
 }
 
 .markdown-body li {
-    margin-bottom: 0.75rem;
-    line-height: 1.7;
-    position: relative;
+  margin-bottom: 0.75rem;
+  line-height: 1.7;
+  position: relative;
 }
 
 .markdown-body ol li::marker {
-    color: var(--accent-secondary);
-    font-weight: 600;
+  color: var(--accent-secondary);
+  font-weight: 600;
 }
 
 /* Inline links styling */
 .markdown-body a,
 .markdown-body .smart-link {
-    color: var(--accent-primary);
-    text-decoration: underline;
-    text-decoration-style: dotted;
-    text-underline-offset: 3px;
-    cursor: pointer;
-    transition: color 0.2s;
+  color: var(--accent-primary);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color 0.2s;
 }
 
 .markdown-body a:hover,
 .markdown-body .smart-link:hover {
-    color: var(--accent-secondary);
-    text-decoration-style: solid;
+  color: var(--accent-secondary);
+  text-decoration-style: solid;
 }
 
 /* Note references */
 .markdown-body .note-ref {
-    color: var(--warning);
-    cursor: pointer;
-    font-weight: 500;
+  color: var(--warning);
+  cursor: pointer;
+  font-weight: 500;
 }
 
 .markdown-body .note-ref:hover {
-    text-decoration: underline;
+  text-decoration: underline;
 }
 
 /* Highlight exclusion terms - VERMELHO */
 .markdown-body .highlight-exclusion {
-    color: var(--error);
-    font-weight: 700;
+  color: var(--error);
+  font-weight: 700;
 }
 
 /* Highlight units - inherits from global .highlight-unit, adds markdown-specific styles */
 .markdown-body .highlight-unit {
-    background-color: rgb(59 130 246 / 20%);
-    color: #93c5fd;
-    padding: 0 3px;
-    border-radius: 3px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.9em;
-    font-weight: 600;
+  background-color: rgb(59 130 246 / 20%);
+  color: #93c5fd;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.9em;
+  font-weight: 600;
 }
 
 /* Glossary terms */
 .markdown-body .glossary-term {
-    border-bottom: 1px dashed var(--accent-secondary);
-    cursor: help;
+  border-bottom: 1px dashed var(--accent-secondary);
+  cursor: help;
+}
+
+/* NESH subposition indicator: † replaces raw (+) artifact */
+.markdown-body .nesh-subpos-indicator {
+  color: var(--text-secondary);
+  font-size: 0.75em;
+  vertical-align: super;
+  cursor: help;
+  opacity: 0.7;
+  margin-left: 2px;
+}
+
+.markdown-body .nesh-subpos-indicator:hover {
+  opacity: 1;
+  color: var(--accent-secondary);
 }
 
 /* Clean up scroll anchors - deprecated in favor of container scroll-padding */
 
 /* Clean up scroll anchors - deprecated in favor of container scroll-padding */
 .markdown-body .scroll-anchor {
-    display: none;
+  display: none;
 }
 
 /* Visually hidden utility for a11y */
 .visually-hidden {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border-width: 0;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
 /* Dynamic scroll offset respecting header height */
 .markdown-body h2,
 .markdown-body h3,
 .ncm-target {
-    scroll-margin-top: var(--scroll-offset);
+  scroll-margin-top: var(--scroll-offset);
 }
 
 .markdown-body .ncm-target {
-    display: inline-block;
+  display: inline-block;
 
-    /* Ensure span respects scroll-margin */
+  /* Ensure span respects scroll-margin */
 }
 
 /* Chapter header styling */
 .markdown-body h2 {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    font-size: 1.4rem;
-    margin-top: 2.5rem;
-    margin-bottom: 1.5rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 3px solid var(--accent-primary);
-    color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.4rem;
+  margin-top: 2.5rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 3px solid var(--accent-primary);
+  color: var(--text-primary);
 }
 
 /* Pure HTML specific classes */
 .nesh-divider {
-    border: none;
-    border-top: 1px solid var(--border-color);
-    margin: 2rem 0;
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 2rem 0;
 }
 
 .nesh-chapter-title {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    font-size: 1.4rem;
-    margin-top: 2.5rem;
-    margin-bottom: 1.5rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 3px solid var(--accent-primary);
-    color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.4rem;
+  margin-top: 2.5rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 3px solid var(--accent-primary);
+  color: var(--text-primary);
 }
 
 .nesh-blockquote {
-    border-left: 2px solid var(--border-color);
-    background: transparent;
-    margin: 0.5rem 0;
-    padding: 0.75rem 1rem;
-    border-radius: 0 6px 6px 0;
-    font-size: 0.9rem;
-    line-height: 1.7;
+  border-left: 2px solid var(--border-color);
+  background: transparent;
+  margin: 0.5rem 0;
+  padding: 0.75rem 1rem;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.9rem;
+  line-height: 1.7;
 }
 
 /* --- Chapter Sections (Structured) --- */
@@ -525,94 +540,92 @@
 .section-notas,
 .section-consideracoes,
 .section-definicoes {
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 1rem 1.25rem;
-    margin: 1.25rem 0;
-    background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin: 1.25rem 0;
+  background: var(--bg-secondary);
 }
 
 .section-header {
-    margin: 0 0 0.75rem;
-    font-size: 1.05rem;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .titulo-header {
-    color: #c4b5fd;
+  color: #c4b5fd;
 }
 
 .notas-header {
-    color: #6ee7b7;
+  color: #6ee7b7;
 }
 
 .consideracoes-header {
-    color: #93c5fd;
+  color: #93c5fd;
 }
 
 .definicoes-header {
-    color: #fdba74;
+  color: #fdba74;
 }
 
 .section-titulo {
-    background: rgb(139 92 246 / 8%);
-    border-left: 3px solid #8b5cf6;
+  background: rgb(139 92 246 / 8%);
+  border-left: 3px solid #8b5cf6;
 }
 
 .section-notas {
-    background: rgb(16 185 129 / 8%);
-    border-left: 3px solid #10b981;
+  background: rgb(16 185 129 / 8%);
+  border-left: 3px solid #10b981;
 }
 
 .section-consideracoes {
-    background: rgb(59 130 246 / 8%);
-    border-left: 3px solid #3b82f6;
+  background: rgb(59 130 246 / 8%);
+  border-left: 3px solid #3b82f6;
 }
 
 .section-definicoes {
-    background: rgb(249 115 22 / 8%);
-    border-left: 3px solid #f97316;
+  background: rgb(249 115 22 / 8%);
+  border-left: 3px solid #f97316;
 }
 
 .consideracoes-content,
 .definicoes-content {
-    font-size: 0.92rem;
-    line-height: 1.7;
-    color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
 }
-
-
 
 /* ===========================================
    Utility Styles (Copy Button, Scroll Anchor)
    =========================================== */
 
 .copy-btn {
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    padding: 0.5rem 1rem;
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .copy-btn:hover {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 .scroll-anchor {
-    scroll-margin-top: var(--scroll-offset);
-    display: block;
-    height: 0;
-    width: 0;
-    visibility: hidden;
+  scroll-margin-top: var(--scroll-offset);
+  display: block;
+  height: 0;
+  width: 0;
+  visibility: hidden;
 }
