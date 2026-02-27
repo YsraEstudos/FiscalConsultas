@@ -69,6 +69,13 @@ def _get_service(session: Annotated[AsyncSession, Depends(get_db)]) -> CommentSe
     return CommentService(session)
 
 
+def _resolve_tenant_id(auth_payload: dict) -> str:
+    tenant_id = get_current_tenant() or auth_payload.get("org_id")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
+    return tenant_id
+
+
 # ─── Endpoints Públicos (usuário autenticado) ──────────────────────────────
 
 
@@ -89,9 +96,7 @@ async def create_comment(
 ):
     """Cria um novo comentário ancorado a um trecho de texto."""
     auth_payload = await _require_payload(request)
-    tenant_id = get_current_tenant()
-    if not tenant_id:
-        raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
+    tenant_id = _resolve_tenant_id(auth_payload)
 
     user_id: str = auth_payload.get("sub", "")
     try:
@@ -119,9 +124,7 @@ async def list_by_anchor(
 ):
     """Lista comentários aprovados + privados do usuário para um anchor."""
     auth_payload = await _require_payload(request)
-    tenant_id = get_current_tenant()
-    if not tenant_id:
-        raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
+    tenant_id = _resolve_tenant_id(auth_payload)
 
     user_id: str = auth_payload.get("sub", "")
     comments = await service.list_for_anchor(tenant_id, anchor_key, user_id)
@@ -147,9 +150,7 @@ async def update_comment(
 ):
     """Edita o corpo de um comentário (somente autor)."""
     auth_payload = await _require_payload(request)
-    tenant_id = get_current_tenant()
-    if not tenant_id:
-        raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
+    tenant_id = _resolve_tenant_id(auth_payload)
 
     user_id: str = auth_payload.get("sub", "")
     try:
@@ -184,9 +185,7 @@ async def delete_comment(
 ):
     """Remove permanentemente um comentário (somente autor)."""
     auth_payload = await _require_payload(request)
-    tenant_id = get_current_tenant()
-    if not tenant_id:
-        raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
+    tenant_id = _resolve_tenant_id(auth_payload)
 
     user_id: str = auth_payload.get("sub", "")
     try:
@@ -215,10 +214,8 @@ async def list_commented_anchors(
     service: Annotated[CommentService, Depends(_get_service)],
 ):
     """Lista anchor_keys que possuem comentários aprovados (para marcar no frontend)."""
-    await _require_payload(request)
-    tenant_id = get_current_tenant()
-    if not tenant_id:
-        raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
+    auth_payload = await _require_payload(request)
+    tenant_id = _resolve_tenant_id(auth_payload)
 
     return await service.get_commented_anchors(tenant_id)
 
@@ -240,10 +237,8 @@ async def list_pending(
     service: Annotated[CommentService, Depends(_get_service)],
 ):
     """[Admin] Lista todos os comentários pendentes de moderação."""
-    await _require_admin_payload(request)
-    tenant_id = get_current_tenant()
-    if not tenant_id:
-        raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
+    auth_payload = await _require_admin_payload(request)
+    tenant_id = _resolve_tenant_id(auth_payload)
 
     comments = await service.list_pending(tenant_id)
     return [CommentOut.model_validate(c) for c in comments]
@@ -268,9 +263,7 @@ async def moderate_comment(
 ):
     """[Admin] Aprova ou rejeita um comentário."""
     admin_info = await _require_admin_payload(request)
-    tenant_id = get_current_tenant()
-    if not tenant_id:
-        raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
+    tenant_id = _resolve_tenant_id(admin_info)
 
     admin_user_id: str = admin_info.get("sub", "")
     try:
