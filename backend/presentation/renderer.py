@@ -252,13 +252,15 @@ class HtmlRenderer:
     @staticmethod
     def clean_content(content: str) -> str:
         """
-        Limpa conteúdo removendo marcadores de página, referências internas e espaços extras.
-
-        Args:
-            content: Texto bruto do capítulo
-
+        Normalize and clean raw chapter text for HTML rendering.
+        
+        Performs several cleanup transformations: converts PDF-style bracketed superscripts (e.g., "[2]" → "²"), replaces the subposition artifact marker "(+)" with a semantic indicator, removes internal NESH references and stray list markers, normalizes blank lines and spaces, and trims each line.
+        
+        Parameters:
+            content (str): Raw chapter text to be cleaned.
+        
         Returns:
-            Texto limpo com formatação consistente
+            str: Cleaned text with consistent formatting, suitable for subsequent HTML rendering.
         """
         content = HtmlRenderer.RE_CLEAN_PAGE.sub("", content)
         # Converte notação de colchetes do PDF para Unicode: [3] → ³, [2] → ²

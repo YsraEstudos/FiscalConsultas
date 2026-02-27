@@ -48,13 +48,13 @@ class PositionRepository:
 
     async def get_by_chapter(self, chapter_num: str) -> List[PositionRead]:
         """
-        Lista todas as posições de um capítulo.
-
-        Args:
-            chapter_num: Número do capítulo (ex: "85")
-
+        List all positions for a given chapter, ordered by HS code numeric components.
+        
+        Parameters:
+            chapter_num (str): Chapter number (e.g., "85").
+        
         Returns:
-            Lista de PositionRead ordenadas por código
+            List[PositionRead]: PositionRead objects containing codigo, descricao, and anchor_id ordered by HS code.
         """
         table = cast(Any, Position).__table__.c
         # Numeric sort: split "XX.XX" into major/minor parts for correct HS Code ordering

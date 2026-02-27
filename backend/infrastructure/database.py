@@ -377,7 +377,16 @@ class DatabaseAdapter:
     def _build_chapter_sql(
         self, has_sections: bool, has_parsed_notes_json: bool
     ) -> str:
-        """Build and cache chapter SQL query (avoids repeated string ops)."""
+        """
+        Constructs and caches the SQL query used to retrieve a chapter row joined with its chapter_notes, adapting the projection for optional section columns and parsed_notes_json.
+        
+        Parameters:
+            has_sections (bool): If True include real section columns from chapter_notes; if False project those columns as NULL.
+            has_parsed_notes_json (bool): If True include the `parsed_notes_json` column from chapter_notes; if False project it as NULL.
+        
+        Returns:
+            str: The SQL SELECT statement that queries chapters joined with chapter_notes for a given chapter_num, with section and parsed_notes_json projections adjusted according to the flags.
+        """
         if (
             self._chapter_sql_cache is not None
             and self._chapter_sql_has_sections == has_sections
@@ -409,7 +418,17 @@ class DatabaseAdapter:
 
     async def get_chapter_raw(self, chapter_num: str) -> Optional[Dict[str, Any]]:
         """
-        Busca dados brutos de um capítulo (Async).
+        Retrieve raw data for a chapter identified by its chapter number.
+        
+        Returns:
+            dict: A mapping with the following keys when the chapter exists:
+                - `chapter_num` (str): Chapter identifier.
+                - `content` (str | None): Chapter content text.
+                - `positions` (list[dict]): List of position objects, each with `codigo` (str), `descricao` (str), and `anchor_id` (str | None).
+                - `notes` (str | None): Notes content for the chapter.
+                - `parsed_notes_json` (Any | None): Parsed notes JSON if available, otherwise `None`.
+                - `sections` (dict | None): Mapping of section column names to their values, or `None` if all sections are empty.
+            `None` if no chapter with the given `chapter_num` is found.
         """
         logger.debug(f"Buscando capítulo: {chapter_num}")
 
@@ -484,7 +503,17 @@ class DatabaseAdapter:
 
     async def fts_search(self, query: str, limit: int = None) -> List[Dict[str, Any]]:
         """
-        Executa busca Full-Text Search no índice FTS5 (Async).
+        Perform a full-text search against the FTS5 search_index and return matching rows.
+        
+        Parameters:
+            query (str): The FTS query string passed to the MATCH operator.
+            limit (int, optional): Maximum number of results to return; if omitted, the module default is used.
+        
+        Returns:
+            List[Dict[str, Any]]: A list of result rows as dictionaries. Each dictionary contains the columns selected from search_index (including `ncm`, `display_text`, `type`, `description`) and a ranking value produced by the configured ranking expression.
+        
+        Raises:
+            DatabaseError: If the FTS index is unavailable or the search cannot be performed.
         """
         logger.debug(f"FTS search: '{query}'")
         result_limit = limit if limit is not None else SearchConfig.MAX_FTS_RESULTS
@@ -528,7 +557,19 @@ class DatabaseAdapter:
         total_words: int = 1,
     ) -> List[Dict[str, Any]]:
         """
-        Executa busca FTS com score calculado por tier (Async).
+        Perform a full-text search and return ranked results with a computed score for the given tier.
+        
+        Parameters:
+            query (str): FTS query string to match against the content column.
+            tier (int): Search tier used to select a base score influencing final result scores.
+            limit (int): Maximum number of results to return.
+            words_matched (int): Number of query words matched in the result (used to compute coverage bonus).
+            total_words (int): Total number of words in the query (used to compute coverage bonus; must be >0 to avoid zero division).
+        
+        Returns:
+            List[Dict[str, Any]]: A list of result dictionaries containing the original row fields from search_index plus:
+                - "score" (float): Final score computed as base + normalized bm25 component + coverage bonus, rounded to one decimal.
+                - "tier" (int): The provided tier value applied to each result.
         """
         tier_bases = {
             1: SearchConfig.TIER1_BASE_SCORE,
@@ -581,7 +622,17 @@ class DatabaseAdapter:
         self, words: List[str], distance: int, limit: int
     ) -> List[Dict[str, Any]]:
         """
-        Busca por proximidade usando NEAR do FTS5 (Async).
+        Perform a proximity FTS5 search using NEAR for the given words.
+        
+        Performs a NEAR-based full-text search across the configured FTS index and returns matching rows as dictionaries. If fewer than two words are provided, if the FTS index is unavailable, or if an error occurs during the query, an empty list is returned.
+        
+        Parameters:
+            words (List[str]): Terms to search for; NEAR requires at least two words.
+            distance (int): Maximum token distance between the words for the NEAR operator.
+            limit (int): Maximum number of results to return.
+        
+        Returns:
+            List[Dict[str, Any]]: A list of result rows from `search_index` represented as dictionaries. Each dict includes the selected columns (e.g., `ncm`, `display_text`, `type`, `description`) and a ranking value provided by the FTS ranking expression.
         """
         if len(words) < 2:
             return []
