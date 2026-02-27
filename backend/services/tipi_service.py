@@ -373,105 +373,110 @@ class TipiService:
         finally:
             await self._release_connection(conn)
 
-    async def search_by_code(
-        self, ncm_query: str, view_mode: str = "family"
-    ) -> Dict[str, Any]:
-        """
-        Busca por código NCM na TIPI (Async).
-        Performance: Cacheia resultados por (query, view_mode) com LRU.
-
-        Args:
-            ncm_query: Código NCM (ex: "85.17" ou "8517")
-            view_mode: 'family' (retorna apenas família NCM) ou 'chapter' (capítulo completo)
-        """
-        # Performance: Check LRU cache
-        cache_key = (ncm_query, view_mode)
+    async def _get_cached_code_result(
+        self, cache_key: Tuple[str, str]
+    ) -> Optional[Dict[str, Any]]:
         async with self._get_cache_lock():
-            if cache_key in self._code_search_cache:
-                self._code_search_cache.move_to_end(cache_key)
-                self._code_search_cache_metrics.record_hit()
-                return self._code_search_cache[cache_key]
-        self._code_search_cache_metrics.record_miss()
-        # Suporta múltiplos NCMs via vírgula/;
-        parts = ncm_utils.split_ncm_query(ncm_query)
-        if len(parts) > 1:
-            merged: Dict[str, Any] = {}
-            total_rows = 0
-            for part in parts:
-                part_resp = await self.search_by_code(part, view_mode=view_mode)
-                total_rows += int(part_resp.get("total", 0) or 0)
-                for cap, cap_data in (
-                    part_resp.get("resultados") or part_resp.get("results") or {}
-                ).items():
-                    if cap not in merged:
-                        merged[cap] = cap_data
-                    else:
-                        merged[cap].setdefault("posicoes", [])
-                        merged[cap]["posicoes"].extend(
-                            cap_data.get("posicoes", []) or []
-                        )
-            return {
-                "success": True,
-                "type": "code",
-                "query": ncm_query,
-                "results": merged,
-                "resultados": merged,
-                "total": total_rows,
-                "total_capitulos": len(merged),
-            }
+            cached = self._code_search_cache.get(cache_key)
+            if not cached:
+                return None
+            self._code_search_cache.move_to_end(cache_key)
+            self._code_search_cache_metrics.record_hit()
+            return cached
 
-        query_part = parts[0] if parts else (ncm_query or "")
-        normalized_query = ncm_utils.format_ncm_tipi(query_part)
-        clean_query = ncm_utils.clean_ncm(normalized_query)
+    async def _store_cached_code_result(
+        self, cache_key: Tuple[str, str], result: Dict[str, Any]
+    ) -> None:
+        async with self._get_cache_lock():
+            self._code_search_cache[cache_key] = result
+            self._code_search_cache_metrics.record_set()
+            self._enforce_cache_limit(
+                self._code_search_cache,
+                CacheConfig.TIPI_RESULT_CACHE_SIZE,
+                self._code_search_cache_metrics,
+            )
 
-        if not clean_query:
-            return self._empty_code_response(ncm_query)
+    @staticmethod
+    def _merge_part_payload_into_chapters(
+        merged: Dict[str, Any], part_resp: Dict[str, Any]
+    ) -> int:
+        total_rows = int(part_resp.get("total", 0) or 0)
+        source = part_resp.get("resultados") or part_resp.get("results") or {}
+        for cap, cap_data in source.items():
+            if cap not in merged:
+                merged[cap] = cap_data
+                continue
+            merged[cap].setdefault("posicoes", [])
+            merged[cap]["posicoes"].extend(cap_data.get("posicoes", []) or [])
+        return total_rows
 
-        # Extrair capítulo (primeiros 2 dígitos)
-        cap_num = clean_query[:2].zfill(2)
+    async def _search_multiple_codes(
+        self, ncm_query: str, view_mode: str, parts: List[str]
+    ) -> Dict[str, Any]:
+        merged: Dict[str, Any] = {}
+        total_rows = 0
+        for part in parts:
+            part_resp = await self.search_by_code(part, view_mode=view_mode)
+            total_rows += self._merge_part_payload_into_chapters(merged, part_resp)
+        return {
+            "success": True,
+            "type": "code",
+            "query": ncm_query,
+            "results": merged,
+            "resultados": merged,
+            "total": total_rows,
+            "total_capitulos": len(merged),
+        }
 
-        # posicao_alvo para auto-scroll
-        posicao_alvo = None
-        if len(clean_query) > 2:
-            posicao_alvo = (normalized_query or "").strip() or query_part.strip()
+    @staticmethod
+    def _build_ancestor_prefixes(prefix: str) -> set[str]:
+        ancestor_prefixes = set()
+        if len(prefix) >= 4:
+            ancestor_prefixes.add(prefix[:4])
+        if len(prefix) >= 6:
+            ancestor_prefixes.add(prefix[:6])
+        return ancestor_prefixes
 
-        # Se a busca for mais específica que capítulo (ex: 8413), usar filtro SQL otimizado
-        # Filtro só se aplica quando view_mode == 'family'
-        if view_mode == "family" and len(clean_query) > 2:
-            prefix = clean_query  # ex: "8413" ou "84131100"
+    async def _load_rows_for_code(
+        self, cap_num: str, clean_query: str, view_mode: str
+    ) -> Tuple[Dict[str, Any], ...]:
+        if view_mode != "family" or len(clean_query) <= 2:
+            return await self._get_chapter_positions(cap_num)
+        return await self._get_family_positions(
+            cap_num,
+            clean_query,
+            self._build_ancestor_prefixes(clean_query),
+        )
 
-            # Coletar prefixos ancestrais para incluir hierarquia completa
-            # Ex: para "39249000", ancestrais são "3924" e "392490"
-            ancestor_prefixes = set()
-            if len(prefix) >= 4:
-                ancestor_prefixes.add(prefix[:4])  # Posição (XX.XX)
-            if len(prefix) >= 6:
-                ancestor_prefixes.add(prefix[:6])  # Subposição (XXXX.XX)
+    @staticmethod
+    def _resolve_posicao_alvo(
+        clean_query: str, normalized_query: str, query_part: str
+    ) -> Optional[str]:
+        if len(clean_query) <= 2:
+            return None
+        return (normalized_query or "").strip() or query_part.strip()
 
-            # Filtro otimizado em SQL (evita iteração Python)
-            rows = await self._get_family_positions(cap_num, prefix, ancestor_prefixes)
-        else:
-            # Capítulo completo ou query curta (2 dígitos)
-            rows = await self._get_chapter_positions(cap_num)
+    @staticmethod
+    def _resolve_cap_posicao_alvo(
+        capitulo: str, posicao_alvo: Optional[str]
+    ) -> Optional[str]:
+        if not posicao_alvo:
+            return None
+        clean_alvo = ncm_utils.clean_ncm(posicao_alvo)
+        return posicao_alvo if clean_alvo.startswith(capitulo) else None
 
-        if not rows:
-            return self._empty_code_response(ncm_query)
-
+    def _build_code_resultados(
+        self, rows: Tuple[Dict[str, Any], ...], posicao_alvo: Optional[str]
+    ) -> Dict[str, Any]:
         resultados: Dict[str, Any] = {}
         for row in rows:
             cap = row["capitulo"]
             if cap not in resultados:
-                cap_posicao_alvo = None
-                if posicao_alvo:
-                    clean_alvo = ncm_utils.clean_ncm(posicao_alvo)
-                    if clean_alvo.startswith(cap):
-                        cap_posicao_alvo = posicao_alvo
-
                 resultados[cap] = {
                     "capitulo": cap,
                     "titulo": f"Capítulo {cap}",
                     "notas_gerais": None,
-                    "posicao_alvo": cap_posicao_alvo,
+                    "posicao_alvo": self._resolve_cap_posicao_alvo(cap, posicao_alvo),
                     "posicoes": [],
                 }
 
@@ -486,7 +491,44 @@ class TipiService:
                     "anchor_id": generate_anchor_id(codigo),
                 }
             )
+        return resultados
 
+    async def search_by_code(
+        self, ncm_query: str, view_mode: str = "family"
+    ) -> Dict[str, Any]:
+        """
+        Busca por código NCM na TIPI (Async).
+        Performance: Cacheia resultados por (query, view_mode) com LRU.
+
+        Args:
+            ncm_query: Código NCM (ex: "85.17" ou "8517")
+            view_mode: 'family' (retorna apenas família NCM) ou 'chapter' (capítulo completo)
+        """
+        cache_key = (ncm_query, view_mode)
+        cached = await self._get_cached_code_result(cache_key)
+        if cached:
+            return cached
+        self._code_search_cache_metrics.record_miss()
+
+        parts = ncm_utils.split_ncm_query(ncm_query)
+        if len(parts) > 1:
+            return await self._search_multiple_codes(ncm_query, view_mode, parts)
+
+        query_part = parts[0] if parts else (ncm_query or "")
+        normalized_query = ncm_utils.format_ncm_tipi(query_part)
+        clean_query = ncm_utils.clean_ncm(normalized_query)
+        if not clean_query:
+            return self._empty_code_response(ncm_query)
+
+        cap_num = clean_query[:2].zfill(2)
+        posicao_alvo = self._resolve_posicao_alvo(
+            clean_query, normalized_query, query_part
+        )
+        rows = await self._load_rows_for_code(cap_num, clean_query, view_mode)
+        if not rows:
+            return self._empty_code_response(ncm_query)
+
+        resultados = self._build_code_resultados(rows, posicao_alvo)
         result = {
             "success": True,
             "type": "code",
@@ -496,17 +538,7 @@ class TipiService:
             "total": len(rows),
             "total_capitulos": len(resultados),
         }
-
-        # Performance: Store in LRU cache
-        async with self._get_cache_lock():
-            self._code_search_cache[cache_key] = result
-            self._code_search_cache_metrics.record_set()
-            self._enforce_cache_limit(
-                self._code_search_cache,
-                CacheConfig.TIPI_RESULT_CACHE_SIZE,
-                self._code_search_cache_metrics,
-            )
-
+        await self._store_cached_code_result(cache_key, result)
         return result
 
     async def search_text(self, query: str, limit: int = 50) -> Dict[str, Any]:

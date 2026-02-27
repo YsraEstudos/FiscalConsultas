@@ -15,6 +15,8 @@ from sqlalchemy import Column, Text
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlmodel import Field, Relationship, SQLModel
 
+TENANT_ID_FOREIGN_KEY = "tenants.id"
+
 # ============================================================
 # Core Multi-Tenant Models
 # ============================================================
@@ -48,7 +50,7 @@ class User(SQLModel, table=True):
     bio: Optional[str] = Field(
         default=None, sa_column=Column(Text), description="Mini-bio do usuário"
     )
-    tenant_id: str = Field(foreign_key="tenants.id", index=True)
+    tenant_id: str = Field(foreign_key=TENANT_ID_FOREIGN_KEY, index=True)
     is_active: bool = Field(default=True)
 
     # Relationships
@@ -61,7 +63,7 @@ class Subscription(SQLModel, table=True):
     __tablename__: ClassVar[str] = "subscriptions"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    tenant_id: str = Field(foreign_key="tenants.id", index=True)
+    tenant_id: str = Field(foreign_key=TENANT_ID_FOREIGN_KEY, index=True)
     provider: str = Field(default="asaas", max_length=30, index=True)
     provider_customer_id: Optional[str] = Field(
         default=None, max_length=255, index=True
@@ -128,7 +130,9 @@ class Chapter(ChapterBase, table=True):
     __tablename__: ClassVar[str] = "chapters"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     chapter_num: str = Field(primary_key=True, max_length=10)
-    tenant_id: Optional[str] = Field(default=None, foreign_key="tenants.id", index=True)
+    tenant_id: Optional[str] = Field(
+        default=None, foreign_key=TENANT_ID_FOREIGN_KEY, index=True
+    )
 
     # PostgreSQL FTS - tsvector para busca textual
     # Ignorado no SQLite (coluna será None)
@@ -148,7 +152,9 @@ class Position(PositionBase, table=True):
 
     codigo: str = Field(primary_key=True, max_length=20)
     chapter_num: str = Field(foreign_key="chapters.chapter_num", max_length=10)
-    tenant_id: Optional[str] = Field(default=None, foreign_key="tenants.id", index=True)
+    tenant_id: Optional[str] = Field(
+        default=None, foreign_key=TENANT_ID_FOREIGN_KEY, index=True
+    )
     anchor_id: Optional[str] = Field(
         default=None, max_length=40, description="Precomputed HTML anchor id"
     )
@@ -169,7 +175,9 @@ class ChapterNotes(SQLModel, table=True):
     chapter_num: str = Field(
         foreign_key="chapters.chapter_num", unique=True, max_length=10
     )
-    tenant_id: Optional[str] = Field(default=None, foreign_key="tenants.id", index=True)
+    tenant_id: Optional[str] = Field(
+        default=None, foreign_key=TENANT_ID_FOREIGN_KEY, index=True
+    )
     notes_content: Optional[str] = Field(default=None, sa_column=Column(Text))
     titulo: Optional[str] = Field(default=None, sa_column=Column(Text))
     notas: Optional[str] = Field(default=None, sa_column=Column(Text))
