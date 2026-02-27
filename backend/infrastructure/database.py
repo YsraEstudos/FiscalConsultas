@@ -190,7 +190,7 @@ class DatabaseAdapter:
             supports_rank = True
             try:
                 await conn.execute(
-                    f"SELECT rank FROM search_index WHERE {content_column} MATCH ? LIMIT 1",
+                    f"SELECT rank FROM search_index WHERE {content_column} MATCH ? LIMIT 1",  # nosec B608 - coluna validada por whitelist interna
                     ("probe",),
                 )
             except Exception:
@@ -332,7 +332,10 @@ class DatabaseAdapter:
         Async Context manager para conexão do pool.
         """
         await self._ensure_pool()
-        conn = await self.pool.get()
+        pool = self.pool
+        if pool is None:
+            raise DatabaseError("Pool de conexões não inicializado")
+        conn = await pool.get()
         try:
             yield conn
         except aiosqlite.Error as e:
@@ -344,7 +347,7 @@ class DatabaseAdapter:
             logger.error(f"Erro inesperado no banco: {e}")
             raise DatabaseError(f"Erro inesperado: {e}")
         finally:
-            await self.pool.release(conn)
+            await pool.release(conn)
 
     async def check_connection(self) -> Optional[Dict[str, int]]:
         """
@@ -357,10 +360,16 @@ class DatabaseAdapter:
         try:
             async with self.get_connection() as conn:
                 cursor = await conn.execute("SELECT COUNT(*) FROM chapters")
-                num_chapters = (await cursor.fetchone())[0]
+                chapter_row = await cursor.fetchone()
+                if chapter_row is None:
+                    return None
+                num_chapters = chapter_row[0]
 
                 cursor = await conn.execute("SELECT COUNT(*) FROM positions")
-                num_positions = (await cursor.fetchone())[0]
+                positions_row = await cursor.fetchone()
+                if positions_row is None:
+                    return None
+                num_positions = positions_row[0]
 
                 stats = {
                     "chapters": num_chapters,
@@ -379,11 +388,11 @@ class DatabaseAdapter:
     ) -> str:
         """
         Constructs and caches the SQL query used to retrieve a chapter row joined with its chapter_notes, adapting the projection for optional section columns and parsed_notes_json.
-        
+
         Parameters:
             has_sections (bool): If True include real section columns from chapter_notes; if False project those columns as NULL.
             has_parsed_notes_json (bool): If True include the `parsed_notes_json` column from chapter_notes; if False project it as NULL.
-        
+
         Returns:
             str: The SQL SELECT statement that queries chapters joined with chapter_notes for a given chapter_num, with section and parsed_notes_json projections adjusted according to the flags.
         """
@@ -410,7 +419,7 @@ class DatabaseAdapter:
                     {notes_select}
                 FROM chapters c
                 LEFT JOIN chapter_notes cn ON c.chapter_num = cn.chapter_num
-                WHERE c.chapter_num = ?"""
+                WHERE c.chapter_num = ?"""  # nosec B608 - projeção gerada com colunas constantes
         self._chapter_sql_cache = sql
         self._chapter_sql_has_sections = has_sections
         self._chapter_sql_has_parsed_notes_json = has_parsed_notes_json
@@ -419,7 +428,7 @@ class DatabaseAdapter:
     async def get_chapter_raw(self, chapter_num: str) -> Optional[Dict[str, Any]]:
         """
         Retrieve raw data for a chapter identified by its chapter number.
-        
+
         Returns:
             dict: A mapping with the following keys when the chapter exists:
                 - `chapter_num` (str): Chapter identifier.
@@ -457,7 +466,7 @@ class DatabaseAdapter:
                 WHERE chapter_num = ?
                 ORDER BY CAST(SUBSTR(codigo, 1, 2) AS INTEGER),
                          CAST(SUBSTR(codigo, 4, 2) AS INTEGER)
-            """,
+            """,  # nosec B608 - anchor_projection é whitelist interna
                 (chapter_num,),
             )
             pos_rows = await cursor.fetchall()
@@ -475,7 +484,9 @@ class DatabaseAdapter:
             logger.debug(
                 f"Capítulo {chapter_num}: {len(positions)} posições (2 queries)"
             )
-            sections = {col: first_row[col] for col in CHAPTER_NOTES_SECTION_COLUMNS}
+            sections: Optional[Dict[str, Any]] = {
+                col: first_row[col] for col in CHAPTER_NOTES_SECTION_COLUMNS
+            }
             if not self._has_section_content(sections):
                 sections = None
 
@@ -501,17 +512,19 @@ class DatabaseAdapter:
             logger.debug(f"Listados {len(chapters)} capítulos")
             return chapters
 
-    async def fts_search(self, query: str, limit: int = None) -> List[Dict[str, Any]]:
+    async def fts_search(
+        self, query: str, limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
         """
         Perform a full-text search against the FTS5 search_index and return matching rows.
-        
+
         Parameters:
             query (str): The FTS query string passed to the MATCH operator.
             limit (int, optional): Maximum number of results to return; if omitted, the module default is used.
-        
+
         Returns:
             List[Dict[str, Any]]: A list of result rows as dictionaries. Each dictionary contains the columns selected from search_index (including `ncm`, `display_text`, `type`, `description`) and a ranking value produced by the configured ranking expression.
-        
+
         Raises:
             DatabaseError: If the FTS index is unavailable or the search cannot be performed.
         """
@@ -538,7 +551,7 @@ class DatabaseAdapter:
                 WHERE {content_col} MATCH ?
                 ORDER BY {rank_sql["order"]}
                 LIMIT ?
-            """,
+            """,  # nosec B608 - content_col/rank_sql vindos de schema validado
                 (query, result_limit),
             )
 
@@ -558,14 +571,14 @@ class DatabaseAdapter:
     ) -> List[Dict[str, Any]]:
         """
         Perform a full-text search and return ranked results with a computed score for the given tier.
-        
+
         Parameters:
             query (str): FTS query string to match against the content column.
             tier (int): Search tier used to select a base score influencing final result scores.
             limit (int): Maximum number of results to return.
             words_matched (int): Number of query words matched in the result (used to compute coverage bonus).
             total_words (int): Total number of words in the query (used to compute coverage bonus; must be >0 to avoid zero division).
-        
+
         Returns:
             List[Dict[str, Any]]: A list of result dictionaries containing the original row fields from search_index plus:
                 - "score" (float): Final score computed as base + normalized bm25 component + coverage bonus, rounded to one decimal.
@@ -602,7 +615,7 @@ class DatabaseAdapter:
                 WHERE {content_col} MATCH ?
                 ORDER BY {rank_sql["order"]}
                 LIMIT ?
-            """,
+            """,  # nosec B608 - content_col/rank_sql vindos de schema validado
                 (query, limit),
             )
 
@@ -623,14 +636,14 @@ class DatabaseAdapter:
     ) -> List[Dict[str, Any]]:
         """
         Perform a proximity FTS5 search using NEAR for the given words.
-        
+
         Performs a NEAR-based full-text search across the configured FTS index and returns matching rows as dictionaries. If fewer than two words are provided, if the FTS index is unavailable, or if an error occurs during the query, an empty list is returned.
-        
+
         Parameters:
             words (List[str]): Terms to search for; NEAR requires at least two words.
             distance (int): Maximum token distance between the words for the NEAR operator.
             limit (int): Maximum number of results to return.
-        
+
         Returns:
             List[Dict[str, Any]]: A list of result rows from `search_index` represented as dictionaries. Each dict includes the selected columns (e.g., `ncm`, `display_text`, `type`, `description`) and a ranking value provided by the FTS ranking expression.
         """
@@ -658,7 +671,7 @@ class DatabaseAdapter:
                     WHERE {content_col} MATCH ?
                     ORDER BY {rank_sql["order"]}
                     LIMIT ?
-                """,
+                """,  # nosec B608 - content_col/rank_sql vindos de schema validado
                     (near_query, limit),
                 )
 
