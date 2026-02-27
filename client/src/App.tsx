@@ -79,6 +79,11 @@ function App() {
         const current = activeTabRef.current?.loadedChaptersByDoc || { nesh: [], tipi: [] };
         return { ...current, [doc]: [] };
     }, []);
+    const runNonBlockingTask = useCallback((task: Promise<unknown>, context: string) => {
+        task.catch((error) => {
+            console.error(`[App] ${context}:`, error);
+        });
+    }, []);
 
 
     // Atalhos globais de teclado
@@ -104,7 +109,10 @@ function App() {
         const doc = (currentTab?.document || 'nesh') as DocType;
 
         if (terms.length === 1) {
-            void executeSearchForTab(activeTabId, doc, terms[0], true);
+            runNonBlockingTask(
+                executeSearchForTab(activeTabId, doc, terms[0], true),
+                'executeSearchForTab (single term)'
+            );
             return;
         }
 
@@ -112,15 +120,21 @@ function App() {
         let startIndex = 0;
 
         if (canReuseActiveTab) {
-            void executeSearchForTab(activeTabId, doc, terms[0], true);
+            runNonBlockingTask(
+                executeSearchForTab(activeTabId, doc, terms[0], true),
+                'executeSearchForTab (reuse active tab)'
+            );
             startIndex = 1;
         }
 
         for (let i = startIndex; i < terms.length; i += 1) {
             const tabId = createTab(doc);
-            void executeSearchForTab(tabId, doc, terms[i], true);
+            runNonBlockingTask(
+                executeSearchForTab(tabId, doc, terms[i], true),
+                'executeSearchForTab (new tab)'
+            );
         }
-    }, [activeTabId, createTab, executeSearchForTab]);
+    }, [activeTabId, createTab, executeSearchForTab, runNonBlockingTask]);
 
     const scrollToNotesSection = useCallback((chapter?: string) => {
         const container = document.getElementById(`results-content-${activeTabId}`);
@@ -340,13 +354,16 @@ function App() {
                 setIsSettingsOpen(true);
             },
             openTextResultInNewTab: (ncm: string, textQuery?: string) => {
-                void openTextResultInNewTabRef.current(ncm, textQuery);
+                runNonBlockingTask(
+                    Promise.resolve(openTextResultInNewTabRef.current(ncm, textQuery)),
+                    'openTextResultInNewTab'
+                );
             }
         };
         return () => {
             (globalThis as any).nesh = undefined;
         };
-    }, []);
+    }, [runNonBlockingTask]);
 
     return (
         <>
