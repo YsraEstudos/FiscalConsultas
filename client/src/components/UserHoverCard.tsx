@@ -25,26 +25,20 @@ interface CardData {
 
 export function UserHoverCard({ userId, children, imageUrl }: Readonly<UserHoverCardProps>) {
     const [card, setCard] = useState<CardData | null>(null);
-    const [loaded, setLoaded] = useState(false);
 
     useEffect(() => {
-        if (loaded) return;
+        // Re-fetch whenever userId changes; cancel the previous request on cleanup
+        setCard(null);
         let cancelled = false;
 
-        // Lazy load on first render — hover triggers via CSS
         getUserCard(userId)
             .then((data: CardData) => {
-                if (!cancelled) {
-                    setCard(data);
-                    setLoaded(true);
-                }
+                if (!cancelled) setCard(data);
             })
-            .catch(() => {
-                if (!cancelled) setLoaded(true);
-            });
+            .catch(() => { /* silent — hover card is non-critical */ });
 
         return () => { cancelled = true; };
-    }, [userId, loaded]);
+    }, [userId]);
 
     const getInitials = (name: string | null) => {
         if (!name) return '?';

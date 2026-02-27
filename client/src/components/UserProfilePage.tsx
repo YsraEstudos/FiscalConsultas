@@ -49,6 +49,121 @@ interface ContributionItem {
     updated_at: string;
 }
 
+// ─── Module-level helpers ─────────────────────────────────────────────────
+
+function getInitials(name: string | null): string {
+    if (!name) return '?';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+}
+
+function statusClass(status: string): string {
+    switch (status) {
+        case 'approved': return styles.statusApproved;
+        case 'pending': return styles.statusPending;
+        case 'rejected': return styles.statusRejected;
+        case 'private': return styles.statusPrivate;
+        default: return '';
+    }
+}
+
+function statusLabel(status: string): string {
+    switch (status) {
+        case 'approved': return 'Aprovado';
+        case 'pending': return 'Pendente';
+        case 'rejected': return 'Rejeitado';
+        case 'private': return 'Privado';
+        default: return status;
+    }
+}
+
+function formatDate(iso: string): string {
+    try {
+        return new Date(iso).toLocaleDateString('pt-BR', {
+            day: '2-digit', month: 'short', year: 'numeric',
+        });
+    } catch {
+        return iso;
+    }
+}
+
+// ─── ContributionsSection ────────────────────────────────────────────────
+
+interface ContributionsSectionProps {
+    contributions: ContributionItem[];
+    contribLoading: boolean;
+    contribSearch: string;
+    onSearchChange: (value: string) => void;
+    contribTotal: number;
+    contribPage: number;
+    contribHasNext: boolean;
+    onPrevPage: () => void;
+    onNextPage: () => void;
+}
+
+function ContributionsSection({
+    contributions,
+    contribLoading,
+    contribSearch,
+    onSearchChange,
+    contribTotal,
+    contribPage,
+    contribHasNext,
+    onPrevPage,
+    onNextPage,
+}: Readonly<ContributionsSectionProps>) {
+    const emptyMsg = contribSearch
+        ? 'Nenhum comentário encontrado para esta busca.'
+        : 'Você ainda não fez nenhum comentário.';
+    const countLabel = contribTotal === 1 ? 'comentário encontrado' : 'comentários encontrados';
+
+    return (
+        <>
+            <input
+                className={styles.searchBox}
+                type="text"
+                placeholder="🔍 Buscar nos seus comentários..."
+                value={contribSearch}
+                onChange={(e) => onSearchChange(e.target.value)}
+            />
+
+            {contribLoading ? (
+                <div className={styles.loading}>Carregando contribuições...</div>
+            ) : contributions.length === 0 ? (
+                <div className={styles.empty}>{emptyMsg}</div>
+            ) : (
+                <>
+                    <div className={`${styles.pageInfo} ${styles.contribSummary}`}>
+                        {contribTotal} {countLabel}
+                    </div>
+                    {contributions.map((item) => (
+                        <div key={item.id} className={styles.contributionItem}>
+                            <div className={styles.contributionHeader}>
+                                <span className={styles.contributionAnchor}>{item.anchor_key}</span>
+                                <span className={`${styles.contributionStatus} ${statusClass(item.status)}`}>
+                                    {statusLabel(item.status)}
+                                </span>
+                            </div>
+                            <div className={styles.contributionBody}>{item.body}</div>
+                            <div className={styles.contributionDate}>{formatDate(item.created_at)}</div>
+                        </div>
+                    ))}
+                    <div className={styles.pagination}>
+                        <button disabled={contribPage <= 1} onClick={onPrevPage}>
+                            ← Anterior
+                        </button>
+                        <span className={styles.pageInfo}>Página {contribPage}</span>
+                        <button disabled={!contribHasNext} onClick={onNextPage}>
+                            Próxima →
+                        </button>
+                    </div>
+                </>
+            )}
+        </>
+    );
+}
+
+// ─── UserProfilePage ─────────────────────────────────────────────────────
+
 export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePageProps>) {
     const { userName, userEmail, userImageUrl } = useAuth();
     const isAdmin = useIsAdmin();
@@ -160,41 +275,6 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
         }
     };
 
-    const getInitials = (name: string | null) => {
-        if (!name) return '?';
-        return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-    };
-
-    const statusClass = (status: string) => {
-        switch (status) {
-            case 'approved': return styles.statusApproved;
-            case 'pending': return styles.statusPending;
-            case 'rejected': return styles.statusRejected;
-            case 'private': return styles.statusPrivate;
-            default: return '';
-        }
-    };
-
-    const statusLabel = (status: string) => {
-        switch (status) {
-            case 'approved': return 'Aprovado';
-            case 'pending': return 'Pendente';
-            case 'rejected': return 'Rejeitado';
-            case 'private': return 'Privado';
-            default: return status;
-        }
-    };
-
-    const formatDate = (iso: string) => {
-        try {
-            return new Date(iso).toLocaleDateString('pt-BR', {
-                day: '2-digit', month: 'short', year: 'numeric',
-            });
-        } catch {
-            return iso;
-        }
-    };
-
     const tabs: { key: TabKey; label: string; icon: string; adminOnly?: boolean }[] = [
         { key: 'profile', label: 'Perfil', icon: '👤' },
         { key: 'contributions', label: 'Contribuições', icon: '💬' },
@@ -203,19 +283,19 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
     ];
 
     return (
-        <div
-            className={styles.overlay}
-            onClick={onClose}
-            onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}
-            role="presentation"
-        >
-            <div
+        <div className={styles.overlay}>
+            {/* Backdrop button — closes on click, accessible to keyboard via ESC global handler */}
+            <button
+                type="button"
+                className={styles.backdrop}
+                onClick={onClose}
+                aria-label="Fechar perfil"
+            />
+
+            <dialog
+                open
                 className={styles.container}
-                onClick={(e) => e.stopPropagation()}
-                role="dialog"
-                aria-modal="true"
                 aria-labelledby="profile-title"
-                onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}
             >
                 {/* Header */}
                 <div className={styles.header}>
@@ -339,61 +419,17 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
 
                             {/* ─── Contributions Tab ─── */}
                             {activeTab === 'contributions' && (
-                                <>
-                                    <input
-                                        className={styles.searchBox}
-                                        type="text"
-                                        placeholder="🔍 Buscar nos seus comentários..."
-                                        value={contribSearch}
-                                        onChange={(e) => {
-                                            setContribSearch(e.target.value);
-                                            setContribPage(1);
-                                        }}
-                                    />
-
-                                    {contribLoading ? (
-                                        <div className={styles.loading}>Carregando contribuições...</div>
-                                    ) : contributions.length === 0 ? (
-                                        <div className={styles.empty}>
-                                            {contribSearch
-                                                ? 'Nenhum comentário encontrado para esta busca.'
-                                                : 'Você ainda não fez nenhum comentário.'}
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <div className={`${styles.pageInfo} ${styles.contribSummary}`}>
-                                                {contribTotal} {contribTotal === 1 ? 'comentário encontrado' : 'comentários encontrados'}
-                                            </div>
-                                            {contributions.map((item) => (
-                                                <div key={item.id} className={styles.contributionItem}>
-                                                    <div className={styles.contributionHeader}>
-                                                        <span className={styles.contributionAnchor}>{item.anchor_key}</span>
-                                                        <span className={`${styles.contributionStatus} ${statusClass(item.status)}`}>
-                                                            {statusLabel(item.status)}
-                                                        </span>
-                                                    </div>
-                                                    <div className={styles.contributionBody}>{item.body}</div>
-                                                    <div className={styles.contributionDate}>{formatDate(item.created_at)}</div>
-                                                </div>
-                                            ))}
-                                            <div className={styles.pagination}>
-                                                <button
-                                                    disabled={contribPage <= 1}
-                                                    onClick={() => setContribPage(p => p - 1)}
-                                                >
-                                                    ← Anterior
-                                                </button>
-                                                <span className={styles.pageInfo}>Página {contribPage}</span>
-                                                <button
-                                                    disabled={!contribHasNext}
-                                                    onClick={() => setContribPage(p => p + 1)}
-                                                >
-                                                    Próxima →
-                                                </button>
-                                            </div>
-                                        </>
-                                    )}
-                                </>
+                                <ContributionsSection
+                                    contributions={contributions}
+                                    contribLoading={contribLoading}
+                                    contribSearch={contribSearch}
+                                    onSearchChange={(v) => { setContribSearch(v); setContribPage(1); }}
+                                    contribTotal={contribTotal}
+                                    contribPage={contribPage}
+                                    contribHasNext={contribHasNext}
+                                    onPrevPage={() => setContribPage(p => p - 1)}
+                                    onNextPage={() => setContribPage(p => p + 1)}
+                                />
                             )}
 
                             {/* ─── Sessions Tab ─── */}
@@ -434,69 +470,67 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
                         </>
                     )}
                 </div>
-            </div>
+            </dialog>
 
             {/* ─── Double Confirm Delete Modal ─── */}
-            {
-                showDeleteConfirm && (
-                    <div
-                        className={styles.confirmOverlay}
+            {showDeleteConfirm && (
+                <div className={styles.confirmWrapper}>
+                    <button
+                        type="button"
+                        className={styles.confirmBackdrop}
                         onClick={() => { setShowDeleteConfirm(false); setDeleteStep(0); }}
-                        role="presentation"
-                        onKeyDown={(e) => { if (e.key === 'Escape') { setShowDeleteConfirm(false); setDeleteStep(0); } }}
+                        aria-label="Fechar confirmação"
+                    />
+                    <dialog
+                        open
+                        className={styles.confirmBox}
+                        role="alertdialog"
+                        aria-modal="true"
                     >
-                        <div
-                            className={styles.confirmBox}
-                            onClick={(e) => e.stopPropagation()}
-                            role="alertdialog"
-                            aria-modal="true"
-                            onKeyDown={(e) => { if (e.key === 'Escape') { setShowDeleteConfirm(false); setDeleteStep(0); } }}
-                        >
-                            {deleteStep === 0 ? (
-                                <>
-                                    <h3>⚠️ Desativar Conta</h3>
-                                    <p>Tem certeza que deseja desativar sua conta? Esta ação não pode ser desfeita facilmente.</p>
-                                    <div className={styles.confirmActions}>
-                                        <button className={styles.cancelBtn} onClick={() => { setShowDeleteConfirm(false); setDeleteStep(0); }}>
-                                            Cancelar
-                                        </button>
-                                        <button className={styles.confirmDeleteBtn} onClick={() => setDeleteStep(1)}>
-                                            Sim, continuar
-                                        </button>
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    <h3>🚨 Confirmação Final</h3>
-                                    <p>
-                                        Digite <strong>"deletar"</strong> para confirmar a desativação permanente da sua conta.
-                                    </p>
-                                    <input
-                                        className={`${styles.searchBox} ${styles.confirmInput}`}
-                                        type="text"
-                                        placeholder='Digite "deletar"'
-                                        value={deleteConfirmText}
-                                        onChange={(e) => setDeleteConfirmText(e.target.value)}
-                                        autoFocus
-                                    />
-                                    <div className={styles.confirmActions}>
-                                        <button className={styles.cancelBtn} onClick={() => { setShowDeleteConfirm(false); setDeleteStep(0); setDeleteConfirmText(''); }}>
-                                            Cancelar
-                                        </button>
-                                        <button
-                                            className={styles.confirmDeleteBtn}
-                                            disabled={deleteConfirmText.toLowerCase() !== 'deletar' || deleteStep === 2}
-                                            onClick={handleDeleteAccount}
-                                        >
-                                            {deleteStep === 2 ? 'Desativando...' : 'Desativar Conta'}
-                                        </button>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    </div>
-                )
-            }
-        </div >
+                        {deleteStep === 0 ? (
+                            <>
+                                <h3>⚠️ Desativar Conta</h3>
+                                <p>Tem certeza que deseja desativar sua conta? Esta ação não pode ser desfeita facilmente.</p>
+                                <div className={styles.confirmActions}>
+                                    <button className={styles.cancelBtn} onClick={() => { setShowDeleteConfirm(false); setDeleteStep(0); }}>
+                                        Cancelar
+                                    </button>
+                                    <button className={styles.confirmDeleteBtn} onClick={() => setDeleteStep(1)}>
+                                        Sim, continuar
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <h3>🚨 Confirmação Final</h3>
+                                <p>
+                                    Digite <strong>"deletar"</strong> para confirmar a desativação permanente da sua conta.
+                                </p>
+                                <input
+                                    className={`${styles.searchBox} ${styles.confirmInput}`}
+                                    type="text"
+                                    placeholder='Digite "deletar"'
+                                    value={deleteConfirmText}
+                                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                                    autoFocus
+                                />
+                                <div className={styles.confirmActions}>
+                                    <button className={styles.cancelBtn} onClick={() => { setShowDeleteConfirm(false); setDeleteStep(0); setDeleteConfirmText(''); }}>
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        className={styles.confirmDeleteBtn}
+                                        disabled={deleteConfirmText.toLowerCase() !== 'deletar' || deleteStep === 2}
+                                        onClick={handleDeleteAccount}
+                                    >
+                                        {deleteStep === 2 ? 'Desativando...' : 'Desativar Conta'}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </dialog>
+                </div>
+            )}
+        </div>
     );
 }

@@ -77,6 +77,8 @@ class ProfileService:
         user = await self.session.get(User, user_id)
         if not user:
             raise ValueError(f"Usuário {user_id} não encontrado")
+        if not user.is_active:
+            raise ValueError(f"Conta desativada para {user_id}")
 
         user.bio = data.bio
         self.session.add(user)
@@ -143,20 +145,22 @@ class ProfileService:
             "has_next": (offset + page_size) < total,
         }
 
-    async def get_user_card(self, user_id: str) -> dict:
+    async def get_user_card(self, user_id: str, tenant_id: str) -> dict:
         """
-        Mini-card público de um usuário.
+        Mini-card público de um usuário, escopado ao tenant do chamador.
 
         Retorna dados mínimos para o hover tooltip em comentários.
+        O count de comentários é filtrado pelo tenant para evitar vazamento cross-tenant.
         """
         user = await self.session.get(User, user_id)
         if not user:
             raise ValueError(f"Usuário {user_id} não encontrado")
 
-        # Count total approved comments
+        # Count total approved comments scoped to the caller's tenant
         count_query = (
             select(func.count())
             .where(Comment.user_id == user_id)
+            .where(Comment.tenant_id == tenant_id)
             .where(Comment.status == "approved")
         )
         count = (await self.session.execute(count_query)).scalar() or 0
