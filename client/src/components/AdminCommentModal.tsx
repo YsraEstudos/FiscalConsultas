@@ -108,12 +108,13 @@ export function AdminCommentModal({ isOpen, onClose }: AdminCommentModalProps) {
     if (!isOpen) return null;
 
     return (
-        <div
-            className={styles.overlay}
-            onMouseDown={(e) => {
-                if (e.target === e.currentTarget) onClose();
-            }}
-        >
+        <div className={styles.overlay}>
+            <button
+                type="button"
+                className={styles.backdrop}
+                onClick={onClose}
+                aria-label="Fechar moderação de comentários"
+            />
             <div className={styles.modal}>
                 {/* Header */}
                 <div className={styles.header}>
