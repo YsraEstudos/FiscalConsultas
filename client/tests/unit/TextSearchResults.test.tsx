@@ -65,7 +65,7 @@ describe('TextSearchResults', () => {
         expect(screen.getAllByText('Parcial')).toHaveLength(2);
         expect(screen.getByText('10')).toBeInTheDocument();
         expect(screen.getByText('0')).toBeInTheDocument();
-        expect(screen.getAllByTitle('Score')).toHaveLength(1);
+        expect(screen.getAllByTitle('Score')).toHaveLength(2);
 
         fireEvent.click(screen.getByText('0201'));
         expect(onResultClick).toHaveBeenCalledWith('0201');
