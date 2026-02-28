@@ -203,6 +203,16 @@ vi.mock('../../src/components/ModalManager', () => ({
   ),
 }));
 
+vi.mock('../../src/components/UserProfilePage', () => ({
+  UserProfilePage: ({ isOpen, onClose }: any) => (
+    <div data-testid="user-profile-page" data-open={String(Boolean(isOpen))}>
+      <button data-testid="user-profile-close" onClick={onClose}>
+        close-profile
+      </button>
+    </div>
+  ),
+}));
+
 vi.mock('../../src/components/NotePanel', () => ({
   NotePanel: ({ isOpen, onClose, note, chapter, content, position }: any) => (
     <div
@@ -332,7 +342,10 @@ describe('App behavior', () => {
   });
 
   afterEach(() => {
-    document.body.innerHTML = '';
+    vi.useRealTimers();
+    document.querySelectorAll('.smart-link, .note-ref, #ncmInput, [id^="results-content-"]').forEach((node) => {
+      node.remove();
+    });
   });
 
   it('handles split search terms and skips blank searches', async () => {

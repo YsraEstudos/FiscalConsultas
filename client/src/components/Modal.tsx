@@ -20,8 +20,13 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
     if (!isOpen) return null;
 
     return (
-        <div className={styles.overlay} onClick={onClose}>
-            <div className={styles.container} onClick={e => e.stopPropagation()}>
+        <div
+            className={styles.overlay}
+            onMouseDown={(e) => {
+                if (e.target === e.currentTarget) onClose();
+            }}
+        >
+            <div className={styles.container}>
                 <div className={styles.header}>
                     <h3 className={styles.title}>{title}</h3>
                     <button className={styles.closeButton} onClick={onClose}>×</button>
