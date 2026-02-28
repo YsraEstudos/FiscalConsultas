@@ -104,10 +104,16 @@ export function AdminCommentModal({ isOpen, onClose }: AdminCommentModalProps) {
 
     return (
         <div className={styles.overlay} onClick={onClose}>
-            <div className={styles.modal} onClick={e => e.stopPropagation()}>
+            <div
+                className={styles.modal}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="admin-comments-title"
+                onClick={e => e.stopPropagation()}
+            >
                 {/* Header */}
                 <div className={styles.header}>
-                    <h2 className={styles.title}>
+                    <h2 id="admin-comments-title" className={styles.title}>
                         🛡️ Moderar Comentários
                         {comments.length > 0 && (
                             <span className={styles.count}>{comments.length}</span>
