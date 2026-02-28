@@ -115,10 +115,15 @@ export function AdminCommentModal({ isOpen, onClose }: AdminCommentModalProps) {
                 onClick={onClose}
                 aria-label="Fechar moderação de comentários"
             />
-            <div className={styles.modal}>
+            <div
+                className={styles.modal}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="admin-comments-title"
+            >
                 {/* Header */}
                 <div className={styles.header}>
-                    <h2 className={styles.title}>
+                    <h2 id="admin-comments-title" className={styles.title}>
                         🛡️ Moderar Comentários
                         {comments.length > 0 && (
                             <span className={styles.count}>{comments.length}</span>

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Header } from '../../src/components/Header';
@@ -185,27 +185,24 @@ describe('Header', () => {
     expect(screen.getByText('Confirmar saída')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
-    await waitFor(() => {
-      expect(screen.queryByText('Confirmar saída')).not.toBeInTheDocument();
-    });
+    expect(screen.queryByText('Confirmar saída')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /menu/i }));
     fireEvent.click(screen.getByRole('button', { name: /sair da conta/i }));
     const confirmButton = screen.getByRole('button', { name: 'Sair' });
 
     fireEvent.click(confirmButton);
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Saindo...' })).toBeDisabled();
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Saindo...' }));
+    const loadingButton = screen.getByRole('button', { name: 'Saindo...' });
+    expect(loadingButton).toBeDisabled();
+    fireEvent.click(loadingButton);
     expect(signOutMock).toHaveBeenCalledTimes(1);
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.getByText('Confirmar saída')).toBeInTheDocument();
 
-    resolveSignOut?.();
-    await waitFor(() => {
-      expect(screen.queryByText('Confirmar saída')).not.toBeInTheDocument();
+    await act(async () => {
+      resolveSignOut?.();
     });
+    expect(screen.queryByText('Confirmar saída')).not.toBeInTheDocument();
   });
 });

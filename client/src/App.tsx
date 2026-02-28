@@ -79,8 +79,8 @@ function App() {
         const current = activeTabRef.current?.loadedChaptersByDoc || { nesh: [], tipi: [] };
         return { ...current, [doc]: [] };
     }, []);
-    const runNonBlockingTask = useCallback((task: Promise<unknown>, context: string) => {
-        task.catch((error) => {
+    const runNonBlockingTask = useCallback((task: Promise<unknown> | void, context: string) => {
+        Promise.resolve(task).catch((error) => {
             console.error(`[App] ${context}:`, error);
         });
     }, []);

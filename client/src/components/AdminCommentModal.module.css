@@ -7,7 +7,7 @@
     align-items: center;
     justify-content: center;
     z-index: 9999;
-    animation: fadeIn 0.15s ease;
+    animation: fade-in 0.15s ease;
 }
 
 .backdrop {
@@ -20,7 +20,7 @@
     cursor: pointer;
 }
 
-@keyframes fadeIn {
+@keyframes fade-in {
     from { opacity: 0; }
     to { opacity: 1; }
 }
