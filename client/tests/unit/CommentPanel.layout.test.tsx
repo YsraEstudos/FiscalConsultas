@@ -1,29 +1,7 @@
-import { act, render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CommentPanel, type LocalComment } from '../../src/components/CommentPanel';
-
-class TestResizeObserver {
-  static instances: TestResizeObserver[] = [];
-
-  private callback: ResizeObserverCallback;
-  observe = vi.fn();
-  unobserve = vi.fn();
-  disconnect = vi.fn();
-
-  constructor(callback: ResizeObserverCallback) {
-    this.callback = callback;
-    TestResizeObserver.instances.push(this);
-  }
-
-  emitHeight(target: Element, height: number) {
-    const entry = {
-      target,
-      contentRect: { height },
-    } as ResizeObserverEntry;
-    this.callback([entry], this as unknown as ResizeObserver);
-  }
-}
 
 function makeComment(id: string, anchorTop: number, body: string): LocalComment {
   return {
@@ -41,23 +19,62 @@ function makeComment(id: string, anchorTop: number, body: string): LocalComment 
 }
 
 describe('CommentPanel layout behavior', () => {
-  const originalResizeObserver = globalThis.ResizeObserver;
+  const originalOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight');
+  let requestAnimationFrameSpy: ReturnType<typeof vi.spyOn>;
+  let cancelAnimationFrameSpy: ReturnType<typeof vi.spyOn>;
+  let queuedFrames: Array<{ id: number; callback: FrameRequestCallback }>;
+  let heights: Record<string, number>;
+  let nextFrameId: number;
+
+  const flushAnimationFrames = () => {
+    while (queuedFrames.length > 0) {
+      const nextFrame = queuedFrames.shift();
+      nextFrame?.callback(0);
+    }
+  };
 
   beforeEach(() => {
-    TestResizeObserver.instances = [];
-    // @ts-expect-error - test-only override
-    globalThis.ResizeObserver = TestResizeObserver;
+    queuedFrames = [];
+    nextFrameId = 1;
+    heights = {
+      c1: 130,
+      c2: 120,
+      __pending__: 130,
+    };
+
+    requestAnimationFrameSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+      const id = nextFrameId++;
+      queuedFrames.push({ id, callback: cb });
+      return id;
+    });
+    cancelAnimationFrameSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id: number) => {
+      queuedFrames = queuedFrames.filter(frame => frame.id !== id);
+    });
+
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+      configurable: true,
+      get() {
+        const id = this.getAttribute?.('data-comment-card-id');
+        return id ? (heights[id] ?? 0) : 0;
+      },
+    });
   });
 
   afterEach(() => {
-    // @ts-expect-error - restore original constructor
-    globalThis.ResizeObserver = originalResizeObserver;
+    requestAnimationFrameSpy.mockRestore();
+    cancelAnimationFrameSpy.mockRestore();
+
+    if (originalOffsetHeight) {
+      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', originalOffsetHeight);
+    } else {
+      delete (HTMLElement.prototype as Partial<HTMLElement>).offsetHeight;
+    }
   });
 
-  it('recalculates only dependent card positions when one card height changes', async () => {
+  it('remeasures dependent card positions when layout-affecting state changes', async () => {
     const comments = [
-      makeComment('c1', 0, 'Primeiro comentário'),
-      makeComment('c2', 300, 'Segundo comentário'),
+      makeComment('c1', 0, 'Primeiro comentario'),
+      makeComment('c2', 300, 'Segundo comentario'),
     ];
 
     const { container } = render(
@@ -66,31 +83,41 @@ describe('CommentPanel layout behavior', () => {
         comments={comments}
         onSubmit={async () => true}
         onDismiss={() => {}}
+        onEdit={async () => {}}
+        onDelete={async () => {}}
+        currentUserId="user_test"
       />,
     );
 
-    const firstCard = container.querySelector('[data-comment-card-id="c1"]') as HTMLElement | null;
-    const secondCard = container.querySelector('[data-comment-card-id="c2"]') as HTMLElement | null;
+    act(() => {
+      flushAnimationFrames();
+    });
+
+    let firstCard = container.querySelector('[data-comment-card-id="c1"]') as HTMLElement | null;
+    let secondCard = container.querySelector('[data-comment-card-id="c2"]') as HTMLElement | null;
     expect(firstCard).not.toBeNull();
     expect(secondCard).not.toBeNull();
     if (!firstCard || !secondCard) return;
 
-    // Initial layout uses estimated height -> second card keeps anchor top.
     expect(firstCard.style.top).toBe('0px');
     expect(secondCard.style.top).toBe('300px');
 
-    const observer = TestResizeObserver.instances[0];
-    expect(observer).toBeDefined();
-    expect(observer.observe).toHaveBeenCalledTimes(2);
-
+    heights.c1 = 280;
     act(() => {
-      observer.emitHeight(firstCard, 280);
+      fireEvent.click(within(firstCard).getByLabelText('Editar comentário'));
+      flushAnimationFrames();
     });
 
     await waitFor(() => {
-      // minTop = 0 + 280 + 60 = 340
-      expect(secondCard.style.top).toBe('340px');
+      act(() => {
+        flushAnimationFrames();
+      });
+      firstCard = container.querySelector('[data-comment-card-id="c1"]') as HTMLElement | null;
+      secondCard = container.querySelector('[data-comment-card-id="c2"]') as HTMLElement | null;
+      expect(firstCard).not.toBeNull();
+      expect(secondCard).not.toBeNull();
+      expect(firstCard?.style.top).toBe('0px');
+      expect(secondCard?.style.top).toBe('340px');
     });
-    expect(firstCard.style.top).toBe('0px');
   });
 });
