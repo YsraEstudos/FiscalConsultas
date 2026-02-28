@@ -440,10 +440,17 @@ function getCachedRawMarkup(
     if (cachedRawMarkup) return cachedRawMarkup;
 
     const reusableMarkup = lastMarkupRef.current === cacheKey ? lastHtmlRef.current : null;
-    const nextRawMarkup = reusableMarkup
-        ? reusableMarkup
+    if (reusableMarkup) {
+        cacheSet(sharedRawMarkupCache, cacheKey, reusableMarkup);
+        return reusableMarkup;
+    }
+
+    let nextRawMarkup = markupToRender;
+    if (shouldParseMarkdown) {
         // @ts-ignore - marked types might mismatch slightly depending on version
-        : (shouldParseMarkdown ? (marked.parse(markupToRender) as string) : markupToRender);
+        nextRawMarkup = marked.parse(markupToRender) as string;
+    }
+
     cacheSet(sharedRawMarkupCache, cacheKey, nextRawMarkup);
     return nextRawMarkup;
 }
@@ -529,17 +536,17 @@ function renderMarkupContent(options: MarkupRenderOptions): (() => void) | undef
 
     const shouldParseMarkdown = !!rawMarkdown && isLikelyLegacyMarkdown(markupToRender);
     const cacheKey = `${shouldParseMarkdown ? 'md' : 'html'}:${markupToRender}`;
-    const isAlreadyRendered = refs.renderedMarkupKeyRef.current === cacheKey && container.childNodes.length > 0;
-
-    if (isAlreadyRendered) {
-        if (!isContentReady) setIsContentReady(true);
-        return undefined;
-    }
 
     // Evita render custoso em abas inativas; o conteúdo é re-hidratado ao ativar a aba.
     if (!isActive) {
         container.textContent = '';
         setIsContentReady(false);
+        return undefined;
+    }
+
+    const isAlreadyRendered = refs.renderedMarkupKeyRef.current === cacheKey && container.childNodes.length > 0;
+    if (isAlreadyRendered) {
+        if (!isContentReady) setIsContentReady(true);
         return undefined;
     }
 
@@ -631,7 +638,10 @@ function findAnchorIdInChapter(
 function getStructuredSectionIds(capitulo: string, secoes: Record<string, unknown>): string[] {
     const ids: string[] = [];
     for (const sectionType of SECTION_TYPES) {
-        const sectionContent = (secoes[sectionType] || '').toString().trim();
+        const sectionValue = secoes[sectionType];
+        const sectionContent = typeof sectionValue === 'string'
+            ? sectionValue.trim()
+            : (typeof sectionValue === 'number' ? String(sectionValue).trim() : '');
         if (!sectionContent) continue;
         ids.push(`chapter-${capitulo}-${sectionType}`);
     }
@@ -1158,7 +1168,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             renderedMarkupKeyRef.current = null;
             setIsContentReady(true);
         }
-    }, [codeResults, data?.type, data?.markdown, isActive, isContentReady]);
+    }, [codeResults, data?.type, data?.markdown, isActive]);
 
     // Ensure target anchor exists by using data-ncm as fallback
     useEffect(() => {

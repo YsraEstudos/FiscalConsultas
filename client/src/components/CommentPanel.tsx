@@ -265,6 +265,7 @@ export function CommentPanel({ pending, comments, onSubmit, onDismiss, onEdit, o
             {pending && pendingPos && (
                 <div
                     ref={setCardRef('__pending__')}
+                    data-comment-card-id="__pending__"
                     className={`${styles.formCard} ${pendingPos.displaced ? styles.displaced : ''}`}
                     style={{ top: `${pendingPos.resolvedTop}px` }}
                 >
@@ -330,6 +331,7 @@ export function CommentPanel({ pending, comments, onSubmit, onDismiss, onEdit, o
                     <div
                         key={comment.id}
                         ref={setCardRef(comment.id)}
+                        data-comment-card-id={comment.id}
                         className={`${styles.commentCard} ${comment.isPrivate ? styles.private : ''} ${pos.displaced ? styles.displaced : ''}`}
                         style={{ top: `${pos.resolvedTop}px` }}
                         title={comment.isPrivate ? 'Comentário privado' : undefined}
