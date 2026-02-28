@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CommentPanel, type LocalComment } from '../../src/components/CommentPanel';
@@ -22,18 +22,20 @@ describe('CommentPanel layout behavior', () => {
   const originalOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight');
   let requestAnimationFrameSpy: ReturnType<typeof vi.spyOn>;
   let cancelAnimationFrameSpy: ReturnType<typeof vi.spyOn>;
-  let queuedFrames: FrameRequestCallback[];
+  let queuedFrames: Array<{ id: number; callback: FrameRequestCallback }>;
   let heights: Record<string, number>;
+  let nextFrameId: number;
 
   const flushAnimationFrames = () => {
     while (queuedFrames.length > 0) {
-      const callback = queuedFrames.shift();
-      callback?.(0);
+      const nextFrame = queuedFrames.shift();
+      nextFrame?.callback(0);
     }
   };
 
   beforeEach(() => {
     queuedFrames = [];
+    nextFrameId = 1;
     heights = {
       c1: 130,
       c2: 120,
@@ -41,10 +43,13 @@ describe('CommentPanel layout behavior', () => {
     };
 
     requestAnimationFrameSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
-      queuedFrames.push(cb);
-      return queuedFrames.length;
+      const id = nextFrameId++;
+      queuedFrames.push({ id, callback: cb });
+      return id;
     });
-    cancelAnimationFrameSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
+    cancelAnimationFrameSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id: number) => {
+      queuedFrames = queuedFrames.filter(frame => frame.id !== id);
+    });
 
     Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
       configurable: true,
@@ -84,7 +89,9 @@ describe('CommentPanel layout behavior', () => {
       />,
     );
 
-    flushAnimationFrames();
+    act(() => {
+      flushAnimationFrames();
+    });
 
     let firstCard = container.querySelector('[data-comment-card-id="c1"]') as HTMLElement | null;
     let secondCard = container.querySelector('[data-comment-card-id="c2"]') as HTMLElement | null;
@@ -96,10 +103,15 @@ describe('CommentPanel layout behavior', () => {
     expect(secondCard.style.top).toBe('300px');
 
     heights.c1 = 280;
-    fireEvent.click(container.querySelector('[data-comment-card-id="c1"] [aria-label="Editar comentário"]') as HTMLElement);
-    flushAnimationFrames();
+    act(() => {
+      fireEvent.click(within(firstCard).getByLabelText('Editar comentário'));
+      flushAnimationFrames();
+    });
 
     await waitFor(() => {
+      act(() => {
+        flushAnimationFrames();
+      });
       firstCard = container.querySelector('[data-comment-card-id="c1"]') as HTMLElement | null;
       secondCard = container.querySelector('[data-comment-card-id="c2"]') as HTMLElement | null;
       expect(firstCard).not.toBeNull();
