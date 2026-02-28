@@ -145,11 +145,11 @@ export function CommentDrawer({
 
             {/* Backdrop */}
             {open && (
-                <div
+                <button
+                    type="button"
                     className={styles.backdrop}
-                    onMouseDown={(e) => {
-                        if (e.target === e.currentTarget) onClose();
-                    }}
+                    onClick={onClose}
+                    aria-label="Fechar comentários"
                 />
             )}
 
