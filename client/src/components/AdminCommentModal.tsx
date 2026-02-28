@@ -114,6 +114,7 @@ export function AdminCommentModal({ isOpen, onClose }: AdminCommentModalProps) {
                 className={styles.backdrop}
                 onClick={onClose}
                 aria-label="Fechar moderação de comentários"
+                tabIndex={-1}
             />
             <div
                 className={styles.modal}
