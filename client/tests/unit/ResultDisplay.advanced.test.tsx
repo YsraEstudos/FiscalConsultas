@@ -420,6 +420,111 @@ describe('ResultDisplay advanced behavior', () => {
     });
   });
 
+  it('clears markup while inactive and rehydrates it when the tab becomes active again', async () => {
+    const onContentReady = vi.fn();
+    const data = {
+      type: 'code' as const,
+      query: '8517',
+      markdown: '<h3 id="pos-85-17">Item 8517</h3><p>Conteudo ativo</p>',
+      resultados: {
+        '85': {
+          capitulo: '85',
+          posicao_alvo: '85.17',
+          posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+        },
+      },
+    };
+
+    const { container, rerender } = render(
+      <ResultDisplay
+        data={data}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-reactivate"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+        onContentReady={onContentReady}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Conteudo ativo')).toBeInTheDocument();
+      expect(onContentReady).toHaveBeenCalledTimes(1);
+    });
+
+    rerender(
+      <ResultDisplay
+        data={data}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={false}
+        tabId="tab-reactivate"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+        onContentReady={onContentReady}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Conteudo ativo')).not.toBeInTheDocument();
+    });
+
+    const contentContainer = container.querySelector('#results-content-tab-reactivate');
+    expect(contentContainer?.textContent).not.toContain('Conteudo ativo');
+
+    rerender(
+      <ResultDisplay
+        data={data}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-reactivate"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+        onContentReady={onContentReady}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Conteudo ativo')).toBeInTheDocument();
+      expect(onContentReady).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('ignores non-string structured section payloads when generating section anchors', async () => {
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '8517',
+          markdown: '<span id="cap-85"></span><h3 id="pos-85-17">Item 8517</h3>',
+          resultados: {
+            '85': {
+              capitulo: '85',
+              secoes: {
+                consideracoes: { nested: true },
+              },
+              posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-non-string-section"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Item 8517')).toBeInTheDocument();
+    });
+
+    expect(document.getElementById('chapter-85-consideracoes')).toBeNull();
+  });
+
   it('replaces text-query highlights on query change without accumulating wrappers', async () => {
     const baseData = {
       type: 'code' as const,
