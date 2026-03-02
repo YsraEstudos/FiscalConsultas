@@ -66,18 +66,18 @@ async def _init_primary_database(app: FastAPI) -> None:
 
 
 async def _init_sqlmodel_engine(app: FastAPI) -> None:
+    if settings.database.is_postgres:
+        # Em Postgres, migrations são responsabilidade do Alembic.
+        app.state.sqlmodel_enabled = True
+        logger.info("SQLModel engine ready (Postgres migrations via Alembic)")
+        return
+
     # SQLModel é opcional no modo legado; tratamos fallback para não bloquear startup em SQLite.
     try:
         from backend.infrastructure.db_engine import init_db
     except ImportError:
         app.state.sqlmodel_enabled = False
         logger.debug("SQLModel not available, using legacy DatabaseAdapter")
-        return
-
-    if settings.database.is_postgres:
-        # Em Postgres, migrations são responsabilidade do Alembic.
-        app.state.sqlmodel_enabled = True
-        logger.info("SQLModel engine ready (Postgres migrations via Alembic)")
         return
 
     try:
@@ -166,9 +166,15 @@ async def _shutdown_resources(app: FastAPI) -> None:
     logger.info("Shutting down...")
 
     if hasattr(app.state, "db") and app.state.db:
-        await app.state.db.close()
+        try:
+            await app.state.db.close()
+        except Exception as e:
+            logger.warning("Error closing DatabaseAdapter: %s", e)
 
-    await redis_cache.close()
+    try:
+        await redis_cache.close()
+    except Exception as e:
+        logger.warning("Error closing Redis cache: %s", e)
 
     if not getattr(app.state, "sqlmodel_enabled", False):
         return
