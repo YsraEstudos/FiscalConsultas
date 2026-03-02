@@ -197,39 +197,43 @@ class NeshService:
         logger.debug(f"Parseadas {len(notes)} notas")
         return notes
 
-    async def fetch_chapter_data(self, chapter_num: str) -> Optional[Dict[str, Any]]:
-        """
-        Busca dados de capítulo com cache LRU (Async).
-
-        Args:
-            chapter_num: Número do capítulo (ex: "73")
-
-        Returns:
-            Dict com dados do capítulo incluindo parsed_notes,
-            ou None se não encontrar
-        """
+    async def _get_cached_chapter(self, chapter_num: str) -> Optional[Dict[str, Any]]:
+        """Retorna capítulo do cache L1 em memória quando disponível."""
         async with self._get_cache_lock():
-            # Check cache
-            if chapter_num in self._chapter_cache:
-                self._chapter_cache.move_to_end(chapter_num)
-                self._chapter_cache_metrics.record_hit()
-                return self._chapter_cache[chapter_num]
-        self._chapter_cache_metrics.record_miss()
+            cached = self._chapter_cache.get(chapter_num)
+            if not cached:
+                return None
+            self._chapter_cache.move_to_end(chapter_num)
+            self._chapter_cache_metrics.record_hit()
+            return cached
 
-        if redis_cache.available:
-            cached = await redis_cache.get_chapter(chapter_num)
-            if cached:
-                async with self._get_cache_lock():
-                    self._chapter_cache[chapter_num] = cached
-                    self._chapter_cache_metrics.record_set()
-                    if len(self._chapter_cache) > CacheConfig.CHAPTER_CACHE_SIZE:
-                        self._chapter_cache.popitem(last=False)
-                        self._chapter_cache_metrics.record_eviction()
-                return cached
+    async def _store_chapter_in_cache(
+        self, chapter_num: str, payload: Dict[str, Any]
+    ) -> None:
+        """Armazena capítulo no cache L1 e aplica política LRU."""
+        async with self._get_cache_lock():
+            self._chapter_cache[chapter_num] = payload
+            self._chapter_cache_metrics.record_set()
+            if len(self._chapter_cache) > CacheConfig.CHAPTER_CACHE_SIZE:
+                self._chapter_cache.popitem(last=False)
+                self._chapter_cache_metrics.record_eviction()
 
-        logger.debug(f"Fetching capítulo {chapter_num} (cache miss)")
+    async def _get_cached_chapter_from_redis(
+        self, chapter_num: str
+    ) -> Optional[Dict[str, Any]]:
+        """Retorna capítulo do cache L2 (Redis) e hidrata cache local."""
+        if not redis_cache.available:
+            return None
+        cached = await redis_cache.get_chapter(chapter_num)
+        if not cached:
+            return None
+        await self._store_chapter_in_cache(chapter_num, cached)
+        return cached
 
-        # Use repository if available, otherwise fallback to legacy adapter
+    async def _fetch_chapter_raw_data(
+        self, chapter_num: str
+    ) -> Optional[Dict[str, Any]]:
+        """Busca dados brutos do capítulo no Repository/DatabaseAdapter."""
         if self._use_repository:
             async with self._get_repo() as repo:
                 if not repo:
@@ -237,18 +241,18 @@ class NeshService:
                 chapter = await repo.get_by_num(chapter_num)
                 if not chapter:
                     return None
-
                 notes = chapter.notes
-                sections = None
-                if notes:
-                    sections = {
+                sections = (
+                    {
                         "titulo": notes.titulo,
                         "notas": notes.notas,
                         "consideracoes": notes.consideracoes,
                         "definicoes": notes.definicoes,
                     }
-
-                raw_data = {
+                    if notes
+                    else None
+                )
+                return {
                     "chapter_num": chapter.chapter_num,
                     "content": chapter.content,
                     "notes": notes.notes_content if notes else None,
@@ -265,14 +269,13 @@ class NeshService:
                     ],
                     "sections": sections,
                 }
-        else:
-            if not self.db:
-                raise RuntimeError("DatabaseAdapter não configurado")
-            raw_data = await self.db.get_chapter_raw(chapter_num)
-            if not raw_data:
-                return None
 
-        # Use precomputed parsed_notes if available, else fall back to runtime parsing
+        if not self.db:
+            raise RuntimeError("DatabaseAdapter não configurado")
+        return await self.db.get_chapter_raw(chapter_num)
+
+    def _hydrate_chapter_payload(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Completa payload do capítulo com parsed_notes e anchor_id."""
         precomputed_json = raw_data.pop("parsed_notes_json", None)
         if precomputed_json:
             try:
@@ -289,19 +292,41 @@ class NeshService:
         raw_data["positions"] = self._enrich_positions_with_id(
             raw_data.get("positions", [])
         )
+        return raw_data
+
+    async def fetch_chapter_data(self, chapter_num: str) -> Optional[Dict[str, Any]]:
+        """
+        Busca dados de capítulo com cache LRU (Async).
+
+        Args:
+            chapter_num: Número do capítulo (ex: "73")
+
+        Returns:
+            Dict com dados do capítulo incluindo parsed_notes,
+            ou None se não encontrar
+        """
+        cached = await self._get_cached_chapter(chapter_num)
+        if cached is not None:
+            return cached
+        self._chapter_cache_metrics.record_miss()
+
+        redis_cached = await self._get_cached_chapter_from_redis(chapter_num)
+        if redis_cached is not None:
+            return redis_cached
+
+        logger.debug(f"Fetching capítulo {chapter_num} (cache miss)")
+
+        raw_data = await self._fetch_chapter_raw_data(chapter_num)
+        if not raw_data:
+            return None
+        hydrated = self._hydrate_chapter_payload(raw_data)
 
         if redis_cache.available:
-            await redis_cache.set_chapter(chapter_num, raw_data)
+            await redis_cache.set_chapter(chapter_num, hydrated)
 
-        async with self._get_cache_lock():
-            # Update cache
-            self._chapter_cache[chapter_num] = raw_data
-            self._chapter_cache_metrics.record_set()
-            if len(self._chapter_cache) > CacheConfig.CHAPTER_CACHE_SIZE:
-                self._chapter_cache.popitem(last=False)
-                self._chapter_cache_metrics.record_eviction()
+        await self._store_chapter_in_cache(chapter_num, hydrated)
 
-        return raw_data
+        return hydrated
 
     def _enrich_positions_with_id(
         self, positions: List[Dict[str, Any]]
@@ -434,6 +459,140 @@ class NeshService:
 
         return results
 
+    @staticmethod
+    def _empty_text_search_response(query: str) -> ServiceResponse:
+        return {
+            "success": True,
+            "type": "text",
+            "query": query,
+            "normalized": "",
+            "match_type": "none",
+            "warning": None,
+            "results": [],
+            "total_capitulos": 0,
+        }
+
+    @staticmethod
+    def _row_identity(row: Dict[str, Any]) -> Tuple[str, str, str]:
+        return (row["ncm"], row["type"], row["display_text"])
+
+    def _add_unique_rows(
+        self,
+        target: List[Dict[str, Any]],
+        seen: set[Tuple[str, str, str]],
+        rows: List[Dict[str, Any]],
+    ) -> None:
+        for row in rows:
+            key = self._row_identity(row)
+            if key in seen:
+                continue
+            seen.add(key)
+            target.append(row)
+
+    async def _search_tier1(
+        self, exact_q: str, total_words: int
+    ) -> List[Dict[str, Any]]:
+        phrase_query = f'"{exact_q}"'
+        return await self._fts_scored_cached(
+            phrase_query,
+            tier=1,
+            limit=SearchConfig.TIER1_LIMIT,
+            words_matched=total_words,
+            total_words=total_words,
+        )
+
+    async def _search_tier2(
+        self, normalized_q: str, normalized_raw_q: str, total_words: int
+    ) -> List[Dict[str, Any]]:
+        and_results = await self._fts_scored_cached(
+            normalized_q,
+            tier=2,
+            limit=SearchConfig.TIER2_LIMIT,
+            words_matched=total_words,
+            total_words=total_words,
+        )
+        if and_results or not normalized_raw_q or normalized_raw_q == normalized_q:
+            return and_results
+        return await self._fts_scored_cached(
+            normalized_raw_q,
+            tier=2,
+            limit=SearchConfig.TIER2_LIMIT,
+            words_matched=total_words,
+            total_words=total_words,
+        )
+
+    def _build_tier3_query(self, original_words: List[str]) -> str:
+        unique_words = list(dict.fromkeys(original_words))[:20]
+        or_parts = []
+        for word in unique_words:
+            word_normalized = self.processor.process_query_for_fts(word)
+            if word_normalized:
+                or_parts.append(word_normalized)
+        return " OR ".join(or_parts)
+
+    async def _search_tier3(
+        self, original_words: List[str], normalized_raw_q: str, total_words: int
+    ) -> List[Dict[str, Any]]:
+        or_query = self._build_tier3_query(original_words)
+        if not or_query:
+            return []
+
+        partial_results = await self._fts_scored_cached(
+            or_query,
+            tier=3,
+            limit=SearchConfig.TIER3_LIMIT,
+            words_matched=max(1, total_words // 2),
+            total_words=total_words,
+        )
+        if partial_results or not normalized_raw_q:
+            return partial_results
+
+        raw_or_query = " OR ".join(normalized_raw_q.split())
+        if raw_or_query == or_query:
+            return partial_results
+        return await self._fts_scored_cached(
+            raw_or_query,
+            tier=3,
+            limit=SearchConfig.TIER3_LIMIT,
+            words_matched=max(1, total_words // 2),
+            total_words=total_words,
+        )
+
+    async def _apply_near_bonus_if_needed(
+        self, all_results: List[Dict[str, Any]], stemmed_words: List[str]
+    ) -> None:
+        if self._use_repository or len(stemmed_words) < 2 or not all_results:
+            return
+        if not self.db:
+            return
+        near_results = await self.db.fts_search_near(
+            stemmed_words,
+            distance=SearchConfig.NEAR_DISTANCE,
+            limit=SearchConfig.TIER1_LIMIT + SearchConfig.TIER2_LIMIT,
+        )
+        near_ncms = {r["ncm"] for r in near_results}
+        for row in all_results:
+            if row["ncm"] not in near_ncms:
+                continue
+            row["score"] += SearchConfig.NEAR_BONUS
+            row["near_bonus"] = True
+            logger.debug(f"NEAR bonus aplicado: {row['ncm']}")
+
+    @staticmethod
+    def _resolve_match_metadata(
+        all_results: List[Dict[str, Any]], query: str, original_words: List[str]
+    ) -> Tuple[str, Optional[str], int]:
+        best_tier = min(r.get("tier", 3) for r in all_results)
+        if best_tier == 1:
+            return "exact", None, best_tier
+        if best_tier == 2:
+            return "all_words", None, best_tier
+        warning = (
+            f'Não encontrei "{query}" exato. '
+            f"Mostrando aproximações para: {', '.join(original_words)}"
+        )
+        return "partial", warning, best_tier
+
     async def search_full_text(self, query: str) -> ServiceResponse:
         """
         Executa busca Full-Text Search (FTS) com sistema de ranking por tiers (Async).
@@ -448,154 +607,59 @@ class NeshService:
 
         if not normalized_q:
             logger.debug("Query vazia após normalização")
-            return {
-                "success": True,
-                "type": "text",
-                "query": query,
-                "normalized": "",
-                "match_type": "none",
-                "warning": None,
-                "results": [],
-                "total_capitulos": 0,
-            }
+            return self._empty_text_search_response(query)
 
         exact_q = self.processor.process_query_exact(query)
         stemmed_words = exact_q.split() if exact_q else []
 
-        all_results = []
-        seen = set()
+        all_results: List[Dict[str, Any]] = []
+        seen: set[Tuple[str, str, str]] = set()
 
-        def add_results(rows):
-            """Adiciona resultados evitando duplicatas."""
-            for row in rows:
-                key = (row["ncm"], row["type"], row["display_text"])
-                if key not in seen:
-                    seen.add(key)
-                    all_results.append(row)
-
-        # ========== TIER 1: Busca Exata (frase) ==========
         if len(original_words) > 1 and exact_q:
-            phrase_query = f'"{exact_q}"'
-            # DatabaseError will be caught by global handler (503)
-            # Other exceptions will be caught by generic handler (500)
-            exact_results = await self._fts_scored_cached(
-                phrase_query,
-                tier=1,
-                limit=SearchConfig.TIER1_LIMIT,
-                words_matched=total_words,
-                total_words=total_words,
-            )
+            exact_results = await self._search_tier1(exact_q, total_words)
             if exact_results:
                 logger.info(f"FTS TIER1 (exato): {len(exact_results)} resultados")
-                add_results(exact_results)
+                self._add_unique_rows(all_results, seen, exact_results)
 
-        # ========== TIER 2: Todas as palavras (AND com wildcards) ==========
-        and_results = await self._fts_scored_cached(
-            normalized_q,
-            tier=2,
-            limit=SearchConfig.TIER2_LIMIT,
-            words_matched=total_words,
-            total_words=total_words,
-        )
-        if not and_results and normalized_raw_q and normalized_raw_q != normalized_q:
-            and_results = await self._fts_scored_cached(
-                normalized_raw_q,
-                tier=2,
-                limit=SearchConfig.TIER2_LIMIT,
-                words_matched=total_words,
-                total_words=total_words,
-            )
+        and_results = await self._search_tier2(normalized_q, normalized_raw_q, total_words)
         if and_results:
             logger.info(f"FTS TIER2 (AND): {len(and_results)} resultados")
-            add_results(and_results)
+            self._add_unique_rows(all_results, seen, and_results)
 
-        # ========== BÔNUS DE PROXIMIDADE (NEAR) ==========
-        if (not self._use_repository) and len(stemmed_words) >= 2:
-            near_results = await self.db.fts_search_near(
-                stemmed_words,
-                distance=SearchConfig.NEAR_DISTANCE,
-                limit=SearchConfig.TIER1_LIMIT + SearchConfig.TIER2_LIMIT,
-            )
-            near_ncms = {r["ncm"] for r in near_results}
+        await self._apply_near_bonus_if_needed(all_results, stemmed_words)
 
-            for r in all_results:
-                if r["ncm"] in near_ncms:
-                    r["score"] += SearchConfig.NEAR_BONUS
-                    r["near_bonus"] = True
-                    logger.debug(f"NEAR bonus aplicado: {r['ncm']}")
-
-        # ========== TIER 3: Qualquer palavra (OR com wildcards) ==========
         if len(original_words) > 1:
-            # Otimização: Dedup e limite de termos para evitar query muito pesada
-            # Preserva ordem de aparição (dict.fromkeys)
-            unique_words = list(dict.fromkeys(original_words))
-            # Limita aos primeiros 20 termos únicos para busca OR (suficiente para relevância)
-            unique_words = unique_words[:20]
-
-            or_parts = []
-            for word in unique_words:
-                word_normalized = self.processor.process_query_for_fts(word)
-                if word_normalized:
-                    or_parts.append(word_normalized)
-
-            if or_parts:
-                or_query = " OR ".join(or_parts)
-                partial_results = await self._fts_scored_cached(
-                    or_query,
-                    tier=3,
-                    limit=SearchConfig.TIER3_LIMIT,
-                    words_matched=max(1, total_words // 2),
-                    total_words=total_words,
-                )
-                if (not partial_results) and normalized_raw_q:
-                    raw_or_query = " OR ".join(normalized_raw_q.split())
-                    if raw_or_query != or_query:
-                        partial_results = await self._fts_scored_cached(
-                            raw_or_query,
-                            tier=3,
-                            limit=SearchConfig.TIER3_LIMIT,
-                            words_matched=max(1, total_words // 2),
-                            total_words=total_words,
-                        )
-                if partial_results:
-                    logger.info(f"FTS TIER3 (OR): {len(partial_results)} resultados")
-                    add_results(partial_results)
+            partial_results = await self._search_tier3(
+                original_words, normalized_raw_q, total_words
+            )
+            if partial_results:
+                logger.info(f"FTS TIER3 (OR): {len(partial_results)} resultados")
+                self._add_unique_rows(all_results, seen, partial_results)
 
         all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
 
-        if all_results:
-            best_tier = min(r.get("tier", 3) for r in all_results)
-            if best_tier == 1:
-                match_type = "exact"
-                match_warning = None
-            elif best_tier == 2:
-                match_type = "all_words"
-                match_warning = None
-            else:
-                match_type = "partial"
-                match_warning = (
-                    f'Não encontrei "{query}" exato. '
-                    f"Mostrando aproximações para: {', '.join(original_words)}"
-                )
-
-            logger.info(
-                f"FTS total: {len(all_results)} resultados, melhor tier: {best_tier}"
-            )
+        if not all_results:
+            logger.info("FTS: 0 resultados em todos os níveis")
             return self._build_fts_response(
                 query,
                 normalized_q,
-                all_results,
-                match_type=match_type,
-                warning=match_warning,
+                [],
+                match_type="none",
+                warning=f'Nenhum resultado encontrado para "{query}"',
             )
 
-        logger.info("FTS: 0 resultados em todos os níveis")
+        match_type, match_warning, best_tier = self._resolve_match_metadata(
+            all_results, query, original_words
+        )
+        logger.info(
+            f"FTS total: {len(all_results)} resultados, melhor tier: {best_tier}"
+        )
         return self._build_fts_response(
             query,
             normalized_q,
-            [],
-            match_type="none",
-            warning=f'Nenhum resultado encontrado para "{query}"',
+            all_results,
+            match_type=match_type,
+            warning=match_warning,
         )
 
     def _build_fts_response(
@@ -640,6 +704,77 @@ class NeshService:
             "total_capitulos": 0,
         }
 
+    def _extract_chapter_targets(
+        self, ncms: List[str]
+    ) -> OrderedDict[str, Tuple[str, Optional[str]]]:
+        chapter_targets: OrderedDict[str, Tuple[str, Optional[str]]] = OrderedDict()
+        for ncm in ncms:
+            chapter_num, target_pos = ncm_utils.extract_chapter_from_ncm(ncm)
+            if not chapter_num:
+                logger.debug(f"NCM inválido ignorado: '{ncm}'")
+                continue
+            chapter_targets.setdefault(chapter_num, (ncm, target_pos))
+        return chapter_targets
+
+    @staticmethod
+    def _has_structured_sections(sections: Dict[str, Any]) -> bool:
+        return any(
+            (sections.get(key) or "").strip()
+            for key in ("titulo", "notas", "consideracoes", "definicoes")
+        )
+
+    @staticmethod
+    def _build_sections_payload(sections: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "titulo": sections.get("titulo"),
+            "notas": sections.get("notas"),
+            "consideracoes": sections.get("consideracoes"),
+            "definicoes": sections.get("definicoes"),
+        }
+
+    def _build_found_chapter_search_result(
+        self,
+        chapter_num: str,
+        ncm_buscado: str,
+        target_pos: Optional[str],
+        data: Dict[str, Any],
+    ) -> SearchResult:
+        sections = data.get("sections") or {}
+        has_sections = self._has_structured_sections(sections)
+        content = (
+            self._strip_chapter_preamble(data["content"])
+            if has_sections
+            else data["content"]
+        )
+        return {
+            "ncm_buscado": ncm_buscado,
+            "capitulo": chapter_num,
+            "posicao_alvo": target_pos,
+            "posicoes": data["positions"],
+            "notas_gerais": data["notes"],
+            "notas_parseadas": data["parsed_notes"],
+            "conteudo": content,
+            "real_content_found": True,
+            "erro": None,
+            "secoes": self._build_sections_payload(sections) if has_sections else None,
+        }
+
+    @staticmethod
+    def _build_missing_chapter_search_result(
+        chapter_num: str, ncm_buscado: str
+    ) -> SearchResult:
+        return {
+            "ncm_buscado": ncm_buscado,
+            "capitulo": chapter_num,
+            "real_content_found": False,
+            "erro": f"Capítulo {chapter_num} não encontrado",
+            "conteudo": "",
+            "posicoes": [],
+            "notas_gerais": None,
+            "notas_parseadas": {},
+            "posicao_alvo": None,
+        }
+
     async def search_by_code(self, ncm_query: str) -> ServiceResponse:
         """
         Busca capítulos por código NCM (Async).
@@ -654,70 +789,34 @@ class NeshService:
 
         results: Dict[str, SearchResult] = {}
         ncms = ncm_utils.split_ncm_query(ncm_query)
+        chapter_targets = self._extract_chapter_targets(ncms)
+        if not chapter_targets:
+            logger.debug("Retornando 0 capítulos")
+            return {
+                "success": True,
+                "type": "code",
+                "query": ncm_query,
+                "normalized": None,
+                "results": results,
+                "total_capitulos": 0,
+            }
 
-        chapter_targets: OrderedDict[str, Tuple[str, Optional[str]]] = OrderedDict()
-        for ncm in ncms:
-            chapter_num, target_pos = ncm_utils.extract_chapter_from_ncm(ncm)
-            if not chapter_num:
-                logger.debug(f"NCM inválido ignorado: '{ncm}'")
-                continue
-            if chapter_num not in chapter_targets:
-                chapter_targets[chapter_num] = (ncm, target_pos)
+        ordered_chapters = list(chapter_targets.keys())
+        chapter_payloads = await asyncio.gather(
+            *(self.fetch_chapter_data(chapter_num) for chapter_num in ordered_chapters)
+        )
 
-        if chapter_targets:
-            ordered_chapters = list(chapter_targets.keys())
-            chapter_payloads = await asyncio.gather(
-                *(
-                    self.fetch_chapter_data(chapter_num)
-                    for chapter_num in ordered_chapters
+        for chapter_num, data in zip(ordered_chapters, chapter_payloads):
+            ncm_buscado, target_pos = chapter_targets[chapter_num]
+            if data:
+                results[chapter_num] = self._build_found_chapter_search_result(
+                    chapter_num, ncm_buscado, target_pos, data
                 )
+                continue
+            logger.warning(f"Capítulo não encontrado: {chapter_num}")
+            results[chapter_num] = self._build_missing_chapter_search_result(
+                chapter_num, ncm_buscado
             )
-
-            for chapter_num, data in zip(ordered_chapters, chapter_payloads):
-                ncm_buscado, target_pos = chapter_targets[chapter_num]
-                if data:
-                    sections = data.get("sections") or {}
-                    has_sections = any(
-                        (sections.get(key) or "").strip()
-                        for key in ("titulo", "notas", "consideracoes", "definicoes")
-                    )
-                    content = data["content"]
-                    if has_sections:
-                        content = self._strip_chapter_preamble(content)
-                    results[chapter_num] = {
-                        "ncm_buscado": ncm_buscado,
-                        "capitulo": chapter_num,
-                        "posicao_alvo": target_pos,
-                        "posicoes": data["positions"],
-                        "notas_gerais": data["notes"],
-                        "notas_parseadas": data["parsed_notes"],
-                        "conteudo": content,
-                        "real_content_found": True,
-                        "erro": None,
-                        "secoes": (
-                            {
-                                "titulo": sections.get("titulo"),
-                                "notas": sections.get("notas"),
-                                "consideracoes": sections.get("consideracoes"),
-                                "definicoes": sections.get("definicoes"),
-                            }
-                            if has_sections
-                            else None
-                        ),
-                    }
-                else:
-                    logger.warning(f"Capítulo não encontrado: {chapter_num}")
-                    results[chapter_num] = {
-                        "ncm_buscado": ncm_buscado,
-                        "capitulo": chapter_num,
-                        "real_content_found": False,
-                        "erro": f"Capítulo {chapter_num} não encontrado",
-                        "conteudo": "",
-                        "posicoes": [],
-                        "notas_gerais": None,
-                        "notas_parseadas": {},
-                        "posicao_alvo": None,
-                    }
 
         logger.debug(f"Retornando {len(results)} capítulos")
         return {
