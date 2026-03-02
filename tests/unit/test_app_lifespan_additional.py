@@ -279,3 +279,44 @@ async def test_lifespan_postgres_tipi_count_failure_falls_back_to_sqlite_mode(
         assert app.state.sqlmodel_enabled is True
         assert app.state.tipi_service.mode == "sqlite"
         assert app.state.tipi_service.created_repo is False
+
+
+@pytest.mark.asyncio
+async def test_init_cache_warmup_handles_redis_connect_exception(monkeypatch):
+    warnings = []
+
+    async def _connect_fail():
+        raise RuntimeError("redis unavailable")
+
+    monkeypatch.setattr(app_module.settings.cache, "enable_redis", True)
+    monkeypatch.setattr(app_module.redis_cache, "connect", _connect_fail)
+    monkeypatch.setattr(app_module.logger, "warning", lambda msg, *args: warnings.append(msg % args))
+
+    app = _FakeApp()
+    app.state.service = _FakeNeshService()
+
+    await app_module._init_cache_warmup(app)
+
+    assert warnings == ["Redis connect failed during startup: redis unavailable"]
+
+
+@pytest.mark.asyncio
+async def test_lifespan_runs_shutdown_when_startup_raises(monkeypatch):
+    calls = {"shutdown": False}
+
+    async def _init_fail(_app):
+        raise RuntimeError("startup failed")
+
+    async def _shutdown(_app):
+        calls["shutdown"] = True
+
+    monkeypatch.setattr(app_module, "_init_primary_database", _init_fail)
+    monkeypatch.setattr(app_module, "_shutdown_resources", _shutdown)
+
+    app = _FakeApp()
+
+    with pytest.raises(RuntimeError, match="startup failed"):
+        async with app_module.lifespan(app):
+            pass
+
+    assert calls["shutdown"] is True
