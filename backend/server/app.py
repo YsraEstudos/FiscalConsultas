@@ -109,7 +109,12 @@ async def _init_cache_warmup(app: FastAPI) -> None:
     if not settings.cache.enable_redis:
         return
 
-    await redis_cache.connect()
+    try:
+        await redis_cache.connect()
+    except Exception as e:
+        logger.warning("Redis connect failed during startup: %s", e)
+        return
+
     if not redis_cache.available:
         return
 
@@ -127,10 +132,12 @@ async def _postgres_tipi_has_data() -> bool:
         from sqlalchemy import text
 
         async with get_session() as session:
-            result = await session.execute(text("SELECT COUNT(*) FROM tipi_positions"))
-            count = int(result.scalar() or 0)
-        logger.info("TIPI PostgreSQL: %s positions found", count)
-        return count > 0
+            result = await session.execute(
+                text("SELECT EXISTS(SELECT 1 FROM tipi_positions)")
+            )
+            has_data = bool(result.scalar())
+        logger.info("TIPI PostgreSQL data available: %s", has_data)
+        return has_data
     except Exception as e:
         logger.warning("Could not check tipi_positions table: %s", e)
         return False
@@ -178,22 +185,23 @@ async def _shutdown_resources(app: FastAPI) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     project_root = _resolve_project_root()
-    await _init_primary_database(app)
-    await _init_sqlmodel_engine(app)
-    await _init_nesh_service(app)
-    await _init_cache_warmup(app)
-    await _init_tipi_service(app)
-    app.state.ai_service = AiService()
+    try:
+        await _init_primary_database(app)
+        await _init_sqlmodel_engine(app)
+        await _init_nesh_service(app)
+        await _init_cache_warmup(app)
+        await _init_tipi_service(app)
+        app.state.ai_service = AiService()
 
-    logger.info("Initializing Glossary...")
-    init_glossary(project_root)
+        logger.info("Initializing Glossary...")
+        init_glossary(project_root)
 
-    # Check Frontend Build
-    verify_frontend_build(project_root)
+        # Check Frontend Build
+        verify_frontend_build(project_root)
 
-    yield
-
-    await _shutdown_resources(app)
+        yield
+    finally:
+        await _shutdown_resources(app)
 
 
 app = FastAPI(title="Nesh API", version="4.2", lifespan=lifespan)
@@ -265,9 +273,7 @@ app.include_router(profile.router, prefix="/api", tags=["Profile"])
 # --- Static Files / Frontend ---
 # Serving Frontend (Production Build)
 # Mounts the Vite build directory to serve the React App
-project_root = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
+project_root = _resolve_project_root()
 static_dir = os.path.join(project_root, "client", "dist")
 
 if os.path.exists(static_dir):

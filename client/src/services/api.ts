@@ -392,8 +392,10 @@ function normalizeCodeResponseAliases<T>(data: T): T {
             results?: unknown;
             resultados?: unknown;
         };
+        const hasResults = Object.prototype.hasOwnProperty.call(candidate, 'results');
+        const hasResultados = Object.prototype.hasOwnProperty.call(candidate, 'resultados');
 
-        if (candidate.type === 'code' && candidate.results && !candidate.resultados) {
+        if (candidate.type === 'code' && hasResults && !hasResultados) {
             Object.defineProperty(candidate, 'resultados', {
                 get() {
                     return this.results;
