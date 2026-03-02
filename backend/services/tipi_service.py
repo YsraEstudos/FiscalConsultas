@@ -426,9 +426,11 @@ class TipiService:
         for cap, cap_data in source.items():
             if cap not in merged:
                 merged[cap] = {**cap_data, "posicoes": []}
-            merged[cap]["posicao_alvo"] = TipiService._prefer_more_specific_posicao_alvo(
-                merged[cap].get("posicao_alvo"),
-                cap_data.get("posicao_alvo"),
+            merged[cap]["posicao_alvo"] = (
+                TipiService._prefer_more_specific_posicao_alvo(
+                    merged[cap].get("posicao_alvo"),
+                    cap_data.get("posicao_alvo"),
+                )
             )
             merged[cap].setdefault("posicoes", [])
             seen_ncms = {pos.get("ncm") for pos in merged[cap]["posicoes"]}
