@@ -265,7 +265,9 @@ export const Sidebar = React.memo(function Sidebar({
     <>
       <div
         className={`${styles.sidebarOverlay} ${isOpen ? styles.open : ""}`}
-        onClick={onClose}
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
       />
 
       <div
