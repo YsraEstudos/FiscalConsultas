@@ -307,6 +307,84 @@ async def test_search_by_code_handles_multi_part_merge_with_same_chapter(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_search_by_code_cache_returns_isolated_payloads(monkeypatch):
+    service = TipiService()
+
+    async def _fake_chapter_positions(_cap_num):
+        return (
+            {
+                "ncm": "85.17",
+                "capitulo": "85",
+                "descricao": "Telefone",
+                "aliquota": "0",
+                "nivel": 1,
+            },
+        )
+
+    monkeypatch.setattr(service, "_get_chapter_positions", _fake_chapter_positions)
+
+    first = await service.search_by_code("85")
+    first["resultados"]["85"]["posicoes"].append(
+        {
+            "ncm": "85.99",
+            "codigo": "85.99",
+            "descricao": "Mutated",
+            "aliquota": "0",
+            "nivel": 1,
+            "anchor_id": "mutated",
+        }
+    )
+
+    second = await service.search_by_code("85")
+    assert [item["ncm"] for item in second["resultados"]["85"]["posicoes"]] == ["85.17"]
+
+    second["resultados"]["85"]["posicoes"].append(
+        {
+            "ncm": "85.98",
+            "codigo": "85.98",
+            "descricao": "Mutated cached",
+            "aliquota": "0",
+            "nivel": 1,
+            "anchor_id": "mutated-cached",
+        }
+    )
+
+    third = await service.search_by_code("85")
+    assert [item["ncm"] for item in third["resultados"]["85"]["posicoes"]] == ["85.17"]
+
+
+@pytest.mark.asyncio
+async def test_search_by_code_caches_multi_code_payload(monkeypatch):
+    service = TipiService()
+    calls = 0
+
+    async def _fake_search_multiple_codes(ncm_query, view_mode, parts):
+        nonlocal calls
+        calls += 1
+        assert ncm_query == "85,8517"
+        assert view_mode == "family"
+        assert parts == ["85", "8517"]
+        return {
+            "success": True,
+            "type": "code",
+            "query": ncm_query,
+            "results": {"85": {"capitulo": "85", "posicoes": []}},
+            "resultados": {"85": {"capitulo": "85", "posicoes": []}},
+            "total": 0,
+            "total_capitulos": 1,
+        }
+
+    monkeypatch.setattr(service, "_search_multiple_codes", _fake_search_multiple_codes)
+
+    first = await service.search_by_code("85,8517", view_mode="family")
+    second = await service.search_by_code("85,8517", view_mode="family")
+
+    assert calls == 1
+    assert first == second
+    assert ("85,8517", "family") in service._code_search_cache
+
+
+@pytest.mark.asyncio
 async def test_search_by_code_returns_empty_when_query_has_no_digits(monkeypatch):
     service = TipiService()
     monkeypatch.setattr(tipi_module.ncm_utils, "format_ncm_tipi", lambda _value: "")

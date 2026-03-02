@@ -11,6 +11,7 @@ Observações de contrato (importante para o frontend):
 import asyncio
 from collections import OrderedDict
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Tuple, cast
 
@@ -382,13 +383,17 @@ class TipiService:
                 return None
             self._code_search_cache.move_to_end(cache_key)
             self._code_search_cache_metrics.record_hit()
-            return cached
+            return self._clone_code_search_result(cached)
+
+    @staticmethod
+    def _clone_code_search_result(result: Dict[str, Any]) -> Dict[str, Any]:
+        return deepcopy(result)
 
     async def _store_cached_code_result(
         self, cache_key: Tuple[str, str], result: Dict[str, Any]
     ) -> None:
         async with self._get_cache_lock():
-            self._code_search_cache[cache_key] = result
+            self._code_search_cache[cache_key] = self._clone_code_search_result(result)
             self._code_search_cache_metrics.record_set()
             self._enforce_cache_limit(
                 self._code_search_cache,
@@ -512,7 +517,9 @@ class TipiService:
 
         parts = ncm_utils.split_ncm_query(ncm_query)
         if len(parts) > 1:
-            return await self._search_multiple_codes(ncm_query, view_mode, parts)
+            result = await self._search_multiple_codes(ncm_query, view_mode, parts)
+            await self._store_cached_code_result(cache_key, result)
+            return result
 
         query_part = parts[0] if parts else (ncm_query or "")
         normalized_query = ncm_utils.format_ncm_tipi(query_part)
