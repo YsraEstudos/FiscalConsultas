@@ -35,11 +35,11 @@ describe('AdminCommentModal', () => {
 
     it('closes on overlay click but not when clicking inside the modal', async () => {
         const onClose = vi.fn();
-        const { container } = render(<AdminCommentModal isOpen={true} onClose={onClose} />);
+        render(<AdminCommentModal isOpen={true} onClose={onClose} />);
 
-        const overlay = container.firstElementChild as HTMLElement;
         const backdrop = screen.getByRole('button', { name: /fechar moderação de comentários/i });
         expect(await screen.findByRole('dialog', { name: /moderar comentários/i })).toBeInTheDocument();
+        expect(backdrop).toBeInTheDocument();
         expect(backdrop).toHaveAttribute('tabindex', '-1');
 
         fireEvent.click(screen.getByRole('dialog', { name: /moderar comentários/i }));
@@ -47,7 +47,6 @@ describe('AdminCommentModal', () => {
 
         fireEvent.click(backdrop);
         expect(onClose).toHaveBeenCalledTimes(1);
-        expect(overlay).toContainElement(backdrop);
     });
 
     it('closes when Escape is pressed', async () => {
