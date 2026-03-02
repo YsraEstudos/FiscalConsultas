@@ -505,12 +505,53 @@ async def test_search_by_code_caches_multi_code_payload(monkeypatch):
 @pytest.mark.asyncio
 async def test_search_by_code_deduplicates_multi_code_parts(monkeypatch):
     service = TipiService()
+    format_calls: list[str] = []
 
     async def _fake_search_multiple_codes(ncm_query, view_mode, parts):
         await asyncio.sleep(0)
-        assert ncm_query == "85,85,8517,8517"
+        raise AssertionError("multi-code path should not run after normalized dedupe")
+
+    async def _fake_family_positions(cap_num, prefix, ancestors):
+        await asyncio.sleep(0)
+        assert cap_num == "85"
+        assert prefix == "8517"
+        assert ancestors == {"8517"}
+        return (
+            {
+                "ncm": "85.17",
+                "capitulo": cap_num,
+                "descricao": "Telefone",
+                "aliquota": "0",
+                "nivel": 1,
+            },
+        )
+
+    def _fake_format_ncm_tipi(value):
+        format_calls.append(value)
+        return "85.17"
+
+    monkeypatch.setattr(service, "_search_multiple_codes", _fake_search_multiple_codes)
+    monkeypatch.setattr(service, "_get_family_positions", _fake_family_positions)
+    monkeypatch.setattr(tipi_module.ncm_utils, "format_ncm_tipi", _fake_format_ncm_tipi)
+
+    payload = await service.search_by_code("85.17,8517", view_mode="family")
+
+    assert payload["query"] == "85.17,8517"
+    assert payload["total"] == 1
+    assert format_calls == ["8517"]
+
+
+@pytest.mark.asyncio
+async def test_search_by_code_caps_multi_code_parts(monkeypatch):
+    service = TipiService()
+
+    async def _fake_search_multiple_codes(ncm_query, view_mode, parts):
+        await asyncio.sleep(0)
+        assert ncm_query.startswith("01,02,03")
         assert view_mode == "family"
-        assert parts == ["85", "8517"]
+        assert len(parts) == 25
+        assert parts[0] == "01"
+        assert parts[-1] == "25"
         return {
             "success": True,
             "type": "code",
@@ -523,9 +564,12 @@ async def test_search_by_code_deduplicates_multi_code_parts(monkeypatch):
 
     monkeypatch.setattr(service, "_search_multiple_codes", _fake_search_multiple_codes)
 
-    payload = await service.search_by_code("85,85,8517,8517", view_mode="family")
+    payload = await service.search_by_code(
+        ",".join(f"{number:02d}" for number in range(1, 31)),
+        view_mode="family",
+    )
 
-    assert payload["query"] == "85,85,8517,8517"
+    assert payload["total"] == 0
 
 
 @pytest.mark.asyncio

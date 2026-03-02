@@ -29,6 +29,7 @@ TIPI_DB_PATH = Path(__file__).parent.parent.parent / "database" / "tipi.db"
 TIPI_SORT_WITH_NCM = "ncm_sort, ncm"
 TIPI_SORT_FALLBACK = "ncm"
 TIPI_ALLOWED_TABLES = {"tipi_positions", "tipi_chapters", "tipi_fts"}
+TIPI_MULTI_CODE_MAX_PARTS = 25
 
 # SQLModel Repository imports (optional - for new code paths)
 get_session = None
@@ -404,6 +405,20 @@ class TipiService:
             )
 
     @staticmethod
+    def _normalize_multi_code_parts(ncm_query: str) -> List[str]:
+        normalized_parts: List[str] = []
+        seen_parts: set[str] = set()
+        for raw_part in ncm_utils.split_ncm_query(ncm_query):
+            normalized_part = ncm_utils.clean_ncm(raw_part)
+            if not normalized_part or normalized_part in seen_parts:
+                continue
+            normalized_parts.append(normalized_part)
+            seen_parts.add(normalized_part)
+            if len(normalized_parts) >= TIPI_MULTI_CODE_MAX_PARTS:
+                break
+        return normalized_parts
+
+    @staticmethod
     def _prefer_more_specific_posicao_alvo(
         current: Optional[str], incoming: Optional[str]
     ) -> Optional[str]:
@@ -541,13 +556,13 @@ class TipiService:
             return cached
         self._code_search_cache_metrics.record_miss()
 
-        parts = list(dict.fromkeys(ncm_utils.split_ncm_query(ncm_query)))
+        parts = self._normalize_multi_code_parts(ncm_query)
         if len(parts) > 1:
             result = await self._search_multiple_codes(ncm_query, view_mode, parts)
             await self._store_cached_code_result(cache_key, result)
             return result
 
-        query_part = parts[0] if parts else (ncm_query or "")
+        query_part = parts[0] if parts else ""
         normalized_query = ncm_utils.format_ncm_tipi(query_part)
         clean_query = ncm_utils.clean_ncm(normalized_query)
         if not clean_query:
