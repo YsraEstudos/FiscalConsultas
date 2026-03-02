@@ -377,13 +377,14 @@ class TipiService:
     async def _get_cached_code_result(
         self, cache_key: Tuple[str, str]
     ) -> Optional[Dict[str, Any]]:
+        cached: Optional[Dict[str, Any]]
         async with self._get_cache_lock():
             cached = self._code_search_cache.get(cache_key)
             if not cached:
                 return None
             self._code_search_cache.move_to_end(cache_key)
             self._code_search_cache_metrics.record_hit()
-            return self._clone_code_search_result(cached)
+        return self._clone_code_search_result(cached)
 
     @staticmethod
     def _clone_code_search_result(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -392,8 +393,9 @@ class TipiService:
     async def _store_cached_code_result(
         self, cache_key: Tuple[str, str], result: Dict[str, Any]
     ) -> None:
+        cloned_result = self._clone_code_search_result(result)
         async with self._get_cache_lock():
-            self._code_search_cache[cache_key] = self._clone_code_search_result(result)
+            self._code_search_cache[cache_key] = cloned_result
             self._code_search_cache_metrics.record_set()
             self._enforce_cache_limit(
                 self._code_search_cache,
@@ -404,25 +406,28 @@ class TipiService:
     @staticmethod
     def _merge_part_payload_into_chapters(
         merged: Dict[str, Any], part_resp: Dict[str, Any]
-    ) -> int:
-        total_rows = int(part_resp.get("total", 0) or 0)
+    ) -> None:
         source = part_resp.get("resultados") or part_resp.get("results") or {}
         for cap, cap_data in source.items():
             if cap not in merged:
-                merged[cap] = cap_data
-                continue
+                merged[cap] = {**cap_data, "posicoes": []}
             merged[cap].setdefault("posicoes", [])
-            merged[cap]["posicoes"].extend(cap_data.get("posicoes", []) or [])
-        return total_rows
+            seen_ncms = {pos.get("ncm") for pos in merged[cap]["posicoes"]}
+            for posicao in cap_data.get("posicoes", []) or []:
+                ncm = posicao.get("ncm")
+                if ncm in seen_ncms:
+                    continue
+                merged[cap]["posicoes"].append(posicao)
+                seen_ncms.add(ncm)
 
     async def _search_multiple_codes(
         self, ncm_query: str, view_mode: str, parts: List[str]
     ) -> Dict[str, Any]:
         merged: Dict[str, Any] = {}
-        total_rows = 0
         for part in parts:
             part_resp = await self.search_by_code(part, view_mode=view_mode)
-            total_rows += self._merge_part_payload_into_chapters(merged, part_resp)
+            self._merge_part_payload_into_chapters(merged, part_resp)
+        total_rows = sum(len((cap.get("posicoes") or [])) for cap in merged.values())
         return {
             "success": True,
             "type": "code",
