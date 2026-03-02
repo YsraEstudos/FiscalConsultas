@@ -394,7 +394,7 @@ function hasOwn(obj: object, key: PropertyKey): boolean {
     if (typeof objectWithHasOwn.hasOwn === 'function') {
         return objectWithHasOwn.hasOwn(obj, key);
     }
-    return Object.prototype.hasOwnProperty.call(obj, key);
+    return Object.getOwnPropertyDescriptor(obj, key) !== undefined;
 }
 
 function normalizeCodeResponseAliases<T>(data: T): T {
