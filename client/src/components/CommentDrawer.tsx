@@ -144,7 +144,14 @@ export function CommentDrawer({
             )}
 
             {/* Backdrop */}
-            {open && <div className={styles.backdrop} onClick={onClose} />}
+            {open && (
+                <button
+                    type="button"
+                    className={styles.backdrop}
+                    onClick={onClose}
+                    aria-label="Fechar comentários"
+                />
+            )}
 
             {/* Drawer */}
             <div className={`${styles.drawer} ${open ? styles.drawerOpen : ''}`}>
