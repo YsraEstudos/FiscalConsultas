@@ -43,7 +43,15 @@ async def auth_me(http_request: Request):
     return {"authenticated": await _is_authenticated(token)}
 
 
-@router.post("/ai/chat")
+@router.post(
+    "/ai/chat",
+    responses={
+        401: {"description": "Unauthorized (missing or invalid Clerk JWT)."},
+        413: {"description": "Message too long for configured limit."},
+        422: {"description": "Validation error (empty message)."},
+        429: {"description": "Rate limit exceeded for AI chat requests."},
+    },
+)
 async def chat_endpoint(
     request: ChatRequest,
     http_request: Request,

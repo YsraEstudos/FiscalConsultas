@@ -5,6 +5,7 @@ Redis cache client for shared L2 caching.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 import orjson
@@ -14,7 +15,7 @@ try:
 
     _REDIS_AVAILABLE = True
 except Exception:  # pragma: no cover - optional dependency
-    aioredis = None  # type: ignore[assignment]
+    aioredis = SimpleNamespace(from_url=None)
     _REDIS_AVAILABLE = False
 
 from backend.config.logging_config import service_logger as logger
