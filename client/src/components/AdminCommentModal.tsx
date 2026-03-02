@@ -53,6 +53,11 @@ export function AdminCommentModal({ isOpen, onClose }: AdminCommentModalProps) {
     const [loading, setLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState<number | null>(null);
     const [notes, setNotes] = useState<Record<number, string>>({});
+    const runNonBlockingTask = useCallback((task: Promise<unknown>, context: string) => {
+        task.catch((error) => {
+            console.error(`[AdminCommentModal] ${context}:`, error);
+        });
+    }, []);
 
     const loadPending = useCallback(async () => {
         setLoading(true);
@@ -69,9 +74,9 @@ export function AdminCommentModal({ isOpen, onClose }: AdminCommentModalProps) {
 
     useEffect(() => {
         if (isOpen) {
-            void loadPending();
+            runNonBlockingTask(loadPending(), 'loadPending');
         }
-    }, [isOpen, loadPending]);
+    }, [isOpen, loadPending, runNonBlockingTask]);
 
     const handleModerate = useCallback(async (
         commentId: number,
@@ -103,11 +108,23 @@ export function AdminCommentModal({ isOpen, onClose }: AdminCommentModalProps) {
     if (!isOpen) return null;
 
     return (
-        <div className={styles.overlay} onClick={onClose}>
-            <div className={styles.modal} onClick={e => e.stopPropagation()}>
+        <div className={styles.overlay}>
+            <button
+                type="button"
+                className={styles.backdrop}
+                onClick={onClose}
+                aria-label="Fechar moderação de comentários"
+                tabIndex={-1}
+            />
+            <div
+                className={styles.modal}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="admin-comments-title"
+            >
                 {/* Header */}
                 <div className={styles.header}>
-                    <h2 className={styles.title}>
+                    <h2 id="admin-comments-title" className={styles.title}>
                         🛡️ Moderar Comentários
                         {comments.length > 0 && (
                             <span className={styles.count}>{comments.length}</span>
@@ -199,7 +216,10 @@ export function AdminCommentModal({ isOpen, onClose }: AdminCommentModalProps) {
                                 <div className={styles.moderationActions}>
                                     <button
                                         className={styles.rejectBtn}
-                                        onClick={() => void handleModerate(comment.id, 'reject')}
+                                        onClick={() => runNonBlockingTask(
+                                            handleModerate(comment.id, 'reject'),
+                                            'handleModerate reject'
+                                        )}
                                         disabled={actionLoading === comment.id}
                                         type="button"
                                     >
@@ -207,7 +227,10 @@ export function AdminCommentModal({ isOpen, onClose }: AdminCommentModalProps) {
                                     </button>
                                     <button
                                         className={styles.approveBtn}
-                                        onClick={() => void handleModerate(comment.id, 'approve')}
+                                        onClick={() => runNonBlockingTask(
+                                            handleModerate(comment.id, 'approve'),
+                                            'handleModerate approve'
+                                        )}
                                         disabled={actionLoading === comment.id}
                                         type="button"
                                     >
