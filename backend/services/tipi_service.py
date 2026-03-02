@@ -404,6 +404,21 @@ class TipiService:
             )
 
     @staticmethod
+    def _prefer_more_specific_posicao_alvo(
+        current: Optional[str], incoming: Optional[str]
+    ) -> Optional[str]:
+        if not incoming:
+            return current
+        if not current:
+            return incoming
+
+        current_clean = ncm_utils.clean_ncm(current)
+        incoming_clean = ncm_utils.clean_ncm(incoming)
+        if len(incoming_clean) > len(current_clean):
+            return incoming
+        return current
+
+    @staticmethod
     def _merge_part_payload_into_chapters(
         merged: Dict[str, Any], part_resp: Dict[str, Any]
     ) -> None:
@@ -411,6 +426,10 @@ class TipiService:
         for cap, cap_data in source.items():
             if cap not in merged:
                 merged[cap] = {**cap_data, "posicoes": []}
+            merged[cap]["posicao_alvo"] = TipiService._prefer_more_specific_posicao_alvo(
+                merged[cap].get("posicao_alvo"),
+                cap_data.get("posicao_alvo"),
+            )
             merged[cap].setdefault("posicoes", [])
             seen_ncms = {pos.get("ncm") for pos in merged[cap]["posicoes"]}
             for posicao in cap_data.get("posicoes", []) or []:
@@ -520,7 +539,7 @@ class TipiService:
             return cached
         self._code_search_cache_metrics.record_miss()
 
-        parts = ncm_utils.split_ncm_query(ncm_query)
+        parts = list(dict.fromkeys(ncm_utils.split_ncm_query(ncm_query)))
         if len(parts) > 1:
             result = await self._search_multiple_codes(ncm_query, view_mode, parts)
             await self._store_cached_code_result(cache_key, result)

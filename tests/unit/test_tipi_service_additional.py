@@ -427,6 +427,48 @@ async def test_search_multiple_codes_deduplicates_positions_and_totals(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_search_multiple_codes_prefers_more_specific_posicao_alvo(monkeypatch):
+    service = TipiService()
+
+    async def _fake_search_by_code(query, view_mode="family"):
+        await asyncio.sleep(0)
+        assert view_mode == "family"
+        if query == "85":
+            posicao_alvo = None
+        else:
+            posicao_alvo = "85.17"
+        return {
+            "success": True,
+            "type": "code",
+            "query": query,
+            "results": {
+                "85": {
+                    "capitulo": "85",
+                    "titulo": "Capitulo 85",
+                    "posicao_alvo": posicao_alvo,
+                    "posicoes": [{"ncm": "85.17", "codigo": "85.17"}],
+                }
+            },
+            "resultados": {
+                "85": {
+                    "capitulo": "85",
+                    "titulo": "Capitulo 85",
+                    "posicao_alvo": posicao_alvo,
+                    "posicoes": [{"ncm": "85.17", "codigo": "85.17"}],
+                }
+            },
+            "total": 1,
+            "total_capitulos": 1,
+        }
+
+    monkeypatch.setattr(service, "search_by_code", _fake_search_by_code)
+
+    payload = await service._search_multiple_codes("85,8517", "family", ["85", "8517"])
+
+    assert payload["resultados"]["85"]["posicao_alvo"] == "85.17"
+
+
+@pytest.mark.asyncio
 async def test_search_by_code_caches_multi_code_payload(monkeypatch):
     service = TipiService()
     calls = 0
@@ -458,6 +500,32 @@ async def test_search_by_code_caches_multi_code_payload(monkeypatch):
     assert first is not second
     assert ("85,8517", "family") in service._code_search_cache
     assert service._code_search_cache[("85,8517", "family")] is not first
+
+
+@pytest.mark.asyncio
+async def test_search_by_code_deduplicates_multi_code_parts(monkeypatch):
+    service = TipiService()
+
+    async def _fake_search_multiple_codes(ncm_query, view_mode, parts):
+        await asyncio.sleep(0)
+        assert ncm_query == "85,85,8517,8517"
+        assert view_mode == "family"
+        assert parts == ["85", "8517"]
+        return {
+            "success": True,
+            "type": "code",
+            "query": ncm_query,
+            "results": {},
+            "resultados": {},
+            "total": 0,
+            "total_capitulos": 0,
+        }
+
+    monkeypatch.setattr(service, "_search_multiple_codes", _fake_search_multiple_codes)
+
+    payload = await service.search_by_code("85,85,8517,8517", view_mode="family")
+
+    assert payload["query"] == "85,85,8517,8517"
 
 
 @pytest.mark.asyncio
