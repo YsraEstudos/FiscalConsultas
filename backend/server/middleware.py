@@ -763,6 +763,8 @@ def _schedule_background_task(task_coro: Coroutine[Any, Any, Any]) -> None:
         _background_tasks.discard(done_task)
         try:
             done_task.result()
+        except asyncio.CancelledError:
+            logger.debug("Background task cancelled")
         except Exception as exc:
             logger.warning("Background task failed: %s", exc)
 
