@@ -13,6 +13,7 @@ from ...config.settings import settings
 from ...domain.sqlmodels import Position, PositionRead, SearchResultItem
 from ...infrastructure.db_engine import tenant_context
 from ...utils.id_utils import generate_anchor_id
+from .postgres_fts import build_postgres_tsquery
 
 
 class PositionRepository:
@@ -143,39 +144,40 @@ class PositionRepository:
 
     async def _fts_postgres(self, query: str, limit: int) -> List[SearchResultItem]:
         """FTS usando tsvector do PostgreSQL."""
+        tsquery = build_postgres_tsquery(query)
         if self.tenant_id:
             stmt = text(
-                """
+                f"""
                 SELECT
                     codigo as ncm,
                     descricao as display_text,
                     'position' as type,
                     descricao as description,
-                    ts_rank(search_vector, plainto_tsquery('portuguese', :query)) as score
+                    ts_rank(search_vector, {tsquery.sql}) as score
                 FROM positions
-                WHERE search_vector @@ plainto_tsquery('portuguese', :query)
+                WHERE search_vector @@ {tsquery.sql}
                   AND (tenant_id = :tenant_id OR tenant_id IS NULL)
                 ORDER BY score DESC
                 LIMIT :limit
                 """
             )
-            params = {"query": query, "limit": limit, "tenant_id": self.tenant_id}
+            params = {**tsquery.params, "limit": limit, "tenant_id": self.tenant_id}
         else:
             stmt = text(
-                """
+                f"""
                 SELECT
                     codigo as ncm,
                     descricao as display_text,
                     'position' as type,
                     descricao as description,
-                    ts_rank(search_vector, plainto_tsquery('portuguese', :query)) as score
+                    ts_rank(search_vector, {tsquery.sql}) as score
                 FROM positions
-                WHERE search_vector @@ plainto_tsquery('portuguese', :query)
+                WHERE search_vector @@ {tsquery.sql}
                 ORDER BY score DESC
                 LIMIT :limit
                 """
             )
-            params = {"query": query, "limit": limit}
+            params = {**tsquery.params, "limit": limit}
         result = await self.session.execute(stmt, params)
         return [
             SearchResultItem(
