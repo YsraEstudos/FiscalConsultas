@@ -283,7 +283,6 @@ class HtmlRenderer:
     # Regex patterns for text-to-HTML conversion
     # Pattern: **XX.XX - Description** (bold markers optional but preferred)
     # Captures: Code (2 digits.2 digits ONLY - main positions, NOT subpositions like 8417.10)
-    # FIX: Restrict to exactly 2 digits before dot to avoid matching subpositions
     RE_NCM_HEADING = re.compile(
         r"^\s*(?:\*\*|\*)?(\d{2}\.\d{2})(?:\*\*|\*)?\s*-\s*(.+?)(?:\*\*|\*)?\s*$",
         re.MULTILINE,
@@ -347,9 +346,7 @@ class HtmlRenderer:
         return index
 
     @classmethod
-    def _parse_superscript_token(
-        cls, text: str, index: int
-    ) -> tuple[str, int] | None:
+    def _parse_superscript_token(cls, text: str, index: int) -> tuple[str, int] | None:
         if text[index] != "[":
             return None
 
