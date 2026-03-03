@@ -172,7 +172,7 @@ async def test_fts_postgres_maps_rows_and_tenant_params(monkeypatch):
 
     out = await repo._fts_postgres("telefone", 3)
     assert len(out) == 1
-    assert out[0].score == 50.0
+    assert out[0].score == pytest.approx(50.0)
     stmt, params = session.calls[0]
     assert "tenant_id" in str(stmt)
     assert params == {"query": "telefone", "limit": 3, "tenant_id": "org_pg"}
@@ -198,7 +198,7 @@ async def test_fts_sqlite_maps_rank(monkeypatch):
 
     out = await repo._fts_sqlite("telefone", 9)
     assert len(out) == 1
-    assert out[0].score == 12.0
+    assert out[0].score == pytest.approx(12.0)
     _stmt, params = session.calls[0]
     assert params == {"query": "telefone", "limit": 9}
 
@@ -220,6 +220,6 @@ async def test_search_scored_applies_tier_base_and_coverage_bonus(monkeypatch):
     )
 
     # Base tier=2 -> 500, coverage bonus=50
-    assert out[0].score == 560.0
-    assert out[1].score == 551.0
+    assert out[0].score == pytest.approx(560.0)
+    assert out[1].score == pytest.approx(551.0)
     assert all(item.tier == 2 for item in out)

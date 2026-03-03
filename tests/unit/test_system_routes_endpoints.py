@@ -128,10 +128,13 @@ async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypat
 
 @pytest.mark.asyncio
 async def test_get_status_handles_db_and_tipi_exceptions(monkeypatch):
+    class _BrokenSession:
+        async def execute(self, _query):  # NOSONAR
+            raise RuntimeError("db down")
+
     @asynccontextmanager
     async def _broken_get_session():  # NOSONAR
-        raise RuntimeError("db down")
-        yield  # type: ignore
+        yield _BrokenSession()
 
     monkeypatch.setattr(db_engine, "get_session", _broken_get_session)
     request = _build_request(
