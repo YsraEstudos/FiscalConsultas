@@ -151,13 +151,15 @@ describe('Header', () => {
 
     fireEvent.click(menuButton);
     expect(menuButton.className).toContain(styles.menuTriggerActive);
-    fireEvent.mouseDown(document.body);
-    await waitFor(() => {
-      expect(menuButton.className).not.toContain(styles.menuTriggerActive);
+    act(() => {
+      fireEvent.mouseDown(document.body);
     });
+    await waitFor(() => {
+      expect(menuButton).not.toHaveClass(styles.menuTriggerActive);
+    }, { timeout: 2000 });
 
     expect(screen.getByText('Tabela de Incidência do IPI')).toBeInTheDocument();
-  }, 15000);
+  });
 
   it('renders fallback user labels when auth profile is missing', () => {
     userNameRef.value = null;
