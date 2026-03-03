@@ -32,6 +32,10 @@ logger = logging.getLogger("routes.profile")
 router = APIRouter(prefix="/profile", tags=["Profile"])
 
 ERROR_TENANT_MISSING = "Tenant não identificado"
+TENANT_ERROR_RESPONSES = {
+    400: {"description": "Bad Request (tenant could not be resolved)."},
+    403: {"description": "Forbidden (tenant mismatch between context and token)."},
+}
 
 
 # ─── Dependências ──────────────────────────────────────────────────────────
@@ -97,6 +101,7 @@ def _resolve_tenant(payload: dict) -> str:
     "/me",
     response_model=UserProfileResponse,
     responses={
+        **TENANT_ERROR_RESPONSES,
         401: {"description": "Unauthorized"},
         404: {"description": "User not found"},
     },
@@ -122,6 +127,7 @@ async def get_my_profile(
     "/me",
     response_model=UserProfileResponse,
     responses={
+        **TENANT_ERROR_RESPONSES,
         401: {"description": "Unauthorized"},
         404: {"description": "User not found"},
     },
@@ -150,6 +156,7 @@ async def update_my_profile(
     "/me/contributions",
     response_model=ContributionsResponse,
     responses={
+        **TENANT_ERROR_RESPONSES,
         401: {"description": "Unauthorized"},
     },
 )
@@ -195,6 +202,7 @@ async def get_my_contributions(
     "/{user_id}/card",
     response_model=UserCardResponse,
     responses={
+        **TENANT_ERROR_RESPONSES,
         401: {"description": "Unauthorized"},
         404: {"description": "User not found"},
     },
@@ -218,6 +226,7 @@ async def get_user_card(
 @router.delete(
     "/me",
     responses={
+        **TENANT_ERROR_RESPONSES,
         401: {"description": "Unauthorized"},
         404: {"description": "User not found"},
         500: {"description": "Internal Server Error"},

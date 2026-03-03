@@ -294,3 +294,26 @@ def test_get_profile_rejects_tenant_mismatch_between_context_and_jwt(
     )
 
     assert response.status_code == 403
+
+
+def test_profile_openapi_documents_tenant_error_responses(client):
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    paths = response.json()["paths"]
+    operations = [
+        ("/api/profile/me", "get"),
+        ("/api/profile/me", "patch"),
+        ("/api/profile/me", "delete"),
+        ("/api/profile/me/contributions", "get"),
+        ("/api/profile/{user_id}/card", "get"),
+    ]
+
+    for path, method in operations:
+        responses = paths[path][method]["responses"]
+        assert responses["400"]["description"] == (
+            "Bad Request (tenant could not be resolved)."
+        )
+        assert responses["403"]["description"] == (
+            "Forbidden (tenant mismatch between context and token)."
+        )
