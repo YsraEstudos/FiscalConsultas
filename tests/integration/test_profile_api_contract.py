@@ -281,7 +281,9 @@ def test_get_profile_rejects_payload_without_sub(client, monkeypatch):
     assert response.status_code == 401
 
 
-def test_get_profile_rejects_tenant_mismatch_between_context_and_jwt(client, monkeypatch):
+def test_get_profile_rejects_tenant_mismatch_between_context_and_jwt(
+    client, monkeypatch
+):
     monkeypatch.setattr(profile, "decode_clerk_jwt", _mock_decode_tenant_mismatch)
     monkeypatch.setattr(profile, "get_current_tenant", lambda: "org_test")
     app.dependency_overrides[profile._get_service] = lambda: _FakeProfileService()
@@ -292,3 +294,26 @@ def test_get_profile_rejects_tenant_mismatch_between_context_and_jwt(client, mon
     )
 
     assert response.status_code == 403
+
+
+def test_profile_openapi_documents_tenant_error_responses(client):
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    paths = response.json()["paths"]
+    operations = [
+        ("/api/profile/me", "get"),
+        ("/api/profile/me", "patch"),
+        ("/api/profile/me", "delete"),
+        ("/api/profile/me/contributions", "get"),
+        ("/api/profile/{user_id}/card", "get"),
+    ]
+
+    for path, method in operations:
+        responses = paths[path][method]["responses"]
+        assert responses["400"]["description"] == (
+            "Bad Request (tenant could not be resolved)."
+        )
+        assert responses["403"]["description"] == (
+            "Forbidden (tenant mismatch between context and token)."
+        )

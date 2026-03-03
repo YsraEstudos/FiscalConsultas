@@ -621,7 +621,9 @@ class NeshService:
                 logger.info(f"FTS TIER1 (exato): {len(exact_results)} resultados")
                 self._add_unique_rows(all_results, seen, exact_results)
 
-        and_results = await self._search_tier2(normalized_q, normalized_raw_q, total_words)
+        and_results = await self._search_tier2(
+            normalized_q, normalized_raw_q, total_words
+        )
         if and_results:
             logger.info(f"FTS TIER2 (AND): {len(and_results)} resultados")
             self._add_unique_rows(all_results, seen, and_results)

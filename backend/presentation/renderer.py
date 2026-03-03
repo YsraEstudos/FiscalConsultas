@@ -347,9 +347,7 @@ class HtmlRenderer:
         return index
 
     @classmethod
-    def _parse_superscript_token(
-        cls, text: str, index: int
-    ) -> tuple[str, int] | None:
+    def _parse_superscript_token(cls, text: str, index: int) -> tuple[str, int] | None:
         if text[index] != "[":
             return None
 
