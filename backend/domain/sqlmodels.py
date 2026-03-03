@@ -25,9 +25,7 @@ TENANT_ID_FOREIGN_KEY = "tenants.id"
 class Tenant(SQLModel, table=True):
     """Representa uma Organização ou Cliente B2B (Mapeado do Clerk org_id)."""
 
-    __tablename__: ClassVar[str] = (
-        "tenants"  # pyright: ignore[reportIncompatibleVariableOverride]
-    )
+    __tablename__: ClassVar[str] = "tenants"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     id: str = Field(
         primary_key=True, description="ID da organização (ex: Clerk org_id)"
@@ -44,9 +42,7 @@ class Tenant(SQLModel, table=True):
 class User(SQLModel, table=True):
     """Usuário do sistema (Mapeado do Clerk user_id)."""
 
-    __tablename__: ClassVar[str] = (
-        "users"  # pyright: ignore[reportIncompatibleVariableOverride]
-    )
+    __tablename__: ClassVar[str] = "users"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     id: str = Field(primary_key=True, description="ID do usuário (ex: Clerk user_id)")
     email: str = Field(unique=True, index=True, max_length=255)
@@ -64,9 +60,7 @@ class User(SQLModel, table=True):
 class Subscription(SQLModel, table=True):
     """Assinatura do tenant (evento de billing/webhook)."""
 
-    __tablename__: ClassVar[str] = (
-        "subscriptions"  # pyright: ignore[reportIncompatibleVariableOverride]
-    )
+    __tablename__: ClassVar[str] = "subscriptions"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     id: Optional[int] = Field(default=None, primary_key=True)
     tenant_id: str = Field(foreign_key=TENANT_ID_FOREIGN_KEY, index=True)
@@ -133,9 +127,7 @@ class GlossaryBase(SQLModel):
 class Chapter(ChapterBase, table=True):
     """Tabela de capítulos NESH."""
 
-    __tablename__: ClassVar[str] = (
-        "chapters"  # pyright: ignore[reportIncompatibleVariableOverride]
-    )
+    __tablename__: ClassVar[str] = "chapters"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     chapter_num: str = Field(primary_key=True, max_length=10)
     tenant_id: Optional[str] = Field(
@@ -156,9 +148,7 @@ class Chapter(ChapterBase, table=True):
 class Position(PositionBase, table=True):
     """Tabela de posições NCM."""
 
-    __tablename__: ClassVar[str] = (
-        "positions"  # pyright: ignore[reportIncompatibleVariableOverride]
-    )
+    __tablename__: ClassVar[str] = "positions"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     codigo: str = Field(primary_key=True, max_length=20)
     chapter_num: str = Field(foreign_key="chapters.chapter_num", max_length=10)
@@ -179,9 +169,7 @@ class Position(PositionBase, table=True):
 class ChapterNotes(SQLModel, table=True):
     """Notas e seções estruturadas de cada capítulo."""
 
-    __tablename__: ClassVar[str] = (
-        "chapter_notes"  # pyright: ignore[reportIncompatibleVariableOverride]
-    )
+    __tablename__: ClassVar[str] = "chapter_notes"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     id: Optional[int] = Field(default=None, primary_key=True)
     chapter_num: str = Field(
@@ -207,9 +195,7 @@ class ChapterNotes(SQLModel, table=True):
 class Glossary(GlossaryBase, table=True):
     """Glossário de termos técnicos fiscais."""
 
-    __tablename__: ClassVar[str] = (
-        "glossary"  # pyright: ignore[reportIncompatibleVariableOverride]
-    )
+    __tablename__: ClassVar[str] = "glossary"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     term: str = Field(primary_key=True, max_length=255)
 
@@ -222,9 +208,7 @@ class Glossary(GlossaryBase, table=True):
 class TipiPosition(SQLModel, table=True):
     """Posição NCM na tabela TIPI (alíquotas IPI)."""
 
-    __tablename__: ClassVar[str] = (
-        "tipi_positions"  # pyright: ignore[reportIncompatibleVariableOverride]
-    )
+    __tablename__: ClassVar[str] = "tipi_positions"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     codigo: str = Field(primary_key=True, max_length=20)
     descricao: str = Field(sa_column=Column(Text))

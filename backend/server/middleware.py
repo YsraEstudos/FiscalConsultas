@@ -483,7 +483,9 @@ def _validate_temporal_claims(
     return None
 
 
-def _log_jwt_validation_success(token_snapshot: dict[str, Any], payload: dict[str, Any]) -> None:
+def _log_jwt_validation_success(
+    token_snapshot: dict[str, Any], payload: dict[str, Any]
+) -> None:
     if not settings.features.debug_mode:
         return
 
@@ -659,8 +661,12 @@ def _resolve_full_name(payload: Dict[str, Any]) -> Optional[str]:
 def _resolve_identity_fields(
     payload: Dict[str, Any], user_id: str, org_id: str
 ) -> tuple[str, str, Optional[str]]:
-    org_name = str(payload.get("org_name") or payload.get("organization_name") or org_id)
-    email = str(payload.get("email") or payload.get("email_address") or f"{user_id}@clerk.local")
+    org_name = str(
+        payload.get("org_name") or payload.get("organization_name") or org_id
+    )
+    email = str(
+        payload.get("email") or payload.get("email_address") or f"{user_id}@clerk.local"
+    )
     full_name = _resolve_full_name(payload)
     return org_name, email, full_name
 
@@ -837,7 +843,9 @@ class TenantMiddleware:
         return settings.database.is_postgres
 
     @staticmethod
-    def _log_tenant_resolution(scope: dict[str, Any], path: str, org_id: Optional[str]) -> None:
+    def _log_tenant_resolution(
+        scope: dict[str, Any], path: str, org_id: Optional[str]
+    ) -> None:
         method = scope.get("method", "?")
         if org_id:
             logger.debug("Request %s %s - Tenant: %s", method, path, org_id)
@@ -876,7 +884,9 @@ class TenantMiddleware:
             tenant_context.reset(token_var)
 
     @staticmethod
-    async def _send_missing_tenant_response(scope: dict[str, Any], receive: Any, send: Any) -> None:
+    async def _send_missing_tenant_response(
+        scope: dict[str, Any], receive: Any, send: Any
+    ) -> None:
         response = JSONResponse(
             status_code=401,
             content={"success": False, "detail": "Tenant não identificado"},

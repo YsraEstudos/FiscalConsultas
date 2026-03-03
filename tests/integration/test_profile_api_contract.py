@@ -281,7 +281,9 @@ def test_get_profile_rejects_payload_without_sub(client, monkeypatch):
     assert response.status_code == 401
 
 
-def test_get_profile_rejects_tenant_mismatch_between_context_and_jwt(client, monkeypatch):
+def test_get_profile_rejects_tenant_mismatch_between_context_and_jwt(
+    client, monkeypatch
+):
     monkeypatch.setattr(profile, "decode_clerk_jwt", _mock_decode_tenant_mismatch)
     monkeypatch.setattr(profile, "get_current_tenant", lambda: "org_test")
     app.dependency_overrides[profile._get_service] = lambda: _FakeProfileService()
