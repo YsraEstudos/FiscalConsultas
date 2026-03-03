@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CommentPanel, type LocalComment } from '../../src/components/CommentPanel';
@@ -54,13 +54,13 @@ describe('CommentPanel layout behavior', () => {
     globalThis.ResizeObserver = originalResizeObserver;
   });
 
-  it('renders cards anchored to expected initial positions', async () => {
+  it('renders cards anchored to expected initial positions', () => {
     const comments = [
       makeComment('c1', 0, 'Primeiro comentário'),
       makeComment('c2', 300, 'Segundo comentário'),
     ];
 
-    const { container } = render(
+    render(
       <CommentPanel
         pending={null}
         comments={comments}
@@ -70,11 +70,7 @@ describe('CommentPanel layout behavior', () => {
     );
 
     const findCard = (text: string): HTMLElement | null => {
-      let node = screen.getByText(text).parentElement as HTMLElement | null;
-      while (node && !node.style.top) {
-        node = node.parentElement as HTMLElement | null;
-      }
-      return node;
+      return screen.getByText(text).closest<HTMLElement>('div[class*="commentCard"]');
     };
 
     const firstCard = findCard('Primeiro comentário');
@@ -86,10 +82,5 @@ describe('CommentPanel layout behavior', () => {
     // Initial layout uses estimated height -> second card keeps anchor top.
     expect(firstCard.style.top).toBe('0px');
     expect(secondCard.style.top).toBe('300px');
-
-    await waitFor(() => {
-      expect(firstCard.style.top).toBe('0px');
-      expect(secondCard.style.top).toBe('300px');
-    });
   });
 });
