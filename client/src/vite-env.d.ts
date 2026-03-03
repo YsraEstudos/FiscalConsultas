@@ -18,6 +18,7 @@ declare global {
             smartLinkSearch: (ncm: string) => void;
             openNote: (note: string, chapter?: string) => void;
             openSettings: () => void;
+            openTextResultInNewTab: (ncm: string, textQuery?: string) => void;
         };
         requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
         cancelIdleCallback?: (handle: number) => void;
