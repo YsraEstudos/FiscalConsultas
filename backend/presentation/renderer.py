@@ -36,6 +36,16 @@ def _get_position_pattern(pos_code: str) -> re.Pattern:
     )
 
 
+@lru_cache(maxsize=256)
+def _get_fallback_anchor_pattern(pos_codes: tuple[str, ...]) -> re.Pattern:
+    """Cache the combined fallback-anchor regex for a stable ordered code tuple."""
+    escaped_codes = "|".join(re.escape(pos_code) for pos_code in pos_codes)
+    return re.compile(
+        rf"^\s*(?:\*\*|\*)?(?P<code>{escaped_codes})(?:\*\*|\*)?\s*(?:[-\u2013\u2014:])\s*",
+        re.MULTILINE,
+    )
+
+
 class _MultiTransformParser(HTMLParser):
     """Single-pass HTML parser that applies multiple text transforms."""
 
@@ -800,12 +810,8 @@ class HtmlRenderer:
 
         if pending:
             code_to_anchor = dict(pending)
-            escaped_codes = "|".join(
-                re.escape(pos_code) for pos_code in code_to_anchor.keys()
-            )
-            combined_pattern = re.compile(
-                rf"^\s*(?:\*\*|\*)?(?P<code>{escaped_codes})(?:\*\*|\*)?\s*(?:[-\u2013\u2014:])\s*",
-                re.MULTILINE,
+            combined_pattern = _get_fallback_anchor_pattern(
+                tuple(code_to_anchor.keys())
             )
             injected: set[str] = set()
 

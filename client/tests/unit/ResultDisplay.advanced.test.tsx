@@ -116,7 +116,7 @@ describe('ResultDisplay advanced behavior', () => {
     intersectionCallbacks = [];
 
     // @ts-expect-error - test bridge
-    window.nesh = { smartLinkSearch: vi.fn() };
+    window.nesh = { smartLinkSearch: vi.fn(), openTextResultInNewTab: vi.fn() };
 
     scrollIntoViewMock = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoViewMock;
@@ -157,7 +157,7 @@ describe('ResultDisplay advanced behavior', () => {
     vi.restoreAllMocks();
   });
 
-  it('forwards text result clicks to window.nesh.smartLinkSearch', () => {
+  it('forwards text result clicks to window.nesh.openTextResultInNewTab with the preserved text query', () => {
     render(
       <ResultDisplay
         data={{ type: 'text', results: [{ ncm: '8517' } as any], query: 'telefone' }}
@@ -165,13 +165,32 @@ describe('ResultDisplay advanced behavior', () => {
         onCloseMobileMenu={vi.fn()}
         isActive={true}
         tabId="tab-text"
+        latestTextQuery="motor centrif"
         isNewSearch={false}
         onConsumeNewSearch={vi.fn()}
       />,
     );
 
     fireEvent.click(screen.getByTestId('text-result-click'));
-    expect((window as any).nesh.smartLinkSearch).toHaveBeenCalledWith('8517');
+    expect((window as any).nesh.openTextResultInNewTab).toHaveBeenCalledWith('8517', 'motor centrif');
+    expect((window as any).nesh.smartLinkSearch).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the backend query when latestTextQuery is missing', () => {
+    render(
+      <ResultDisplay
+        data={{ type: 'text', results: [{ ncm: '8517' } as any], query: 'telefone industrial' }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-text-fallback"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('text-result-click'));
+    expect((window as any).nesh.openTextResultInNewTab).toHaveBeenCalledWith('8517', 'telefone industrial');
   });
 
   it('renders TIPI fallback, applies aliquot classes and toggles sidebar', async () => {
@@ -525,7 +544,7 @@ describe('ResultDisplay advanced behavior', () => {
     expect(document.getElementById('chapter-85-consideracoes')).toBeNull();
   });
 
-  it('replaces text-query highlights on query change without accumulating wrappers', async () => {
+  it('replaces search highlighter marks on query change without accumulating wrappers', async () => {
     const baseData = {
       type: 'code' as const,
       query: '8517',
@@ -553,7 +572,7 @@ describe('ResultDisplay advanced behavior', () => {
     );
 
     await waitFor(() => {
-      const marks = container.querySelectorAll('mark[data-text-query-highlight="true"]');
+      const marks = container.querySelectorAll('mark[data-sh-term="motor"]');
       expect(marks).toHaveLength(2);
       expect(Array.from(marks).every((mark) => mark.textContent?.toLowerCase() === 'motor')).toBe(true);
     });
@@ -572,10 +591,11 @@ describe('ResultDisplay advanced behavior', () => {
     );
 
     await waitFor(() => {
-      const marks = container.querySelectorAll('mark[data-text-query-highlight="true"]');
+      const marks = container.querySelectorAll('mark[data-sh-term="bomba"]');
       expect(marks).toHaveLength(1);
       expect(marks[0]?.textContent?.toLowerCase()).toBe('bomba');
       expect(container.querySelectorAll('mark mark')).toHaveLength(0);
+      expect(container.querySelectorAll('mark[data-sh-term="motor"]')).toHaveLength(0);
     });
   });
 

@@ -90,7 +90,38 @@ if "!ENABLE_AUTH_DEBUG!"=="1" (
 )
 
 echo.
-echo [3/8] Subindo infraestrutura Docker (docker compose up -d)...
+echo [3/9] Verificando compatibilidade da migracao PostgreSQL...
+if exist ".\.venv\Scripts\python.exe" (
+    set "PG_MIGRATION_PYTHON=.\.venv\Scripts\python.exe"
+) else (
+    where python >nul 2>&1
+    if errorlevel 1 (
+        set "CHK_DOCKER_STACK=FALHA"
+        set "FAIL_REASON=Python nao encontrado para rodar o preflight de migracao PostgreSQL."
+        goto fail
+    )
+    set "PG_MIGRATION_PYTHON=python"
+)
+call !PG_MIGRATION_PYTHON! scripts\migrate_postgres_cluster.py --check-only
+set "PG_MIGRATION_EXIT=!errorlevel!"
+if "!PG_MIGRATION_EXIT!"=="10" (
+    set "CHK_DOCKER_STACK=FALHA"
+    set "FAIL_REASON=Volume PostgreSQL legado detectado. Rode: .\.venv\Scripts\python scripts\migrate_postgres_cluster.py --run"
+    goto fail
+)
+if "!PG_MIGRATION_EXIT!"=="11" (
+    set "CHK_DOCKER_STACK=FALHA"
+    set "FAIL_REASON=Compose PostgreSQL 18 incompativel. Corrija o compose e rode: .\.venv\Scripts\python scripts\migrate_postgres_cluster.py --run"
+    goto fail
+)
+if not "!PG_MIGRATION_EXIT!"=="0" (
+    set "CHK_DOCKER_STACK=FALHA"
+    set "FAIL_REASON=Falha no preflight de migracao PostgreSQL (exit !PG_MIGRATION_EXIT!)."
+    goto fail
+)
+
+echo.
+echo [4/9] Subindo infraestrutura Docker (docker compose up -d)...
 docker compose up -d
 if errorlevel 1 (
     set "CHK_DOCKER_STACK=FALHA"
@@ -121,7 +152,7 @@ if errorlevel 1 (
 set "CHK_DOCKER_STACK=OK"
 
 echo.
-echo [4/8] Sincronizando ambiente Python com UV...
+echo [5/9] Sincronizando ambiente Python com UV...
 call uv sync
 if errorlevel 1 (
     set "CHK_UV=FALHA"
@@ -131,7 +162,7 @@ if errorlevel 1 (
 
 if "!ENABLE_REBUILD!"=="1" (
     echo.
-    echo [4.5/8] Recriando bancos de dados...
+    echo [5.5/9] Recriando bancos de dados...
     call uv run scripts\rebuild_index.py
     if errorlevel 1 (
         set "FAIL_REASON=Falha no rebuild_index.py."
@@ -145,11 +176,11 @@ if "!ENABLE_REBUILD!"=="1" (
 )
 
 echo.
-echo [5/8] Iniciando Backend...
+echo [6/9] Iniciando Backend...
 start "Nesh Backend Server" cmd /k "uv run Nesh.py"
 
 echo.
-echo [6/8] Verificando dependencias Frontend...
+echo [7/9] Verificando dependencias Frontend...
 cd client
 set "NEED_INSTALL=0"
 if not exist "node_modules\" set "NEED_INSTALL=1"
@@ -171,12 +202,12 @@ if "!NEED_INSTALL!"=="1" (
 )
 
 echo.
-echo [7/8] Iniciando Frontend com Hot Reload...
+echo [8/9] Iniciando Frontend com Hot Reload...
 start "Nesh Client (Dev)" cmd /k "cd /d "%~dp0client" && !FRONTEND_BOOT_CMD!"
 cd ..
 
 echo.
-echo [8/8] Validando se os servicos subiram...
+echo [9/9] Validando se os servicos subiram...
 call :wait_http_ready "http://127.0.0.1:8000/api/status" 35
 if errorlevel 1 (
     set "CHK_BACKEND_HEALTH=FALHA"
@@ -295,6 +326,8 @@ if /I not "!CHK_DOCKER_STACK!"=="OK" (
     echo [DICA] Para diagnostico rapido da stack Docker:
     echo        docker compose ps
     echo        docker compose logs -f db redis pgadmin
+    echo        .\.venv\Scripts\python scripts\migrate_postgres_cluster.py --check-only
+    echo        .\.venv\Scripts\python scripts\migrate_postgres_cluster.py --run
 )
 exit /b 0
 
@@ -353,6 +386,8 @@ echo.
 echo [Dicas]
 echo - docker compose ps
 echo - docker compose logs -f db redis pgadmin
+echo - .\.venv\Scripts\python scripts\migrate_postgres_cluster.py --check-only
+echo - .\.venv\Scripts\python scripts\migrate_postgres_cluster.py --run
 ) > "%CHECKLIST_FILE%"
 exit /b 0
 
