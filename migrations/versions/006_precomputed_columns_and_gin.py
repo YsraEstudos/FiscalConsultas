@@ -31,16 +31,10 @@ def upgrade() -> None:
 
     # --- Backfill anchor_id for existing rows ---
     # anchor_id = 'pos-' + replace('.', '-', codigo)
-    if is_postgres:
-        op.execute(
-            "UPDATE positions SET anchor_id = 'pos-' || REPLACE(codigo, '.', '-') "
-            "WHERE anchor_id IS NULL"
-        )
-    else:
-        op.execute(
-            "UPDATE positions SET anchor_id = 'pos-' || REPLACE(codigo, '.', '-') "
-            "WHERE anchor_id IS NULL"
-        )
+    op.execute(
+        "UPDATE positions SET anchor_id = 'pos-' || REPLACE(codigo, '.', '-') "
+        "WHERE anchor_id IS NULL"
+    )
 
     # --- GIN indexes on tsvector columns (PostgreSQL only) ---
     if is_postgres:

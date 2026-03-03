@@ -124,6 +124,21 @@ function formatDate(date: Date): string {
     });
 }
 
+function hasHeightMapChanged(
+    prevHeights: Map<string, number>,
+    nextHeights: Map<string, number>,
+): boolean {
+    if (prevHeights.size !== nextHeights.size) return true;
+
+    for (const [id, height] of nextHeights) {
+        if (prevHeights.get(id) !== height) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // ── Componente ────────────────────────────────────────────────────────────
 
 /**
@@ -169,20 +184,11 @@ export function CommentPanel({ pending, comments, onSubmit, onDismiss, onEdit, o
     useLayoutEffect(() => {
         let frameId = requestAnimationFrame(() => {
             const newHeights = new Map<string, number>();
-            cardRefs.current.forEach((el, id) => {
+            for (const [id, el] of cardRefs.current) {
                 if (el) newHeights.set(id, el.offsetHeight);
-            });
-            // Só atualiza se mudou para evitar loop
-            setCardHeights(prev => {
-                let changed = false;
-                if (prev.size !== newHeights.size) changed = true;
-                if (!changed) {
-                    newHeights.forEach((h, id) => {
-                        if (prev.get(id) !== h) changed = true;
-                    });
-                }
-                return changed ? newHeights : prev;
-            });
+            }
+            // Só atualiza se mudou para evitar loop.
+            setCardHeights(prev => (hasHeightMapChanged(prev, newHeights) ? newHeights : prev));
         });
 
         return () => {
@@ -259,6 +265,7 @@ export function CommentPanel({ pending, comments, onSubmit, onDismiss, onEdit, o
             {pending && pendingPos && (
                 <div
                     ref={setCardRef('__pending__')}
+                    data-comment-card-id="__pending__"
                     className={`${styles.formCard} ${pendingPos.displaced ? styles.displaced : ''}`}
                     style={{ top: `${pendingPos.resolvedTop}px` }}
                 >
@@ -324,6 +331,7 @@ export function CommentPanel({ pending, comments, onSubmit, onDismiss, onEdit, o
                     <div
                         key={comment.id}
                         ref={setCardRef(comment.id)}
+                        data-comment-card-id={comment.id}
                         className={`${styles.commentCard} ${comment.isPrivate ? styles.private : ''} ${pos.displaced ? styles.displaced : ''}`}
                         style={{ top: `${pos.resolvedTop}px` }}
                         title={comment.isPrivate ? 'Comentário privado' : undefined}

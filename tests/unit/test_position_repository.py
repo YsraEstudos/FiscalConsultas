@@ -167,7 +167,7 @@ async def test_fts_postgres_maps_score_and_sends_tenant_param(monkeypatch):
 
     items = await repo._fts_postgres("motor", 7)
     assert len(items) == 1
-    assert items[0].score == 42.0
+    assert items[0].score == pytest.approx(42.0)
     stmt, params = session.calls[0]
     assert "tenant_id" in str(stmt)
     assert params == {"query": "motor", "limit": 7, "tenant_id": "org_pg"}
@@ -193,6 +193,6 @@ async def test_fts_sqlite_maps_rank_to_positive_score(monkeypatch):
 
     items = await repo._fts_sqlite("motor", 3)
     assert len(items) == 1
-    assert items[0].score == 25.0
+    assert items[0].score == pytest.approx(25.0)
     _stmt, params = session.calls[0]
     assert params == {"query": "motor", "limit": 3}

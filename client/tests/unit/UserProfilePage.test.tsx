@@ -11,7 +11,6 @@
  */
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { UserProfilePage } from '../../src/components/UserProfilePage';
 
 // ─── Mocks de API ────────────────────────────────────────────────────────────
 vi.mock('../../src/services/api', () => ({
@@ -58,6 +57,7 @@ const mockGetMyProfile = vi.mocked(getMyProfile);
 const mockUpdateMyProfile = vi.mocked(updateMyProfile);
 const mockGetMyContributions = vi.mocked(getMyContributions);
 const mockDeleteMyAccount = vi.mocked(deleteMyAccount);
+let UserProfilePage: typeof import('../../src/components/UserProfilePage').UserProfilePage;
 
 // ─── Dados de fixture ─────────────────────────────────────────────────────────
 
@@ -98,9 +98,10 @@ const MOCK_CONTRIBUTIONS = {
 
 // ─── Setup / Teardown ─────────────────────────────────────────────────────────
 
-beforeEach(() => {
+beforeEach(async () => {
     vi.clearAllMocks();
     isAdminRef.value = false;
+    ({ UserProfilePage } = await import('../../src/components/UserProfilePage'));
     mockGetMyProfile.mockResolvedValue(MOCK_PROFILE);
     mockGetMyContributions.mockResolvedValue(MOCK_CONTRIBUTIONS);
     mockUpdateMyProfile.mockImplementation(async (data) => ({

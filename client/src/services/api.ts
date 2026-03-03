@@ -385,26 +385,38 @@ function setMemoryCacheEntry<T>(key: string, entry: CacheEntry<T>): void {
     memoryCache.set(key, entry);
 }
 
-function normalizeCodeResponseAliases<T>(data: T): T {
-    if (!data || typeof data !== 'object') return data;
+type ObjectWithHasOwn = ObjectConstructor & {
+    hasOwn?: (obj: object, key: PropertyKey) => boolean;
+};
 
-    const candidate = data as {
-        type?: string;
-        results?: unknown;
-        resultados?: unknown;
-    };
-
-    if (candidate.type !== 'code' || !candidate.results || candidate.resultados) {
-        return data;
+function hasOwn(obj: object, key: PropertyKey): boolean {
+    const objectWithHasOwn = Object as ObjectWithHasOwn;
+    if (typeof objectWithHasOwn.hasOwn === 'function') {
+        return objectWithHasOwn.hasOwn(obj, key);
     }
+    return Object.getOwnPropertyDescriptor(obj, key) !== undefined;
+}
 
-    Object.defineProperty(candidate, 'resultados', {
-        get() {
-            return this.results;
-        },
-        enumerable: false,
-        configurable: true
-    });
+function normalizeCodeResponseAliases<T>(data: T): T {
+    if (data && typeof data === 'object') {
+        const candidate = data as {
+            type?: string;
+            results?: unknown;
+            resultados?: unknown;
+        };
+        const hasResults = hasOwn(candidate, 'results');
+        const hasResultados = hasOwn(candidate, 'resultados');
+
+        if (candidate.type === 'code' && hasResults && !hasResultados) {
+            Object.defineProperty(candidate, 'resultados', {
+                get() {
+                    return this.results;
+                },
+                enumerable: false,
+                configurable: true
+            });
+        }
+    }
 
     return data;
 }
@@ -465,7 +477,7 @@ function setCache<T>(key: string, data: T): void {
             }
         }
 
-        const isNewKey = !Object.prototype.hasOwnProperty.call(index, key);
+        const isNewKey = !hasOwn(index, key);
         if (isNewKey && Object.keys(index).length >= CACHE_MAX_ENTRIES) {
             const oldestKeys = Object.keys(index)
                 .sort((a, b) => index[a] - index[b])

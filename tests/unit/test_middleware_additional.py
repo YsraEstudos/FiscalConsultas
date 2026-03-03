@@ -1,4 +1,5 @@
 import base64
+import asyncio
 import json
 from types import SimpleNamespace
 
@@ -611,6 +612,35 @@ async def test_dispatch_sets_tenant_from_bearer_and_schedules_provision(monkeypa
     assert status == 200
     assert seen == ["org_bearer"]
     assert len(created) == 1
+
+
+@pytest.mark.asyncio
+async def test_schedule_background_task_ignores_cancelled_tasks(monkeypatch):
+    warnings = []
+
+    def _fake_warning(message, *args):  # NOSONAR
+        warnings.append(message % args if args else message)
+
+    def _fake_debug(*_args, **_kwargs):  # NOSONAR
+        return None
+
+    def _fake_ensure_future(coro):
+        coro.close()
+        task = asyncio.get_running_loop().create_future()
+        task.cancel()
+        return task
+
+    monkeypatch.setattr(middleware.logger, "warning", _fake_warning)
+    monkeypatch.setattr(middleware.logger, "debug", _fake_debug)
+    monkeypatch.setattr(middleware.asyncio, "ensure_future", _fake_ensure_future)
+
+    async def _noop():  # NOSONAR
+        return None
+
+    middleware._schedule_background_task(_noop())
+    await asyncio.sleep(0)
+
+    assert warnings == []
 
 
 class _FakeProvisionSession:
