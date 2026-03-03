@@ -246,8 +246,16 @@ app.add_middleware(
     allow_origins=cors_origins,
     allow_origin_regex=cors_allow_origin_regex,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-Admin-Token",
+        "X-Tenant-Id",
+        "Accept-Encoding",
+        "Asaas-Access-Token",
+        "X-Asaas-Access-Token",
+    ],
 )
 
 
