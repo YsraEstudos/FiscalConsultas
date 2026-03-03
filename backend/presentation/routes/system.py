@@ -85,7 +85,9 @@ async def _collect_db_status(request: Request) -> tuple[dict, float]:
         from sqlalchemy import text
 
         async with get_session() as session:
-            chapters_count = await session.execute(text("SELECT COUNT(*) FROM chapters"))
+            chapters_count = await session.execute(
+                text("SELECT COUNT(*) FROM chapters")
+            )
             positions_count = await session.execute(
                 text("SELECT COUNT(*) FROM positions")
             )
