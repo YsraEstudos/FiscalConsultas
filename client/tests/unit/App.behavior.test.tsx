@@ -18,6 +18,7 @@ type MockTab = {
   scrollTop?: number;
   isContentReady?: boolean;
   loadedChaptersByDoc?: Record<DocType, string[]>;
+  latestTextQuery?: string;
 };
 
 const mocks = vi.hoisted(() => {
@@ -132,6 +133,7 @@ vi.mock('../../src/components/TabsBar', () => ({
 vi.mock('../../src/components/ResultDisplay', () => ({
   ResultDisplay: ({
     tabId,
+    latestTextQuery,
     mobileMenuOpen,
     isActive,
     onCloseMobileMenu,
@@ -143,6 +145,7 @@ vi.mock('../../src/components/ResultDisplay', () => ({
       data-testid={`result-display-${tabId}`}
       data-mobile-open={String(Boolean(mobileMenuOpen))}
       data-active={String(Boolean(isActive))}
+      data-latest-text-query={latestTextQuery ?? ''}
     >
       <button data-testid={`result-consume-scroll-${tabId}`} onClick={() => onConsumeNewSearch(tabId, 321)}>
         consume-scroll
@@ -294,6 +297,7 @@ function buildTab(overrides: Partial<MockTab> = {}): MockTab {
     scrollTop: 0,
     isContentReady: true,
     loadedChaptersByDoc: { nesh: [], tipi: [] },
+    latestTextQuery: undefined,
     ...overrides,
   };
 }
@@ -642,6 +646,7 @@ describe('App behavior', () => {
           results: buildCodeResults({ '84': { notas_parseadas: { '1': 'Nota da bridge' } } }),
           isContentReady: false,
           isNewSearch: true,
+          latestTextQuery: 'motor',
         }),
         buildTab({ id: 'tab-2', document: 'tipi', loading: true }),
         buildTab({ id: 'tab-3', document: 'nesh', error: 'Falha no backend' }),
@@ -663,6 +668,7 @@ describe('App behavior', () => {
     expect(typeof bridge.smartLinkSearch).toBe('function');
     expect(typeof bridge.openNote).toBe('function');
     expect(typeof bridge.openSettings).toBe('function');
+    expect(typeof bridge.openTextResultInNewTab).toBe('function');
 
     bridge.smartLinkSearch('8501');
     expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('tab-1', 'nesh', '8501', true);
@@ -678,6 +684,8 @@ describe('App behavior', () => {
     await waitFor(() => {
       expect(screen.getByTestId('note-panel')).toHaveAttribute('data-content', 'Nota da bridge');
     });
+
+    expect(screen.getByTestId('result-display-tab-1')).toHaveAttribute('data-latest-text-query', 'motor');
 
     expect(screen.getAllByTestId('result-skeleton').length).toBeGreaterThan(0);
     expect(screen.getByText('Falha no backend')).toBeInTheDocument();
@@ -703,6 +711,12 @@ describe('App behavior', () => {
     expect(mocks.createTabMock).toHaveBeenCalledWith('nesh');
     expect(mocks.switchTabMock).toHaveBeenCalledWith('tab-2');
     expect(mocks.closeTabMock).toHaveBeenCalledWith(expect.anything(), 'tab-2');
+
+    await act(async () => {
+      await bridge.openTextResultInNewTab('8422', 'motor centrifo');
+    });
+    expect(mocks.updateTabMock).toHaveBeenCalledWith('new-nesh-2', { latestTextQuery: 'motor centrifo' });
+    expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nesh-2', 'nesh', '8422', false);
 
     unmount();
     expect((window as any).nesh).toBeUndefined();
