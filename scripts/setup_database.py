@@ -88,7 +88,7 @@ def get_current_db_hash() -> str | None:
 def read_nesh_content() -> tuple[str | None, str | None, str | None]:
     """
     Read the Nesh source content, preferring a plain TXT file over a ZIP archive.
-    
+
     Returns:
         tuple[str | None, str | None, str | None]: A tuple (content, source_type, source_path)
             - content: the file content as a UTF-8 string, or `None` if no readable source was found.
@@ -146,13 +146,13 @@ def _replace_bracket_superscripts(text: str) -> str:
 def _clean_position_description(desc: str) -> str:
     """
     Clean and normalize a position description extracted from source content.
-    
+
     Performs targeted removals and transformations commonly needed for NESH position text:
     - Removes the NESH "(+)" subposition artifact and Markdown bold markers.
     - Strips a trailing isolated period.
     - Converts PDF-style bracketed superscripts `[2]` and `[3]` to `²` and `³`.
     - Collapses multiple spaces and trims surrounding whitespace.
-    
+
     Returns:
         cleaned (str): The normalized description string.
     """
@@ -173,12 +173,12 @@ def _clean_position_description(desc: str) -> str:
 def extract_positions_from_chapter(chapter_content: str) -> list:
     """
     Extracts unique position entries from a chapter's text.
-    
+
     Scans the chapter content for lines that start with a two-digit dot two-digit code (e.g., "01.01" or "85.07") followed by a separator and a description. Accepts codes wrapped in markdown bold markers and different dash characters. For each distinct code, the first occurrence is kept; subsequent duplicates are ignored. Descriptions are cleaned and normalized, then truncated to 100 characters.
-    
+
     Parameters:
         chapter_content (str): Full text of a chapter to scan for position lines.
-    
+
     Returns:
         list[dict]: A list of dictionaries in the order found, each with:
             - "codigo" (str): The position code (e.g., "01.01").
@@ -210,9 +210,9 @@ def extract_positions_from_chapter(chapter_content: str) -> list:
 def extract_chapter_notes(chapter_content: str) -> str:
     """
     Extracts the general notes section for a chapter.
-    
+
     Parses the text between the chapter title and the first position entry. Recognizes an explicit "Nota" or "Notas" header, or treats initial non-position text before the first position code (format "DD.DD -") as the notes section. Collapses runs of three or more consecutive newlines into two and trims leading/trailing whitespace.
-    
+
     Returns:
         notes_text (str): The extracted notes text with normalized blank lines; empty string if no notes were found.
     """
@@ -263,12 +263,12 @@ def extract_chapter_notes(chapter_content: str) -> str:
 def _sanitize_source_content(content: str) -> str:
     """
     Normalize PDF-extraction artifacts in source text by converting bracketed numeric superscripts to their Unicode superscript characters.
-    
+
     This replaces occurrences like "[2]", "[2 ]", "[ 3]" with the corresponding superscript digits (² and ³), preserving surrounding text.
-    
+
     Parameters:
         content (str): Source text to sanitize, typically extracted from a PDF or raw text file.
-    
+
     Returns:
         str: The sanitized text with bracketed superscripts converted to Unicode superscripts.
     """
@@ -278,12 +278,12 @@ def _sanitize_source_content(content: str) -> str:
 def parse_nesh_content(content: str) -> dict:
     """
     Parse the full Nesh source text into a mapping of chapter numbers to chapter content.
-    
+
     The function sanitizes common PDF-extraction artifacts (for example, bracketed superscripts) before locating chapters by lines like "Capítulo <number>". It also moves standalone "Seção <Roman>" headers that appear immediately after a chapter header into the following chapter to keep section headers with their intended chapter.
-    
+
     Parameters:
         content (str): Full raw Nesh text to parse.
-    
+
     Returns:
         dict: Mapping of two-digit chapter numbers (e.g., "01", "02") to the corresponding chapter text.
     """

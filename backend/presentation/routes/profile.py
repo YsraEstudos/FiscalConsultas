@@ -32,6 +32,10 @@ logger = logging.getLogger("routes.profile")
 router = APIRouter(prefix="/profile", tags=["Profile"])
 
 ERROR_TENANT_MISSING = "Tenant não identificado"
+TENANT_ERROR_RESPONSES = {
+    400: {"description": "Bad Request (tenant could not be resolved)."},
+    403: {"description": "Forbidden (tenant mismatch between context and token)."},
+}
 
 
 # ─── Dependências ──────────────────────────────────────────────────────────
@@ -75,8 +79,14 @@ def _resolve_tenant(payload: dict) -> str:
     context_tenant_id = get_current_tenant()
     payload_tenant_id = payload.get("org_id")
 
-    if context_tenant_id and payload_tenant_id and context_tenant_id != payload_tenant_id:
-        raise HTTPException(status_code=403, detail="Tenant inválido para token")  # NOSONAR
+    if (
+        context_tenant_id
+        and payload_tenant_id
+        and context_tenant_id != payload_tenant_id
+    ):
+        raise HTTPException(
+            status_code=403, detail="Tenant inválido para token"
+        )  # NOSONAR
 
     tenant_id = context_tenant_id or payload_tenant_id
     if not tenant_id:
@@ -91,6 +101,7 @@ def _resolve_tenant(payload: dict) -> str:
     "/me",
     response_model=UserProfileResponse,
     responses={
+        **TENANT_ERROR_RESPONSES,
         401: {"description": "Unauthorized"},
         404: {"description": "User not found"},
     },
@@ -116,6 +127,7 @@ async def get_my_profile(
     "/me",
     response_model=UserProfileResponse,
     responses={
+        **TENANT_ERROR_RESPONSES,
         401: {"description": "Unauthorized"},
         404: {"description": "User not found"},
     },
@@ -132,7 +144,9 @@ async def update_my_profile(
     image_url = payload.get("image_url") or payload.get("picture")
 
     try:
-        profile = await service.update_bio(user_id, tenant_id, data, image_url=image_url)
+        profile = await service.update_bio(
+            user_id, tenant_id, data, image_url=image_url
+        )
         return UserProfileResponse(**profile)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e  # NOSONAR
@@ -142,6 +156,7 @@ async def update_my_profile(
     "/me/contributions",
     response_model=ContributionsResponse,
     responses={
+        **TENANT_ERROR_RESPONSES,
         401: {"description": "Unauthorized"},
     },
 )
@@ -150,7 +165,9 @@ async def get_my_contributions(
     service: Annotated[ProfileService, Depends(_get_service)],
     page: Annotated[int, Query(ge=1, description="Página")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="Itens por página")] = 20,
-    search: Annotated[str | None, Query(max_length=200, description="Busca por texto")] = None,
+    search: Annotated[
+        str | None, Query(max_length=200, description="Busca por texto")
+    ] = None,
     status_filter: Annotated[
         str | None,
         Query(
@@ -185,6 +202,7 @@ async def get_my_contributions(
     "/{user_id}/card",
     response_model=UserCardResponse,
     responses={
+        **TENANT_ERROR_RESPONSES,
         401: {"description": "Unauthorized"},
         404: {"description": "User not found"},
     },
@@ -208,6 +226,7 @@ async def get_user_card(
 @router.delete(
     "/me",
     responses={
+        **TENANT_ERROR_RESPONSES,
         401: {"description": "Unauthorized"},
         404: {"description": "User not found"},
         500: {"description": "Internal Server Error"},
