@@ -44,7 +44,7 @@ def main() -> None:
             if data.get("type") == "code":
                 count = int(data.get("total_capitulos") or 0)
             else:
-                count = len(data.get("results", []) or [])
+                count = len(data.get("results", []))
 
             cases[query] = {
                 "hash": digest,
