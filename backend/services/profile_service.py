@@ -23,7 +23,9 @@ class ProfileService:
         self.session = session
 
     async def _get_user_in_tenant(self, user_id: str, tenant_id: str) -> User:
-        user_query = select(User).where(User.id == user_id).where(User.tenant_id == tenant_id)
+        user_query = (
+            select(User).where(User.id == user_id).where(User.tenant_id == tenant_id)
+        )
         user = (await self.session.execute(user_query)).scalar_one_or_none()
         if not user:
             raise ValueError(f"Usuário {user_id} não encontrado")

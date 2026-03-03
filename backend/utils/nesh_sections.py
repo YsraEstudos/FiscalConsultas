@@ -1,8 +1,6 @@
 import re
 
-_RE_CHAPTER_HEADER = re.compile(
-    r"^(?:\*\*)?Capítulo\s+\d+(?:\*\*)?$", re.IGNORECASE
-)
+_RE_CHAPTER_HEADER = re.compile(r"^(?:\*\*)?Capítulo\s+\d+(?:\*\*)?$", re.IGNORECASE)
 _RE_POSITION_START = re.compile(r"^\*?\*?\d{2}\.\d{2}\s*[-–]")
 _RE_NOTAS_HEADER = re.compile(r"^Notas?\.?$", re.IGNORECASE)
 _RE_CONSIDERACOES = re.compile(r"^CONSIDERAÇÕES GERAIS", re.IGNORECASE)
