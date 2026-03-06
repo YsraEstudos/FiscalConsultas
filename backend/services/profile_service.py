@@ -8,12 +8,11 @@ entre routers e repositories, responsável por validações e lógica de domíni
 import logging
 from typing import Optional
 
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from backend.domain.comment_models import Comment
 from backend.domain.sqlmodels import Tenant, User
 from backend.presentation.schemas.profile_schemas import UserProfileUpdate
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("service.profile")
 
@@ -131,7 +130,8 @@ class ProfileService:
             )
 
         # Count total
-        count_query = select(func.count()).select_from(base_query.subquery())
+        # Optimization: using with_only_columns(func.count()).order_by(None) avoids inefficient subqueries
+        count_query = base_query.with_only_columns(func.count()).order_by(None)
         total = (await self.session.execute(count_query)).scalar() or 0
 
         # Fetch page
