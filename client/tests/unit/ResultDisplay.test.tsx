@@ -15,10 +15,8 @@ vi.mock('../../src/components/Sidebar', () => ({
 
 describe('ResultDisplay Component', () => {
     beforeEach(() => {
-        // Mock scrollIntoView
         Element.prototype.scrollIntoView = vi.fn();
 
-        // Mock requestIdleCallback to run immediately
         globalThis.requestIdleCallback = (cb: any) => {
             return window.setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 50 }), 0);
         };
@@ -93,7 +91,6 @@ describe('ResultDisplay Component', () => {
                 </SettingsProvider>
             </AuthProvider>
         );
-        // marked parses # Title to <h1 id="title">Title</h1>
         await waitFor(() => {
             expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Title');
             expect(screen.getByText('Some content')).toBeInTheDocument();
@@ -253,5 +250,33 @@ describe('ResultDisplay Component', () => {
         rafSpy.mockRestore();
     });
 
+    it('hides comment controls for unauthorized users', async () => {
+        const mockData = {
+            type: 'code' as const,
+            markdown: '# Title\nSome content',
+            resultados: {}
+        };
 
+        render(
+            <AuthProvider>
+                <SettingsProvider>
+                    <ResultDisplay
+                        data={mockData as any}
+                        mobileMenuOpen={false}
+                        onCloseMobileMenu={vi.fn()}
+                        isActive={true}
+                        tabId="tab-1"
+                        isNewSearch={false}
+                        onConsumeNewSearch={vi.fn()}
+                    />
+                </SettingsProvider>
+            </AuthProvider>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Title');
+        });
+
+        expect(screen.queryByRole('button', { name: /comentários/i })).not.toBeInTheDocument();
+    });
 });

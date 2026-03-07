@@ -263,39 +263,39 @@
 
 .badge.position,
 .badge.subposition {
-    background: rgb(99 102 241 / 12%);
-    border-color: rgb(99 102 241 / 24%);
-    color: var(--accent-primary);
+    background: #4338ca;
+    border-color: #4338ca;
+    color: #eef2ff;
 }
 
 .badge.chapter {
-    background: rgb(245 158 11 / 12%);
-    border-color: rgb(245 158 11 / 22%);
-    color: var(--warning);
+    background: #b45309;
+    border-color: #b45309;
+    color: #fffbeb;
 }
 
 .badge.tierExact {
-    background: rgb(34 197 94 / 15%);
-    border-color: rgb(34 197 94 / 24%);
-    color: #4ade80;
+    background: #166534;
+    border-color: #166534;
+    color: #f0fdf4;
 }
 
 .badge.tierAll {
-    background: rgb(56 189 248 / 14%);
-    border-color: rgb(56 189 248 / 24%);
-    color: #67e8f9;
+    background: #155e75;
+    border-color: #155e75;
+    color: #ecfeff;
 }
 
 .badge.tierPartial {
-    background: rgb(148 163 184 / 12%);
-    border-color: rgb(148 163 184 / 18%);
-    color: #cbd5e1;
+    background: #475569;
+    border-color: #475569;
+    color: #f8fafc;
 }
 
 .badge.nearBonus {
-    background: rgb(16 185 129 / 14%);
-    border-color: rgb(16 185 129 / 24%);
-    color: #6ee7b7;
+    background: #047857;
+    border-color: #047857;
+    color: #ecfdf5;
 }
 
 .score {
@@ -367,6 +367,8 @@
         justify-self: start;
     }
 }
+
+
 
 
 

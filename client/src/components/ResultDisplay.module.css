@@ -97,7 +97,7 @@
     min-width: 0;
 }
 
-.textSearchContent {
+.content.textSearchContent {
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -298,6 +298,10 @@
         padding: 1rem;
     }
 
+    .content.textSearchContent {
+        padding: 0;
+    }
+
     .sidebarContainer {
         width: 100%;
     }
@@ -352,4 +356,5 @@
 .commentToggleActive:hover {
     background: rgb(99 102 241 / 25%);
 }
+
 

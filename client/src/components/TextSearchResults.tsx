@@ -16,22 +16,35 @@ interface TextSearchResultsProps {
 
 const VIRTUALIZE_THRESHOLD = 60;
 
+function getResultTypeMeta(tipo: TextSearchResultItem['tipo']) {
+    if (tipo === 'chapter') {
+        return { label: 'Capítulo', className: styles.chapter };
+    }
+
+    if (tipo === 'subposition') {
+        return { label: 'Subposição', className: styles.subposition };
+    }
+
+    return { label: 'Posição', className: styles.position };
+}
+
 export const TextSearchResults = React.memo(function TextSearchResults({ results, query, onResultClick, scrollParentRef }: TextSearchResultsProps) {
     const { highlightEnabled } = useSettings();
     const normalizedResults = results ?? [];
     const hasResults = normalizedResults.length > 0;
-    const displayQuery = query.trim() || 'termo informado';
+    const normalizedQuery = query.trim();
+    const displayQuery = normalizedQuery || 'termo informado';
 
     const highlightRegex = useMemo(() => {
-        if (!highlightEnabled || !query) return null;
+        if (!highlightEnabled || !normalizedQuery) return null;
         try {
-            const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const escapedQuery = normalizedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             return new RegExp(`(${escapedQuery})`, 'gi');
         } catch (e) {
             console.error('Highlight error', e);
             return null;
         }
-    }, [highlightEnabled, query]);
+    }, [highlightEnabled, normalizedQuery]);
 
     const summaryCards = useMemo(() => {
         const exact = normalizedResults.filter(item => item.tier === 1).length;
@@ -52,23 +65,18 @@ export const TextSearchResults = React.memo(function TextSearchResults({ results
     }, [normalizedResults]);
 
     const renderDescription = useCallback((text: string) => {
-        if (!highlightRegex || !query) return text;
+        if (!highlightRegex || !normalizedQuery) return text;
 
         const parts = text.split(highlightRegex);
         return parts.map((part, i) =>
-            part.toLowerCase() === query.toLowerCase()
+            part.toLowerCase() === normalizedQuery.toLowerCase()
                 ? <span key={i} className={`${styles.searchHighlight} ${styles.partial}`}>{part}</span>
                 : part
         );
-    }, [highlightRegex, query]);
+    }, [highlightRegex, normalizedQuery]);
 
     const renderItem = useCallback((item: TextSearchResultItem, index: number) => {
-        const typeLabel = item.tipo === 'chapter' ? 'Capítulo' : item.tipo === 'subposition' ? 'Subposição' : 'Posição';
-        const typeClass = item.tipo === 'chapter'
-            ? styles.chapter
-            : item.tipo === 'subposition'
-                ? styles.subposition
-                : styles.position;
+        const typeMeta = getResultTypeMeta(item.tipo);
 
         let tierClass = styles.tierPartial;
         if (item.tier === 1) tierClass = styles.tierExact;
@@ -90,7 +98,7 @@ export const TextSearchResults = React.memo(function TextSearchResults({ results
                     </div>
 
                     <div className={styles.badges}>
-                        <span className={`${styles.badge} ${typeClass}`}>{typeLabel}</span>
+                        <span className={`${styles.badge} ${typeMeta.className}`}>{typeMeta.label}</span>
                         <span className={`${styles.badge} ${tierClass}`}>{tierLabel}</span>
                         {item.near_bonus ? <span className={`${styles.badge} ${styles.nearBonus}`}>Contexto</span> : null}
                     </div>
@@ -161,5 +169,3 @@ export const TextSearchResults = React.memo(function TextSearchResults({ results
         </div>
     );
 });
-
-

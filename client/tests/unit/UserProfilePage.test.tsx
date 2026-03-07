@@ -28,11 +28,12 @@ vi.mock('@clerk/clerk-react', () => ({
 
 // ─── Mocks de contexto e hooks ───────────────────────────────────────────────
 const isAdminRef = { value: false };
+const userEmailRef = { value: 'israelseja2@gmail.com' };
 
 vi.mock('../../src/context/AuthContext', () => ({
     useAuth: () => ({
         userName: 'João Silva',
-        userEmail: 'joao@example.com',
+        userEmail: userEmailRef.value,
         userImageUrl: null,
     }),
 }));
@@ -101,6 +102,7 @@ const MOCK_CONTRIBUTIONS = {
 beforeEach(async () => {
     vi.clearAllMocks();
     isAdminRef.value = false;
+    userEmailRef.value = 'israelseja2@gmail.com';
     ({ UserProfilePage } = await import('../../src/components/UserProfilePage'));
     mockGetMyProfile.mockResolvedValue(MOCK_PROFILE);
     mockGetMyContributions.mockResolvedValue(MOCK_CONTRIBUTIONS);
@@ -263,6 +265,15 @@ describe('UserProfilePage', () => {
         expect(screen.queryByText(/organização/i)).not.toBeInTheDocument();
     });
 
+    it('não exibe aba Contribuições para usuários não autorizados', async () => {
+        userEmailRef.value = 'joao@example.com';
+        render(<UserProfilePage isOpen={true} onClose={vi.fn()} />);
+
+        await waitFor(() => expect(mockGetMyProfile).toHaveBeenCalled());
+
+        expect(screen.queryByRole('button', { name: /contribuições/i })).not.toBeInTheDocument();
+    });
+
     it('exibe aba Organização para administradores', async () => {
         isAdminRef.value = true;
         render(<UserProfilePage isOpen={true} onClose={vi.fn()} />);
@@ -354,3 +365,4 @@ describe('UserProfilePage', () => {
         });
     });
 });
+
