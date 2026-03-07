@@ -1265,7 +1265,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     // Text Search Rendering
     if (data.type === 'text') {
         return (
-            <div className={styles.content} ref={containerRef} id={containerId}>
+            <div className={`${styles.content} ${styles.textSearchContent}`} ref={containerRef} id={containerId}>
                 <TextSearchResults
                     results={(data.results as SearchResultItem[]) || null}
                     query={latestTextQuery || data.query || ""}
@@ -1380,3 +1380,4 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         </div>
     );
 });
+
