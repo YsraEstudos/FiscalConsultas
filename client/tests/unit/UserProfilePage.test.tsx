@@ -101,6 +101,7 @@ const MOCK_CONTRIBUTIONS = {
 
 beforeEach(async () => {
     vi.clearAllMocks();
+    vi.stubEnv('VITE_RESTRICTED_UI_EMAILS', 'israelseja2@gmail.com');
     isAdminRef.value = false;
     userEmailRef.value = 'israelseja2@gmail.com';
     ({ UserProfilePage } = await import('../../src/components/UserProfilePage'));
@@ -365,4 +366,5 @@ describe('UserProfilePage', () => {
         });
     });
 });
+
 

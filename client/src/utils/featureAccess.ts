@@ -1,5 +1,20 @@
-export const RESTRICTED_UI_EMAIL = 'israelseja2@gmail.com';
+export function getRestrictedUiEmails(): string[] {
+    const configuredEmails = import.meta.env.VITE_RESTRICTED_UI_EMAILS;
+    if (!configuredEmails) {
+        return [];
+    }
+
+    return configuredEmails
+        .split(',')
+        .map(email => email.trim().toLowerCase())
+        .filter(Boolean);
+}
 
 export function canAccessRestrictedUi(userEmail: string | null | undefined): boolean {
-    return (userEmail || '').trim().toLowerCase() === RESTRICTED_UI_EMAIL;
+    const normalizedEmail = (userEmail || '').trim().toLowerCase();
+    if (!normalizedEmail) {
+        return false;
+    }
+
+    return getRestrictedUiEmails().includes(normalizedEmail);
 }

@@ -38,7 +38,7 @@ export const TextSearchResults = React.memo(function TextSearchResults({ results
     const highlightRegex = useMemo(() => {
         if (!highlightEnabled || !normalizedQuery) return null;
         try {
-            const escapedQuery = normalizedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const escapedQuery = normalizedQuery.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
             return new RegExp(`(${escapedQuery})`, 'gi');
         } catch (e) {
             console.error('Highlight error', e);
@@ -169,3 +169,4 @@ export const TextSearchResults = React.memo(function TextSearchResults({ results
         </div>
     );
 });
+

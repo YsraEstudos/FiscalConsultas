@@ -1,7 +1,17 @@
+import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ModalManager } from '../../src/components/ModalManager';
-import { AuthProvider } from '../../src/context/AuthContext';
+
+const authState = {
+    isSignedIn: false,
+    userEmail: 'blocked@example.com',
+};
+
+vi.mock('../../src/context/AuthContext', () => ({
+    AuthProvider: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
+    useAuth: () => authState,
+}));
 
 vi.mock('../../src/components/AIChat', () => ({
     AIChat: () => <div data-testid="ai-chat-trigger">AI Chat</div>
@@ -32,29 +42,33 @@ vi.mock('../../src/components/AdminCommentModal', () => ({
 }));
 
 describe('ModalManager', () => {
-    it('hides AI chat for unauthorized users', async () => {
+    beforeEach(() => {
+        vi.stubEnv('VITE_RESTRICTED_UI_EMAILS', 'israelseja2@gmail.com');
+        authState.isSignedIn = false;
+        authState.userEmail = 'blocked@example.com';
+    });
+
+    it('hides AI chat for unauthorized users', () => {
         render(
-            <AuthProvider>
-                <ModalManager
-                    modals={{
-                        settings: false,
-                        tutorial: false,
-                        stats: false,
-                        comparator: false,
-                        moderate: false,
-                    }}
-                    onClose={{
-                        settings: vi.fn(),
-                        tutorial: vi.fn(),
-                        stats: vi.fn(),
-                        comparator: vi.fn(),
-                        moderate: vi.fn(),
-                    }}
-                    currentDoc="nesh"
-                    onOpenInDoc={vi.fn()}
-                    onOpenInNewTab={vi.fn()}
-                />
-            </AuthProvider>
+            <ModalManager
+                modals={{
+                    settings: false,
+                    tutorial: false,
+                    stats: false,
+                    comparator: false,
+                    moderate: false,
+                }}
+                onClose={{
+                    settings: vi.fn(),
+                    tutorial: vi.fn(),
+                    stats: vi.fn(),
+                    comparator: vi.fn(),
+                    moderate: vi.fn(),
+                }}
+                currentDoc="nesh"
+                onOpenInDoc={vi.fn()}
+                onOpenInNewTab={vi.fn()}
+            />
         );
 
         expect(screen.queryByTestId('ai-chat-trigger')).not.toBeInTheDocument();
