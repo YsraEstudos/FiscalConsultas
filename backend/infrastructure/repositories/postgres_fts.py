@@ -37,9 +37,12 @@ def build_postgres_tsquery(query: str) -> PostgresTsQuerySpec:
     stripped = query.strip()
 
     if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
+        phrase = stripped[1:-1]
+        if not phrase:
+            return _empty_tsquery_spec()
         return PostgresTsQuerySpec(
             sql="phraseto_tsquery('portuguese', :query)",
-            params={"query": stripped[1:-1]},
+            params={"query": phrase},
         )
 
     if " OR " in stripped:
