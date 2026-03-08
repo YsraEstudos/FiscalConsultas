@@ -27,6 +27,12 @@ def _join_and_terms(text: str) -> str:
     return " & ".join(terms)
 
 
+def _empty_tsquery_spec() -> PostgresTsQuerySpec:
+    # Keep the fragment typed as tsquery so repositories can reuse it in both
+    # ts_rank(...) and @@ predicates without calling to_tsquery on an empty input.
+    return PostgresTsQuerySpec(sql="NULL::tsquery", params={})
+
+
 def build_postgres_tsquery(query: str) -> PostgresTsQuerySpec:
     stripped = query.strip()
 
@@ -39,15 +45,20 @@ def build_postgres_tsquery(query: str) -> PostgresTsQuerySpec:
     if " OR " in stripped:
         groups = [_join_and_terms(part) for part in stripped.split(" OR ")]
         tsquery = " | ".join(group for group in groups if group)
+        if not tsquery:
+            return _empty_tsquery_spec()
         return PostgresTsQuerySpec(
             sql="to_tsquery('portuguese', :tsquery)",
             params={"tsquery": tsquery},
         )
 
     if "*" in stripped:
+        tsquery = _join_and_terms(stripped)
+        if not tsquery:
+            return _empty_tsquery_spec()
         return PostgresTsQuerySpec(
             sql="to_tsquery('portuguese', :tsquery)",
-            params={"tsquery": _join_and_terms(stripped)},
+            params={"tsquery": tsquery},
         )
 
     return PostgresTsQuerySpec(
