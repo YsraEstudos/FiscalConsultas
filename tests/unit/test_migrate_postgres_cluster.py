@@ -10,6 +10,10 @@ from scripts import migrate_postgres_cluster as mod
 pytestmark = pytest.mark.unit
 
 
+def _raise(exc: Exception) -> None:
+    raise exc
+
+
 def _config(tmp_path: Path) -> mod.MigrationConfig:
     secret = "".join(["se", "cret"])
     return mod.MigrationConfig(
@@ -240,7 +244,7 @@ def test_run_migration_returns_dump_failed(tmp_path, monkeypatch):
     monkeypatch.setattr(
         mod,
         "export_dump",
-        lambda *_args: (_ for _ in ()).throw(RuntimeError("dump failed")),
+        lambda *_args: _raise(RuntimeError("dump failed")),
     )
     monkeypatch.setattr(mod, "run_command", lambda *args, **kwargs: _completed())
 
@@ -257,7 +261,7 @@ def test_run_migration_returns_dump_failed_for_oserror(tmp_path, monkeypatch):
     monkeypatch.setattr(
         mod,
         "export_dump",
-        lambda *_args: (_ for _ in ()).throw(OSError("disk full")),
+        lambda *_args: _raise(OSError("disk full")),
     )
     monkeypatch.setattr(mod, "run_command", lambda *args, **kwargs: _completed())
 
@@ -296,7 +300,7 @@ def test_run_migration_returns_restore_failed_for_oserror(tmp_path, monkeypatch)
     monkeypatch.setattr(
         mod,
         "restore_dump",
-        lambda *_args: (_ for _ in ()).throw(OSError("cannot open dump")),
+        lambda *_args: _raise(OSError("cannot open dump")),
     )
     monkeypatch.setattr(mod, "run_command", lambda *args, **kwargs: _completed())
 

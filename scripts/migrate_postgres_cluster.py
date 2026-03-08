@@ -20,6 +20,7 @@ DEFAULT_SOURCE_IMAGE = "postgres:15"
 DEFAULT_TARGET_IMAGE = "postgres:18"
 DEFAULT_DB_NAME = "nesh_db"
 DEFAULT_DB_USER = "postgres"
+PSQL_ON_ERROR_STOP = "ON_ERROR_STOP=1"
 DOCKER_COMPOSE_PATH = PROJECT_ROOT / "docker-compose.yml"
 ENV_PATH = PROJECT_ROOT / ".env"
 
@@ -166,61 +167,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def inspect_compose_mount(compose_path: Path) -> ComposeCheck:
-    if not compose_path.exists():
-        return ComposeCheck(
-            compatible=False,
-            has_expected_mount=False,
-            has_legacy_mount=False,
-            message=f"Compose file not found: {compose_path}",
-        )
-
-    lines = compose_path.read_text(encoding="utf-8").splitlines()
-    in_db = False
-    db_indent = 0
-    in_volumes = False
-    volumes_indent = 0
-    has_expected_mount = False
-    has_legacy_mount = False
-
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-
-        indent = len(line) - len(line.lstrip(" "))
-        if not in_db:
-            if stripped == "db:":
-                in_db = True
-                db_indent = indent
-            continue
-
-        if (
-            indent <= db_indent
-            and stripped.endswith(":")
-            and not stripped.startswith("-")
-        ):
-            break
-
-        if not in_volumes:
-            if stripped == "volumes:":
-                in_volumes = True
-                volumes_indent = indent
-            continue
-
-        if indent <= volumes_indent and not stripped.startswith("-"):
-            in_volumes = False
-            continue
-
-        if not stripped.startswith("- "):
-            continue
-
-        mount = stripped[2:].strip().strip("'").strip('"')
-        if ":/var/lib/postgresql/data" in mount:
-            has_legacy_mount = True
-        if mount.endswith(":/var/lib/postgresql") or ":/var/lib/postgresql:" in mount:
-            has_expected_mount = True
-
+def _compose_scan_result(
+    compose_path: Path, has_expected_mount: bool, has_legacy_mount: bool
+) -> ComposeCheck:
     compatible = has_expected_mount and not has_legacy_mount
     if compatible:
         message = "Compose mount for Postgres 18 is compatible."
@@ -237,6 +186,92 @@ def inspect_compose_mount(compose_path: Path) -> ComposeCheck:
         has_legacy_mount=has_legacy_mount,
         message=message,
     )
+
+
+def _compose_indent(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def _is_ignorable_compose_line(stripped: str) -> bool:
+    return not stripped or stripped.startswith("#")
+
+
+def _is_compose_section_boundary(
+    stripped: str, indent: int, section_indent: int
+) -> bool:
+    return (
+        indent <= section_indent
+        and stripped.endswith(":")
+        and not stripped.startswith("-")
+    )
+
+
+def _extract_compose_mount(stripped: str) -> str | None:
+    if not stripped.startswith("- "):
+        return None
+    return stripped[2:].strip().strip("'").strip('"')
+
+
+def _scan_compose_db_mounts(lines: Sequence[str]) -> tuple[bool, bool]:
+    search_db = "search_db"
+    search_volumes = "search_volumes"
+    scan_mounts = "scan_mounts"
+
+    state = search_db
+    db_indent = 0
+    volumes_indent = 0
+    has_expected_mount = False
+    has_legacy_mount = False
+
+    for line in lines:
+        stripped = line.strip()
+        if _is_ignorable_compose_line(stripped):
+            continue
+
+        indent = _compose_indent(line)
+        if state == search_db:
+            if stripped == "db:":
+                state = search_volumes
+                db_indent = indent
+            continue
+
+        if _is_compose_section_boundary(stripped, indent, db_indent):
+            break
+
+        if state == search_volumes:
+            if stripped == "volumes:":
+                state = scan_mounts
+                volumes_indent = indent
+            continue
+
+        if indent <= volumes_indent and not stripped.startswith("-"):
+            state = search_volumes
+            continue
+
+        mount = _extract_compose_mount(stripped)
+        if mount is None:
+            continue
+
+        if ":/var/lib/postgresql/data" in mount:
+            has_legacy_mount = True
+        if mount.endswith(":/var/lib/postgresql") or ":/var/lib/postgresql:" in mount:
+            has_expected_mount = True
+
+    return has_expected_mount, has_legacy_mount
+
+
+def inspect_compose_mount(compose_path: Path) -> ComposeCheck:
+    if not compose_path.exists():
+        return ComposeCheck(
+            compatible=False,
+            has_expected_mount=False,
+            has_legacy_mount=False,
+            message=f"Compose file not found: {compose_path}",
+        )
+
+    lines = compose_path.read_text(encoding="utf-8").splitlines()
+    has_expected_mount, has_legacy_mount = _scan_compose_db_mounts(lines)
+    return _compose_scan_result(compose_path, has_expected_mount, has_legacy_mount)
 
 
 def _docker_check() -> None:
@@ -404,7 +439,7 @@ def _query_scalar(container_name: str, db_user: str, db_name: str, sql: str) -> 
             "-d",
             db_name,
             "-v",
-            "ON_ERROR_STOP=1",
+            PSQL_ON_ERROR_STOP,
             "-Atqc",
             sql,
         ]
@@ -656,7 +691,7 @@ def restore_dump(config: MigrationConfig, dump_path: Path, container_name: str) 
                 "-d",
                 "postgres",
                 "-v",
-                "ON_ERROR_STOP=1",
+                PSQL_ON_ERROR_STOP,
             ],
             stdin=handle,
             capture_output=False,
@@ -672,7 +707,7 @@ def restore_dump(config: MigrationConfig, dump_path: Path, container_name: str) 
             "-d",
             config.db_name,
             "-v",
-            "ON_ERROR_STOP=1",
+            PSQL_ON_ERROR_STOP,
             "-c",
             "ANALYZE;",
         ]
