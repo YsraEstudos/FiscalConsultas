@@ -3,22 +3,22 @@ import { act, render, screen, fireEvent } from '@testing-library/react';
 import { SearchHighlighter } from '../../src/components/SearchHighlighter';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+function createRect(top: number): DOMRect {
+    return {
+        x: 0,
+        y: top,
+        top,
+        bottom: top + 10,
+        left: 0,
+        right: 10,
+        width: 10,
+        height: 10,
+        toJSON: () => ({}),
+    } as DOMRect;
+}
+
 describe('SearchHighlighter', () => {
     let containerRef: React.RefObject<HTMLElement>;
-
-    function createRect(top: number): DOMRect {
-        return {
-            x: 0,
-            y: top,
-            top,
-            bottom: top + 10,
-            left: 0,
-            right: 10,
-            width: 10,
-            height: 10,
-            toJSON: () => ({}),
-        } as DOMRect;
-    }
 
     beforeEach(() => {
         // Setup a fake container with some chapters and paragraphs
