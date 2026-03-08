@@ -4,7 +4,7 @@
     bottom: 2rem;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 1000;
+    z-index: 9999;
     background: var(--bg-primary, #fff);
     border: 1px solid var(--border-color, rgb(0 0 0 / 10%));
     border-radius: 12px;
@@ -68,6 +68,47 @@
     background: var(--bg-tertiary, rgb(0 0 0 / 5%));
     padding: 0.2rem 0.6rem;
     border-radius: 6px;
+}
+
+.highSubpositionJump {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-right: 0.75rem;
+    border-right: 1px solid var(--border-color);
+}
+
+.highSubpositionSelect {
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    max-width: 15rem;
+    cursor: pointer;
+}
+
+.highSubpositionSelect:focus {
+    outline: none;
+    border-color: var(--success);
+}
+
+.highLegend {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-left: 0.5rem;
+}
+
+.highLegendDot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--success, #10b981);
+    box-shadow: 0 0 4px var(--success, #10b981);
 }
 
 .termsContainer {
