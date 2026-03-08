@@ -174,6 +174,41 @@ async def test_fts_postgres_maps_score_and_sends_tenant_param(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_fts_postgres_uses_to_tsquery_for_prefix_or_queries(monkeypatch):
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.position_repository.settings.database.engine",
+        "postgresql",
+    )
+    session = _FakeSession(
+        [_FakeResult(rows=[]), _FakeResult(rows=[]), _FakeResult(rows=[])]
+    )
+    repo = PositionRepository(session)
+
+    await repo._fts_postgres("motor* OR centrif*", 5)
+
+    stmt, params = session.calls[0]
+    stmt_text = str(stmt)
+    assert "to_tsquery('portuguese', :tsquery)" in stmt_text
+    assert params == {"tsquery": "motor:* | centrif:*", "limit": 5}
+
+    await repo._fts_postgres("*", 7)
+
+    stmt, params = session.calls[1]
+    stmt_text = str(stmt)
+    assert "NULL::tsquery" in stmt_text
+    assert "to_tsquery('portuguese', :tsquery)" not in stmt_text
+    assert params == {"limit": 7}
+
+    await repo._fts_postgres("* OR *", 9)
+
+    stmt, params = session.calls[2]
+    stmt_text = str(stmt)
+    assert "NULL::tsquery" in stmt_text
+    assert "to_tsquery('portuguese', :tsquery)" not in stmt_text
+    assert params == {"limit": 9}
+
+
+@pytest.mark.asyncio
 async def test_fts_sqlite_maps_rank_to_positive_score(monkeypatch):
     monkeypatch.setattr(
         "backend.infrastructure.repositories.position_repository.settings.database.engine",
