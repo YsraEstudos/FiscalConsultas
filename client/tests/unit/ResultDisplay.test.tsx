@@ -27,8 +27,22 @@ vi.mock('../../src/components/Sidebar', () => ({
 }));
 
 vi.mock('../../src/components/SearchHighlighter', () => ({
-    SearchHighlighter: ({ query }: { query?: string | null }) => (
-        <div data-testid="search-highlighter">{query || ''}</div>
+    SearchHighlighter: ({
+        query,
+        onHighlightScrollComplete,
+    }: {
+        query?: string | null;
+        onHighlightScrollComplete?: (scrollTop: number) => void;
+    }) => (
+        <div data-testid="search-highlighter">
+            <span>{query || ''}</span>
+            <button
+                data-testid="search-highlighter-complete"
+                onClick={() => onHighlightScrollComplete?.(321)}
+            >
+                complete-highlight-scroll
+            </button>
+        </div>
     )
 }));
 
@@ -189,6 +203,49 @@ describe('ResultDisplay Component', () => {
         await waitFor(() => {
             expect(screen.getByTestId('search-highlighter')).toHaveTextContent('motor');
         });
+    });
+
+    it('consumes a new text-originated search when SearchHighlighter reports scroll completion', async () => {
+        const onConsumeNewSearch = vi.fn();
+        const mockData = {
+            type: 'code' as const,
+            query: '8422',
+            markdown: '<h3 id="pos-84-22">84.22</h3><p>Motor no capitulo</p>',
+            resultados: {
+                '84': {
+                    capitulo: '84',
+                    posicao_alvo: '84.22',
+                    posicoes: [
+                        { codigo: '84.22', ncm: '8422', descricao: 'Maquina de lavar', anchor_id: 'pos-84-22' }
+                    ]
+                }
+            }
+        };
+
+        render(
+            <AuthProvider>
+                <SettingsProvider>
+                    <ResultDisplay
+                        data={mockData as any}
+                        latestTextQuery="motor"
+                        mobileMenuOpen={false}
+                        onCloseMobileMenu={vi.fn()}
+                        isActive={true}
+                        tabId="tab-highlight-complete"
+                        isNewSearch={true}
+                        onConsumeNewSearch={onConsumeNewSearch}
+                    />
+                </SettingsProvider>
+            </AuthProvider>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('search-highlighter')).toHaveTextContent('motor');
+        });
+
+        fireEvent.click(screen.getByTestId('search-highlighter-complete'));
+
+        expect(onConsumeNewSearch).toHaveBeenCalledWith('tab-highlight-complete', 321);
     });
 
     it('persists scroll position when tab becomes inactive', async () => {

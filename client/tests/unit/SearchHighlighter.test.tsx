@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import { SearchHighlighter } from '../../src/components/SearchHighlighter';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -29,6 +29,7 @@ describe('SearchHighlighter', () => {
         if (containerRef.current) {
             containerRef.current.remove();
         }
+        vi.useRealTimers();
         vi.restoreAllMocks();
     });
 
@@ -38,12 +39,13 @@ describe('SearchHighlighter', () => {
                 query="motor centrífugo"
                 contentContainerRef={containerRef}
                 isContentReady={true}
+                isFullyRendered={true}
             />
         );
 
         // O Match Alto deve aparecer porque o cap-2 tem 'motor' e 'centrífugo' no mesmo <p>
-        const matchLabel = await screen.findByText("Match Alto");
-        expect(matchLabel).toBeInTheDocument();
+        const matchLabels = await screen.findAllByText("Match Alto");
+        expect(matchLabels.length).toBeGreaterThan(0);
         expect(screen.getByText("1 subposição com alta correspondência")).toBeInTheDocument();
 
         // Verifica a quantidade de pill terms
@@ -72,6 +74,7 @@ describe('SearchHighlighter', () => {
                 query="motor centrífugo"
                 contentContainerRef={testContainerRef as React.RefObject<HTMLElement>}
                 isContentReady={true}
+                isFullyRendered={true}
             />
         );
 
@@ -95,10 +98,12 @@ describe('SearchHighlighter', () => {
                 query="motor centrífugo"
                 contentContainerRef={testContainerRef as React.RefObject<HTMLElement>}
                 isContentReady={true}
+                isFullyRendered={true}
             />
         );
 
-        expect(await screen.findByText("Match Alto")).toBeInTheDocument();
+        const matchLabels = await screen.findAllByText("Match Alto");
+        expect(matchLabels.length).toBeGreaterThan(0);
         expect(screen.getByText("1 subposição com alta correspondência")).toBeInTheDocument();
     });
 
@@ -119,6 +124,7 @@ describe('SearchHighlighter', () => {
                 query="motor centrífugo"
                 contentContainerRef={testContainerRef as React.RefObject<HTMLElement>}
                 isContentReady={true}
+                isFullyRendered={true}
             />
         );
 
@@ -141,6 +147,7 @@ describe('SearchHighlighter', () => {
                 query="motor"
                 contentContainerRef={containerRef}
                 isContentReady={true}
+                isFullyRendered={true}
             />
         );
 
@@ -163,6 +170,41 @@ describe('SearchHighlighter', () => {
         expect(progress).toBeInTheDocument();
     });
 
+    it('notifica quando o scroll inicial da busca termina', async () => {
+        vi.useFakeTimers();
+
+        const scrollCompleteSpy = vi.fn();
+        const scrollContainer = document.createElement('div');
+        scrollContainer.appendChild(containerRef.current!);
+        scrollContainer.scrollTop = 0;
+
+        const scrollSpy = vi
+            .spyOn(globalThis.HTMLElement.prototype, 'scrollIntoView')
+            .mockImplementation(() => {
+                scrollContainer.scrollTop = 180;
+                scrollContainer.dispatchEvent(new Event('scroll'));
+            });
+
+        render(
+            <SearchHighlighter
+                query="motor"
+                contentContainerRef={containerRef}
+                isContentReady={true}
+                isFullyRendered={true}
+                onHighlightScrollComplete={scrollCompleteSpy}
+            />
+        );
+
+        expect(screen.getByText("1 / 2")).toBeInTheDocument();
+
+        act(() => {
+            vi.advanceTimersByTime(200);
+        });
+
+        expect(scrollSpy).toHaveBeenCalled();
+        expect(scrollCompleteSpy).toHaveBeenCalledWith(180);
+    });
+
     it('conta coocorrências em múltiplas subposições com alta correspondência', async () => {
         const div = document.createElement('div');
         div.innerHTML = `
@@ -180,6 +222,7 @@ describe('SearchHighlighter', () => {
                 query="motor centrífugo"
                 contentContainerRef={testContainerRef as React.RefObject<HTMLElement>}
                 isContentReady={true}
+                isFullyRendered={true}
             />
         );
 

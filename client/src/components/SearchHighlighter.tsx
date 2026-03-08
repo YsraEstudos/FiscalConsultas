@@ -23,6 +23,7 @@ interface SearchHighlighterProps {
     contentContainerRef: React.RefObject<HTMLElement | null>;
     isContentReady: boolean;
     isFullyRendered?: boolean;
+    onHighlightScrollComplete?: (scrollTop: number) => void;
 }
 
 // Block elements that usually denote a "paragraph" or chunk of meaning
@@ -177,7 +178,55 @@ function hasChapterLevelCoOccurrence(chapterTermMap: Map<HTMLElement, Set<string
     return false;
 }
 
-export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, contentContainerRef, isContentReady, isFullyRendered }) => {
+function resolveScrollContainer(contentContainer: HTMLElement): HTMLElement {
+    const parent = contentContainer.parentElement;
+    return parent instanceof HTMLElement ? parent : contentContainer;
+}
+
+function notifyAfterScrollSettles(
+    scrollContainer: HTMLElement,
+    onComplete?: (scrollTop: number) => void
+): () => void {
+    if (!onComplete) {
+        return () => undefined;
+    }
+
+    let finished = false;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const finish = () => {
+        if (finished) return;
+        finished = true;
+        scrollContainer.removeEventListener('scroll', handleScroll);
+        if (settleTimer !== null) {
+            clearTimeout(settleTimer);
+        }
+        onComplete(scrollContainer.scrollTop);
+    };
+
+    const scheduleFinish = () => {
+        if (settleTimer !== null) {
+            clearTimeout(settleTimer);
+        }
+        settleTimer = setTimeout(finish, 120);
+    };
+
+    const handleScroll = () => {
+        scheduleFinish();
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+    scheduleFinish();
+    return finish;
+}
+
+export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({
+    query,
+    contentContainerRef,
+    isContentReady,
+    isFullyRendered,
+    onHighlightScrollComplete,
+}) => {
     const [matches, setMatches] = useState<Record<string, MatchInstance[]>>({});
     const [terms, setTerms] = useState<string[]>([]);
     const [activeTerm, setActiveTerm] = useState<string | null>(null);
@@ -188,10 +237,34 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
     const [highSubpositionKeys, setHighSubpositionKeys] = useState<string[]>([]);
     const [isVisible, setIsVisible] = useState(true);
     const hasAutoJumpedRef = React.useRef(false);
+    const pendingScrollCompletionCleanupRef = React.useRef<(() => void) | null>(null);
+
+    const clearPendingScrollCompletion = useCallback(() => {
+        pendingScrollCompletionCleanupRef.current?.();
+        pendingScrollCompletionCleanupRef.current = null;
+    }, []);
+
+    const reportHighlightScrollCompletion = useCallback(() => {
+        const contentContainer = contentContainerRef.current;
+        if (!contentContainer) {
+            onHighlightScrollComplete?.(0);
+            return;
+        }
+
+        clearPendingScrollCompletion();
+        const scrollContainer = resolveScrollContainer(contentContainer);
+        pendingScrollCompletionCleanupRef.current = notifyAfterScrollSettles(
+            scrollContainer,
+            onHighlightScrollComplete,
+        );
+    }, [clearPendingScrollCompletion, contentContainerRef, onHighlightScrollComplete]);
 
     useEffect(() => {
         hasAutoJumpedRef.current = false;
+        clearPendingScrollCompletion();
     }, [query]);
+
+    useEffect(() => () => clearPendingScrollCompletion(), [clearPendingScrollCompletion]);
 
     const normalizedTerms = useMemo(() => {
         const trimmedQuery = query?.trim() ?? '';
@@ -529,22 +602,24 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
             el.classList.add('search-highlight-partial');
         });
 
-        if (highSubpositionKeys.length === 0) return;
+        const hasHighSubpositionTargets = highSubpositionKeys.length > 0;
 
-        // Apply classes
-        highSubpositionKeys.forEach(id => {
-            const section = container.querySelector(`[id="${CSS.escape(id)}"]`);
-            if (section) {
-                section.classList.add('high-correspondence-zone');
-                section.querySelectorAll('mark.search-highlight').forEach(mark => {
-                    mark.classList.remove('search-highlight-partial');
-                    mark.classList.add('search-highlight-high');
-                });
-            }
-        });
+        if (hasHighSubpositionTargets) {
+            // Apply classes
+            highSubpositionKeys.forEach(id => {
+                const section = container.querySelector(`[id="${CSS.escape(id)}"]`);
+                if (section) {
+                    section.classList.add('high-correspondence-zone');
+                    section.querySelectorAll('mark.search-highlight').forEach(mark => {
+                        mark.classList.remove('search-highlight-partial');
+                        mark.classList.add('search-highlight-high');
+                    });
+                }
+            });
+        }
 
         // Auto-Jump Logic
-        if (normalizedTerms.length > 1 && !hasAutoJumpedRef.current) {
+        if (normalizedTerms.length > 1 && hasHighSubpositionTargets && !hasAutoJumpedRef.current) {
             hasAutoJumpedRef.current = true;
             // Heuristics: filter out generic chapters like "Partes"
             const jumpCandidates = highSubpositionKeys.filter(id => {
@@ -561,19 +636,23 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
                     setTimeout(() => {
                         // Rola para o centro para evitar corte no topo do container
                         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        reportHighlightScrollCompletion();
                     }, 50); // slight delay to allow rendering
                 }
             }
-        } else if (!hasAutoJumpedRef.current && (matches[activeTerm ?? '']?.length ?? 0) > 0) {
+        } else if (normalizedTerms.length === 1 && !hasAutoJumpedRef.current && (matches[activeTerm ?? '']?.length ?? 0) > 0) {
             // Fallback for single-term search: just scroll to first match
             hasAutoJumpedRef.current = true;
             const match = matches[activeTerm ?? '']?.[0];
             if (match?.node) {
-                 setTimeout(() => match.node.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+                setTimeout(() => {
+                    match.node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    reportHighlightScrollCompletion();
+                }, 50);
             }
         }
 
-    }, [highSubpositionKeys, isFullyRendered, normalizedTerms.length, contentContainerRef, matches, activeTerm]);
+    }, [activeTerm, contentContainerRef, highSubpositionKeys, isFullyRendered, matches, normalizedTerms.length, reportHighlightScrollCompletion]);
 
     // Handle scroll to active match
     useEffect(() => {
@@ -688,7 +767,7 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
                     >
                         <option value="" disabled>Ir para subposição alta...</option>
                         {highSubpositionKeys.map((id) => {
-                            const cleanLabel = id.replace(/^(pos|cap|chapter)-/, '').replace(/-/g, '.');
+                            const cleanLabel = id.replace(/^(pos|cap|chapter)-/, '').replaceAll('-', '.');
                             return (
                                 <option key={id} value={id}>
                                     Subposição {cleanLabel}

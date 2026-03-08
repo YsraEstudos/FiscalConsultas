@@ -116,16 +116,16 @@ describe('ResultDisplay advanced behavior', () => {
     intersectionCallbacks = [];
 
     // @ts-expect-error - test bridge
-    window.nesh = { smartLinkSearch: vi.fn(), openTextResultInNewTab: vi.fn() };
+    globalThis.nesh = { smartLinkSearch: vi.fn(), openTextResultInNewTab: vi.fn() };
 
     scrollIntoViewMock = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoViewMock;
 
-    rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+    rafSpy = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
       cb(0);
       return 1;
     });
-    cancelRafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
+    cancelRafSpy = vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => undefined);
 
     requestIdleCallbackMock = vi.fn((cb: any) => {
       cb({ didTimeout: false, timeRemaining: () => 20 });
@@ -157,7 +157,7 @@ describe('ResultDisplay advanced behavior', () => {
     vi.restoreAllMocks();
   });
 
-  it('forwards text result clicks to window.nesh.openTextResultInNewTab with the preserved text query', () => {
+  it('forwards text result clicks to globalThis.nesh.openTextResultInNewTab with the preserved text query', () => {
     render(
       <ResultDisplay
         data={{ type: 'text', results: [{ ncm: '8517' } as any], query: 'telefone' }}
@@ -172,8 +172,8 @@ describe('ResultDisplay advanced behavior', () => {
     );
 
     fireEvent.click(screen.getByTestId('text-result-click'));
-    expect((window as any).nesh.openTextResultInNewTab).toHaveBeenCalledWith('8517', 'motor centrif');
-    expect((window as any).nesh.smartLinkSearch).not.toHaveBeenCalled();
+    expect((globalThis as any).nesh.openTextResultInNewTab).toHaveBeenCalledWith('8517', 'motor centrif');
+    expect((globalThis as any).nesh.smartLinkSearch).not.toHaveBeenCalled();
   });
 
   it('falls back to the backend query when latestTextQuery is missing', () => {
@@ -190,7 +190,7 @@ describe('ResultDisplay advanced behavior', () => {
     );
 
     fireEvent.click(screen.getByTestId('text-result-click'));
-    expect((window as any).nesh.openTextResultInNewTab).toHaveBeenCalledWith('8517', 'telefone industrial');
+    expect((globalThis as any).nesh.openTextResultInNewTab).toHaveBeenCalledWith('8517', 'telefone industrial');
   });
 
   it('renders TIPI fallback, applies aliquot classes and toggles sidebar', async () => {
@@ -341,6 +341,43 @@ describe('ResultDisplay advanced behavior', () => {
       shouldScrollCall?.onComplete(false);
     });
     expect(onConsumeNewSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps robust auto-scroll enabled as a fallback when a text query also activates SearchHighlighter', async () => {
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '8517',
+          markdown: '<h3 id="pos-85-17">Item 8517</h3><p>Motor no capitulo</p>',
+          resultados: {
+            '85': {
+              capitulo: '85',
+              posicao_alvo: '85.17',
+              posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-autoscroll-fallback"
+        latestTextQuery="motor"
+        isNewSearch={true}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        hoisted.robustCallsRef.value.some(
+          (call) => call.shouldScroll === true
+            && (Array.isArray(call.targetId)
+              ? call.targetId.includes('pos-85-17')
+              : call.targetId === 'pos-85-17'),
+        ),
+      ).toBe(true);
+    });
   });
 
   it('assigns fallback id via data-ncm and syncs active anchor from intersection', async () => {

@@ -1003,6 +1003,11 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         const candidate = (latestTextQuery || '').trim();
         return candidate || null;
     }, [latestTextQuery]);
+    const searchHighlighterOwnsScroll = data?.type === 'text' && !!searchHighlighterQuery;
+    const consumeNewSearchKey = useMemo(
+        () => `${tabId}|${isNewSearch ? '1' : '0'}|${data?.query ?? ''}|${data?.ncm ?? ''}|${latestTextQuery ?? ''}`,
+        [data?.ncm, data?.query, isNewSearch, latestTextQuery, tabId],
+    );
 
     // Sidebar Navigation Handler
     const handleNavigate = useCallback((targetId: string) => {
@@ -1059,9 +1064,13 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     }, [onConsumeNewSearch]);
 
     const onPersistScrollRef = useRef(onPersistScroll);
+    const hasConsumedNewSearchRef = useRef(false);
     useEffect(() => {
         onPersistScrollRef.current = onPersistScroll;
     }, [onPersistScroll]);
+    useEffect(() => {
+        hasConsumedNewSearchRef.current = false;
+    }, [consumeNewSearchKey]);
     useEffect(() => {
         onContentReadyRef.current = onContentReady;
     }, [onContentReady]);
@@ -1087,22 +1096,33 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         setActiveTerm(prev => (prev === normalizedLatestTextQuery ? prev : normalizedLatestTextQuery));
     }, [latestTextQuery, data?.query, tabId]);
 
+    const consumeNewSearchScroll = useCallback((scrollTop?: number) => {
+        if (hasConsumedNewSearchRef.current) return;
+        hasConsumedNewSearchRef.current = true;
+        onConsumeNewSearchRef.current(tabId, scrollTop);
+    }, [tabId]);
+
     const handleAutoScrollComplete = useCallback((success?: boolean) => {
         if (!success) return;
         // Wrap in RAF to ensure DOM has updated/painted the scroll action
         // before we capture the final position and update app state.
         requestAnimationFrame(() => {
             const currentScroll = containerRef.current?.scrollTop || 0;
-            onConsumeNewSearchRef.current(tabId, currentScroll);
+            consumeNewSearchScroll(currentScroll);
         });
-    }, [tabId]); // Empty deps = stable reference
+    }, [consumeNewSearchScroll]);
+
+    const handleHighlightScrollComplete = useCallback((scrollTop: number) => {
+        if (!isActive || !isNewSearch) return;
+        consumeNewSearchScroll(scrollTop);
+    }, [consumeNewSearchScroll, isActive, isNewSearch]);
 
     // Hook handles the heavy lifting (MutationObserver, retries, etc)
     // Only auto-scroll when:
     // 1. Tab is active
     // 2. This is a NEW search (not returning to existing tab)
-    // 3. AND it's not a text query (if it is, SearchHighlighter takes over)
-    const shouldAutoScroll = !!targetId && isActive && isNewSearch && isContentReady && data?.type !== 'text' && !searchHighlighterQuery;
+    // 3. Let SearchHighlighter take precedence for text-result tabs, but keep anchor scroll as fallback elsewhere
+    const shouldAutoScroll = !!targetId && isActive && isNewSearch && isContentReady && !searchHighlighterOwnsScroll;
     useRobustScroll({
         targetId,
         shouldScroll: shouldAutoScroll,
@@ -1110,18 +1130,6 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         onComplete: handleAutoScrollComplete,
         expectedTags: ['H1', 'H2', 'H3', 'H4', 'ARTICLE', 'SECTION', 'DIV']
     });
-
-    // If it's a text query, we need to consume the "new search" flag so it doesn't stay stuck
-    useEffect(() => {
-        if (isActive && isNewSearch && searchHighlighterQuery && isFullyRendered) {
-            // Delay consumption so SearchHighlighter has time to do its 50ms setTimeout scroll
-            const timer = setTimeout(() => {
-                const currentScroll = containerRef.current?.scrollTop || 0;      
-                onConsumeNewSearchRef.current(tabId, currentScroll);
-            }, 300);
-            return () => clearTimeout(timer);
-        }
-    }, [isActive, isNewSearch, searchHighlighterQuery, isFullyRendered, tabId]);
 
     // Track scroll position for persistence
     useEffect(() => {
@@ -1326,7 +1334,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                 <TextSearchResults
                     results={(data.results as SearchResultItem[]) || null}
                     query={latestTextQuery || data.query || ""}
-                    onResultClick={(ncm: string) => window.nesh.openTextResultInNewTab(ncm, latestTextQuery || data.query || '')}
+                    onResultClick={(ncm: string) => globalThis.nesh.openTextResultInNewTab(ncm, latestTextQuery || data.query || '')}
                     scrollParentRef={containerRef}
                 />
             </div>
@@ -1393,6 +1401,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                     contentContainerRef={contentRef}
                     isContentReady={isContentReady}
                     isFullyRendered={isFullyRendered}
+                    onHighlightScrollComplete={handleHighlightScrollComplete}
                 />
             )}
 

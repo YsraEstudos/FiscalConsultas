@@ -13,6 +13,8 @@ declare module '*.css' {
 }
 
 declare global {
+    var nesh: Window['nesh'];
+
     interface Window {
         nesh: {
             smartLinkSearch: (ncm: string) => void;
