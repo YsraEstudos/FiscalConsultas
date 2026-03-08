@@ -6,6 +6,20 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 describe('SearchHighlighter', () => {
     let containerRef: React.RefObject<HTMLElement>;
 
+    function createRect(top: number): DOMRect {
+        return {
+            x: 0,
+            y: top,
+            top,
+            bottom: top + 10,
+            left: 0,
+            right: 10,
+            width: 10,
+            height: 10,
+            toJSON: () => ({}),
+        } as DOMRect;
+    }
+
     beforeEach(() => {
         // Setup a fake container with some chapters and paragraphs
         const div = document.createElement('div');
@@ -168,6 +182,49 @@ describe('SearchHighlighter', () => {
         fireEvent.click(prevBtn);
         progress = screen.getByText("1 / 2");
         expect(progress).toBeInTheDocument();
+    });
+
+    it('seleciona a ocorrencia inicial mais proxima usando a posicao relativa ao scroll container', async () => {
+        const scrollContainer = document.createElement('div');
+        scrollContainer.scrollTop = 300;
+
+        const div = document.createElement('div');
+        div.innerHTML = `
+            <div id="first-paragraph"><p>Motor inicial</p></div>
+            <div id="second-paragraph"><p>Motor mais proximo da area visivel</p></div>
+        `;
+        scrollContainer.appendChild(div);
+        document.body.appendChild(scrollContainer);
+
+        const testContainerRef = { current: div } as React.RefObject<HTMLElement>;
+        const rectSpy = vi.spyOn(globalThis.HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function(this: HTMLElement) {
+            if (this === scrollContainer) {
+                return createRect(0);
+            }
+            if (this.tagName === 'MARK' && this.dataset.shTerm === 'motor') {
+                if (this.closest('#first-paragraph')) {
+                    return createRect(-260);
+                }
+                if (this.closest('#second-paragraph')) {
+                    return createRect(20);
+                }
+            }
+            return createRect(0);
+        });
+
+        render(
+            <SearchHighlighter
+                query="motor"
+                contentContainerRef={testContainerRef}
+                isContentReady={true}
+                isFullyRendered={true}
+            />
+        );
+
+        expect(await screen.findByText("2 / 2")).toBeInTheDocument();
+
+        rectSpy.mockRestore();
+        scrollContainer.remove();
     });
 
     it('notifica quando o scroll inicial da busca termina', async () => {

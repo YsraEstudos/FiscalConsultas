@@ -183,6 +183,12 @@ function resolveScrollContainer(contentContainer: HTMLElement): HTMLElement {
     return parent instanceof HTMLElement ? parent : contentContainer;
 }
 
+function getNodeTopWithinScrollContainer(node: HTMLElement, scrollContainer: HTMLElement): number {
+    const nodeRect = node.getBoundingClientRect();
+    const containerRect = scrollContainer.getBoundingClientRect();
+    return (nodeRect.top - containerRect.top) + scrollContainer.scrollTop;
+}
+
 function notifyAfterScrollSettles(
     scrollContainer: HTMLElement,
     onComplete?: (scrollTop: number) => void
@@ -479,7 +485,8 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({
 
         // Ao invés de sempre começar no índice 0 (topo), procuramos o match visualmente mais próximo da tela atual
         // Para isso, pegamos a posição do scrollContainer
-        const containerScrollTop = contentContainerRef.current?.parentElement?.scrollTop || 0;
+        const scrollContainer = resolveScrollContainer(container);
+        const containerScrollTop = scrollContainer.scrollTop || 0;
         
         normalizedTerms.forEach(term => {
             indices[term] = 0; // fallback default is 0
@@ -490,9 +497,8 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({
                  let closestIndex = 0;
                  let minDiff = Infinity;
                  newMatches[term].forEach((m, idx) => {
-                     // Get roughly the offset relative to container
-                     const offsetTop = m.node.offsetTop || 0;
-                     const diff = Math.abs(offsetTop - containerScrollTop);
+                     const relativeTop = getNodeTopWithinScrollContainer(m.node, scrollContainer);
+                     const diff = Math.abs(relativeTop - containerScrollTop);
                      if (diff < minDiff) {
                          minDiff = diff;
                          closestIndex = idx;
