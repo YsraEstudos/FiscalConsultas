@@ -184,20 +184,18 @@ describe('ResultDisplay Component', () => {
         };
 
         render(
-            <AuthProvider>
-                <SettingsProvider>
-                    <ResultDisplay
-                        data={mockData as any}
-                        latestTextQuery="motor"
-                        mobileMenuOpen={false}
-                        onCloseMobileMenu={vi.fn()}
-                        isActive={true}
-                        tabId="tab-1"
-                        isNewSearch={false}
-                        onConsumeNewSearch={vi.fn()}
-                    />
-                </SettingsProvider>
-            </AuthProvider>
+            <SettingsProvider>
+                <ResultDisplay
+                    data={mockData as any}
+                    latestTextQuery="motor"
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={true}
+                    tabId="tab-1"
+                    isNewSearch={false}
+                    onConsumeNewSearch={vi.fn()}
+                />
+            </SettingsProvider>
         );
 
         await waitFor(() => {
@@ -223,20 +221,18 @@ describe('ResultDisplay Component', () => {
         };
 
         render(
-            <AuthProvider>
-                <SettingsProvider>
-                    <ResultDisplay
-                        data={mockData as any}
-                        latestTextQuery="motor"
-                        mobileMenuOpen={false}
-                        onCloseMobileMenu={vi.fn()}
-                        isActive={true}
-                        tabId="tab-highlight-complete"
-                        isNewSearch={true}
-                        onConsumeNewSearch={onConsumeNewSearch}
-                    />
-                </SettingsProvider>
-            </AuthProvider>
+            <SettingsProvider>
+                <ResultDisplay
+                    data={mockData as any}
+                    latestTextQuery="motor"
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={true}
+                    tabId="tab-highlight-complete"
+                    isNewSearch={true}
+                    onConsumeNewSearch={onConsumeNewSearch}
+                />
+            </SettingsProvider>
         );
 
         await waitFor(() => {
