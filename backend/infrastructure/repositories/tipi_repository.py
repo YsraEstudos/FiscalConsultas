@@ -14,6 +14,7 @@ from ...config.settings import settings
 from ...domain.sqlmodels import TipiPosition
 from ...infrastructure.db_engine import tenant_context
 from ...utils.id_utils import generate_anchor_id
+from .postgres_fts import build_postgres_tsquery
 
 
 class TipiRepository:
@@ -163,19 +164,20 @@ class TipiRepository:
 
     async def _fts_postgres(self, query: str, limit: int) -> List[Dict[str, Any]]:
         """FTS usando tsvector do PostgreSQL."""
-        stmt = text("""
+        tsquery = build_postgres_tsquery(query)
+        stmt = text(f"""
             SELECT
                 codigo as ncm,
                 chapter_num as capitulo,
                 descricao,
                 aliquota,
-                ts_rank(search_vector, plainto_tsquery('portuguese', :query)) as score
+                ts_rank(search_vector, {tsquery.sql}) as score
             FROM tipi_positions
-            WHERE search_vector @@ plainto_tsquery('portuguese', :query)
+            WHERE search_vector @@ {tsquery.sql}
             ORDER BY score DESC
             LIMIT :limit
         """)
-        result = await self.session.execute(stmt, {"query": query, "limit": limit})
+        result = await self.session.execute(stmt, {**tsquery.params, "limit": limit})
         return [
             {
                 "ncm": row.ncm,

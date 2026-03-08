@@ -16,6 +16,7 @@ import {
     deleteMyAccount,
 } from '../services/api';
 import styles from './UserProfilePage.module.css';
+import { canAccessRestrictedUi } from '../utils/featureAccess';
 
 interface UserProfilePageProps {
     isOpen: boolean;
@@ -167,6 +168,7 @@ function ContributionsSection({
 export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePageProps>) {
     const { userName, userEmail, userImageUrl } = useAuth();
     const isAdmin = useIsAdmin();
+    const canUseRestrictedUi = canAccessRestrictedUi(userEmail);
 
     const [activeTab, setActiveTab] = useState<TabKey>('profile');
     const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -267,6 +269,11 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
     }, []);
 
     useEffect(() => {
+        if (!canUseRestrictedUi && activeTab === 'contributions') {
+            setActiveTab('profile');
+            return undefined;
+        }
+
         if (isOpen && activeTab === 'contributions') {
             fetchContributions(contribPage, contribSearch);
             return () => {
@@ -274,7 +281,7 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
             };
         }
         return undefined;
-    }, [isOpen, activeTab, contribPage, contribSearch, fetchContributions]);
+    }, [canUseRestrictedUi, isOpen, activeTab, contribPage, contribSearch, fetchContributions]);
 
     if (!isOpen) return null;
 
@@ -312,9 +319,9 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
         }
     };
 
-    const tabs: { key: TabKey; label: string; icon: string; adminOnly?: boolean }[] = [
+    const tabs: { key: TabKey; label: string; icon: string; adminOnly?: boolean; restrictedEmailOnly?: boolean }[] = [
         { key: 'profile', label: 'Perfil', icon: '👤' },
-        { key: 'contributions', label: 'Contribuições', icon: '💬' },
+        { key: 'contributions', label: 'Contribuições', icon: '💬', restrictedEmailOnly: true },
         { key: 'sessions', label: 'Sessões', icon: '🔐' },
         { key: 'organization', label: 'Organização', icon: '🏢', adminOnly: true },
     ];
@@ -343,7 +350,7 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
                 {/* Tabs */}
                 <div className={styles.tabs}>
                     {tabs
-                        .filter(t => !t.adminOnly || isAdmin)
+                        .filter(t => (!t.adminOnly || isAdmin) && (!t.restrictedEmailOnly || canUseRestrictedUi))
                         .map(t => (
                             <button
                                 key={t.key}
@@ -575,3 +582,4 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
         </div>
     );
 }
+
