@@ -19,6 +19,7 @@ import type { PendingCommentEntry } from './CommentPanel';
 import { useAuth } from '../context/AuthContext';
 import { useComments } from '../hooks/useComments';
 import toast from 'react-hot-toast';
+import { canAccessRestrictedUi } from '../utils/featureAccess';
 
 const sanitizeHtml = (html: string) => DOMPurify.sanitize(html, {
     ALLOW_DATA_ATTR: true,
@@ -724,8 +725,9 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     onContentReady
 }: ResultDisplayProps) {
     const { sidebarPosition } = useSettings();
-    const { userName, userImageUrl, isSignedIn, isLoading: isAuthLoading, userId } = useAuth();
+    const { userName, userImageUrl, isSignedIn, isLoading: isAuthLoading, userId, userEmail } = useAuth();
     const containerRef = useRef<HTMLDivElement>(null);
+    const canUseRestrictedUi = canAccessRestrictedUi(userEmail);
     const [targetId, setTargetId] = useState<string | string[] | null>(null);
     const latestScrollTopRef = useRef(0);
     const lastPersistedScrollRef = useRef<number | null>(null);
@@ -756,6 +758,10 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             toast.error('Faça login para usar comentários.');
             return;
         }
+        if (!canUseRestrictedUi) {
+            toast.error('Seu usuário não tem acesso a comentários.');
+            return;
+        }
         if (import.meta.env.DEV && typeof window !== 'undefined') {
             const host = window.location.hostname;
             const isLanHost = host !== 'localhost' && host !== '127.0.0.1';
@@ -765,7 +771,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             }
         }
         setCommentsEnabled(prev => !prev);
-    }, [isSignedIn, isAuthLoading]);
+    }, [canUseRestrictedUi, isSignedIn, isAuthLoading]);
 
     const contentRef = useRef<HTMLDivElement>(null);
     const { selection, clearSelection, onPopoverMouseDown } = useTextSelection(contentRef);
@@ -831,9 +837,16 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         setPendingComment(null);
     }, []);
 
+    useEffect(() => {
+        if (canUseRestrictedUi) return;
+        setCommentsEnabled(false);
+        setPendingComment(null);
+        setDrawerOpen(false);
+    }, [canUseRestrictedUi]);
+
     // ── Carregar anchors com comentários quando ativado ────────────────────
     useEffect(() => {
-        if (!commentsEnabled) {
+        if (!canUseRestrictedUi || !commentsEnabled) {
             commentedAnchorsLoadedRef.current = false;
             return;
         }
@@ -843,7 +856,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
         commentedAnchorsLoadedRef.current = true;
         void loadCommentedAnchors();
-    }, [commentsEnabled, loadCommentedAnchors, isSignedIn, isAuthLoading]);
+    }, [canUseRestrictedUi, commentsEnabled, loadCommentedAnchors, isSignedIn, isAuthLoading]);
 
     // ── Aplicar/remover classe .has-comment nos elementos do DOM ──────────
     useEffect(() => {
@@ -856,7 +869,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         });
 
         // Só aplica quando comments estão ativos e há anchors
-        if (!commentsEnabled || commentedAnchors.length === 0) return;
+        if (!canUseRestrictedUi || !commentsEnabled || commentedAnchors.length === 0) return;
 
         commentedAnchors.forEach(anchorKey => {
             const el = container.querySelector(`[id="${CSS.escape(anchorKey)}"]`);
@@ -864,12 +877,12 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                 el.classList.add('has-comment');
             }
         });
-    }, [commentsEnabled, commentedAnchors, isContentReady]);
+    }, [canUseRestrictedUi, commentsEnabled, commentedAnchors, isContentReady]);
 
     // ── Carregar comentários ao clicar em elemento com .has-comment ───────
     useEffect(() => {
         const container = contentRef.current;
-        if (!container || !commentsEnabled) return;
+        if (!container || !canUseRestrictedUi || !commentsEnabled) return;
 
         const handleHasCommentClick = (e: Event) => {
             const target = (e.target as HTMLElement).closest('.has-comment');
@@ -888,7 +901,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
         container.addEventListener('click', handleHasCommentClick);
         return () => container.removeEventListener('click', handleHasCommentClick);
-    }, [commentsEnabled, loadComments]);
+    }, [canUseRestrictedUi, commentsEnabled, loadComments]);
 
     // ── Reset ao mudar de conteúdo ────────────────────────────────────────
     useEffect(() => {
@@ -1309,7 +1322,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     // Text Search Rendering
     if (data.type === 'text') {
         return (
-            <div className={styles.content} ref={containerRef} id={containerId}>
+            <div className={`${styles.content} ${styles.textSearchContent}`} ref={containerRef} id={containerId}>
                 <TextSearchResults
                     results={(data.results as SearchResultItem[]) || null}
                     query={latestTextQuery || data.query || ""}
@@ -1361,7 +1374,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                 </div>
 
                 {/* Painel de Comentários (Google Docs style) — só exibido quando ativado */}
-                {commentsEnabled && (
+                {canUseRestrictedUi && commentsEnabled && (
                     <CommentPanel
                         pending={pendingComment}
                         comments={localComments}
@@ -1384,17 +1397,19 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             )}
 
             {/* Toggle de Comentários */}
-            <button
-                className={commentToggleClasses}
-                onClick={toggleComments}
-                aria-label={commentToggleLabel}
-                title={commentToggleLabel}
-            >
-                💬
-            </button>
+            {canUseRestrictedUi && (
+                <button
+                    className={commentToggleClasses}
+                    onClick={toggleComments}
+                    aria-label={commentToggleLabel}
+                    title={commentToggleLabel}
+                >
+                    💬
+                </button>
+            )}
 
             {/* Botão bolha flutuante (aparece ao selecionar texto, se comentários ativos) */}
-            {commentsEnabled && selection && (
+            {canUseRestrictedUi && commentsEnabled && selection && (
                 <HighlightPopover
                     selection={selection}
                     onRequestComment={handleOpenComment}
@@ -1403,7 +1418,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             )}
 
             {/* Drawer de Comentários — responsivo < 1280px */}
-            {commentsEnabled && (
+            {canUseRestrictedUi && commentsEnabled && (
                 <CommentDrawer
                     open={drawerOpen}
                     onClose={toggleDrawer}
@@ -1433,3 +1448,5 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         </div>
     );
 });
+
+

@@ -36,6 +36,16 @@ def _get_position_pattern(pos_code: str) -> re.Pattern:
     )
 
 
+@lru_cache(maxsize=256)
+def _get_fallback_anchor_pattern(pos_codes: tuple[str, ...]) -> re.Pattern:
+    """Cache the combined fallback-anchor regex for a stable ordered code tuple."""
+    escaped_codes = "|".join(re.escape(pos_code) for pos_code in pos_codes)
+    return re.compile(
+        rf"^\s*(?:\*\*|\*)?(?P<code>{escaped_codes})(?:\*\*|\*)?\s*(?:[-\u2013\u2014:])\s*",
+        re.MULTILINE,
+    )
+
+
 class _MultiTransformParser(HTMLParser):
     """Single-pass HTML parser that applies multiple text transforms."""
 
@@ -283,6 +293,7 @@ class HtmlRenderer:
     # Regex patterns for text-to-HTML conversion
     # Pattern: **XX.XX - Description** (bold markers optional but preferred)
     # Captures: Code (2 digits.2 digits ONLY - main positions, NOT subpositions like 8417.10)
+    # FIX: Restrict to exactly 2 digits before dot to avoid matching subpositions
     RE_NCM_HEADING = re.compile(
         r"^\s*(?:\*\*|\*)?(\d{2}\.\d{2})(?:\*\*|\*)?\s*-\s*(.+?)(?:\*\*|\*)?\s*$",
         re.MULTILINE,
@@ -799,12 +810,8 @@ class HtmlRenderer:
 
         if pending:
             code_to_anchor = dict(pending)
-            escaped_codes = "|".join(
-                re.escape(pos_code) for pos_code in code_to_anchor.keys()
-            )
-            combined_pattern = re.compile(
-                rf"^\s*(?:\*\*|\*)?(?P<code>{escaped_codes})(?:\*\*|\*)?\s*(?:[-\u2013\u2014:])\s*",
-                re.MULTILINE,
+            combined_pattern = _get_fallback_anchor_pattern(
+                tuple(code_to_anchor.keys())
             )
             injected: set[str] = set()
 
