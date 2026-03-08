@@ -1,5 +1,6 @@
 import React, { Suspense, lazy } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { canAccessRestrictedUi } from '../utils/featureAccess';
 
 // Lazy load modals
 const SettingsModal = lazy(() => import('./SettingsModal').then(module => ({ default: module.SettingsModal })));
@@ -39,7 +40,8 @@ export const ModalManager: React.FC<ModalManagerProps> = ({
     onOpenInDoc,
     onOpenInNewTab
 }) => {
-    const { isSignedIn } = useAuth();
+    const { isSignedIn, userEmail } = useAuth();
+    const canUseRestrictedUi = canAccessRestrictedUi(userEmail);
 
     return (
         <Suspense fallback={null}>
@@ -61,8 +63,7 @@ export const ModalManager: React.FC<ModalManagerProps> = ({
                 onOpenInNewTab={onOpenInNewTab}
             />
 
-            {/* AI Chat is now available for signed-in users (Clerk handles auth) */}
-            {isSignedIn && <AIChat />}
+            {isSignedIn && canUseRestrictedUi && <AIChat />}
 
             {modals.moderate && (
                 <AdminCommentModal isOpen onClose={onClose.moderate} />
