@@ -10,6 +10,7 @@ import { debug } from '../utils/debug';
 import { NeshRenderer } from '../utils/NeshRenderer';
 import { useSettings } from '../context/SettingsContext';
 import { Sidebar } from './Sidebar';
+import { SearchHighlighter } from './SearchHighlighter';
 import { useTextSelection } from '../hooks/useTextSelection';
 import { HighlightPopover } from './HighlightPopover';
 import { CommentPanel } from './CommentPanel';
@@ -363,6 +364,7 @@ type MarkupRenderOptions = {
     isContentReady: boolean;
     refs: MarkupRenderRefs;
     setIsContentReady: React.Dispatch<React.SetStateAction<boolean>>;
+    setIsFullyRendered: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 const SECTION_TYPES: ChapterSectionType[] = ['titulo', 'notas', 'consideracoes', 'definicoes'];
@@ -473,6 +475,7 @@ function renderSmallMarkup(
     cacheKey: string,
     renderedMarkupKeyRef: React.MutableRefObject<string | null>,
     setIsContentReady: React.Dispatch<React.SetStateAction<boolean>>,
+    setIsFullyRendered: React.Dispatch<React.SetStateAction<boolean>>,
 ): () => void {
     const frameId = requestAnimationFrame(() => {
         if (!contentRef.current) return;
@@ -481,6 +484,7 @@ function renderSmallMarkup(
         contentRef.current.replaceChildren(template.content);
         renderedMarkupKeyRef.current = cacheKey;
         setIsContentReady(true);
+        setIsFullyRendered(true);
     });
 
     return () => cancelAnimationFrame(frameId);
@@ -492,6 +496,7 @@ function renderChunkedMarkup(
     cacheKey: string,
     renderedMarkupKeyRef: React.MutableRefObject<string | null>,
     setIsContentReady: React.Dispatch<React.SetStateAction<boolean>>,
+    setIsFullyRendered: React.Dispatch<React.SetStateAction<boolean>>,
 ): () => void {
     const chunks = finalMarkup.split(/(?=<hr\s*\/?>)/i);
     const pendingIdleIds: number[] = [];
@@ -510,7 +515,10 @@ function renderChunkedMarkup(
         setIsContentReady(true);
 
         const enqueueChunk = (index: number) => {
-            if (index >= chunks.length) return;
+            if (index >= chunks.length) {
+                setIsFullyRendered(true);
+                return;
+            }
 
             const idleId = scheduleIdleTask(() => {
                 if (cancelled || !contentRef.current) return;
@@ -531,7 +539,7 @@ function renderChunkedMarkup(
 }
 
 function renderMarkupContent(options: MarkupRenderOptions): (() => void) | undefined {
-    const { rawMarkdown, markupToRender, isActive, isContentReady, refs, setIsContentReady } = options;
+    const { rawMarkdown, markupToRender, isActive, isContentReady, refs, setIsContentReady, setIsFullyRendered } = options;
     const container = refs.contentRef.current;
     if (!container) return undefined;
 
@@ -542,16 +550,19 @@ function renderMarkupContent(options: MarkupRenderOptions): (() => void) | undef
     if (!isActive) {
         container.textContent = '';
         setIsContentReady(false);
+        setIsFullyRendered(false);
         return undefined;
     }
 
     const isAlreadyRendered = refs.renderedMarkupKeyRef.current === cacheKey && container.childNodes.length > 0;
     if (isAlreadyRendered) {
         if (!isContentReady) setIsContentReady(true);
+        setIsFullyRendered(true);
         return undefined;
     }
 
     setIsContentReady(false);
+    setIsFullyRendered(false);
     const rawMarkup = getCachedRawMarkup(
         cacheKey,
         shouldParseMarkdown,
@@ -564,10 +575,10 @@ function renderMarkupContent(options: MarkupRenderOptions): (() => void) | undef
 
     const finalMarkup = getFinalMarkup(rawMarkdown, rawMarkup, cacheKey);
     if (finalMarkup.length <= CHUNK_SIZE_THRESHOLD) {
-        return renderSmallMarkup(refs.contentRef, finalMarkup, cacheKey, refs.renderedMarkupKeyRef, setIsContentReady);
+        return renderSmallMarkup(refs.contentRef, finalMarkup, cacheKey, refs.renderedMarkupKeyRef, setIsContentReady, setIsFullyRendered);
     }
 
-    return renderChunkedMarkup(refs.contentRef, finalMarkup, cacheKey, refs.renderedMarkupKeyRef, setIsContentReady);
+    return renderChunkedMarkup(refs.contentRef, finalMarkup, cacheKey, refs.renderedMarkupKeyRef, setIsContentReady, setIsFullyRendered);
 }
 
 function getWrapperClasses(
@@ -721,6 +732,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     const latestScrollTopRef = useRef(0);
     const lastPersistedScrollRef = useRef<number | null>(null);
     const [isContentReady, setIsContentReady] = useState(false);
+    const [isFullyRendered, setIsFullyRendered] = useState(false);
     const [activeTerm, setActiveTerm] = useState('');
     const [activeAnchorId, setActiveAnchorId] = useState<string | null>(null);
     const containerId = `results-content-${tabId}`;
@@ -987,6 +999,16 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         }
     }, [getSectionAnchorIdsFromResultados]);
 
+    const searchHighlighterQuery = useMemo(() => {
+        const candidate = (latestTextQuery || '').trim();
+        return candidate || null;
+    }, [latestTextQuery]);
+    const searchHighlighterOwnsScroll = data?.type === 'text' && !!searchHighlighterQuery;
+    const consumeNewSearchKey = useMemo(
+        () => `${tabId}|${isNewSearch ? '1' : '0'}|${data?.query ?? ''}|${data?.ncm ?? ''}|${latestTextQuery ?? ''}`,
+        [data?.ncm, data?.query, isNewSearch, latestTextQuery, tabId],
+    );
+
     // Sidebar Navigation Handler
     const handleNavigate = useCallback((targetId: string) => {
         const container = containerRef.current;
@@ -1042,9 +1064,13 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     }, [onConsumeNewSearch]);
 
     const onPersistScrollRef = useRef(onPersistScroll);
+    const hasConsumedNewSearchRef = useRef(false);
     useEffect(() => {
         onPersistScrollRef.current = onPersistScroll;
     }, [onPersistScroll]);
+    useEffect(() => {
+        hasConsumedNewSearchRef.current = false;
+    }, [consumeNewSearchKey]);
     useEffect(() => {
         onContentReadyRef.current = onContentReady;
     }, [onContentReady]);
@@ -1070,21 +1096,33 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         setActiveTerm(prev => (prev === normalizedLatestTextQuery ? prev : normalizedLatestTextQuery));
     }, [latestTextQuery, data?.query, tabId]);
 
+    const consumeNewSearchScroll = useCallback((scrollTop?: number) => {
+        if (hasConsumedNewSearchRef.current) return;
+        hasConsumedNewSearchRef.current = true;
+        onConsumeNewSearchRef.current(tabId, scrollTop);
+    }, [tabId]);
+
     const handleAutoScrollComplete = useCallback((success?: boolean) => {
         if (!success) return;
         // Wrap in RAF to ensure DOM has updated/painted the scroll action
         // before we capture the final position and update app state.
         requestAnimationFrame(() => {
             const currentScroll = containerRef.current?.scrollTop || 0;
-            onConsumeNewSearchRef.current(tabId, currentScroll);
+            consumeNewSearchScroll(currentScroll);
         });
-    }, [tabId]); // Empty deps = stable reference
+    }, [consumeNewSearchScroll]);
+
+    const handleHighlightScrollComplete = useCallback((scrollTop: number) => {
+        if (!isActive || !isNewSearch) return;
+        consumeNewSearchScroll(scrollTop);
+    }, [consumeNewSearchScroll, isActive, isNewSearch]);
 
     // Hook handles the heavy lifting (MutationObserver, retries, etc)
     // Only auto-scroll when:
     // 1. Tab is active
     // 2. This is a NEW search (not returning to existing tab)
-    const shouldAutoScroll = !!targetId && isActive && isNewSearch && isContentReady && data?.type !== 'text';
+    // 3. Let SearchHighlighter take precedence for text-result tabs, but keep anchor scroll as fallback elsewhere
+    const shouldAutoScroll = !!targetId && isActive && isNewSearch && isContentReady && !searchHighlighterOwnsScroll;
     useRobustScroll({
         targetId,
         shouldScroll: shouldAutoScroll,
@@ -1122,6 +1160,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
 
     // Restore scroll when tab becomes active (only if NOT a new search)
+    const hasRestoredInitialScrollRef = useRef(false);
     useEffect(() => {
         // Skip restore if this is a new search - auto-scroll will handle positioning
         if (!isActive || isNewSearch) return;
@@ -1131,14 +1170,23 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         if (typeof initialScrollTop !== 'number') return;
         const targetScrollTop = initialScrollTop;
 
+        if (hasRestoredInitialScrollRef.current) return;
         if (Math.abs(element.scrollTop - targetScrollTop) < 1) return;
 
         requestAnimationFrame(() => {
             if (!containerRef.current) return;
             containerRef.current.scrollTop = targetScrollTop;
             latestScrollTopRef.current = targetScrollTop;
+            hasRestoredInitialScrollRef.current = true;
         });
-    }, [codeResults, isActive, initialScrollTop, isNewSearch, data?.type, data?.markdown]);
+    }, [isActive, initialScrollTop, isNewSearch]);
+
+    // Reset restored flag when inactive so it can restore again when returning
+    useEffect(() => {
+        if (!isActive) {
+            hasRestoredInitialScrollRef.current = false;
+        }
+    }, [isActive]);
 
 
 
@@ -1147,6 +1195,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         if (data?.type === 'text') {
             renderedMarkupKeyRef.current = null;
             setIsContentReady(true);
+            setIsFullyRendered(true);
             return;
         }
         if (!contentRef.current) return;
@@ -1158,6 +1207,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             contentRef.current.textContent = '';
             renderedMarkupKeyRef.current = null;
             setIsContentReady(true);
+            setIsFullyRendered(true);
             return;
         }
 
@@ -1174,12 +1224,14 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                     lastHtmlRef,
                 },
                 setIsContentReady,
+                setIsFullyRendered,
             });
         } catch (e) {
             console.error("Content render error:", e);
             if (contentRef.current) contentRef.current.innerText = 'Error rendering content.';
             renderedMarkupKeyRef.current = null;
             setIsContentReady(true);
+            setIsFullyRendered(true);
         }
     }, [codeResults, data?.type, data?.markdown, isActive]);
 
@@ -1224,7 +1276,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
         unwrapQueryHighlights(contentContainer);
 
-        if (!isActive || !isContentReady || !activeTerm) {
+        if (!isActive || !isContentReady || !activeTerm || searchHighlighterQuery) {
             return () => {
                 const current = contentRef.current;
                 if (current) unwrapQueryHighlights(current);
@@ -1237,7 +1289,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             const current = contentRef.current;
             if (current) unwrapQueryHighlights(current);
         };
-    }, [activeTerm, isActive, isContentReady, tabId, data?.type, data?.markdown]);
+    }, [activeTerm, isActive, isContentReady, searchHighlighterQuery, tabId, data?.type, data?.markdown]);
 
     // Sync Sidebar to current visible anchor
     useEffect(() => {
@@ -1282,7 +1334,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                 <TextSearchResults
                     results={(data.results as SearchResultItem[]) || null}
                     query={latestTextQuery || data.query || ""}
-                    onResultClick={(ncm: string) => window.nesh.smartLinkSearch(ncm)}
+                    onResultClick={(ncm: string) => globalThis.nesh.openTextResultInNewTab(ncm, latestTextQuery || data.query || '')}
                     scrollParentRef={containerRef}
                 />
             </div>
@@ -1342,6 +1394,16 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                     />
                 )}
             </div>
+
+            {searchHighlighterQuery && (
+                <SearchHighlighter
+                    query={searchHighlighterQuery}
+                    contentContainerRef={contentRef}
+                    isContentReady={isContentReady}
+                    isFullyRendered={isFullyRendered}
+                    onHighlightScrollComplete={handleHighlightScrollComplete}
+                />
+            )}
 
             {/* Toggle de Comentários */}
             {canUseRestrictedUi && (

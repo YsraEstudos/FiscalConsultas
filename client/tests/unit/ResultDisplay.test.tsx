@@ -26,6 +26,26 @@ vi.mock('../../src/components/Sidebar', () => ({
     Sidebar: () => <div data-testid="sidebar">Sidebar</div>
 }));
 
+vi.mock('../../src/components/SearchHighlighter', () => ({
+    SearchHighlighter: ({
+        query,
+        onHighlightScrollComplete,
+    }: {
+        query?: string | null;
+        onHighlightScrollComplete?: (scrollTop: number) => void;
+    }) => (
+        <div data-testid="search-highlighter">
+            <span>{query || ''}</span>
+            <button
+                data-testid="search-highlighter-complete"
+                onClick={() => onHighlightScrollComplete?.(321)}
+            >
+                complete-highlight-scroll
+            </button>
+        </div>
+    )
+}));
+
 describe('ResultDisplay Component', () => {
     beforeEach(() => {
         Element.prototype.scrollIntoView = vi.fn();
@@ -147,6 +167,81 @@ describe('ResultDisplay Component', () => {
             expect(screen.queryByText('Sem resultados para exibir.')).not.toBeInTheDocument();
             expect(screen.getByText('Maquina de lavar')).toBeInTheDocument();
         });
+    });
+
+    it('renders search highlighter for code results when latest text query is available', async () => {
+        const mockData = {
+            type: 'code' as const,
+            markdown: '<h3 id="pos-84-22">84.22</h3><p>Motor no capitulo</p>',
+            resultados: {
+                '84': {
+                    capitulo: '84',
+                    posicoes: [
+                        { codigo: '84.22', ncm: '8422', descricao: 'Maquina de lavar', anchor_id: 'pos-84-22' }
+                    ]
+                }
+            }
+        };
+
+        render(
+            <SettingsProvider>
+                <ResultDisplay
+                    data={mockData as any}
+                    latestTextQuery="motor"
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={true}
+                    tabId="tab-1"
+                    isNewSearch={false}
+                    onConsumeNewSearch={vi.fn()}
+                />
+            </SettingsProvider>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('search-highlighter')).toHaveTextContent('motor');
+        });
+    });
+
+    it('consumes a new text-originated search when SearchHighlighter reports scroll completion', async () => {
+        const onConsumeNewSearch = vi.fn();
+        const mockData = {
+            type: 'code' as const,
+            query: '8422',
+            markdown: '<h3 id="pos-84-22">84.22</h3><p>Motor no capitulo</p>',
+            resultados: {
+                '84': {
+                    capitulo: '84',
+                    posicao_alvo: '84.22',
+                    posicoes: [
+                        { codigo: '84.22', ncm: '8422', descricao: 'Maquina de lavar', anchor_id: 'pos-84-22' }
+                    ]
+                }
+            }
+        };
+
+        render(
+            <SettingsProvider>
+                <ResultDisplay
+                    data={mockData as any}
+                    latestTextQuery="motor"
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={true}
+                    tabId="tab-highlight-complete"
+                    isNewSearch={true}
+                    onConsumeNewSearch={onConsumeNewSearch}
+                />
+            </SettingsProvider>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('search-highlighter')).toHaveTextContent('motor');
+        });
+
+        fireEvent.click(screen.getByTestId('search-highlighter-complete'));
+
+        expect(onConsumeNewSearch).toHaveBeenCalledWith('tab-highlight-complete', 321);
     });
 
     it('persists scroll position when tab becomes inactive', async () => {
