@@ -175,7 +175,10 @@ describe('SearchHighlighter', () => {
 
         const scrollCompleteSpy = vi.fn();
         const scrollContainer = document.createElement('div');
-        scrollContainer.appendChild(containerRef.current!);
+        const contentContainer = containerRef.current;
+        expect(contentContainer).not.toBeNull();
+        if (!contentContainer) return;
+        scrollContainer.appendChild(contentContainer);
         scrollContainer.scrollTop = 0;
 
         const scrollSpy = vi
