@@ -46,6 +46,13 @@ class ComposeCheck:
 
 
 @dataclass(frozen=True)
+class _ComposeScanState:
+    mode: str
+    db_indent: int = 0
+    volumes_indent: int = 0
+
+
+@dataclass(frozen=True)
 class MigrationConfig:
     project_root: Path
     compose_path: Path
@@ -171,7 +178,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def _compose_scan_result(
-    compose_path: Path, has_expected_mount: bool, has_legacy_mount: bool
+    has_expected_mount: bool, has_legacy_mount: bool
 ) -> ComposeCheck:
     compatible = has_expected_mount and not has_legacy_mount
     if compatible:
@@ -215,14 +222,41 @@ def _extract_compose_mount(stripped: str) -> str | None:
     return stripped[2:].strip().strip("'").strip('"')
 
 
-def _scan_compose_db_mounts(lines: Sequence[str]) -> tuple[bool, bool]:
-    search_db = "search_db"
-    search_volumes = "search_volumes"
-    scan_mounts = "scan_mounts"
+def _enter_db_scan_state(
+    state: _ComposeScanState, stripped: str, indent: int
+) -> _ComposeScanState:
+    if stripped != "db:":
+        return state
+    return _ComposeScanState("search_volumes", db_indent=indent)
 
-    state = search_db
-    db_indent = 0
-    volumes_indent = 0
+
+def _enter_volume_scan_state(
+    state: _ComposeScanState, stripped: str, indent: int
+) -> _ComposeScanState:
+    if stripped != "volumes:":
+        return state
+    return _ComposeScanState(
+        "scan_mounts",
+        db_indent=state.db_indent,
+        volumes_indent=indent,
+    )
+
+
+def _leaves_volume_section(stripped: str, indent: int, volumes_indent: int) -> bool:
+    return indent <= volumes_indent and not stripped.startswith("-")
+
+
+def _apply_compose_mount_flags(
+    mount: str, has_expected_mount: bool, has_legacy_mount: bool
+) -> tuple[bool, bool]:
+    has_legacy_mount = has_legacy_mount or ":/var/lib/postgresql/data" in mount
+    has_expected_mount = has_expected_mount or mount.endswith(":/var/lib/postgresql")
+    has_expected_mount = has_expected_mount or ":/var/lib/postgresql:" in mount
+    return has_expected_mount, has_legacy_mount
+
+
+def _scan_compose_db_mounts(lines: Sequence[str]) -> tuple[bool, bool]:
+    state = _ComposeScanState("search_db")
     has_expected_mount = False
     has_legacy_mount = False
 
@@ -232,33 +266,30 @@ def _scan_compose_db_mounts(lines: Sequence[str]) -> tuple[bool, bool]:
             continue
 
         indent = _compose_indent(line)
-        if state == search_db:
-            if stripped == "db:":
-                state = search_volumes
-                db_indent = indent
+        if state.mode == "search_db":
+            state = _enter_db_scan_state(state, stripped, indent)
             continue
 
-        if _is_compose_section_boundary(stripped, indent, db_indent):
+        if _is_compose_section_boundary(stripped, indent, state.db_indent):
             break
 
-        if state == search_volumes:
-            if stripped == "volumes:":
-                state = scan_mounts
-                volumes_indent = indent
+        if state.mode == "search_volumes":
+            state = _enter_volume_scan_state(state, stripped, indent)
             continue
 
-        if indent <= volumes_indent and not stripped.startswith("-"):
-            state = search_volumes
+        if _leaves_volume_section(stripped, indent, state.volumes_indent):
+            state = _ComposeScanState("search_volumes", db_indent=state.db_indent)
             continue
 
         mount = _extract_compose_mount(stripped)
         if mount is None:
             continue
 
-        if ":/var/lib/postgresql/data" in mount:
-            has_legacy_mount = True
-        if mount.endswith(":/var/lib/postgresql") or ":/var/lib/postgresql:" in mount:
-            has_expected_mount = True
+        has_expected_mount, has_legacy_mount = _apply_compose_mount_flags(
+            mount,
+            has_expected_mount,
+            has_legacy_mount,
+        )
 
     return has_expected_mount, has_legacy_mount
 
@@ -274,7 +305,7 @@ def inspect_compose_mount(compose_path: Path) -> ComposeCheck:
 
     lines = compose_path.read_text(encoding="utf-8").splitlines()
     has_expected_mount, has_legacy_mount = _scan_compose_db_mounts(lines)
-    return _compose_scan_result(compose_path, has_expected_mount, has_legacy_mount)
+    return _compose_scan_result(has_expected_mount, has_legacy_mount)
 
 
 def _docker_check() -> None:
@@ -523,6 +554,57 @@ def validate_existing_target(config: MigrationConfig) -> tuple[bool, list[str]]:
         run_command(["docker", "rm", "-f", temp_container], check=False)
 
 
+def _check_existing_target_volume(
+    config: MigrationConfig, target_exists: bool
+) -> ExitCode | None:
+    if not target_exists:
+        return None
+
+    target_version = read_target_layout_version(config.target_volume)
+    if target_version != "18":
+        return None
+
+    valid, errors = validate_existing_target(config)
+    if valid:
+        print("Target Postgres 18 volume is already valid.")
+        return ExitCode.OK
+
+    print("Target Postgres 18 volume exists but validation failed:")
+    for error in errors:
+        print(f" - {error}")
+    return None
+
+
+def _check_source_volume_presence(
+    config: MigrationConfig, source_exists: bool, target_exists: bool
+) -> ExitCode | None:
+    if not source_exists and not target_exists:
+        print("No PostgreSQL volumes detected yet. Fresh install looks OK.")
+        return ExitCode.OK
+
+    if source_exists:
+        return None
+
+    print(
+        "Legacy source volume not found and target volume is not valid: "
+        f"{config.source_volume}"
+    )
+    return ExitCode.PRECONDITION_MISSING
+
+
+def _check_source_volume_version(config: MigrationConfig) -> ExitCode | None:
+    source_version = read_source_pg_version(config.source_volume)
+    if source_version is None:
+        print(f"Could not read PG_VERSION from source volume {config.source_volume}.")
+        return ExitCode.INSPECTION_FAILED
+
+    if source_version == "15":
+        return None
+
+    print(f"Unsupported source PG_VERSION for {config.source_volume}: {source_version}")
+    return ExitCode.INSPECTION_FAILED
+
+
 def check_environment(config: MigrationConfig) -> ExitCode:
     try:
         _docker_check()
@@ -538,37 +620,21 @@ def check_environment(config: MigrationConfig) -> ExitCode:
     target_exists = volume_exists(config.target_volume)
     source_exists = volume_exists(config.source_volume)
 
-    if target_exists:
-        target_version = read_target_layout_version(config.target_volume)
-        if target_version == "18":
-            valid, errors = validate_existing_target(config)
-            if valid:
-                print("Target Postgres 18 volume is already valid.")
-                return ExitCode.OK
-            print("Target Postgres 18 volume exists but validation failed:")
-            for error in errors:
-                print(f" - {error}")
+    target_check = _check_existing_target_volume(config, target_exists)
+    if target_check is not None:
+        return target_check
 
-    if not source_exists and not target_exists:
-        print("No PostgreSQL volumes detected yet. Fresh install looks OK.")
-        return ExitCode.OK
+    source_presence_check = _check_source_volume_presence(
+        config,
+        source_exists,
+        target_exists,
+    )
+    if source_presence_check is not None:
+        return source_presence_check
 
-    if not source_exists:
-        print(
-            "Legacy source volume not found and target volume is not valid: "
-            f"{config.source_volume}"
-        )
-        return ExitCode.PRECONDITION_MISSING
-
-    source_version = read_source_pg_version(config.source_volume)
-    if source_version is None:
-        print(f"Could not read PG_VERSION from source volume {config.source_volume}.")
-        return ExitCode.INSPECTION_FAILED
-    if source_version != "15":
-        print(
-            f"Unsupported source PG_VERSION for {config.source_volume}: {source_version}"
-        )
-        return ExitCode.INSPECTION_FAILED
+    source_version_check = _check_source_volume_version(config)
+    if source_version_check is not None:
+        return source_version_check
 
     print(
         "Legacy PostgreSQL 15 volume detected. Run with --run to migrate it to Postgres 18."
