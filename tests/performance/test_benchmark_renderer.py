@@ -5,7 +5,9 @@ import pytest
 from backend.presentation.renderer import HtmlRenderer, _get_fallback_anchor_pattern
 
 
-def _build_renderer_fixture(num_codes: int = 80) -> tuple[str, list[dict[str, str]], str]:
+def _build_renderer_fixture(
+    num_codes: int = 80,
+) -> tuple[str, list[dict[str, str]], str]:
     posicoes = [{"codigo": f"{i:02d}.{i % 100:02d}"} for i in range(1, num_codes + 1)]
     content = "\n".join(
         f'{pos["codigo"]} - Descricao {idx}<span id="other-{idx}"></span>'
