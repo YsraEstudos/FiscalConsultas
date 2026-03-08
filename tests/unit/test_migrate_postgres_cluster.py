@@ -30,6 +30,7 @@ def _config(tmp_path: Path) -> mod.MigrationConfig:
         backup_volume="fiscal_postgres15_backup_test",
         dump_path=tmp_path / "dump.sql",
         keep_dump=False,
+        force=False,
     )
 
 
@@ -100,6 +101,7 @@ def test_build_config_unescapes_docker_escaped_password(tmp_path, monkeypatch):
         backup_volume=None,
         keep_dump=False,
         dump_path=None,
+        force=False,
     )
 
     config = mod.build_config(args)
@@ -185,9 +187,7 @@ def test_check_environment_returns_migration_required_for_legacy_source(
     assert exit_code == mod.ExitCode.MIGRATION_REQUIRED
 
 
-def test_check_environment_returns_precondition_missing_without_source_or_target(
-    tmp_path, monkeypatch
-):
+def test_check_environment_returns_ok_without_source_or_target(tmp_path, monkeypatch):
     config = _config(tmp_path)
     monkeypatch.setattr(mod, "_docker_check", lambda: None)
     monkeypatch.setattr(
@@ -199,7 +199,7 @@ def test_check_environment_returns_precondition_missing_without_source_or_target
 
     exit_code = mod.check_environment(config)
 
-    assert exit_code == mod.ExitCode.PRECONDITION_MISSING
+    assert exit_code == mod.ExitCode.OK
 
 
 def test_ensure_prerequisites_for_run_rejects_matching_source_and_target_volumes(
@@ -234,6 +234,78 @@ def test_ensure_prerequisites_for_run_rejects_matching_backup_and_target_volumes
 
     assert exit_code == mod.ExitCode.PRECONDITION_MISSING
     assert "backup_volume and target_volume" in capsys.readouterr().out
+
+
+def test_ensure_prerequisites_for_run_rejects_existing_backup_volume(
+    tmp_path, monkeypatch, capsys
+):
+    config = _config(tmp_path)
+    monkeypatch.setattr(mod, "_docker_check", lambda: None)
+    monkeypatch.setattr(
+        mod,
+        "inspect_compose_mount",
+        lambda _path: mod.ComposeCheck(True, True, False, "ok"),
+    )
+    monkeypatch.setattr(
+        mod,
+        "volume_exists",
+        lambda volume: volume == config.backup_volume,
+    )
+
+    exit_code = mod._ensure_prerequisites_for_run(config, config.backup_volume)
+
+    assert exit_code == mod.ExitCode.PRECONDITION_MISSING
+    assert (
+        f"Backup volume already exists: {config.backup_volume}"
+        in capsys.readouterr().out
+    )
+
+
+def test_ensure_prerequisites_for_run_rejects_existing_target_without_force(
+    tmp_path, monkeypatch, capsys
+):
+    config = _config(tmp_path)
+    monkeypatch.setattr(mod, "_docker_check", lambda: None)
+    monkeypatch.setattr(
+        mod,
+        "inspect_compose_mount",
+        lambda _path: mod.ComposeCheck(True, True, False, "ok"),
+    )
+    monkeypatch.setattr(
+        mod,
+        "volume_exists",
+        lambda volume: volume in {config.source_volume, config.target_volume},
+    )
+    monkeypatch.setattr(mod, "read_source_pg_version", lambda _volume: "15")
+    monkeypatch.setattr(mod, "read_target_layout_version", lambda _volume: "18")
+
+    exit_code = mod._ensure_prerequisites_for_run(config, "fresh-backup-volume")
+
+    assert exit_code == mod.ExitCode.PRECONDITION_MISSING
+    assert "Use --force to recreate it" in capsys.readouterr().out
+
+
+def test_ensure_prerequisites_for_run_allows_existing_target_with_force(
+    tmp_path, monkeypatch
+):
+    config = replace(_config(tmp_path), force=True)
+    monkeypatch.setattr(mod, "_docker_check", lambda: None)
+    monkeypatch.setattr(
+        mod,
+        "inspect_compose_mount",
+        lambda _path: mod.ComposeCheck(True, True, False, "ok"),
+    )
+    monkeypatch.setattr(
+        mod,
+        "volume_exists",
+        lambda volume: volume in {config.source_volume, config.target_volume},
+    )
+    monkeypatch.setattr(mod, "read_source_pg_version", lambda _volume: "15")
+    monkeypatch.setattr(mod, "read_target_layout_version", lambda _volume: "18")
+
+    exit_code = mod._ensure_prerequisites_for_run(config, "fresh-backup-volume")
+
+    assert exit_code is None
 
 
 def test_run_migration_returns_dump_failed(tmp_path, monkeypatch):

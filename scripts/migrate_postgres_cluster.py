@@ -60,6 +60,7 @@ class MigrationConfig:
     backup_volume: str | None
     dump_path: Path | None
     keep_dump: bool
+    force: bool
 
 
 def _timestamp() -> str:
@@ -145,6 +146,7 @@ def build_config(args: argparse.Namespace) -> MigrationConfig:
         backup_volume=args.backup_volume,
         dump_path=Path(args.dump_path).resolve() if args.dump_path else None,
         keep_dump=bool(args.keep_dump),
+        force=bool(args.force),
     )
 
 
@@ -164,6 +166,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--backup-volume")
     parser.add_argument("--keep-dump", action="store_true")
     parser.add_argument("--dump-path")
+    parser.add_argument("--force", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -532,7 +535,10 @@ def check_environment(config: MigrationConfig) -> ExitCode:
         print(compose_check.message)
         return ExitCode.COMPOSE_INCOMPATIBLE
 
-    if volume_exists(config.target_volume):
+    target_exists = volume_exists(config.target_volume)
+    source_exists = volume_exists(config.source_volume)
+
+    if target_exists:
         target_version = read_target_layout_version(config.target_volume)
         if target_version == "18":
             valid, errors = validate_existing_target(config)
@@ -543,7 +549,11 @@ def check_environment(config: MigrationConfig) -> ExitCode:
             for error in errors:
                 print(f" - {error}")
 
-    if not volume_exists(config.source_volume):
+    if not source_exists and not target_exists:
+        print("No PostgreSQL volumes detected yet. Fresh install looks OK.")
+        return ExitCode.OK
+
+    if not source_exists:
         print(
             "Legacy source volume not found and target volume is not valid: "
             f"{config.source_volume}"
@@ -619,6 +629,10 @@ def _ensure_prerequisites_for_run(
         print("POSTGRES_PASSWORD is missing from .env; cannot run migration safely.")
         return ExitCode.PRECONDITION_MISSING
 
+    if volume_exists(backup_volume):
+        print(f"Backup volume already exists: {backup_volume}")
+        return ExitCode.PRECONDITION_MISSING
+
     if not volume_exists(config.source_volume):
         print(f"Source volume not found: {config.source_volume}")
         return ExitCode.PRECONDITION_MISSING
@@ -632,6 +646,15 @@ def _ensure_prerequisites_for_run(
             f"Expected source volume {config.source_volume} to be PostgreSQL 15, got {source_version}."
         )
         return ExitCode.INSPECTION_FAILED
+
+    if volume_exists(config.target_volume):
+        target_version = read_target_layout_version(config.target_volume)
+        if target_version == "18" and not config.force:
+            print(
+                "Target volume already contains a PostgreSQL 18 cluster. "
+                f"Use --force to recreate it: {config.target_volume}"
+            )
+            return ExitCode.PRECONDITION_MISSING
 
     return None
 
