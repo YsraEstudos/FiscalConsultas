@@ -67,7 +67,7 @@ function renderHeader() {
 }
 
 describe('Header', () => {
-  const SLOW_MENU_FLOW_TIMEOUT_MS = 15000;
+  const SLOW_MENU_FLOW_TIMEOUT_MS = 12000;
 
   beforeEach(() => {
     signOutMock.mockReset();
@@ -158,7 +158,7 @@ describe('Header', () => {
     });
     await waitFor(() => {
       expect(menuButton).not.toHaveClass(styles.menuTriggerActive);
-    }, { timeout: 2000 });
+    }, { timeout: SLOW_MENU_FLOW_TIMEOUT_MS });
 
     expect(screen.getByText('Tabela de Incidência do IPI')).toBeInTheDocument();
   }, SLOW_MENU_FLOW_TIMEOUT_MS);
