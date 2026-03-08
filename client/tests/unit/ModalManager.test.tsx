@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ModalManager } from '../../src/components/ModalManager';
 
 const authState = {
-    isSignedIn: false,
+    isSignedIn: true,
     userEmail: 'blocked@example.com',
 };
 
@@ -14,7 +14,7 @@ vi.mock('../../src/context/AuthContext', () => ({
 }));
 
 vi.mock('../../src/components/AIChat', () => ({
-    AIChat: () => <div data-testid="ai-chat-trigger">AI Chat</div>
+    AIChat: () => <div data-testid="ai-chat-trigger" title="Abrir Chat IA">AI Chat</div>
 }));
 
 vi.mock('../../src/components/SettingsModal', () => ({
@@ -44,11 +44,11 @@ vi.mock('../../src/components/AdminCommentModal', () => ({
 describe('ModalManager', () => {
     beforeEach(() => {
         vi.stubEnv('VITE_RESTRICTED_UI_EMAILS', 'israelseja2@gmail.com');
-        authState.isSignedIn = false;
+        authState.isSignedIn = true;
         authState.userEmail = 'blocked@example.com';
     });
 
-    it('hides AI chat for unauthorized users', () => {
+    it('hides AI chat for signed-in users without the allowed email', () => {
         render(
             <ModalManager
                 modals={{
@@ -73,5 +73,34 @@ describe('ModalManager', () => {
 
         expect(screen.queryByTestId('ai-chat-trigger')).not.toBeInTheDocument();
         expect(screen.queryByTitle('Abrir Chat IA')).not.toBeInTheDocument();
+    });
+
+    it('shows AI chat for the allowed email', async () => {
+        authState.userEmail = 'israelseja2@gmail.com';
+
+        render(
+            <ModalManager
+                modals={{
+                    settings: false,
+                    tutorial: false,
+                    stats: false,
+                    comparator: false,
+                    moderate: false,
+                }}
+                onClose={{
+                    settings: vi.fn(),
+                    tutorial: vi.fn(),
+                    stats: vi.fn(),
+                    comparator: vi.fn(),
+                    moderate: vi.fn(),
+                }}
+                currentDoc="nesh"
+                onOpenInDoc={vi.fn()}
+                onOpenInNewTab={vi.fn()}
+            />
+        );
+
+        expect(await screen.findByTestId('ai-chat-trigger')).toBeInTheDocument();
+        expect(await screen.findByTitle('Abrir Chat IA')).toBeInTheDocument();
     });
 });

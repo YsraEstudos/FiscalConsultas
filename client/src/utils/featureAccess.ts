@@ -6,7 +6,7 @@ export function getRestrictedUiEmails(): string[] {
 
     return configuredEmails
         .split(',')
-        .map(email => email.trim().toLowerCase())
+        .map((email: string) => email.trim().toLowerCase())
         .filter(Boolean);
 }
 

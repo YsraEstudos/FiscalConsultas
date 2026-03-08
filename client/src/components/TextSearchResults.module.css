@@ -1,3 +1,17 @@
+:global(:root) {
+    --text-search-badge-position-bg: #4338ca;
+    --text-search-badge-position-text: #eef2ff;
+    --text-search-badge-chapter-bg: #b45309;
+    --text-search-badge-chapter-text: #fffbeb;
+    --text-search-badge-tier-exact-bg: #166534;
+    --text-search-badge-tier-exact-text: #f0fdf4;
+    --text-search-badge-tier-all-bg: #155e75;
+    --text-search-badge-tier-all-text: #ecfeff;
+    --text-search-badge-tier-partial-bg: #475569;
+    --text-search-badge-tier-partial-text: #f8fafc;
+    --text-search-badge-near-bonus-bg: #047857;
+    --text-search-badge-near-bonus-text: #ecfdf5;
+}
 .list {
     display: flex;
     flex-direction: column;
@@ -368,6 +382,7 @@
         justify-self: start;
     }
 }
+
 
 
 
