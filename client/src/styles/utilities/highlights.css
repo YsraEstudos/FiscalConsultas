@@ -24,6 +24,20 @@
   box-shadow: none;
 }
 
+/* Match ALTO (multi-termos na mesma subposição) - VERDE vivo */
+.search-highlight.search-highlight-high {
+  background-color: rgb(34 197 94 / 30%);
+  border-bottom: 2px solid var(--success);
+  color: inherit;
+}
+
+/* Zona de subposição de alta correspondência */
+.high-correspondence-zone {
+  border-left: 4px solid var(--success) !important;
+  background: linear-gradient(to right, rgb(34 197 94 / 5%), transparent 20%);
+  border-radius: 4px;
+}
+
 /* Match ativo (navegação) */
 .search-highlight.active {
   background-color: #f97316;

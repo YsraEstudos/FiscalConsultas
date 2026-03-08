@@ -15,12 +15,15 @@ interface MatchQualityResult {
     matchQuality: MatchQuality;
     coOccurrenceCount: number;
     coOccurrenceScope: CoOccurrenceScope;
+    highSubpositionKeys: string[];
 }
 
 interface SearchHighlighterProps {
     query?: string | null;
     contentContainerRef: React.RefObject<HTMLElement | null>;
     isContentReady: boolean;
+    isFullyRendered?: boolean;
+    onHighlightScrollComplete?: (scrollTop: number) => void;
 }
 
 // Block elements that usually denote a "paragraph" or chunk of meaning
@@ -64,7 +67,7 @@ function buildAccentInsensitivePattern(term: string): string {
 type ResolveSubpositionKeyFn = (node: HTMLElement, container: HTMLElement) => string | null;
 
 function getNoMatchResult(): MatchQualityResult {
-    return { matchQuality: 'NENHUM', coOccurrenceCount: 0, coOccurrenceScope: 'subposition' };
+    return { matchQuality: 'NENHUM', coOccurrenceCount: 0, coOccurrenceScope: 'subposition', highSubpositionKeys: [] };
 }
 
 function addTermToMap<K>(map: Map<K, Set<string>>, key: K, term: string): void {
@@ -133,14 +136,14 @@ function buildTermMaps(
     return { subpositionTermMap, blockTermMap, chapterTermMap };
 }
 
-function countEntriesWithAllTerms<K>(map: Map<K, Set<string>>, requiredTermCount: number): number {
-    let count = 0;
-    for (const terms of map.values()) {
+function getEntriesWithAllTerms<K>(map: Map<K, Set<string>>, requiredTermCount: number): K[] {
+    const result: K[] = [];
+    for (const [key, terms] of map.entries()) {
         if (terms.size === requiredTermCount) {
-            count += 1;
+            result.push(key);
         }
     }
-    return count;
+    return result;
 }
 
 function analyzeBlockCoOccurrence(
@@ -175,7 +178,61 @@ function hasChapterLevelCoOccurrence(chapterTermMap: Map<HTMLElement, Set<string
     return false;
 }
 
-export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, contentContainerRef, isContentReady }) => {
+function resolveScrollContainer(contentContainer: HTMLElement): HTMLElement {
+    const parent = contentContainer.parentElement;
+    return parent instanceof HTMLElement ? parent : contentContainer;
+}
+
+function getNodeTopWithinScrollContainer(node: HTMLElement, scrollContainer: HTMLElement): number {
+    const nodeRect = node.getBoundingClientRect();
+    const containerRect = scrollContainer.getBoundingClientRect();
+    return (nodeRect.top - containerRect.top) + scrollContainer.scrollTop;
+}
+
+function notifyAfterScrollSettles(
+    scrollContainer: HTMLElement,
+    onComplete?: (scrollTop: number) => void
+): () => void {
+    if (!onComplete) {
+        return () => undefined;
+    }
+
+    let finished = false;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const finish = () => {
+        if (finished) return;
+        finished = true;
+        scrollContainer.removeEventListener('scroll', handleScroll);
+        if (settleTimer !== null) {
+            clearTimeout(settleTimer);
+        }
+        onComplete(scrollContainer.scrollTop);
+    };
+
+    const scheduleFinish = () => {
+        if (settleTimer !== null) {
+            clearTimeout(settleTimer);
+        }
+        settleTimer = setTimeout(finish, 120);
+    };
+
+    const handleScroll = () => {
+        scheduleFinish();
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+    scheduleFinish();
+    return finish;
+}
+
+export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({
+    query,
+    contentContainerRef,
+    isContentReady,
+    isFullyRendered,
+    onHighlightScrollComplete,
+}) => {
     const [matches, setMatches] = useState<Record<string, MatchInstance[]>>({});
     const [terms, setTerms] = useState<string[]>([]);
     const [activeTerm, setActiveTerm] = useState<string | null>(null);
@@ -183,7 +240,37 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
     const [matchQuality, setMatchQuality] = useState<MatchQuality>('NENHUM');
     const [coOccurrenceCount, setCoOccurrenceCount] = useState(0);
     const [coOccurrenceScope, setCoOccurrenceScope] = useState<CoOccurrenceScope>('subposition');
+    const [highSubpositionKeys, setHighSubpositionKeys] = useState<string[]>([]);
     const [isVisible, setIsVisible] = useState(true);
+    const hasAutoJumpedRef = React.useRef(false);
+    const pendingScrollCompletionCleanupRef = React.useRef<(() => void) | null>(null);
+
+    const clearPendingScrollCompletion = useCallback(() => {
+        pendingScrollCompletionCleanupRef.current?.();
+        pendingScrollCompletionCleanupRef.current = null;
+    }, []);
+
+    const reportHighlightScrollCompletion = useCallback(() => {
+        const contentContainer = contentContainerRef.current;
+        if (!contentContainer) {
+            onHighlightScrollComplete?.(0);
+            return;
+        }
+
+        clearPendingScrollCompletion();
+        const scrollContainer = resolveScrollContainer(contentContainer);
+        pendingScrollCompletionCleanupRef.current = notifyAfterScrollSettles(
+            scrollContainer,
+            onHighlightScrollComplete,
+        );
+    }, [clearPendingScrollCompletion, contentContainerRef, onHighlightScrollComplete]);
+
+    useEffect(() => {
+        hasAutoJumpedRef.current = false;
+        clearPendingScrollCompletion();
+    }, [query]);
+
+    useEffect(() => () => clearPendingScrollCompletion(), [clearPendingScrollCompletion]);
 
     const normalizedTerms = useMemo(() => {
         const trimmedQuery = query?.trim() ?? '';
@@ -201,7 +288,7 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
 
     // DOM Manipulation to highlight terms using TreeWalker
     useEffect(() => {
-        if (!isContentReady || !contentContainerRef.current || normalizedTerms.length === 0) {
+        if (!isContentReady || !isFullyRendered || !contentContainerRef.current || normalizedTerms.length === 0) {
             setMatches({});
             setTerms([]);
             setActiveTerm(null);
@@ -209,6 +296,7 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
             setMatchQuality('NENHUM');
             setCoOccurrenceCount(0);
             setCoOccurrenceScope('subposition');
+            setHighSubpositionKeys([]);
             return;
         }
 
@@ -395,10 +483,29 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
             (newMatches[activeTerm]?.length ?? 0) > 0
         ) ? activeTerm : null;
 
+        // Ao invés de sempre começar no índice 0 (topo), procuramos o match visualmente mais próximo da tela atual
+        // Para isso, pegamos a posição do scrollContainer
+        const scrollContainer = resolveScrollContainer(container);
+        const containerScrollTop = scrollContainer.scrollTop || 0;
+        
         normalizedTerms.forEach(term => {
-            indices[term] = 0;
-            if (newMatches[term].length > 0 && !activeT) {
-                activeT = term;
+            indices[term] = 0; // fallback default is 0
+            if (newMatches[term].length > 0) {
+                 if (!activeT) activeT = term;
+                 
+                 // If we had a jump candidate, or just generally, let's find the match index closest to viewport center
+                 let closestIndex = 0;
+                 let minDiff = Infinity;
+                 newMatches[term].forEach((m, idx) => {
+                     const relativeTop = getNodeTopWithinScrollContainer(m.node, scrollContainer);
+                     const diff = Math.abs(relativeTop - containerScrollTop);
+                     if (diff < minDiff) {
+                         minDiff = diff;
+                         closestIndex = idx;
+                     }
+                 });
+                 // Store the closest index rather than just 0
+                 indices[term] = closestIndex;
             }
         });
 
@@ -414,11 +521,12 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
         setMatchQuality(qualityInsights.matchQuality);
         setCoOccurrenceCount(qualityInsights.coOccurrenceCount);
         setCoOccurrenceScope(qualityInsights.coOccurrenceScope);
+        setHighSubpositionKeys(qualityInsights.highSubpositionKeys);
         setIsVisible(true);
 
         return cleanup;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isContentReady, query, contentContainerRef]);
+    }, [isContentReady, isFullyRendered, query, contentContainerRef]);
 
     const resolveSubpositionKey = (node: HTMLElement, container: HTMLElement): string | null => {
         const tipiPosition = node.closest<HTMLElement>('article.tipi-position[id]');
@@ -465,7 +573,8 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
         );
 
         const requiredTermCount = allTerms.length;
-        const highSubpositionsCount = countEntriesWithAllTerms(subpositionTermMap, requiredTermCount);
+        const highSubpositionKeys = getEntriesWithAllTerms(subpositionTermMap, requiredTermCount);
+        const highSubpositionsCount = highSubpositionKeys.length;
         const { highBlocksWithoutSubposition, hasFallbackHighBlock } = analyzeBlockCoOccurrence(
             blockTermMap,
             requiredTermCount,
@@ -477,19 +586,86 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
         const coOccurrenceScope: CoOccurrenceScope = highSubpositionsCount > 0 ? 'subposition' : 'block';
 
         if (highSubpositionsCount > 0 || hasFallbackHighBlock) {
-            return { matchQuality: 'ALTO', coOccurrenceCount, coOccurrenceScope };
+            return { matchQuality: 'ALTO', coOccurrenceCount, coOccurrenceScope, highSubpositionKeys };
         }
 
         if (hasChapterLevelCoOccurrence(chapterTermMap, requiredTermCount)) {
-            return { matchQuality: 'PEQUENO', coOccurrenceCount, coOccurrenceScope };
+            return { matchQuality: 'PEQUENO', coOccurrenceCount, coOccurrenceScope, highSubpositionKeys: [] };
         }
 
-        return { matchQuality: 'NENHUM', coOccurrenceCount, coOccurrenceScope };
+        return { matchQuality: 'NENHUM', coOccurrenceCount, coOccurrenceScope, highSubpositionKeys: [] };
     };
+
+    // Handle Visual Class Injection AND Auto-Jump Logic for High Quality Matches
+    useEffect(() => {
+        if (!isFullyRendered || !contentContainerRef.current) return;
+        const container = contentContainerRef.current;
+
+        // Cleanup before re-applying
+        container.querySelectorAll('.high-correspondence-zone').forEach(el => el.classList.remove('high-correspondence-zone'));
+        container.querySelectorAll('.search-highlight-high').forEach(el => {
+            el.classList.remove('search-highlight-high');
+            el.classList.add('search-highlight-partial');
+        });
+
+        const hasHighSubpositionTargets = highSubpositionKeys.length > 0;
+
+        if (hasHighSubpositionTargets) {
+            // Apply classes
+            highSubpositionKeys.forEach(id => {
+                const section = container.querySelector(`[id="${CSS.escape(id)}"]`);
+                if (section) {
+                    section.classList.add('high-correspondence-zone');
+                    section.querySelectorAll('mark.search-highlight').forEach(mark => {
+                        mark.classList.remove('search-highlight-partial');
+                        mark.classList.add('search-highlight-high');
+                    });
+                }
+            });
+        }
+
+        // Auto-Jump Logic
+        if (normalizedTerms.length > 1 && hasHighSubpositionTargets && !hasAutoJumpedRef.current) {
+            hasAutoJumpedRef.current = true;
+            // Heuristics: filter out generic chapters like "Partes"
+            const jumpCandidates = highSubpositionKeys.filter(id => {
+                const section = container.querySelector(`[id="${CSS.escape(id)}"]`);
+                if (!section) return true;
+                const text = (section.textContent || '').toLowerCase();
+                return !text.includes(' - partes');
+            });
+
+            const bestCandidateId = jumpCandidates.length > 0 ? jumpCandidates[0] : highSubpositionKeys[0];
+            if (bestCandidateId) {
+                const el = container.querySelector(`[id="${CSS.escape(bestCandidateId)}"]`);
+                if (el) {
+                    setTimeout(() => {
+                        // Rola para o centro para evitar corte no topo do container
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        reportHighlightScrollCompletion();
+                    }, 50); // slight delay to allow rendering
+                }
+            }
+        } else if (normalizedTerms.length === 1 && !hasAutoJumpedRef.current && (matches[activeTerm ?? '']?.length ?? 0) > 0) {
+            // Fallback for single-term search: just scroll to first match
+            hasAutoJumpedRef.current = true;
+            const match = matches[activeTerm ?? '']?.[0];
+            if (match?.node) {
+                setTimeout(() => {
+                    match.node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    reportHighlightScrollCompletion();
+                }, 50);
+            }
+        }
+
+    }, [activeTerm, contentContainerRef, highSubpositionKeys, isFullyRendered, matches, normalizedTerms.length, reportHighlightScrollCompletion]);
 
     // Handle scroll to active match
     useEffect(() => {
         if (!activeTerm || (matches[activeTerm]?.length ?? 0) === 0) return;
+        
+        // We only want this effect to trigger on explicit user navigation (Prev/Next), or after the initial jump is done
+        if (!hasAutoJumpedRef.current) return; 
 
         const currentIndex = activeIndices[activeTerm] || 0;
         const match = matches[activeTerm][currentIndex];
@@ -565,6 +741,15 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
         ? `1 ${coOccurrenceUnitSingular} com alta correspondência`
         : `${coOccurrenceCount} ${coOccurrenceUnitPlural} com alta correspondência`;
 
+    const handleManualJump = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const id = e.target.value;
+        if (!id || !contentContainerRef.current) return;
+        const el = contentContainerRef.current.querySelector(`[id="${CSS.escape(id)}"]`);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    };
+
     return (
         <div className={styles.container}>
             {terms.length > 1 && (
@@ -576,6 +761,29 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({ query, con
                     <span className={styles.coOccurrenceLabel}>
                         {coOccurrenceLabel}
                     </span>
+                </div>
+            )}
+
+            {highSubpositionKeys.length > 0 && (
+                <div className={styles.highSubpositionJump}>
+                    <select
+                        className={styles.highSubpositionSelect}
+                        onChange={handleManualJump}
+                        defaultValue=""
+                    >
+                        <option value="" disabled>Ir para subposição alta...</option>
+                        {highSubpositionKeys.map((id) => {
+                            const cleanLabel = id.replace(/^(pos|cap|chapter)-/, '').replaceAll('-', '.');
+                            return (
+                                <option key={id} value={id}>
+                                    Subposição {cleanLabel}
+                                </option>
+                            );
+                        })}
+                    </select>
+                    <div className={styles.highLegend} title="Exibe subposições identificadas como de alta relevância">
+                        <span className={styles.highLegendDot} /> Match Alto
+                    </div>
                 </div>
             )}
 
