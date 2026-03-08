@@ -290,55 +290,6 @@ Migrar dados SQLite para PostgreSQL:
 python scripts/migrate_to_postgres.py
 ```
 
-### Migracao do PostgreSQL 15 para 18 (Windows/Docker local)
-
-Se o ambiente local tinha um volume antigo `fiscal_postgres_data` em PostgreSQL 15,
-o container `postgres:18` pode entrar em restart loop se o cluster nao for migrado
-ou se o volume for montado no caminho legado `/var/lib/postgresql/data`.
-
-Configuracao esperada no compose para PostgreSQL 18:
-
-```yaml
-volumes:
-  - postgres18_data:/var/lib/postgresql
-```
-
-Verificar se o ambiente precisa de migracao:
-
-```powershell
-.\.venv\Scripts\python scripts\migrate_postgres_cluster.py --check-only
-```
-
-Executar a migracao logica do cluster PostgreSQL 15 para 18:
-
-```powershell
-.\.venv\Scripts\python scripts\migrate_postgres_cluster.py --run
-```
-
-O utilitario faz:
-
-- deteccao do volume legado `fiscal_postgres_data`
-- clone defensivo do volume antigo
-- dump logico completo com `pg_dumpall`
-- recriacao limpa do volume `fiscal_postgres18_data`
-- restore no PostgreSQL 18
-- validacao de tabelas e contagens minimas (`chapters`, `positions`, `chapter_notes`, `tipi_positions`, `users`, `tenants`, `subscriptions`, `comments`)
-
-Validacao pos-migracao:
-
-```powershell
-docker compose up -d
-docker compose ps
-Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/status"
-```
-
-Política de rollback local:
-
-- o volume fonte `fiscal_postgres_data` nao e apagado automaticamente
-- o clone `fiscal_postgres15_backup_<timestamp>` tambem e preservado
-- se a migracao falhar, corrija o problema e repita o `--run`
-- se precisar de recuperacao parcial, recrie o cluster PostgreSQL 18 e rode `alembic upgrade head` seguido de `python scripts/migrate_to_postgres.py`
-
 ## Performance NCM (estado atual)
 
 Baseline local mais recente para `/api/search?ncm=8481.30.00` (10 de fevereiro de 2026):
