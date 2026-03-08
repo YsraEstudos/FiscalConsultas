@@ -10,7 +10,7 @@ from scripts import migrate_postgres_cluster as mod
 pytestmark = pytest.mark.unit
 
 
-def _raise(exc: Exception) -> None:
+def _raise(exc: RuntimeError | OSError) -> None:
     raise exc
 
 
