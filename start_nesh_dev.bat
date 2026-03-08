@@ -20,6 +20,7 @@ set "FAIL_REASON="
 set "FRONTEND_BOOT_CMD=npm run dev"
 set "CHECKLIST_FILE=%TEMP%\nesh_startup_checklist.txt"
 set "CHECKLIST_SHOWN=0"
+set "PG_MIGRATION_CMD=python scripts\migrate_postgres_cluster.py"
 
 :parse_args
 if "%~1"=="" goto args_done
@@ -102,16 +103,17 @@ if exist ".\.venv\Scripts\python.exe" (
     )
     set "PG_MIGRATION_PYTHON=python"
 )
-call !PG_MIGRATION_PYTHON! scripts\migrate_postgres_cluster.py --check-only
+set "PG_MIGRATION_CMD=!PG_MIGRATION_PYTHON! scripts\migrate_postgres_cluster.py"
+call !PG_MIGRATION_CMD! --check-only
 set "PG_MIGRATION_EXIT=!errorlevel!"
 if "!PG_MIGRATION_EXIT!"=="10" (
     set "CHK_DOCKER_STACK=FALHA"
-    set "FAIL_REASON=Volume PostgreSQL legado detectado. Rode: .\.venv\Scripts\python scripts\migrate_postgres_cluster.py --run"
+    set "FAIL_REASON=Volume PostgreSQL legado detectado. Rode: !PG_MIGRATION_CMD! --run"
     goto fail
 )
 if "!PG_MIGRATION_EXIT!"=="11" (
     set "CHK_DOCKER_STACK=FALHA"
-    set "FAIL_REASON=Compose PostgreSQL 18 incompativel. Corrija o compose e rode: .\.venv\Scripts\python scripts\migrate_postgres_cluster.py --run"
+    set "FAIL_REASON=Compose PostgreSQL 18 incompativel. Corrija o compose e rode: !PG_MIGRATION_CMD! --run"
     goto fail
 )
 if not "!PG_MIGRATION_EXIT!"=="0" (
@@ -326,8 +328,8 @@ if /I not "!CHK_DOCKER_STACK!"=="OK" (
     echo [DICA] Para diagnostico rapido da stack Docker:
     echo        docker compose ps
     echo        docker compose logs -f db redis pgadmin
-    echo        .\.venv\Scripts\python scripts\migrate_postgres_cluster.py --check-only
-    echo        .\.venv\Scripts\python scripts\migrate_postgres_cluster.py --run
+    echo        !PG_MIGRATION_CMD! --check-only
+    echo        !PG_MIGRATION_CMD! --run
 )
 exit /b 0
 
@@ -386,8 +388,8 @@ echo.
 echo [Dicas]
 echo - docker compose ps
 echo - docker compose logs -f db redis pgadmin
-echo - .\.venv\Scripts\python scripts\migrate_postgres_cluster.py --check-only
-echo - .\.venv\Scripts\python scripts\migrate_postgres_cluster.py --run
+echo - !PG_MIGRATION_CMD! --check-only
+echo - !PG_MIGRATION_CMD! --run
 ) > "%CHECKLIST_FILE%"
 exit /b 0
 

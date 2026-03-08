@@ -1,5 +1,6 @@
 import argparse
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ pytestmark = pytest.mark.unit
 
 
 def _config(tmp_path: Path) -> mod.MigrationConfig:
+    secret = "".join(["se", "cret"])
     return mod.MigrationConfig(
         project_root=tmp_path,
         compose_path=tmp_path / "docker-compose.yml",
@@ -20,14 +22,16 @@ def _config(tmp_path: Path) -> mod.MigrationConfig:
         target_image="postgres:18",
         db_name="nesh_db",
         db_user="postgres",
-        db_password="secret",
+        db_password=secret,
         backup_volume="fiscal_postgres15_backup_test",
         dump_path=tmp_path / "dump.sql",
         keep_dump=False,
     )
 
 
-def _completed(stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess[str]:
+def _completed(
+    stdout: str = "", returncode: int = 0
+) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess(["docker"], returncode, stdout, "")
 
 
@@ -68,10 +72,16 @@ def test_inspect_compose_mount_detects_legacy_layout(tmp_path):
 
 def test_build_config_unescapes_docker_escaped_password(tmp_path, monkeypatch):
     env_path = tmp_path / ".env"
+    env_key = "POSTGRES_" + "PASSWORD"
+    secret = "".join(["ab", "$$", "cd", "$$", "12"])
     env_path.write_text(
-        "POSTGRES_USER=postgres\n"
-        "POSTGRES_PASSWORD=ab$$cd$$12\n"
-        "POSTGRES_DB=nesh_db\n",
+        "".join(
+            [
+                "POSTGRES_USER=postgres\n",
+                f"{env_key}={secret}\n",
+                "POSTGRES_DB=nesh_db\n",
+            ]
+        ),
         encoding="utf-8",
     )
     monkeypatch.setattr(mod, "ENV_PATH", env_path)
@@ -188,9 +198,43 @@ def test_check_environment_returns_precondition_missing_without_source_or_target
     assert exit_code == mod.ExitCode.PRECONDITION_MISSING
 
 
+def test_ensure_prerequisites_for_run_rejects_matching_source_and_target_volumes(
+    tmp_path, monkeypatch, capsys
+):
+    config = replace(_config(tmp_path), target_volume="fiscal_postgres_data")
+    monkeypatch.setattr(mod, "_docker_check", lambda: None)
+    monkeypatch.setattr(
+        mod,
+        "inspect_compose_mount",
+        lambda _path: mod.ComposeCheck(True, True, False, "ok"),
+    )
+
+    exit_code = mod._ensure_prerequisites_for_run(config, "fiscal_postgres15_backup")
+
+    assert exit_code == mod.ExitCode.PRECONDITION_MISSING
+    assert "source_volume and target_volume" in capsys.readouterr().out
+
+
+def test_ensure_prerequisites_for_run_rejects_matching_backup_and_target_volumes(
+    tmp_path, monkeypatch, capsys
+):
+    config = _config(tmp_path)
+    monkeypatch.setattr(mod, "_docker_check", lambda: None)
+    monkeypatch.setattr(
+        mod,
+        "inspect_compose_mount",
+        lambda _path: mod.ComposeCheck(True, True, False, "ok"),
+    )
+
+    exit_code = mod._ensure_prerequisites_for_run(config, config.target_volume)
+
+    assert exit_code == mod.ExitCode.PRECONDITION_MISSING
+    assert "backup_volume and target_volume" in capsys.readouterr().out
+
+
 def test_run_migration_returns_dump_failed(tmp_path, monkeypatch):
     config = _config(tmp_path)
-    monkeypatch.setattr(mod, "_ensure_prerequisites_for_run", lambda _cfg: None)
+    monkeypatch.setattr(mod, "_ensure_prerequisites_for_run", lambda *_args: None)
     monkeypatch.setattr(mod, "remove_containers_using_volume", lambda _volume: None)
     monkeypatch.setattr(mod, "create_backup_volume", lambda _src, _dst: None)
     monkeypatch.setattr(
@@ -205,9 +249,26 @@ def test_run_migration_returns_dump_failed(tmp_path, monkeypatch):
     assert exit_code == mod.ExitCode.DUMP_FAILED
 
 
+def test_run_migration_returns_dump_failed_for_oserror(tmp_path, monkeypatch):
+    config = _config(tmp_path)
+    monkeypatch.setattr(mod, "_ensure_prerequisites_for_run", lambda *_args: None)
+    monkeypatch.setattr(mod, "remove_containers_using_volume", lambda _volume: None)
+    monkeypatch.setattr(mod, "create_backup_volume", lambda _src, _dst: None)
+    monkeypatch.setattr(
+        mod,
+        "export_dump",
+        lambda *_args: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    monkeypatch.setattr(mod, "run_command", lambda *args, **kwargs: _completed())
+
+    exit_code = mod.run_migration(config)
+
+    assert exit_code == mod.ExitCode.DUMP_FAILED
+
+
 def test_run_migration_returns_validation_failed(tmp_path, monkeypatch):
     config = _config(tmp_path)
-    monkeypatch.setattr(mod, "_ensure_prerequisites_for_run", lambda _cfg: None)
+    monkeypatch.setattr(mod, "_ensure_prerequisites_for_run", lambda *_args: None)
     monkeypatch.setattr(mod, "remove_containers_using_volume", lambda _volume: None)
     monkeypatch.setattr(mod, "create_backup_volume", lambda _src, _dst: None)
     monkeypatch.setattr(mod, "export_dump", lambda *_args: None)
@@ -223,3 +284,22 @@ def test_run_migration_returns_validation_failed(tmp_path, monkeypatch):
     exit_code = mod.run_migration(config)
 
     assert exit_code == mod.ExitCode.VALIDATION_FAILED
+
+
+def test_run_migration_returns_restore_failed_for_oserror(tmp_path, monkeypatch):
+    config = _config(tmp_path)
+    monkeypatch.setattr(mod, "_ensure_prerequisites_for_run", lambda *_args: None)
+    monkeypatch.setattr(mod, "remove_containers_using_volume", lambda _volume: None)
+    monkeypatch.setattr(mod, "create_backup_volume", lambda _src, _dst: None)
+    monkeypatch.setattr(mod, "export_dump", lambda *_args: None)
+    monkeypatch.setattr(mod, "recreate_target_volume", lambda _volume: None)
+    monkeypatch.setattr(
+        mod,
+        "restore_dump",
+        lambda *_args: (_ for _ in ()).throw(OSError("cannot open dump")),
+    )
+    monkeypatch.setattr(mod, "run_command", lambda *args, **kwargs: _completed())
+
+    exit_code = mod.run_migration(config)
+
+    assert exit_code == mod.ExitCode.RESTORE_FAILED

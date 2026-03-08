@@ -332,7 +332,7 @@ docker compose ps
 Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/status"
 ```
 
-Politica de rollback local:
+Política de rollback local:
 
 - o volume fonte `fiscal_postgres_data` nao e apagado automaticamente
 - o clone `fiscal_postgres15_backup_<timestamp>` tambem e preservado

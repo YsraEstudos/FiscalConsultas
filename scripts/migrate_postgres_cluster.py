@@ -13,7 +13,6 @@ from enum import IntEnum
 from pathlib import Path
 from typing import IO, Sequence
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE_VOLUME = "fiscal_postgres_data"
 DEFAULT_TARGET_VOLUME = "fiscal_postgres18_data"
@@ -196,7 +195,11 @@ def inspect_compose_mount(compose_path: Path) -> ComposeCheck:
                 db_indent = indent
             continue
 
-        if indent <= db_indent and stripped.endswith(":") and not stripped.startswith("-"):
+        if (
+            indent <= db_indent
+            and stripped.endswith(":")
+            and not stripped.startswith("-")
+        ):
             break
 
         if not in_volumes:
@@ -301,11 +304,22 @@ def remove_containers_using_volume(volume_name: str) -> None:
     run_command(["docker", "rm", "-f", *containers], check=False)
 
 
-def wait_for_postgres(container_name: str, db_user: str, db_name: str, timeout_seconds: int = 60) -> bool:
+def wait_for_postgres(
+    container_name: str, db_user: str, db_name: str, timeout_seconds: int = 60
+) -> bool:
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
         result = run_command(
-            ["docker", "exec", container_name, "pg_isready", "-U", db_user, "-d", db_name],
+            [
+                "docker",
+                "exec",
+                container_name,
+                "pg_isready",
+                "-U",
+                db_user,
+                "-d",
+                db_name,
+            ],
             check=False,
         )
         if result.returncode == 0:
@@ -314,7 +328,9 @@ def wait_for_postgres(container_name: str, db_user: str, db_name: str, timeout_s
     return False
 
 
-def build_source_container_cmd(config: MigrationConfig, container_name: str) -> list[str]:
+def build_source_container_cmd(
+    config: MigrationConfig, container_name: str
+) -> list[str]:
     return [
         "docker",
         "run",
@@ -334,7 +350,9 @@ def build_source_container_cmd(config: MigrationConfig, container_name: str) -> 
     ]
 
 
-def build_target_container_cmd(config: MigrationConfig, container_name: str) -> list[str]:
+def build_target_container_cmd(
+    config: MigrationConfig, container_name: str
+) -> list[str]:
     return [
         "docker",
         "run",
@@ -394,7 +412,9 @@ def _query_scalar(container_name: str, db_user: str, db_name: str, sql: str) -> 
     return (result.stdout or "").strip()
 
 
-def validate_target_data(config: MigrationConfig, container_name: str) -> tuple[bool, list[str]]:
+def validate_target_data(
+    config: MigrationConfig, container_name: str
+) -> tuple[bool, list[str]]:
     errors: list[str] = []
 
     checks = {
@@ -437,7 +457,9 @@ def validate_target_data(config: MigrationConfig, container_name: str) -> tuple[
 
 
 def validate_existing_target(config: MigrationConfig) -> tuple[bool, list[str]]:
-    running_containers = list_volume_containers(config.target_volume, all_containers=False)
+    running_containers = list_volume_containers(
+        config.target_volume, all_containers=False
+    )
     if running_containers:
         for container_name in running_containers:
             try:
@@ -449,11 +471,16 @@ def validate_existing_target(config: MigrationConfig) -> tuple[bool, list[str]]:
     try:
         run_command(build_target_container_cmd(config, temp_container))
         if not wait_for_postgres(temp_container, config.db_user, config.db_name):
-            return False, [f"Timed out waiting for {temp_container} to accept connections"]
+            return False, [
+                f"Timed out waiting for {temp_container} to accept connections"
+            ]
         return validate_target_data(config, temp_container)
     except subprocess.CalledProcessError as exc:
         stderr = (exc.stderr or exc.output or "").strip()
-        return False, [stderr or f"Failed to validate target volume with {_format_command(exc.cmd)}"]
+        return False, [
+            stderr
+            or f"Failed to validate target volume with {_format_command(exc.cmd)}"
+        ]
     finally:
         run_command(["docker", "rm", "-f", temp_container], check=False)
 
@@ -504,11 +531,48 @@ def check_environment(config: MigrationConfig) -> ExitCode:
     return ExitCode.MIGRATION_REQUIRED
 
 
-def _ensure_prerequisites_for_run(config: MigrationConfig) -> ExitCode | None:
+def _volume_name_collision_message(
+    left_label: str, left_value: str, right_label: str, right_value: str
+) -> str | None:
+    if left_value != right_value:
+        return None
+    return (
+        "Volume names must be distinct for migration: "
+        f"{left_label} and {right_label} both use {left_value!r}."
+    )
+
+
+def _ensure_prerequisites_for_run(
+    config: MigrationConfig, backup_volume: str
+) -> ExitCode | None:
     try:
         _docker_check()
     except subprocess.CalledProcessError:
         print("Docker is not available or Docker Desktop is not running.")
+        return ExitCode.PRECONDITION_MISSING
+
+    collision_message = (
+        _volume_name_collision_message(
+            "source_volume",
+            config.source_volume,
+            "target_volume",
+            config.target_volume,
+        )
+        or _volume_name_collision_message(
+            "backup_volume",
+            backup_volume,
+            "source_volume",
+            config.source_volume,
+        )
+        or _volume_name_collision_message(
+            "backup_volume",
+            backup_volume,
+            "target_volume",
+            config.target_volume,
+        )
+    )
+    if collision_message is not None:
+        print(collision_message)
         return ExitCode.PRECONDITION_MISSING
 
     compose_check = inspect_compose_mount(config.compose_path)
@@ -616,12 +680,12 @@ def restore_dump(config: MigrationConfig, dump_path: Path, container_name: str) 
 
 
 def run_migration(config: MigrationConfig) -> ExitCode:
-    prerequisite_code = _ensure_prerequisites_for_run(config)
+    backup_volume = config.backup_volume or _default_backup_volume()
+    dump_path = config.dump_path or _default_dump_path()
+    prerequisite_code = _ensure_prerequisites_for_run(config, backup_volume)
     if prerequisite_code is not None:
         return prerequisite_code
 
-    backup_volume = config.backup_volume or _default_backup_volume()
-    dump_path = config.dump_path or _default_dump_path()
     source_container = _temp_container_name("fiscal-pg15-dump")
     target_container = _temp_container_name("fiscal-pg18-restore")
 
@@ -629,7 +693,9 @@ def run_migration(config: MigrationConfig) -> ExitCode:
         f"Preparing migration from {config.source_volume} ({config.source_image}) "
         f"to {config.target_volume} ({config.target_image})."
     )
-    print(f"Using database user {config.db_user} and password {_mask_secret(config.db_password)}.")
+    print(
+        f"Using database user {config.db_user} and password {_mask_secret(config.db_password)}."
+    )
     print(f"Backup volume: {backup_volume}")
     print(f"Dump path: {dump_path}")
 
@@ -643,7 +709,7 @@ def run_migration(config: MigrationConfig) -> ExitCode:
 
     try:
         export_dump(config, dump_path, source_container)
-    except (subprocess.CalledProcessError, RuntimeError) as exc:
+    except (OSError, subprocess.CalledProcessError, RuntimeError) as exc:
         print(f"Failed to export logical dump to {dump_path}: {exc}")
         return ExitCode.DUMP_FAILED
     finally:
@@ -669,7 +735,7 @@ def run_migration(config: MigrationConfig) -> ExitCode:
             print(f"Dump retained at: {dump_path}")
 
         return ExitCode.OK
-    except (subprocess.CalledProcessError, RuntimeError) as exc:
+    except (OSError, subprocess.CalledProcessError, RuntimeError) as exc:
         print(f"Failed to restore dump into {config.target_volume}: {exc}")
         return ExitCode.RESTORE_FAILED
     finally:
