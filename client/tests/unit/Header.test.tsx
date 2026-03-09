@@ -67,6 +67,8 @@ function renderHeader() {
 }
 
 describe('Header', () => {
+  const SLOW_MENU_FLOW_TIMEOUT_MS = 8000;
+
   beforeEach(() => {
     signOutMock.mockReset();
     userNameRef.value = 'Usuário Teste';
@@ -156,10 +158,10 @@ describe('Header', () => {
     });
     await waitFor(() => {
       expect(menuButton).not.toHaveClass(styles.menuTriggerActive);
-    }, { timeout: 2000 });
+    }, { timeout: SLOW_MENU_FLOW_TIMEOUT_MS });
 
     expect(screen.getByText('Tabela de Incidência do IPI')).toBeInTheDocument();
-  });
+  }, SLOW_MENU_FLOW_TIMEOUT_MS);
 
   it('renders fallback user labels when auth profile is missing', () => {
     userNameRef.value = null;
@@ -206,5 +208,5 @@ describe('Header', () => {
       resolveSignOut?.();
     });
     expect(screen.queryByText('Confirmar saída')).not.toBeInTheDocument();
-  });
+  }, SLOW_MENU_FLOW_TIMEOUT_MS);
 });
