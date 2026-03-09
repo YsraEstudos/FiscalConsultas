@@ -131,7 +131,8 @@ class ProfileService:
             )
 
         # Count total
-        count_query = select(func.count()).select_from(base_query.subquery())
+        # Bolt: Optimize count query by avoiding subquery for faster execution
+        count_query = base_query.with_only_columns(func.count()).order_by(None)
         total = (await self.session.execute(count_query)).scalar() or 0
 
         # Fetch page
