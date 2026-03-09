@@ -1,4 +1,4 @@
-# Seguranca, Auth e Operacao de Secrets (estado real 2026-02-17)
+# Seguranca, Auth e Operacao de Secrets (estado real 2026-03-09)
 
 Este documento consolida os mecanismos de seguranca **efetivamente ativos** no backend.
 
@@ -121,11 +121,17 @@ Fluxo recomendado:
 - auth de IA com rate limit.
 - comparacao de segredo/token com `secrets.compare_digest`.
 - CORS configurado com regex mais estrita em desenvolvimento local (`:5173`).
+- shell SPA (`client/index.html`) publica:
+  - `Content-Security-Policy`
+  - `referrer` policy
+  - `Permissions-Policy`
+- frontend sanitiza HTML renderizado e endurece links/imagens em `client/src/utils/contentSecurity.ts`.
+- frontend nao depende de cookies ambiente para auth cross-origin (`withCredentials: false` no axios client).
 
 ## 9) Lacunas e Riscos Abertos
 
 1. cache de JWT e provisioning sao in-memory (nao compartilhados entre multiplas instancias).
-2. ausencia de middleware dedicado para headers de seguranca HTTP (CSP, HSTS, X-Frame-Options, etc.).
+2. ainda nao existe middleware backend dedicado para headers de seguranca HTTP em todas as respostas de API (HSTS, X-Frame-Options, CSP por header, etc.); hoje parte do hardening esta no shell SPA do frontend.
 3. ambientes sem `AUTH__CLERK_DOMAIN` nao validam JWT e podem bloquear fluxos autenticados.
 4. `TenantMiddleware` usa task background sem observabilidade forte de falha.
 5. endpoint `/api/auth/me` e publico por design (retorna apenas `authenticated`), mas depende de contrato claro para nao crescer escopo sensivel no futuro.

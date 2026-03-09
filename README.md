@@ -85,6 +85,7 @@ Configuração mínima para desenvolvimento local com SQLite:
 
 ```env
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_sua_chave
+VITE_RESTRICTED_UI_EMAILS=voce@empresa.com,admin@empresa.com
 ```
 
 Sem `VITE_CLERK_PUBLISHABLE_KEY`, o frontend exibe apenas a tela de erro de configuração.
@@ -107,6 +108,7 @@ AUTH__CLERK_CLOCK_SKEW_SECONDS=120
 ```env
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_sua_chave
 VITE_CLERK_TOKEN_TEMPLATE=backend_api
+VITE_RESTRICTED_UI_EMAILS=voce@empresa.com,admin@empresa.com
 ```
 
 Checklist rápido Clerk (dev local):
@@ -115,6 +117,7 @@ Checklist rápido Clerk (dev local):
 - `AUTH__CLERK_AUDIENCE` deve ser exatamente o `aud` emitido no template JWT (`backend_api`).
 - `VITE_CLERK_TOKEN_TEMPLATE` deve ter o mesmo nome do template configurado no Clerk.
 - `AUTH__CLERK_AUTHORIZED_PARTIES` deve incluir `http://localhost:5173` e `http://127.0.0.1:5173`.
+- `VITE_RESTRICTED_UI_EMAILS` é opcional e controla apenas superfícies de UI restritas no frontend (chat IA, comentários e aba de contribuições). Não substitui autorização backend.
 
 ### 3) Preparar dados locais (SQLite)
 
@@ -243,6 +246,35 @@ Status observado em **2026-02-19** (fechamento da Fase 2 de cobertura frontend):
   - `client/src/components/HighlightPopover.tsx`: **94.11% branches** (**96.15% statements**)
   - `client/src/hooks/useTextSelection.ts`: **100% branches** (**100% statements**)
 
+Status observado em **2026-03-09** (hardening de frontend + atualização da suíte):
+
+- Frontend:
+  - `cd client && npm run test`: **270 passed** (`46` arquivos de teste)
+  - `cd client && npm run type-check`: **OK**
+- Novas suítes/expansões relevantes:
+  - `client/src/utils/contentSecurity.test.ts`
+  - `client/src/utils/authz.test.ts`
+  - `client/tests/unit/MarkdownPane.test.tsx`
+  - reforços em `AuthContext`, `ModalManager`, `ResultDisplay`, `Header`, `App.behavior` e `AppSearch`
+
+## Hardening de frontend (2026-03-09)
+
+Mudanças de segurança documentadas no estado atual:
+
+- HTML vindo do backend ou de markdown legado passa por sanitização central em `client/src/utils/contentSecurity.ts` antes de entrar no DOM.
+- A sanitização preserva atributos necessários para smart-links/notas (`data-ncm`, `data-note`, `data-chapter`), mas remove tags perigosas (`script`, `iframe`, `form`, `svg`, `math`, mídia embutida etc.) e atributos inseguros (`style`, `srcset`).
+- Links recebem hardening adicional:
+  - protocolos permitidos: `http`, `https`, `mailto`, `tel`
+  - links externos ou `_blank` recebem `rel="noopener noreferrer"`
+- Imagens recebem hardening adicional:
+  - só aceitam `http`, `https`, `blob` e `data:image/...` permitido
+  - imagens inseguras são descartadas
+  - imagens válidas recebem `loading="lazy"`, `decoding="async"` e `referrerpolicy="no-referrer"`
+- O shell SPA em `client/index.html` publica `Content-Security-Policy`, `referrer` policy e `Permissions-Policy` via meta tags.
+- O client axios opera com `withCredentials: false`; a autenticação do Clerk segue apenas pelo header `Authorization`.
+- `isAdmin` no frontend não usa mais fallback por email hardcoded; agora deriva de `membership.role` do Clerk e aceita `admin`, `owner` e `superadmin` (inclusive em formatos como `org:admin`).
+- `VITE_RESTRICTED_UI_EMAILS` controla apenas exposição de UI opcional no client. Qualquer autorização sensível continua devendo existir no backend.
+
 Guia curto de estratégia, marcadores e escopo de testes: `docs/TESTING.md`.
 Observação: suites legadas/diagnóstico fora do contrato oficial ficam excluídas do fluxo padrão.
 
@@ -369,6 +401,7 @@ Mudanças principais já aplicadas:
 | `GOOGLE_API_KEY` | Habilita integração Gemini no serviço de IA |
 | `VITE_CLERK_PUBLISHABLE_KEY` | Obrigatório para o frontend montar com Clerk |
 | `VITE_CLERK_TOKEN_TEMPLATE` | Template usado no `getToken()` do Clerk (recomendado: `backend_api`) |
+| `VITE_RESTRICTED_UI_EMAILS` | Lista CSV opcional para liberar UI restrita no frontend (chat IA, comentários, contribuições); não é controle de auth backend |
 | `VITE_AUTH_DEBUG` | (Opcional) habilita logs de diagnóstico JWT no navegador |
 | `VITE_API_URL` / `VITE_API_FILTER_URL` | Base URL de API no frontend (normalizada em runtime) |
 
@@ -396,7 +429,9 @@ Não há script dedicado de deploy/orquestração além de `docker-compose.yml` 
 ## Documentação para IA e manutenção
 
 - Contexto técnico principal: [`docs/AI Context/AI_CONTEXT.md`](docs/AI%20Context/AI_CONTEXT.md)
+- Segurança backend/auth: [`docs/AI Context/Backend/Seguranca.md`](docs/AI%20Context/Backend/Seguranca.md)
 - Guia completo de abas (estado, fluxos e impactos): [`docs/AI Context/Frontend/Tabs.md`](docs/AI%20Context/Frontend/Tabs.md)
 - Navegação e interações cruzadas: [`docs/AI Context/Frontend/NavigationInteractions.md`](docs/AI%20Context/Frontend/NavigationInteractions.md)
 - Auto-scroll e sincronização: [`docs/AI Context/Frontend/Autoscroll.md`](docs/AI%20Context/Frontend/Autoscroll.md)
+- Estratégia e estado da suíte: [`docs/TESTING.md`](docs/TESTING.md)
 - Roadmap: [`docs/roadmap/ROADMAP.md`](docs/roadmap/ROADMAP.md)
