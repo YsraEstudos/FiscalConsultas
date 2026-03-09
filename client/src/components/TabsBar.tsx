@@ -15,6 +15,13 @@ export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch
     const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const draggedTabIdRef = useRef<string | null>(null);
 
+    const handleTabMouseDown = (event: React.MouseEvent<HTMLDivElement>, tabId: string) => {
+        if (event.button !== 1) return;
+
+        event.preventDefault();
+        onClose(event, tabId);
+    };
+
     // Scroll to active tab when it changes
     useEffect(() => {
         const activeTabElement = tabRefs.current.get(activeTabId);
@@ -44,6 +51,7 @@ export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch
                     className={`${styles.tabButton} ${activeTabId === tab.id ? styles.tabButtonActive : ''}`}
                     data-document={tab.document}
                     onClick={() => onSwitch(tab.id)}
+                    onMouseDown={(event) => handleTabMouseDown(event, tab.id)}
                     onDragStart={(e) => {
                         draggedTabIdRef.current = tab.id;
                         e.dataTransfer.effectAllowed = 'move';
