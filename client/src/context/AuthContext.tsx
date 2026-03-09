@@ -5,7 +5,7 @@
  * expondo informações do usuário e organização atual.
  */
 import { createContext, useContext, useEffect, ReactNode } from 'react';
-import { useUser, useAuth as useClerkAuth, useOrganization } from '@clerk/clerk-react';
+import { useUser, useAuth as useClerkAuth, useOrganization } from '@clerk/react';
 import { registerClerkTokenGetter, unregisterClerkTokenGetter } from '../services/api';
 import { hasPrivilegedRole } from '../utils/authz';
 

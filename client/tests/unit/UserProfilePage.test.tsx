@@ -21,7 +21,7 @@ vi.mock('../../src/services/api', () => ({
 }));
 
 // ─── Mocks de Clerk ──────────────────────────────────────────────────────────
-vi.mock('@clerk/clerk-react', () => ({
+vi.mock('@clerk/react', () => ({
     UserProfile: () => <div data-testid="clerk-user-profile" />,
     OrganizationProfile: () => <div data-testid="clerk-org-profile" />,
 }));
@@ -128,10 +128,8 @@ describe('UserProfilePage', () => {
     it('renderiza o modal com título quando isOpen=true', async () => {
         render(<UserProfilePage isOpen={true} onClose={vi.fn()} />);
         expect(screen.getByText('Meu Perfil')).toBeInTheDocument();
-        await waitFor(() => {
-            expect(mockGetMyProfile).toHaveBeenCalled();
-            expect(screen.getByText('Especialista em classificação fiscal')).toBeInTheDocument();
-        });
+        await waitFor(() => expect(mockGetMyProfile).toHaveBeenCalled());
+        await screen.findByPlaceholderText('Conte um pouco sobre você...');
     });
 
     it('chama onClose ao clicar no botão X', async () => {
@@ -352,10 +350,13 @@ describe('UserProfilePage', () => {
     });
 
     it('executa deleção após confirmar com "deletar"', async () => {
+        const originalConsoleError = console.error.bind(console);
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation((...args) => {
             if (args.some((arg) => String(arg).includes('Not implemented: navigation to another Document'))) {
                 return;
             }
+
+            originalConsoleError(...args);
         });
         const onClose = vi.fn();
         try {

@@ -10,6 +10,8 @@ describe('hasPrivilegedRole', () => {
 
     it('rejects non-privileged roles', () => {
         expect(hasPrivilegedRole('org:member')).toBe(false);
+        expect(hasPrivilegedRole('team:admin')).toBe(false);
+        expect(hasPrivilegedRole('user:owner')).toBe(false);
         expect(hasPrivilegedRole('viewer')).toBe(false);
         expect(hasPrivilegedRole(null)).toBe(false);
     });

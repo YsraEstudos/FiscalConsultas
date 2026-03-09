@@ -19,6 +19,7 @@ vi.mock('../../src/services/api', () => ({
 // Importa após o mock para obter a versão mockada
 import { getUserCard } from '../../src/services/api';
 const mockGetUserCard = vi.mocked(getUserCard);
+const unsafeJavascriptUrl = `javascript${':alert(1)'}`;
 
 describe('UserHoverCard', () => {
     beforeEach(() => {
@@ -104,6 +105,28 @@ describe('UserHoverCard', () => {
         await waitFor(() => {
             const img = screen.getByRole('img');
             expect(img).toHaveAttribute('src', 'https://example.com/avatar.png');
+            expect(img).toHaveAttribute('alt', 'Ana Lima');
+        });
+    });
+
+    it('usa a imagem do card quando a prop imageUrl falha na sanitização', async () => {
+        mockGetUserCard.mockResolvedValue({
+            user_id: 'user_790',
+            full_name: 'Ana Lima',
+            bio: 'Auditora fiscal',
+            image_url: 'https://example.com/card-avatar.png',
+            comment_count: 8,
+        });
+
+        render(
+            <UserHoverCard userId="user_790" imageUrl={unsafeJavascriptUrl}>
+                <span>Ana Lima</span>
+            </UserHoverCard>,
+        );
+
+        await waitFor(() => {
+            const img = screen.getByRole('img');
+            expect(img).toHaveAttribute('src', 'https://example.com/card-avatar.png');
             expect(img).toHaveAttribute('alt', 'Ana Lima');
         });
     });

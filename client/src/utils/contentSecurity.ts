@@ -42,7 +42,17 @@ const SAFE_DATA_IMAGE_PATTERN = /^data:image\/(?:png|gif|jpe?g|webp|bmp|svg\+xml
 function normalizeUrlCandidate(value: string | null | undefined): string | null {
     const trimmed = (value || '').trim();
     if (!trimmed) return null;
-    if (/[\u0000-\u001F\u007F\s]/.test(trimmed)) return null;
+    if (/\s/.test(trimmed)) return null;
+
+    for (let index = 0; index < trimmed.length; index += 1) {
+        const codePoint = trimmed.codePointAt(index);
+        if (codePoint === undefined) continue;
+        if (codePoint <= 0x1F || codePoint === 0x7F) return null;
+        if (codePoint > 0xFFFF) {
+            index += 1;
+        }
+    }
+
     return trimmed;
 }
 

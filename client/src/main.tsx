@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ClerkProvider } from '@clerk/clerk-react'
+import { ClerkProvider } from '@clerk/react'
 import './index.css'
 import App from './App'
 import { AuthProvider } from './context/AuthContext';
@@ -18,7 +18,7 @@ if (!rootElement) throw new Error('Failed to find the root element');
 if (PUBLISHABLE_KEY) {
     createRoot(rootElement).render(
         <StrictMode>
-            <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/" appearance={clerkTheme}>
+            <ClerkProvider publishableKey={PUBLISHABLE_KEY} appearance={clerkTheme}>
                 <AuthProvider>
                     <SettingsProvider>
                         <GlossaryProvider>
