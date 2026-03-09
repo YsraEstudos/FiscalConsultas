@@ -5,32 +5,96 @@ import * as matchers from '@testing-library/jest-dom/matchers';
 
 expect.extend(matchers);
 
-vi.mock('@clerk/clerk-react', () => ({
+const {
+    getMockSignedInState,
+    mockUseUser,
+    mockUseAuth,
+    mockUseClerk,
+    setMockSignedInState,
+    resetMockClerkState,
+} = vi.hoisted(() => {
+    const sharedAuthState = {
+        isSignedIn: true,
+        getToken: vi.fn().mockResolvedValue('test_token'),
+        signOut: vi.fn(),
+    };
+
+    const mockUser = {
+        id: 'user_test',
+        fullName: 'Test User',
+        firstName: 'Test',
+        primaryEmailAddress: { emailAddress: 'test@example.com' },
+        imageUrl: '',
+    };
+
+    const mockUseUser = () => ({
+        user: sharedAuthState.isSignedIn ? mockUser : null,
+        isSignedIn: sharedAuthState.isSignedIn,
+        isLoaded: true,
+    });
+
+    const mockUseAuth = () => ({
+        getToken: sharedAuthState.getToken,
+        signOut: sharedAuthState.signOut,
+        isSignedIn: sharedAuthState.isSignedIn,
+        isLoaded: true,
+    });
+
+    const mockUseClerk = () => ({
+        signOut: sharedAuthState.signOut,
+    });
+
+    const getMockSignedInState = () => {
+        const userState = mockUseUser();
+        if (typeof userState?.isSignedIn === 'boolean') return userState.isSignedIn;
+
+        const authState = mockUseAuth();
+        if (typeof (authState as { isSignedIn?: unknown })?.isSignedIn === 'boolean') {
+            return Boolean((authState as { isSignedIn?: boolean }).isSignedIn);
+        }
+
+        return false;
+    };
+
+    const setMockSignedInState = (value: boolean) => {
+        sharedAuthState.isSignedIn = value;
+    };
+
+    const resetMockClerkState = () => {
+        sharedAuthState.isSignedIn = true;
+        sharedAuthState.getToken.mockReset();
+        sharedAuthState.getToken.mockResolvedValue('test_token');
+        sharedAuthState.signOut.mockReset();
+    };
+
+    return {
+        getMockSignedInState,
+        mockUseUser,
+        mockUseAuth,
+        mockUseClerk,
+        setMockSignedInState,
+        resetMockClerkState,
+    };
+});
+
+export { setMockSignedInState };
+
+vi.mock('@clerk/react', () => ({
     ClerkProvider: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
-    SignedIn: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
-    SignedOut: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
+    SignedIn: ({ children }: { children: React.ReactNode }) => getMockSignedInState()
+        ? React.createElement(React.Fragment, null, children)
+        : null,
+    SignedOut: ({ children }: { children: React.ReactNode }) => getMockSignedInState()
+        ? null
+        : React.createElement(React.Fragment, null, children),
     SignInButton: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
     SignUpButton: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
     UserButton: () => null,
     OrganizationSwitcher: () => null,
     SignIn: () => null,
-    useClerk: () => ({ signOut: vi.fn() }),
-    useUser: () => ({
-        user: {
-            id: 'user_test',
-            fullName: 'Test User',
-            firstName: 'Test',
-            primaryEmailAddress: { emailAddress: 'test@example.com' },
-            imageUrl: '',
-        },
-        isSignedIn: true,
-        isLoaded: true,
-    }),
-    useAuth: () => ({
-        getToken: vi.fn().mockResolvedValue('test_token'),
-        signOut: vi.fn(),
-        isLoaded: true,
-    }),
+    useClerk: mockUseClerk,
+    useUser: mockUseUser,
+    useAuth: mockUseAuth,
     useOrganization: () => ({
         organization: { id: 'org_test', name: 'Test Org', slug: 'test-org' },
     }),
@@ -125,6 +189,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+    resetMockClerkState();
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation((...args) => {
         if (shouldSilenceConsole(args)) return;
         originalConsoleError(...args);
