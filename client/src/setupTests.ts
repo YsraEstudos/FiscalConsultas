@@ -40,9 +40,9 @@ vi.mock('@clerk/react', () => ({
     SignedIn: ({ children }: { children: React.ReactNode }) => getMockSignedInState()
         ? React.createElement(React.Fragment, null, children)
         : null,
-    SignedOut: ({ children }: { children: React.ReactNode }) => !getMockSignedInState()
-        ? React.createElement(React.Fragment, null, children)
-        : null,
+    SignedOut: ({ children }: { children: React.ReactNode }) => getMockSignedInState()
+        ? null
+        : React.createElement(React.Fragment, null, children),
     SignInButton: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
     SignUpButton: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
     UserButton: () => null,
