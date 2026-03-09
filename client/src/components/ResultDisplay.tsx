@@ -1,7 +1,6 @@
 import { TextSearchResults } from './TextSearchResults';
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { marked } from 'marked';
-import DOMPurify from 'dompurify';
 import { useRobustScroll } from '../hooks/useRobustScroll';
 import { generateAnchorId } from '../utils/id_utils';
 import { SearchResultItem } from './TextSearchResults';
@@ -20,11 +19,11 @@ import { useAuth } from '../context/AuthContext';
 import { useComments } from '../hooks/useComments';
 import toast from 'react-hot-toast';
 import { canAccessRestrictedUi } from '../utils/featureAccess';
-
-const sanitizeHtml = (html: string) => DOMPurify.sanitize(html, {
-    ALLOW_DATA_ATTR: true,
-    ADD_ATTR: ['data-ncm', 'data-note', 'data-chapter', 'aria-label', 'data-tooltip', 'role', 'tabindex']
-});
+import {
+    appendTrustedHtmlToElement,
+    replaceElementWithTrustedHtml,
+    sanitizeRichHtml,
+} from '../utils/contentSecurity';
 
 const LEGACY_MARKDOWN_PATTERN = /(^|\n)\s{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+\.\s|---+\s*$)|\*\*[^*\n]+?\*\*/m;
 
@@ -386,9 +385,7 @@ function cancelIdleTask(taskId: number) {
 }
 
 function appendMarkupChunk(container: HTMLElement, htmlChunk: string) {
-    const template = document.createElement('template');
-    template.innerHTML = htmlChunk;
-    container.appendChild(template.content);
+    appendTrustedHtmlToElement(container, htmlChunk);
 }
 
 function normalizeDigits(value: string): string {
@@ -458,13 +455,11 @@ function getCachedRawMarkup(
     return nextRawMarkup;
 }
 
-function getFinalMarkup(rawMarkdown: string, rawMarkup: string, cacheKey: string): string {
-    if (rawMarkdown) return rawMarkup;
-
+function getFinalMarkup(rawMarkup: string, cacheKey: string): string {
     const cachedSanitizedMarkup = cacheGet(sharedSanitizedMarkupCache, cacheKey);
     if (cachedSanitizedMarkup) return cachedSanitizedMarkup;
 
-    const sanitizedMarkup = sanitizeHtml(rawMarkup);
+    const sanitizedMarkup = sanitizeRichHtml(rawMarkup);
     cacheSet(sharedSanitizedMarkupCache, cacheKey, sanitizedMarkup);
     return sanitizedMarkup;
 }
@@ -479,9 +474,7 @@ function renderSmallMarkup(
 ): () => void {
     const frameId = requestAnimationFrame(() => {
         if (!contentRef.current) return;
-        const template = document.createElement('template');
-        template.innerHTML = finalMarkup;
-        contentRef.current.replaceChildren(template.content);
+        replaceElementWithTrustedHtml(contentRef.current, finalMarkup);
         renderedMarkupKeyRef.current = cacheKey;
         setIsContentReady(true);
         setIsFullyRendered(true);
@@ -573,7 +566,7 @@ function renderMarkupContent(options: MarkupRenderOptions): (() => void) | undef
     refs.lastMarkupRef.current = cacheKey;
     refs.lastHtmlRef.current = rawMarkup;
 
-    const finalMarkup = getFinalMarkup(rawMarkdown, rawMarkup, cacheKey);
+    const finalMarkup = getFinalMarkup(rawMarkup, cacheKey);
     if (finalMarkup.length <= CHUNK_SIZE_THRESHOLD) {
         return renderSmallMarkup(refs.contentRef, finalMarkup, cacheKey, refs.renderedMarkupKeyRef, setIsContentReady, setIsFullyRendered);
     }
@@ -1228,7 +1221,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             });
         } catch (e) {
             console.error("Content render error:", e);
-            if (contentRef.current) contentRef.current.innerText = 'Error rendering content.';
+            if (contentRef.current) contentRef.current.textContent = 'Error rendering content.';
             renderedMarkupKeyRef.current = null;
             setIsContentReady(true);
             setIsFullyRendered(true);
@@ -1371,7 +1364,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                 }}
                 id={containerId}
             >
-                {/* Texto renderizado via contentRef (innerHTML injection) */}
+                {/* Texto renderizado via fragmentos HTML sanitizados */}
                 <div
                     className={styles.contentText}
                     ref={(el) => {

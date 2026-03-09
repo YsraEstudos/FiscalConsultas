@@ -29,15 +29,6 @@ interface SearchHighlighterProps {
 // Block elements that usually denote a "paragraph" or chunk of meaning
 const BLOCK_ELEMENTS = new Set(['P', 'LI', 'DIV', 'TD', 'TH', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
 
-function escapeHtmlAttribute(value: string): string {
-    return value
-        .replaceAll('&', '&amp;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;');
-}
-
 /**
  * Strip diacritics/accents from a string.
  * e.g. "centrífuga" → "centrifuga", "ação" → "acao"
@@ -430,24 +421,24 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({
 
             selectedRanges.sort((a, b) => a.start - b.start);
 
-            const htmlParts: string[] = [];
+            const wrapper = document.createElement('span');
+            wrapper.dataset.shWrapper = '1';
             let cursor = 0;
             for (const range of selectedRanges) {
                 if (range.start > cursor) {
-                    htmlParts.push(escapeHtmlAttribute(originalText.slice(cursor, range.start)));
+                    wrapper.appendChild(document.createTextNode(originalText.slice(cursor, range.start)));
                 }
-                const safeTerm = escapeHtmlAttribute(range.term);
-                const matchedText = escapeHtmlAttribute(originalText.slice(range.start, range.end));
-                htmlParts.push(`<mark data-sh-term="${safeTerm}" class="search-highlight search-highlight-partial">${matchedText}</mark>`);
+                const mark = document.createElement('mark');
+                mark.dataset.shTerm = range.term;
+                mark.className = 'search-highlight search-highlight-partial';
+                mark.textContent = originalText.slice(range.start, range.end);
+                wrapper.appendChild(mark);
                 cursor = range.end;
             }
             if (cursor < originalText.length) {
-                htmlParts.push(escapeHtmlAttribute(originalText.slice(cursor)));
+                wrapper.appendChild(document.createTextNode(originalText.slice(cursor)));
             }
 
-            const wrapper = document.createElement('span');
-            wrapper.dataset.shWrapper = '1';
-            wrapper.innerHTML = htmlParts.join('');
             textNode.replaceWith(wrapper);
 
             // Now collect the newly inserted marks

@@ -17,6 +17,7 @@ import {
 } from '../services/api';
 import styles from './UserProfilePage.module.css';
 import { canAccessRestrictedUi } from '../utils/featureAccess';
+import { sanitizeImageUrl } from '../utils/contentSecurity';
 
 interface UserProfilePageProps {
     isOpen: boolean;
@@ -169,6 +170,7 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
     const { userName, userEmail, userImageUrl } = useAuth();
     const isAdmin = useIsAdmin();
     const canUseRestrictedUi = canAccessRestrictedUi(userEmail);
+    const safeUserImageUrl = sanitizeImageUrl(userImageUrl);
 
     const [activeTab, setActiveTab] = useState<TabKey>('profile');
     const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -373,8 +375,15 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
                             {activeTab === 'profile' && profile && (
                                 <>
                                     <div className={styles.profileHeader}>
-                                        {userImageUrl ? (
-                                            <img src={userImageUrl} alt="Avatar" className={styles.avatar} />
+                                        {safeUserImageUrl ? (
+                                            <img
+                                                src={safeUserImageUrl}
+                                                alt="Avatar"
+                                                className={styles.avatar}
+                                                loading="lazy"
+                                                decoding="async"
+                                                referrerPolicy="no-referrer"
+                                            />
                                         ) : (
                                             <div className={styles.avatarPlaceholder}>
                                                 {getInitials(userName)}

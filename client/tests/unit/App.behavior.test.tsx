@@ -513,6 +513,7 @@ describe('App behavior', () => {
   });
 
   it('handles delegated smart links and note refs (local + cross chapter + errors)', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     setTabsState([
       buildTab({
         id: 'tab-1',
@@ -526,43 +527,48 @@ describe('App behavior', () => {
     mocks.fetchNotesMock.mockResolvedValueOnce({ '2': 'Nota cruzada 73' });
     mocks.fetchNotesMock.mockRejectedValueOnce(new Error('boom'));
 
-    render(<App />);
+    try {
+      render(<App />);
 
-    const smartLink = appendSmartLink('9401');
-    fireEvent.click(smartLink);
-    expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('tab-1', 'nesh', '9401', true);
+      const smartLink = appendSmartLink('9401');
+      fireEvent.click(smartLink);
+      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('tab-1', 'nesh', '9401', true);
 
-    const localNoteRef = appendNoteRef('1', '84');
-    fireEvent.click(localNoteRef);
-    await waitFor(() => {
-      expect(screen.getByTestId('note-panel')).toHaveAttribute('data-open', 'true');
-    });
-    expect(screen.getByTestId('note-panel')).toHaveAttribute('data-note', '1');
-    expect(screen.getByTestId('note-panel')).toHaveAttribute('data-chapter', '84');
-    expect(screen.getByTestId('note-panel')).toHaveAttribute('data-content', 'Nota local 84');
+      const localNoteRef = appendNoteRef('1', '84');
+      fireEvent.click(localNoteRef);
+      await waitFor(() => {
+        expect(screen.getByTestId('note-panel')).toHaveAttribute('data-open', 'true');
+      });
+      expect(screen.getByTestId('note-panel')).toHaveAttribute('data-note', '1');
+      expect(screen.getByTestId('note-panel')).toHaveAttribute('data-chapter', '84');
+      expect(screen.getByTestId('note-panel')).toHaveAttribute('data-content', 'Nota local 84');
 
-    fireEvent.click(screen.getByTestId('note-panel-close'));
-    await waitFor(() => {
-      expect(screen.getByTestId('note-panel')).toHaveAttribute('data-open', 'false');
-    });
+      fireEvent.click(screen.getByTestId('note-panel-close'));
+      await waitFor(() => {
+        expect(screen.getByTestId('note-panel')).toHaveAttribute('data-open', 'false');
+      });
 
-    const crossChapterNoteRef = appendNoteRef('2', '73');
-    fireEvent.click(crossChapterNoteRef);
-    await waitFor(() => {
-      expect(mocks.fetchNotesMock).toHaveBeenCalledWith('73');
-    });
-    expect(mocks.toastMock.loading).toHaveBeenCalledWith('Carregando notas do Capítulo 73...');
-    expect(mocks.toastMock.dismiss).toHaveBeenCalledWith('loading-toast');
-    await waitFor(() => {
-      expect(screen.getByTestId('note-panel')).toHaveAttribute('data-content', 'Nota cruzada 73');
-    });
+      const crossChapterNoteRef = appendNoteRef('2', '73');
+      fireEvent.click(crossChapterNoteRef);
+      await waitFor(() => {
+        expect(mocks.fetchNotesMock).toHaveBeenCalledWith('73');
+      });
+      expect(mocks.toastMock.loading).toHaveBeenCalledWith('Carregando notas do Capítulo 73...');
+      expect(mocks.toastMock.dismiss).toHaveBeenCalledWith('loading-toast');
+      await waitFor(() => {
+        expect(screen.getByTestId('note-panel')).toHaveAttribute('data-content', 'Nota cruzada 73');
+      });
 
-    const crossChapterErrorRef = appendNoteRef('3', '72');
-    fireEvent.click(crossChapterErrorRef);
-    await waitFor(() => {
-      expect(mocks.fetchNotesMock).toHaveBeenCalledWith('72');
-    });
-    expect(mocks.toastMock.error).toHaveBeenCalledWith('Erro ao carregar notas do Capítulo 72.');
+      const crossChapterErrorRef = appendNoteRef('3', '72');
+      fireEvent.click(crossChapterErrorRef);
+      await waitFor(() => {
+        expect(mocks.fetchNotesMock).toHaveBeenCalledWith('72');
+      });
+      expect(mocks.toastMock.error).toHaveBeenCalledWith('Erro ao carregar notas do Capítulo 72.');
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Erro no fetchCrossChapterNotes:', expect.any(Error));
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it('falls back to chapter scroll and errors when note content is missing', () => {

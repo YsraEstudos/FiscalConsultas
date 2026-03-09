@@ -16,3 +16,21 @@
 /* 3. Utilities */
 @import url("./styles/utilities/scrollbar.css");
 @import url("./styles/utilities/highlights.css");
+
+.security-fallback-main {
+  font-family: system-ui, sans-serif;
+  padding: 2rem;
+  line-height: 1.5;
+}
+
+.security-fallback-title {
+  margin-top: 0;
+}
+
+.security-fallback-pre {
+  background: #111;
+  color: #eee;
+  padding: 0.75rem;
+  border-radius: 8px;
+  overflow-x: auto;
+}
