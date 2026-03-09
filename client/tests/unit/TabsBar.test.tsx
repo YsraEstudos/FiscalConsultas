@@ -77,6 +77,30 @@ describe('TabsBar', () => {
     expect(onNewTab).toHaveBeenCalledTimes(1);
   });
 
+  it('closes the tab on middle click without switching and prevents the default action', () => {
+    const onClose = vi.fn((event: React.MouseEvent) => event.stopPropagation());
+    const onSwitch = vi.fn();
+    render(
+      <TabsBar tabs={tabs} activeTabId="tab-1" onSwitch={onSwitch} onClose={onClose} onNewTab={vi.fn()} />,
+    );
+
+    const tabButton = screen.getByText('Aba TIPI').closest('div') as HTMLDivElement | null;
+    expect(tabButton).not.toBeNull();
+    if (!tabButton) return;
+
+    const event = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      button: 1,
+    });
+
+    tabButton.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(onClose).toHaveBeenCalledWith(expect.anything(), 'tab-2');
+    expect(onSwitch).not.toHaveBeenCalled();
+  });
+
   it('renders document badges for nesh and tipi tabs', () => {
     render(
       <TabsBar tabs={tabs} activeTabId="tab-1" onSwitch={vi.fn()} onClose={vi.fn()} onNewTab={vi.fn()} />,
