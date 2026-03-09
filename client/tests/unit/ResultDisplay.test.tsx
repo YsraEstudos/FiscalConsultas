@@ -1,10 +1,23 @@
+import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ResultDisplay } from '../../src/components/ResultDisplay';
 import { SettingsProvider } from '../../src/context/SettingsContext';
-import { AuthProvider } from '../../src/context/AuthContext';
 
-// Mock child components to isolate ResultDisplay logic
+const authState = {
+    userName: 'Blocked User',
+    userImageUrl: null,
+    isSignedIn: true,
+    isLoading: false,
+    userId: 'user_test',
+    userEmail: 'blocked@example.com',
+};
+
+vi.mock('../../src/context/AuthContext', () => ({
+    AuthProvider: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
+    useAuth: () => authState,
+}));
+
 vi.mock('../../src/components/TextSearchResults', () => ({
     TextSearchResults: ({ results }: { results: any[] }) => <div data-testid="text-results">{results.length} results found</div>
 }));
@@ -13,12 +26,34 @@ vi.mock('../../src/components/Sidebar', () => ({
     Sidebar: () => <div data-testid="sidebar">Sidebar</div>
 }));
 
+vi.mock('../../src/components/SearchHighlighter', () => ({
+    SearchHighlighter: ({
+        query,
+        onHighlightScrollComplete,
+    }: {
+        query?: string | null;
+        onHighlightScrollComplete?: (scrollTop: number) => void;
+    }) => (
+        <div data-testid="search-highlighter">
+            <span>{query || ''}</span>
+            <button
+                data-testid="search-highlighter-complete"
+                onClick={() => onHighlightScrollComplete?.(321)}
+            >
+                complete-highlight-scroll
+            </button>
+        </div>
+    )
+}));
+
 describe('ResultDisplay Component', () => {
     beforeEach(() => {
-        // Mock scrollIntoView
         Element.prototype.scrollIntoView = vi.fn();
+        vi.stubEnv('VITE_RESTRICTED_UI_EMAILS', 'israelseja2@gmail.com');
+        authState.userEmail = 'blocked@example.com';
+        authState.isSignedIn = true;
+        authState.isLoading = false;
 
-        // Mock requestIdleCallback to run immediately
         globalThis.requestIdleCallback = (cb: any) => {
             return window.setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 50 }), 0);
         };
@@ -31,19 +66,17 @@ describe('ResultDisplay Component', () => {
 
     it('renders empty state when no data is provided', () => {
         render(
-            <AuthProvider>
-                <SettingsProvider>
-                    <ResultDisplay
-                        data={null}
-                        mobileMenuOpen={false}
-                        onCloseMobileMenu={vi.fn()}
-                        isActive={true}
-                        tabId="tab-1"
-                        isNewSearch={false}
-                        onConsumeNewSearch={vi.fn()}
-                    />
-                </SettingsProvider>
-            </AuthProvider>
+            <SettingsProvider>
+                <ResultDisplay
+                    data={null}
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={true}
+                    tabId="tab-1"
+                    isNewSearch={false}
+                    onConsumeNewSearch={vi.fn()}
+                />
+            </SettingsProvider>
         );
         expect(screen.getByText('Sem resultados para exibir.')).toBeInTheDocument();
     });
@@ -55,19 +88,17 @@ describe('ResultDisplay Component', () => {
             query: 'test'
         };
         render(
-            <AuthProvider>
-                <SettingsProvider>
-                    <ResultDisplay
-                        data={mockData}
-                        mobileMenuOpen={false}
-                        onCloseMobileMenu={vi.fn()}
-                        isActive={true}
-                        tabId="tab-1"
-                        isNewSearch={false}
-                        onConsumeNewSearch={vi.fn()}
-                    />
-                </SettingsProvider>
-            </AuthProvider>
+            <SettingsProvider>
+                <ResultDisplay
+                    data={mockData}
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={true}
+                    tabId="tab-1"
+                    isNewSearch={false}
+                    onConsumeNewSearch={vi.fn()}
+                />
+            </SettingsProvider>
         );
         expect(screen.getByTestId('text-results')).toHaveTextContent('3 results found');
     });
@@ -79,21 +110,18 @@ describe('ResultDisplay Component', () => {
             resultados: []
         };
         render(
-            <AuthProvider>
-                <SettingsProvider>
-                    <ResultDisplay
-                        data={mockData as any}
-                        mobileMenuOpen={false}
-                        onCloseMobileMenu={vi.fn()}
-                        isActive={true}
-                        tabId="tab-1"
-                        isNewSearch={false}
-                        onConsumeNewSearch={vi.fn()}
-                    />
-                </SettingsProvider>
-            </AuthProvider>
+            <SettingsProvider>
+                <ResultDisplay
+                    data={mockData as any}
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={true}
+                    tabId="tab-1"
+                    isNewSearch={false}
+                    onConsumeNewSearch={vi.fn()}
+                />
+            </SettingsProvider>
         );
-        // marked parses # Title to <h1 id="title">Title</h1>
         await waitFor(() => {
             expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Title');
             expect(screen.getByText('Some content')).toBeInTheDocument();
@@ -122,25 +150,98 @@ describe('ResultDisplay Component', () => {
         };
 
         render(
-            <AuthProvider>
-                <SettingsProvider>
-                    <ResultDisplay
-                        data={mockData as any}
-                        mobileMenuOpen={false}
-                        onCloseMobileMenu={vi.fn()}
-                        isActive={true}
-                        tabId="tab-1"
-                        isNewSearch={false}
-                        onConsumeNewSearch={vi.fn()}
-                    />
-                </SettingsProvider>
-            </AuthProvider>
+            <SettingsProvider>
+                <ResultDisplay
+                    data={mockData as any}
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={true}
+                    tabId="tab-1"
+                    isNewSearch={false}
+                    onConsumeNewSearch={vi.fn()}
+                />
+            </SettingsProvider>
         );
 
         await waitFor(() => {
             expect(screen.queryByText('Sem resultados para exibir.')).not.toBeInTheDocument();
             expect(screen.getByText('Maquina de lavar')).toBeInTheDocument();
         });
+    });
+
+    it('renders search highlighter for code results when latest text query is available', async () => {
+        const mockData = {
+            type: 'code' as const,
+            markdown: '<h3 id="pos-84-22">84.22</h3><p>Motor no capitulo</p>',
+            resultados: {
+                '84': {
+                    capitulo: '84',
+                    posicoes: [
+                        { codigo: '84.22', ncm: '8422', descricao: 'Maquina de lavar', anchor_id: 'pos-84-22' }
+                    ]
+                }
+            }
+        };
+
+        render(
+            <SettingsProvider>
+                <ResultDisplay
+                    data={mockData as any}
+                    latestTextQuery="motor"
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={true}
+                    tabId="tab-1"
+                    isNewSearch={false}
+                    onConsumeNewSearch={vi.fn()}
+                />
+            </SettingsProvider>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('search-highlighter')).toHaveTextContent('motor');
+        });
+    });
+
+    it('consumes a new text-originated search when SearchHighlighter reports scroll completion', async () => {
+        const onConsumeNewSearch = vi.fn();
+        const mockData = {
+            type: 'code' as const,
+            query: '8422',
+            markdown: '<h3 id="pos-84-22">84.22</h3><p>Motor no capitulo</p>',
+            resultados: {
+                '84': {
+                    capitulo: '84',
+                    posicao_alvo: '84.22',
+                    posicoes: [
+                        { codigo: '84.22', ncm: '8422', descricao: 'Maquina de lavar', anchor_id: 'pos-84-22' }
+                    ]
+                }
+            }
+        };
+
+        render(
+            <SettingsProvider>
+                <ResultDisplay
+                    data={mockData as any}
+                    latestTextQuery="motor"
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={true}
+                    tabId="tab-highlight-complete"
+                    isNewSearch={true}
+                    onConsumeNewSearch={onConsumeNewSearch}
+                />
+            </SettingsProvider>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('search-highlighter')).toHaveTextContent('motor');
+        });
+
+        fireEvent.click(screen.getByTestId('search-highlighter-complete'));
+
+        expect(onConsumeNewSearch).toHaveBeenCalledWith('tab-highlight-complete', 321);
     });
 
     it('persists scroll position when tab becomes inactive', async () => {
@@ -152,20 +253,18 @@ describe('ResultDisplay Component', () => {
         };
 
         const { container, rerender } = render(
-            <AuthProvider>
-                <SettingsProvider>
-                    <ResultDisplay
-                        data={mockData}
-                        mobileMenuOpen={false}
-                        onCloseMobileMenu={vi.fn()}
-                        isActive={true}
-                        tabId="tab-1"
-                        isNewSearch={false}
-                        onConsumeNewSearch={vi.fn()}
-                        onPersistScroll={onPersistScroll}
-                    />
-                </SettingsProvider>
-            </AuthProvider>
+            <SettingsProvider>
+                <ResultDisplay
+                    data={mockData}
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={true}
+                    tabId="tab-1"
+                    isNewSearch={false}
+                    onConsumeNewSearch={vi.fn()}
+                    onPersistScroll={onPersistScroll}
+                />
+            </SettingsProvider>
         );
 
         const scrollContainer = container.querySelector('#results-content-tab-1') as HTMLDivElement | null;
@@ -176,20 +275,18 @@ describe('ResultDisplay Component', () => {
         fireEvent.scroll(scrollContainer);
 
         rerender(
-            <AuthProvider>
-                <SettingsProvider>
-                    <ResultDisplay
-                        data={mockData}
-                        mobileMenuOpen={false}
-                        onCloseMobileMenu={vi.fn()}
-                        isActive={false}
-                        tabId="tab-1"
-                        isNewSearch={false}
-                        onConsumeNewSearch={vi.fn()}
-                        onPersistScroll={onPersistScroll}
-                    />
-                </SettingsProvider>
-            </AuthProvider>
+            <SettingsProvider>
+                <ResultDisplay
+                    data={mockData}
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={false}
+                    tabId="tab-1"
+                    isNewSearch={false}
+                    onConsumeNewSearch={vi.fn()}
+                    onPersistScroll={onPersistScroll}
+                />
+            </SettingsProvider>
         );
 
         await waitFor(() => {
@@ -210,19 +307,17 @@ describe('ResultDisplay Component', () => {
         });
 
         const { container, rerender } = render(
-            <AuthProvider>
-                <SettingsProvider>
-                    <ResultDisplay
-                        data={mockData}
-                        mobileMenuOpen={false}
-                        onCloseMobileMenu={vi.fn()}
-                        isActive={false}
-                        tabId="tab-1"
-                        isNewSearch={false}
-                        onConsumeNewSearch={vi.fn()}
-                    />
-                </SettingsProvider>
-            </AuthProvider>
+            <SettingsProvider>
+                <ResultDisplay
+                    data={mockData}
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={false}
+                    tabId="tab-1"
+                    isNewSearch={false}
+                    onConsumeNewSearch={vi.fn()}
+                />
+            </SettingsProvider>
         );
 
         const scrollContainer = container.querySelector('#results-content-tab-1') as HTMLDivElement | null;
@@ -232,20 +327,18 @@ describe('ResultDisplay Component', () => {
         scrollContainer.scrollTop = 0;
 
         rerender(
-            <AuthProvider>
-                <SettingsProvider>
-                    <ResultDisplay
-                        data={mockData}
-                        mobileMenuOpen={false}
-                        onCloseMobileMenu={vi.fn()}
-                        isActive={true}
-                        tabId="tab-1"
-                        isNewSearch={false}
-                        onConsumeNewSearch={vi.fn()}
-                        initialScrollTop={180}
-                    />
-                </SettingsProvider>
-            </AuthProvider>
+            <SettingsProvider>
+                <ResultDisplay
+                    data={mockData}
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={true}
+                    tabId="tab-1"
+                    isNewSearch={false}
+                    onConsumeNewSearch={vi.fn()}
+                    initialScrollTop={180}
+                />
+            </SettingsProvider>
         );
 
         expect(scrollContainer.scrollTop).toBe(180);
@@ -253,5 +346,33 @@ describe('ResultDisplay Component', () => {
         rafSpy.mockRestore();
     });
 
+    it('hides comment controls for unauthorized users', async () => {
+        const mockData = {
+            type: 'code' as const,
+            markdown: '# Title\nSome content',
+            resultados: {}
+        };
 
+        authState.userEmail = 'x@nonpriv.com';
+
+        render(
+            <SettingsProvider>
+                <ResultDisplay
+                    data={mockData as any}
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={true}
+                    tabId="tab-1"
+                    isNewSearch={false}
+                    onConsumeNewSearch={vi.fn()}
+                />
+            </SettingsProvider>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Title');
+        });
+
+        expect(screen.queryByRole('button', { name: /comentários/i })).not.toBeInTheDocument();
+    });
 });

@@ -13,11 +13,14 @@ declare module '*.css' {
 }
 
 declare global {
+    var nesh: Window['nesh'];
+
     interface Window {
         nesh: {
             smartLinkSearch: (ncm: string) => void;
             openNote: (note: string, chapter?: string) => void;
             openSettings: () => void;
+            openTextResultInNewTab: (ncm: string, textQuery?: string) => void;
         };
         requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
         cancelIdleCallback?: (handle: number) => void;

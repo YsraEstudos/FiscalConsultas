@@ -179,6 +179,23 @@ async def test_fts_postgres_maps_rows_and_tenant_params(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_fts_postgres_uses_phrase_query_for_exact_search(monkeypatch):
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.chapter_repository.settings.database.engine",
+        "postgresql",
+    )
+    session = _FakeSession([_FakeResult(rows=[])])
+    repo = ChapterRepository(session)
+
+    await repo._fts_postgres('"motor centrif"', 4)
+
+    stmt, params = session.calls[0]
+    stmt_text = str(stmt)
+    assert "phraseto_tsquery('portuguese', :query)" in stmt_text
+    assert params == {"query": "motor centrif", "limit": 4}
+
+
+@pytest.mark.asyncio
 async def test_fts_sqlite_maps_rank(monkeypatch):
     monkeypatch.setattr(
         "backend.infrastructure.repositories.chapter_repository.settings.database.engine",

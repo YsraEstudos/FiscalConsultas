@@ -1,4 +1,8 @@
-from backend.presentation.renderer import HtmlRenderer, _get_position_pattern
+from backend.presentation.renderer import (
+    HtmlRenderer,
+    _get_fallback_anchor_pattern,
+    _get_position_pattern,
+)
 
 
 class TestRendererRegex:
@@ -68,3 +72,17 @@ class TestRendererRegex:
         content = "  85.17 - Aparelhos..."
         match = pattern.search(content)
         assert match is not None
+
+    def test_fallback_anchor_pattern_is_cached_for_same_code_tuple(self):
+        codes = ("84.13", "84.14")
+
+        first = _get_fallback_anchor_pattern(codes)
+        second = _get_fallback_anchor_pattern(codes)
+
+        assert first is second
+
+    def test_fallback_anchor_pattern_cache_key_preserves_tuple_order(self):
+        first = _get_fallback_anchor_pattern(("84.13", "84.14"))
+        second = _get_fallback_anchor_pattern(("84.14", "84.13"))
+
+        assert first is not second
