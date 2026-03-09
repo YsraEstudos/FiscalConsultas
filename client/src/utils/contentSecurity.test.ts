@@ -56,8 +56,8 @@ describe('contentSecurity', () => {
     });
 
     it('rejects URL candidates with control characters', () => {
-        const controlCharacter = String.fromCharCode(0x1F);
-        const deleteCharacter = String.fromCharCode(0x7F);
+        const controlCharacter = String.fromCodePoint(0x1F);
+        const deleteCharacter = String.fromCodePoint(0x7F);
 
         expect(sanitizeNavigationUrl(`https://example.com/${controlCharacter}`)).toBeNull();
         expect(sanitizeImageUrl(`https://example.com/avatar${deleteCharacter}.png`)).toBeNull();

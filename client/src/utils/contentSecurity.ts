@@ -60,13 +60,22 @@ function isRelativeUrl(candidate: string): boolean {
     return !ABSOLUTE_SCHEME_PATTERN.test(candidate) && !candidate.startsWith('//');
 }
 
+function getRuntimeOrigin(): string | null {
+    if (typeof globalThis.location === 'undefined') {
+        return null;
+    }
+
+    return globalThis.location.origin;
+}
+
 function isExternalAbsoluteUrl(candidate: string): boolean {
-    if (candidate.startsWith('#') || isRelativeUrl(candidate) || typeof window === 'undefined') {
+    const runtimeOrigin = getRuntimeOrigin();
+    if (candidate.startsWith('#') || isRelativeUrl(candidate) || !runtimeOrigin) {
         return false;
     }
 
     try {
-        return new URL(candidate, window.location.origin).origin !== window.location.origin;
+        return new URL(candidate, runtimeOrigin).origin !== runtimeOrigin;
     } catch {
         return false;
     }
@@ -80,7 +89,7 @@ export function sanitizeNavigationUrl(value: string | null | undefined): string 
     if (isRelativeUrl(candidate)) return candidate;
 
     try {
-        const base = typeof window === 'undefined' ? 'https://localhost' : window.location.origin;
+        const base = getRuntimeOrigin() || 'https://localhost';
         const protocol = new URL(candidate, base).protocol;
         return SAFE_LINK_PROTOCOLS.has(protocol) ? candidate : null;
     } catch {
@@ -99,7 +108,7 @@ export function sanitizeImageUrl(value: string | null | undefined): string | nul
     if (isRelativeUrl(candidate)) return candidate;
 
     try {
-        const base = typeof window === 'undefined' ? 'https://localhost' : window.location.origin;
+        const base = getRuntimeOrigin() || 'https://localhost';
         const protocol = new URL(candidate, base).protocol;
         return SAFE_IMAGE_PROTOCOLS.has(protocol) ? candidate : null;
     } catch {
