@@ -18,14 +18,14 @@
   - Run on demand for profiling/regression baselines.
 
 ## Top 10 Risk Areas (Execution Order)
-1. Auth enforcement on `/api/ai/chat` (401 vs 200 contract).
-2. AI chat rate-limit behavior (`429` + `Retry-After` header).
-3. Webhook contract for `/api/webhooks/asaas` (token validation, payload validation, event routing).
-4. Search route contract aliasing (`results` vs `resultados`) for legacy frontend compatibility.
-5. TIPI route compatibility fields (`total_capitulos`, normalized text defaults).
-6. Status payload normalization (`/api/status` database/TIPI schema contract).
-7. In-memory sliding-window limiter correctness.
-8. Webhook date/datetime parsing edge cases.
+1. Sanitização de HTML/backend-rendered content no frontend (`contentSecurity.ts`, `MarkdownPane`, `ResultDisplay`).
+2. Gating de moderação/admin por role do Clerk (`AuthContext`, `authz.ts`, `ModalManager`).
+3. Gating de UI restrita por `VITE_RESTRICTED_UI_EMAILS` sem vazar controles para usuários não autorizados.
+4. Auth enforcement on `/api/ai/chat` (401 vs 200 contract).
+5. AI chat rate-limit behavior (`429` + `Retry-After` header).
+6. Webhook contract for `/api/webhooks/asaas` (token validation, payload validation, event routing).
+7. Search route contract aliasing (`results` vs `resultados`) for legacy frontend compatibility.
+8. TIPI route compatibility fields (`total_capitulos`, normalized text defaults).
 9. Cross-chapter note cache/dedup behavior on frontend.
 10. Existing NCM/TIPI unit+integration regression tests.
 
@@ -151,3 +151,35 @@
   - `src/components/CrossNavContextMenu.tsx`
   - `src/components/Sidebar.tsx`
   - `src/hooks/useRobustScroll.ts`
+
+## Snapshot Atual (2026-03-09)
+- Frontend default suite:
+  - `cd client && npm run test` -> **270 passed** em **46 arquivos**
+- Frontend type safety:
+  - `cd client && npm run type-check` -> **OK**
+
+### Cobertura funcional adicionada nesta rodada
+- Novas suítes:
+  - `client/src/utils/contentSecurity.test.ts`
+  - `client/src/utils/authz.test.ts`
+  - `client/tests/unit/MarkdownPane.test.tsx`
+- Suítes expandidas:
+  - `client/tests/unit/AuthContext.test.tsx`
+  - `client/tests/unit/ModalManager.test.tsx`
+  - `client/tests/unit/ResultDisplay.test.tsx`
+  - `client/tests/unit/Header.test.tsx`
+  - `client/tests/unit/App.behavior.test.tsx`
+  - `client/tests/integration/AppSearch.test.tsx`
+  - `client/tests/unit/UserProfilePage.test.tsx`
+
+### O que esta rodada protege
+- HTML malicioso e protocolos inseguros não chegam ao DOM renderizado.
+- Links externos são endurecidos com `noopener noreferrer`.
+- Imagens inseguras são descartadas e imagens válidas ganham políticas seguras.
+- A UI de moderação só renderiza para roles privilegiadas do Clerk.
+- O fluxo de busca principal ficou estável sob carga da suíte completa.
+
+## Notas do Ambiente de Teste
+- O fluxo de desativação de conta em `UserProfilePage` aciona `location.reload()` após sucesso.
+- Em JSDOM isso ainda pode emitir o aviso `Not implemented: navigation to another Document`.
+- Esse aviso é conhecido, não quebra a suíte e não muda o resultado dos testes.

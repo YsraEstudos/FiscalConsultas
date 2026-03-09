@@ -1,7 +1,7 @@
 # Nesh / Fiscal - AI_CONTEXT
 
-Atualizado em: 2026-02-26
-Base desta revisao: leitura constante de backend/frontend/scripts/docs durante a migração para SaaS (PostgreSQL, Clerk JWT, Asaas).
+Atualizado em: 2026-03-09
+Base desta revisao: leitura constante de backend/frontend/scripts/docs durante a migração para SaaS (PostgreSQL, Clerk JWT, Asaas) e do hardening recente de frontend/testes.
 
 ## 1) Proposito
 
@@ -22,6 +22,8 @@ A UX e orientada por navegacao rapida (abas, smart-links, menu contextual, autos
   - lifespan: inicializa `NeshService`, `TipiService`, `AiService`, `Redis`, glossario.
 - Frontend entrypoint real: `client/src/main.tsx`
   - exige `VITE_CLERK_PUBLISHABLE_KEY`.
+- Shell SPA real: `client/index.html`
+  - publica CSP, `referrer` policy e `Permissions-Policy` via meta tags.
 
 ## 3) Mapa Arquitetural Atual
 
@@ -139,6 +141,15 @@ Regras de compatibilidade importantes:
   - Provisioning Best-Effort (sincronização fantasma) de entidades DB locais após verificação de autenticidade JWT.
 - Webhook Asaas para Pagamentos:
   - Gera triggers para criação automática/ativação de tenants (`Subscription`).
+- Hardening ativo no frontend:
+  - HTML backend-rendered/markdown legado passa por sanitização central em `client/src/utils/contentSecurity.ts`.
+  - Links só aceitam protocolos seguros e links externos recebem `rel="noopener noreferrer"`.
+  - Imagens inseguras são descartadas; imagens válidas recebem `loading="lazy"`, `decoding="async"` e `referrerpolicy="no-referrer"`.
+  - `api.ts` usa `withCredentials: false`; o fluxo autenticado depende do header `Authorization`, não de cookies implícitos.
+- Autorização/gating de UI no frontend:
+  - `AuthContext` deriva `isAdmin` de `membership.role` do Clerk via `hasPrivilegedRole`.
+  - roles reconhecidas: `admin`, `owner`, `superadmin`, inclusive formatos compostos como `org:admin`.
+  - `VITE_RESTRICTED_UI_EMAILS` controla apenas superfícies opcionais de UI (chat IA, comentários, contribuições). Não é fronteira de autorização backend.
 
 ## 8) Cache e Performance (estado atual)
 
@@ -158,6 +169,7 @@ Notas:
 
 - `ResultDisplay` e o orquestrador de render/autoscroll/persistencia de scroll.
 - NESH preferencialmente chega pre-renderizado no campo `markdown` (HTML do backend).
+- Todo HTML renderizado por `ResultDisplay` e `MarkdownPane` deve passar pelo pipeline de sanitização/hardening antes de entrar no DOM.
 - Fallbacks existem:
   - NESH fallback em `NeshRenderer.renderFullResponse`.
   - TIPI fallback em `renderTipiFallback`.
@@ -170,8 +182,12 @@ Local:
 
 - Backend default: `pytest -q` (sem `perf` por padrao).
 - Frontend default: `cd client && npm run test`.
+- Frontend type-check: `cd client && npm run type-check`.
 - Testes de performance existem, mas sao opt-in.
 - Existe cobertura de contratos de rota, renderer, middleware e hooks.
+- Snapshot observado em 2026-03-09:
+  - frontend: `46` arquivos / `270` testes passando
+  - novas suítes cobrindo `contentSecurity`, `authz`, `MarkdownPane`, `ModalManager`, `AuthContext`, `ResultDisplay`, `AppSearch`
 
 CI observado em `.github/workflows/tests.yml`:
 
@@ -200,8 +216,9 @@ CI adicional em `.github/workflows/megalinter.yml`:
 
 Status:
 
-1. Sem drift critico identificado entre README, workflows e configuracao ativa de CI.
-2. O ponto de atencao e manter este documento sincronizado quando o escopo do `PR Smart` mudar.
+1. README, `TESTING.md` e este contexto foram sincronizados em 2026-03-09 com o hardening recente do frontend.
+2. O ponto de atencao atual e manter a parte de UI restrita (`VITE_RESTRICTED_UI_EMAILS`) claramente documentada como gating de client, nao como auth backend.
+3. Outro ponto de atencao e manter este documento sincronizado quando o escopo do `PR Smart` ou das suites frontend mudar.
 
 ## 12) Divida Tecnica Estrutural (resumo)
 
