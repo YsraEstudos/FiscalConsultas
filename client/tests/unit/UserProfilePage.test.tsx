@@ -128,6 +128,10 @@ describe('UserProfilePage', () => {
     it('renderiza o modal com título quando isOpen=true', async () => {
         render(<UserProfilePage isOpen={true} onClose={vi.fn()} />);
         expect(screen.getByText('Meu Perfil')).toBeInTheDocument();
+        await waitFor(() => {
+            expect(mockGetMyProfile).toHaveBeenCalled();
+            expect(screen.getByText('Especialista em classificação fiscal')).toBeInTheDocument();
+        });
     });
 
     it('chama onClose ao clicar no botão X', async () => {
@@ -348,22 +352,32 @@ describe('UserProfilePage', () => {
     });
 
     it('executa deleção após confirmar com "deletar"', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation((...args) => {
+            if (args.some((arg) => String(arg).includes('Not implemented: navigation to another Document'))) {
+                return;
+            }
+        });
         const onClose = vi.fn();
-        render(<UserProfilePage isOpen={true} onClose={onClose} />);
+        try {
+            render(<UserProfilePage isOpen={true} onClose={onClose} />);
 
-        await waitFor(() => expect(mockGetMyProfile).toHaveBeenCalled());
+            await waitFor(() => expect(mockGetMyProfile).toHaveBeenCalled());
 
-        // Fluxo completo de deleção
-        fireEvent.click(screen.getByRole('button', { name: /desativar minha conta/i }));
-        fireEvent.click(screen.getByRole('button', { name: 'Sim, continuar' }));
-        fireEvent.change(screen.getByPlaceholderText(/digite "deletar"/i), {
-            target: { value: 'deletar' },
-        });
-        fireEvent.click(screen.getByRole('button', { name: /desativar conta/i }));
+            // Fluxo completo de deleção
+            fireEvent.click(screen.getByRole('button', { name: /desativar minha conta/i }));
+            fireEvent.click(screen.getByRole('button', { name: 'Sim, continuar' }));
+            fireEvent.change(screen.getByPlaceholderText(/digite "deletar"/i), {
+                target: { value: 'deletar' },
+            });
+            fireEvent.click(screen.getByRole('button', { name: /desativar conta/i }));
 
-        await waitFor(() => {
-            expect(mockDeleteMyAccount).toHaveBeenCalledTimes(1);
-        });
+            await waitFor(() => {
+                expect(mockDeleteMyAccount).toHaveBeenCalledTimes(1);
+            });
+            expect(onClose).toHaveBeenCalledTimes(1);
+        } finally {
+            consoleErrorSpy.mockRestore();
+        }
     });
 });
 

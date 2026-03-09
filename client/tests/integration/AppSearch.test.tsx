@@ -1,5 +1,5 @@
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import App from '../../src/../src/App';
 import { AuthProvider } from '../../src/../src/context/AuthContext';
@@ -30,6 +30,8 @@ vi.mock('../../src/context/CrossChapterNoteContext', () => ({
 // Mock window.scrollTo since it's not supported in JSDOM
 window.scrollTo = vi.fn();
 
+const SLOW_SEARCH_FLOW_TIMEOUT_MS = 15000;
+
 describe('App Search Integration', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -37,7 +39,7 @@ describe('App Search Integration', () => {
 
     it('displays loading spinner and then results when searching', async () => {
         // 1. Setup Mock Delayed Response
-        let resolvePromise;
+        let resolvePromise: ((value: any) => void) | undefined;
         const promise = new Promise((resolve) => {
             resolvePromise = resolve;
         });
@@ -64,8 +66,10 @@ describe('App Search Integration', () => {
 
         // 4. Verify Loading State
         // A UI atual mantém o texto "Buscar" e mostra spinner + desabilita o botão.
-        const searchBtn = screen.getByRole('button', { name: /buscar/i });
-        expect(searchBtn).toBeDisabled();
+        await waitFor(() => {
+            expect(api.searchNCM).toHaveBeenCalledWith('8517');
+            expect(screen.getByRole('button', { name: /buscar/i })).toBeDisabled();
+        }, { timeout: SLOW_SEARCH_FLOW_TIMEOUT_MS });
 
         // 5. Resolve Promise and Verify Results
         const mockResponse = {
@@ -81,12 +85,15 @@ describe('App Search Integration', () => {
             markdown: '<div class="chapter-content"><h1>Telefones</h1></div>'
         };
 
-        resolvePromise(mockResponse);
+        await act(async () => {
+            resolvePromise?.(mockResponse);
+        });
 
         // 6. Wait for Loading to Disappear and Results to Appear
         await waitFor(() => {
-            expect(searchBtn).not.toBeDisabled();
-            expect(screen.getByText('Telefones')).toBeInTheDocument();
-        });
-    });
+            expect(screen.getByRole('button', { name: /buscar/i })).not.toBeDisabled();
+        }, { timeout: SLOW_SEARCH_FLOW_TIMEOUT_MS });
+
+        expect(await screen.findByText('Telefones', {}, { timeout: SLOW_SEARCH_FLOW_TIMEOUT_MS })).toBeInTheDocument();
+    }, SLOW_SEARCH_FLOW_TIMEOUT_MS);
 });

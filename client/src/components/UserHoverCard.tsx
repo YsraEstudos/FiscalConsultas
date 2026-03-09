@@ -7,6 +7,7 @@
 import { useState, useEffect, ReactNode } from 'react';
 import { getUserCard } from '../services/api';
 import styles from './UserHoverCard.module.css';
+import { sanitizeImageUrl } from '../utils/contentSecurity';
 
 interface UserHoverCardProps {
     userId: string;
@@ -45,7 +46,7 @@ export function UserHoverCard({ userId, children, imageUrl }: Readonly<UserHover
         return () => { cancelled = true; };
     }, [userId]);
 
-    const resolvedImage = imageUrl || card?.image_url;
+    const resolvedImage = sanitizeImageUrl(imageUrl || card?.image_url);
 
     return (
         <span className={styles.trigger}>
@@ -59,6 +60,9 @@ export function UserHoverCard({ userId, children, imageUrl }: Readonly<UserHover
                                     src={resolvedImage}
                                     alt={card.full_name || 'Avatar'}
                                     className={styles.avatar}
+                                    loading="lazy"
+                                    decoding="async"
+                                    referrerPolicy="no-referrer"
                                 />
                             ) : (
                                 <span className={styles.avatarPlaceholder}>

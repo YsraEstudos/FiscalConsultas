@@ -7,6 +7,7 @@
 import { createContext, useContext, useEffect, ReactNode } from 'react';
 import { useUser, useAuth as useClerkAuth, useOrganization } from '@clerk/clerk-react';
 import { registerClerkTokenGetter, unregisterClerkTokenGetter } from '../services/api';
+import { hasPrivilegedRole } from '../utils/authz';
 
 interface AuthContextType {
     // User Info
@@ -86,8 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
 
         // Admin detection from Clerk organization membership role
-        isAdmin: membership?.role === 'org:admin'
-            || user?.primaryEmailAddress?.emailAddress === 'israelsena2@gmail.com',
+        isAdmin: hasPrivilegedRole(membership?.role),
         authToken: null, // Use getToken() instead
         login: (_token?: string | null) => {
             // No-op: Clerk's <SignIn /> component handles login UI

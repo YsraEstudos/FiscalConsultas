@@ -36,6 +36,7 @@ const refs = vi.hoisted(() => ({
         name: 'Org Demo',
         slug: 'org-demo',
       },
+      membership: null as { role: string } | null,
     },
   },
 }));
@@ -80,6 +81,7 @@ describe('AuthContext', () => {
         name: 'Org Demo',
         slug: 'org-demo',
       },
+      membership: null,
     };
   });
 
@@ -129,6 +131,32 @@ describe('AuthContext', () => {
     expect(result.current.orgId).toBeNull();
     expect(result.current.orgName).toBeNull();
     expect(result.current.orgSlug).toBeNull();
+  });
+
+  it('marks privileged membership roles as admin using backend-aligned role parsing', () => {
+    refs.orgStateRef.value = {
+      organization: {
+        id: 'org_1',
+        name: 'Org Demo',
+        slug: 'org-demo',
+      },
+      membership: { role: 'org:admin' },
+    } as any;
+
+    const { result, rerender } = renderHook(() => useAuth(), { wrapper });
+    expect(result.current.isAdmin).toBe(true);
+
+    refs.orgStateRef.value = {
+      organization: {
+        id: 'org_1',
+        name: 'Org Demo',
+        slug: 'org-demo',
+      },
+      membership: { role: 'owner' },
+    } as any;
+
+    rerender();
+    expect(result.current.isAdmin).toBe(true);
   });
 
   it('returns token on success and null when getToken throws', async () => {

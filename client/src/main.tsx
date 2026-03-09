@@ -38,22 +38,15 @@ if (PUBLISHABLE_KEY) {
 
     createRoot(rootElement).render(
         <StrictMode>
-            <style>
-                {`
-                .fallback-main { font-family: system-ui, sans-serif; padding: 2rem; line-height: 1.5; }
-                .fallback-h1 { margin-top: 0; }
-                .fallback-pre { background: #111; color: #eee; padding: 0.75rem; border-radius: 8px; }
-                `}
-            </style>
-            <main className="fallback-main">
-                <h1 className="fallback-h1">Configuration Required</h1>
+            <main className="security-fallback-main">
+                <h1 className="security-fallback-title">Configuration Required</h1>
                 <p>
                     Missing <code>VITE_CLERK_PUBLISHABLE_KEY</code>.
                 </p>
                 <p>
                     Create <code>client/.env.local</code> with:
                 </p>
-                <pre className="fallback-pre">
+                <pre className="security-fallback-pre">
                     VITE_CLERK_PUBLISHABLE_KEY=pk_test_your_key
                 </pre>
                 <p>Then restart <code>npm run dev</code>.</p>

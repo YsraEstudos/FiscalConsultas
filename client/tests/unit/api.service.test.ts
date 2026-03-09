@@ -78,7 +78,7 @@ describe('api service', () => {
       expect.objectContaining({
         baseURL: expect.stringMatching(/\/api$/),
         timeout: 60000,
-        withCredentials: true,
+        withCredentials: false,
       }),
     );
     expect(mockAxios.instance.interceptors.request.use).toHaveBeenCalledTimes(1);

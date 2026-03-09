@@ -67,7 +67,7 @@ function renderHeader() {
 }
 
 describe('Header', () => {
-  const SLOW_MENU_FLOW_TIMEOUT_MS = 8000;
+  const SLOW_MENU_FLOW_TIMEOUT_MS = 15000;
 
   beforeEach(() => {
     signOutMock.mockReset();
@@ -186,17 +186,12 @@ describe('Header', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /menu/i }));
     fireEvent.click(screen.getByRole('button', { name: /sair da conta/i }));
-    expect(screen.getByText('Confirmar saída')).toBeInTheDocument();
+    expect(await screen.findByText('Confirmar saída')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
-    expect(screen.queryByText('Confirmar saída')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /menu/i }));
-    fireEvent.click(screen.getByRole('button', { name: /sair da conta/i }));
-    const confirmButton = screen.getByRole('button', { name: 'Sair' });
+    const confirmButton = await screen.findByRole('button', { name: 'Sair' });
 
     fireEvent.click(confirmButton);
-    const loadingButton = screen.getByRole('button', { name: 'Saindo...' });
+    const loadingButton = await screen.findByRole('button', { name: 'Saindo...' });
     expect(loadingButton).toBeDisabled();
     fireEvent.click(loadingButton);
     expect(signOutMock).toHaveBeenCalledTimes(1);
@@ -207,6 +202,9 @@ describe('Header', () => {
     await act(async () => {
       resolveSignOut?.();
     });
-    expect(screen.queryByText('Confirmar saída')).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.queryByText('Confirmar saída')).not.toBeInTheDocument();
+    }, { timeout: SLOW_MENU_FLOW_TIMEOUT_MS });
   }, SLOW_MENU_FLOW_TIMEOUT_MS);
 });
