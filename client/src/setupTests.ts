@@ -5,32 +5,52 @@ import * as matchers from '@testing-library/jest-dom/matchers';
 
 expect.extend(matchers);
 
+const getMockSignedInState = () => {
+    const userState = mockUseUser();
+    if (typeof userState?.isSignedIn === 'boolean') return userState.isSignedIn;
+
+    const authState = mockUseAuth();
+    if (typeof (authState as { isSignedIn?: unknown })?.isSignedIn === 'boolean') {
+        return Boolean((authState as { isSignedIn?: boolean }).isSignedIn);
+    }
+
+    return false;
+};
+
+const mockUseUser = () => ({
+    user: {
+        id: 'user_test',
+        fullName: 'Test User',
+        firstName: 'Test',
+        primaryEmailAddress: { emailAddress: 'test@example.com' },
+        imageUrl: '',
+    },
+    isSignedIn: true,
+    isLoaded: true,
+});
+
+const mockUseAuth = () => ({
+    getToken: vi.fn().mockResolvedValue('test_token'),
+    signOut: vi.fn(),
+    isLoaded: true,
+});
+
 vi.mock('@clerk/react', () => ({
     ClerkProvider: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
-    SignedIn: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
-    SignedOut: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
+    SignedIn: ({ children }: { children: React.ReactNode }) => getMockSignedInState()
+        ? React.createElement(React.Fragment, null, children)
+        : null,
+    SignedOut: ({ children }: { children: React.ReactNode }) => !getMockSignedInState()
+        ? React.createElement(React.Fragment, null, children)
+        : null,
     SignInButton: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
     SignUpButton: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
     UserButton: () => null,
     OrganizationSwitcher: () => null,
     SignIn: () => null,
     useClerk: () => ({ signOut: vi.fn() }),
-    useUser: () => ({
-        user: {
-            id: 'user_test',
-            fullName: 'Test User',
-            firstName: 'Test',
-            primaryEmailAddress: { emailAddress: 'test@example.com' },
-            imageUrl: '',
-        },
-        isSignedIn: true,
-        isLoaded: true,
-    }),
-    useAuth: () => ({
-        getToken: vi.fn().mockResolvedValue('test_token'),
-        signOut: vi.fn(),
-        isLoaded: true,
-    }),
+    useUser: mockUseUser,
+    useAuth: mockUseAuth,
     useOrganization: () => ({
         organization: { id: 'org_test', name: 'Test Org', slug: 'test-org' },
     }),

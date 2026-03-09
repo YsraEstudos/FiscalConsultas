@@ -175,6 +175,16 @@ describe('Header', () => {
     expect(screen.getByText('Conta autenticada')).toBeInTheDocument();
   });
 
+  it('renders sign-in entry when the user is signed out', () => {
+    isSignedInRef.value = false;
+    renderHeader();
+
+    fireEvent.click(screen.getByRole('button', { name: /menu/i }));
+
+    expect(screen.getByRole('button', { name: /entrar/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /sair da conta/i })).not.toBeInTheDocument();
+  });
+
   it('confirms logout, blocks duplicate requests and closes modal on completion', async () => {
     let resolveSignOut: (() => void) | null = null;
     signOutMock.mockImplementation(
@@ -202,6 +212,7 @@ describe('Header', () => {
     expect(loadingButton).toBeDisabled();
     fireEvent.click(loadingButton);
     expect(signOutMock).toHaveBeenCalledTimes(1);
+    expect(signOutMock).toHaveBeenCalledWith({ redirectUrl: '/' });
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.getByText('Confirmar saída')).toBeInTheDocument();

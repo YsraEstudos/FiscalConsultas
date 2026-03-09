@@ -88,7 +88,7 @@ export function Header({
         if (isSigningOut) return;
         setIsSigningOut(true);
         try {
-            await signOut();
+            await signOut({ redirectUrl: '/' });
         } finally {
             setIsSigningOut(false);
             setIsLogoutConfirmOpen(false);
