@@ -10,5 +10,9 @@ export function hasPrivilegedRole(role: string | null | undefined): boolean {
         return true;
     }
 
-    return normalized.split(':').some((part) => PRIVILEGED_ROLE_PARTS.has(part));
+    if (!normalized.startsWith('org:')) {
+        return false;
+    }
+
+    return PRIVILEGED_ROLE_PARTS.has(normalized.slice(4));
 }

@@ -1,4 +1,4 @@
-import { SignIn } from '@clerk/clerk-react';
+import { SignIn } from '@clerk/react';
 import { Modal } from './Modal';
 import styles from './LoginModal.module.css';
 
@@ -11,7 +11,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Entrar">
             <div className={styles.form}>
-                <SignIn routing="virtual" />
+                <SignIn />
             </div>
         </Modal>
     );

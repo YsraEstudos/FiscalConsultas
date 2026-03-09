@@ -11,7 +11,7 @@ Sistema híbrido de consulta fiscal (NESH + TIPI) com backend FastAPI e frontend
 ## Requisitos
 
 - Python 3.13+ (alinhado com `pyproject.toml`)
-- Node.js 18+ (validado localmente com Node 22.17.0)
+- Node.js 22.12+ para o frontend (validado localmente com Node 22.17.0; CI usa Node 24)
 - npm (validado localmente com npm 10.9.2)
 - Opcional para modo PostgreSQL: Docker + Docker Compose
 

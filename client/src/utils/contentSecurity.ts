@@ -42,7 +42,16 @@ const SAFE_DATA_IMAGE_PATTERN = /^data:image\/(?:png|gif|jpe?g|webp|bmp|svg\+xml
 function normalizeUrlCandidate(value: string | null | undefined): string | null {
     const trimmed = (value || '').trim();
     if (!trimmed) return null;
-    if (/[\u0000-\u001F\u007F\s]/.test(trimmed)) return null;
+    if (/\s/.test(trimmed)) return null;
+
+    for (let index = 0; index < trimmed.length; index += 1) {
+        const codePoint = trimmed.codePointAt(index);
+        if (codePoint === undefined) continue;
+        if (codePoint <= 0x1F || codePoint === 0x7F) return null;
+        if (codePoint > 0xFFFF) {
+            index += 1;
+        }
+    }
     return trimmed;
 }
 
@@ -50,13 +59,23 @@ function isRelativeUrl(candidate: string): boolean {
     return !ABSOLUTE_SCHEME_PATTERN.test(candidate) && !candidate.startsWith('//');
 }
 
+function getRuntimeOrigin(): string | null {
+    // `globalThis.location` is intentionally guarded for SSR/Node, where it may not exist.
+    if (typeof globalThis.location === 'undefined') { // NOSONAR (typescript:S7764): location is optional outside browser runtimes.
+        return null;
+    }
+
+    return globalThis.location.origin;
+}
+
 function isExternalAbsoluteUrl(candidate: string): boolean {
-    if (candidate.startsWith('#') || isRelativeUrl(candidate) || typeof window === 'undefined') {
+    const runtimeOrigin = getRuntimeOrigin();
+    if (candidate.startsWith('#') || isRelativeUrl(candidate) || !runtimeOrigin) {
         return false;
     }
 
     try {
-        return new URL(candidate, window.location.origin).origin !== window.location.origin;
+        return new URL(candidate, runtimeOrigin).origin !== runtimeOrigin;
     } catch {
         return false;
     }
@@ -70,7 +89,7 @@ export function sanitizeNavigationUrl(value: string | null | undefined): string 
     if (isRelativeUrl(candidate)) return candidate;
 
     try {
-        const base = typeof window === 'undefined' ? 'https://localhost' : window.location.origin;
+        const base = getRuntimeOrigin() || 'https://localhost';
         const protocol = new URL(candidate, base).protocol;
         return SAFE_LINK_PROTOCOLS.has(protocol) ? candidate : null;
     } catch {
@@ -89,7 +108,7 @@ export function sanitizeImageUrl(value: string | null | undefined): string | nul
     if (isRelativeUrl(candidate)) return candidate;
 
     try {
-        const base = typeof window === 'undefined' ? 'https://localhost' : window.location.origin;
+        const base = getRuntimeOrigin() || 'https://localhost';
         const protocol = new URL(candidate, base).protocol;
         return SAFE_IMAGE_PROTOCOLS.has(protocol) ? candidate : null;
     } catch {
@@ -134,12 +153,12 @@ function hardenImage(image: HTMLImageElement): void {
 }
 
 function hardenFragment(fragment: ParentNode): void {
-    fragment.querySelectorAll('a[href]').forEach((anchor) => {
-        hardenAnchor(anchor as HTMLAnchorElement);
+    fragment.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((anchor) => {
+        hardenAnchor(anchor);
     });
 
-    fragment.querySelectorAll('img').forEach((image) => {
-        hardenImage(image as HTMLImageElement);
+    fragment.querySelectorAll<HTMLImageElement>('img').forEach((image) => {
+        hardenImage(image);
     });
 }
 

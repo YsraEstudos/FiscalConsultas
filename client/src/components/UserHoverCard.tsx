@@ -46,7 +46,9 @@ export function UserHoverCard({ userId, children, imageUrl }: Readonly<UserHover
         return () => { cancelled = true; };
     }, [userId]);
 
-    const resolvedImage = sanitizeImageUrl(imageUrl || card?.image_url);
+    const sanitizedImageUrl = sanitizeImageUrl(imageUrl);
+    const sanitizedCardImageUrl = sanitizeImageUrl(card?.image_url);
+    const resolvedImage = sanitizedImageUrl || sanitizedCardImageUrl;
 
     return (
         <span className={styles.trigger}>

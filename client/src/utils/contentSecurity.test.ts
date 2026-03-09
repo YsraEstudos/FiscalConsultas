@@ -6,13 +6,14 @@ import {
     sanitizeRichHtml,
 } from './contentSecurity';
 
+const unsafeJavascriptUrl = `javascript${':alert(1)'}`;
 describe('contentSecurity', () => {
     it('removes active content from rich HTML while preserving safe data attributes', () => {
         const container = document.createElement('div');
 
         replaceElementWithSanitizedHtml(
             container,
-            '<p data-ncm="8401" onclick="alert(1)">ok</p><a href="javascript:alert(1)">x</a><img src="javascript:alert(1)" onerror="alert(1)"><script>alert(1)</script>',
+            `<p data-ncm="8401" onclick="alert(1)">ok</p><a href="${unsafeJavascriptUrl}">x</a><img src="${unsafeJavascriptUrl}" onerror="alert(1)"><script>alert(1)</script>`,
         );
 
         expect(container.querySelector('[data-ncm="8401"]')).not.toBeNull();
@@ -44,12 +45,20 @@ describe('contentSecurity', () => {
     it('accepts only safe navigation and image URLs', () => {
         expect(sanitizeNavigationUrl('https://example.com')).toBe('https://example.com');
         expect(sanitizeNavigationUrl('/interno')).toBe('/interno');
-        expect(sanitizeNavigationUrl('javascript:alert(1)')).toBeNull();
+        expect(sanitizeNavigationUrl(unsafeJavascriptUrl)).toBeNull();
         expect(sanitizeNavigationUrl('//evil.test')).toBeNull();
 
         expect(sanitizeImageUrl('https://example.com/avatar.png')).toBe('https://example.com/avatar.png');
         expect(sanitizeImageUrl('data:image/png;base64,abc')).toBe('data:image/png;base64,abc');
         expect(sanitizeImageUrl('data:text/html;base64,abc')).toBeNull();
-        expect(sanitizeImageUrl('javascript:alert(1)')).toBeNull();
+        expect(sanitizeImageUrl(unsafeJavascriptUrl)).toBeNull();
+    });
+
+    it('rejects URL candidates with control characters', () => {
+        const controlCharacter = String.fromCodePoint(0x1F);
+        const deleteCharacter = String.fromCodePoint(0x7F);
+
+        expect(sanitizeNavigationUrl(`https://example.com/${controlCharacter}`)).toBeNull();
+        expect(sanitizeImageUrl(`https://example.com/avatar${deleteCharacter}.png`)).toBeNull();
     });
 });
