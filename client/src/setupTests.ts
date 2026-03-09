@@ -5,35 +5,71 @@ import * as matchers from '@testing-library/jest-dom/matchers';
 
 expect.extend(matchers);
 
-const getMockSignedInState = () => {
-    const userState = mockUseUser();
-    if (typeof userState?.isSignedIn === 'boolean') return userState.isSignedIn;
+const {
+    getMockSignedInState,
+    mockUseUser,
+    mockUseAuth,
+    setMockSignedInState,
+    resetMockClerkState,
+} = vi.hoisted(() => {
+    const sharedAuthState = {
+        isSignedIn: true,
+        getToken: vi.fn().mockResolvedValue('test_token'),
+        signOut: vi.fn(),
+    };
 
-    const authState = mockUseAuth();
-    if (typeof (authState as { isSignedIn?: unknown })?.isSignedIn === 'boolean') {
-        return Boolean((authState as { isSignedIn?: boolean }).isSignedIn);
-    }
+    const mockUseUser = () => ({
+        user: {
+            id: 'user_test',
+            fullName: 'Test User',
+            firstName: 'Test',
+            primaryEmailAddress: { emailAddress: 'test@example.com' },
+            imageUrl: '',
+        },
+        isSignedIn: sharedAuthState.isSignedIn,
+        isLoaded: true,
+    });
 
-    return false;
-};
+    const mockUseAuth = () => ({
+        getToken: sharedAuthState.getToken,
+        signOut: sharedAuthState.signOut,
+        isSignedIn: sharedAuthState.isSignedIn,
+        isLoaded: true,
+    });
 
-const mockUseUser = () => ({
-    user: {
-        id: 'user_test',
-        fullName: 'Test User',
-        firstName: 'Test',
-        primaryEmailAddress: { emailAddress: 'test@example.com' },
-        imageUrl: '',
-    },
-    isSignedIn: true,
-    isLoaded: true,
+    const getMockSignedInState = () => {
+        const userState = mockUseUser();
+        if (typeof userState?.isSignedIn === 'boolean') return userState.isSignedIn;
+
+        const authState = mockUseAuth();
+        if (typeof (authState as { isSignedIn?: unknown })?.isSignedIn === 'boolean') {
+            return Boolean((authState as { isSignedIn?: boolean }).isSignedIn);
+        }
+
+        return false;
+    };
+
+    const setMockSignedInState = (value: boolean) => {
+        sharedAuthState.isSignedIn = value;
+    };
+
+    const resetMockClerkState = () => {
+        sharedAuthState.isSignedIn = true;
+        sharedAuthState.getToken.mockReset();
+        sharedAuthState.getToken.mockResolvedValue('test_token');
+        sharedAuthState.signOut.mockReset();
+    };
+
+    return {
+        getMockSignedInState,
+        mockUseUser,
+        mockUseAuth,
+        setMockSignedInState,
+        resetMockClerkState,
+    };
 });
 
-const mockUseAuth = () => ({
-    getToken: vi.fn().mockResolvedValue('test_token'),
-    signOut: vi.fn(),
-    isLoaded: true,
-});
+export { setMockSignedInState };
 
 vi.mock('@clerk/react', () => ({
     ClerkProvider: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
@@ -145,6 +181,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+    resetMockClerkState();
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation((...args) => {
         if (shouldSilenceConsole(args)) return;
         originalConsoleError(...args);
