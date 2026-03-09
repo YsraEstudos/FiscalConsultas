@@ -9,6 +9,7 @@ const {
     getMockSignedInState,
     mockUseUser,
     mockUseAuth,
+    mockUseClerk,
     setMockSignedInState,
     resetMockClerkState,
 } = vi.hoisted(() => {
@@ -18,14 +19,16 @@ const {
         signOut: vi.fn(),
     };
 
+    const mockUser = {
+        id: 'user_test',
+        fullName: 'Test User',
+        firstName: 'Test',
+        primaryEmailAddress: { emailAddress: 'test@example.com' },
+        imageUrl: '',
+    };
+
     const mockUseUser = () => ({
-        user: {
-            id: 'user_test',
-            fullName: 'Test User',
-            firstName: 'Test',
-            primaryEmailAddress: { emailAddress: 'test@example.com' },
-            imageUrl: '',
-        },
+        user: sharedAuthState.isSignedIn ? mockUser : null,
         isSignedIn: sharedAuthState.isSignedIn,
         isLoaded: true,
     });
@@ -35,6 +38,10 @@ const {
         signOut: sharedAuthState.signOut,
         isSignedIn: sharedAuthState.isSignedIn,
         isLoaded: true,
+    });
+
+    const mockUseClerk = () => ({
+        signOut: sharedAuthState.signOut,
     });
 
     const getMockSignedInState = () => {
@@ -64,6 +71,7 @@ const {
         getMockSignedInState,
         mockUseUser,
         mockUseAuth,
+        mockUseClerk,
         setMockSignedInState,
         resetMockClerkState,
     };
@@ -84,7 +92,7 @@ vi.mock('@clerk/react', () => ({
     UserButton: () => null,
     OrganizationSwitcher: () => null,
     SignIn: () => null,
-    useClerk: () => ({ signOut: vi.fn() }),
+    useClerk: mockUseClerk,
     useUser: mockUseUser,
     useAuth: mockUseAuth,
     useOrganization: () => ({
