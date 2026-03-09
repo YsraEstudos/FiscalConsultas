@@ -5,7 +5,7 @@
  * Integra dados da API customizada + componentes nativos do Clerk.
  */
 import { useState, useEffect, useCallback, useRef, type MouseEvent } from 'react';
-import { UserProfile, OrganizationProfile } from '@clerk/clerk-react';
+import { UserProfile, OrganizationProfile } from '@clerk/react';
 import { useAuth } from '../context/AuthContext';
 import { useIsAdmin } from '../hooks/useIsAdmin';
 import { clerkTheme } from '../config/clerkAppearance';
