@@ -130,9 +130,10 @@ class ProfileService:
                 | Comment.anchor_key.ilike(search_term)
             )
 
-        # Count total
-        # Optimization: using with_only_columns(func.count()).order_by(None) avoids inefficient subqueries
-        count_query = base_query.with_only_columns(func.count()).order_by(None)
+        # Count total without wrapping the filtered query in a derived table.
+        count_query = base_query.with_only_columns(
+            func.count(), maintain_column_froms=True
+        ).order_by(None)
         total = (await self.session.execute(count_query)).scalar() or 0
 
         # Fetch page

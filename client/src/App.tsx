@@ -457,6 +457,7 @@ function App() {
                             {!tab.loading && tab.results && (
                                 <ResultDisplay
                                     data={tab.results}
+                                    latestTextQuery={tab.latestTextQuery}
                                     mobileMenuOpen={tab.id === activeTabId ? mobileMenuOpen : false}
                                     onCloseMobileMenu={tab.id === activeTabId ? closeMobileMenu : noop}
                                     isActive={tab.id === activeTabId}
