@@ -61,7 +61,8 @@ function isRelativeUrl(candidate: string): boolean {
 }
 
 function getRuntimeOrigin(): string | null {
-    if (typeof globalThis.location === 'undefined') {
+    // `globalThis.location` is intentionally guarded for SSR/Node, where it may not exist.
+    if (typeof globalThis.location === 'undefined') { // NOSONAR (typescript:S7764): location is optional outside browser runtimes.
         return null;
     }
 
@@ -153,12 +154,12 @@ function hardenImage(image: HTMLImageElement): void {
 }
 
 function hardenFragment(fragment: ParentNode): void {
-    fragment.querySelectorAll('a[href]').forEach((anchor) => {
-        hardenAnchor(anchor as HTMLAnchorElement);
+    fragment.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((anchor) => {
+        hardenAnchor(anchor);
     });
 
-    fragment.querySelectorAll('img').forEach((image) => {
-        hardenImage(image as HTMLImageElement);
+    fragment.querySelectorAll<HTMLImageElement>('img').forEach((image) => {
+        hardenImage(image);
     });
 }
 
