@@ -24,12 +24,8 @@ class GlossaryManager:
             return
 
         # Longest-first avoids partial matching when terms overlap.
-        escaped_terms = sorted(
-            (re.escape(t) for t in self._terms.keys()), key=len, reverse=True
-        )
-        self._regex = re.compile(
-            r"\b(" + "|".join(escaped_terms) + r")\b", re.IGNORECASE
-        )
+        escaped_terms = sorted((re.escape(t) for t in self._terms.keys()), key=len, reverse=True)
+        self._regex = re.compile(r"\b(" + "|".join(escaped_terms) + r")\b", re.IGNORECASE)
 
     def load_from_json(self, path: str) -> bool:
         if not os.path.exists(path):
@@ -44,11 +40,7 @@ class GlossaryManager:
         if isinstance(raw, dict):
             iterable = raw.items()
         elif isinstance(raw, list):
-            iterable = (
-                (str(item.get("term", "")), item)
-                for item in raw
-                if isinstance(item, dict)
-            )
+            iterable = ((str(item.get("term", "")), item) for item in raw if isinstance(item, dict))
         else:
             iterable = ()
 
@@ -86,3 +78,4 @@ def init_glossary(project_root: str) -> None:
     for path in candidates:
         if glossary_manager.load_from_json(path):
             return
+
