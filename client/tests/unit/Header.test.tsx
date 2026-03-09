@@ -7,19 +7,19 @@ import styles from '../../src/components/Header.module.css';
 
 const {
   signOutMock,
+  isSignedInRef,
   userNameRef,
   userEmailRef,
   isAdminRef,
 } = vi.hoisted(() => ({
   signOutMock: vi.fn(),
+  isSignedInRef: { value: true },
   userNameRef: { value: 'Usuário Teste' as string | null },
   userEmailRef: { value: 'teste@demo.com' as string | null },
   isAdminRef: { value: true },
 }));
 
-vi.mock('@clerk/clerk-react', () => ({
-  SignedIn: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  SignedOut: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+vi.mock('@clerk/react', () => ({
   UserButton: () => <div data-testid="user-button" />,
   OrganizationSwitcher: () => <div data-testid="org-switcher" />,
   SignInButton: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -36,6 +36,7 @@ vi.mock('../../src/components/SearchBar', () => ({
 
 vi.mock('../../src/context/AuthContext', () => ({
   useAuth: () => ({
+    isSignedIn: isSignedInRef.value,
     userName: userNameRef.value,
     userEmail: userEmailRef.value,
   }),
@@ -71,6 +72,7 @@ describe('Header', () => {
 
   beforeEach(() => {
     signOutMock.mockReset();
+    isSignedInRef.value = true;
     userNameRef.value = 'Usuário Teste';
     userEmailRef.value = 'teste@demo.com';
     isAdminRef.value = true;

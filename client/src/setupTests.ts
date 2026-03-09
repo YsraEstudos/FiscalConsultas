@@ -5,7 +5,7 @@ import * as matchers from '@testing-library/jest-dom/matchers';
 
 expect.extend(matchers);
 
-vi.mock('@clerk/clerk-react', () => ({
+vi.mock('@clerk/react', () => ({
     ClerkProvider: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
     SignedIn: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
     SignedOut: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),

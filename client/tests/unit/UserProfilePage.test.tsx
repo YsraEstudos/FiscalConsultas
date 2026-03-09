@@ -21,7 +21,7 @@ vi.mock('../../src/services/api', () => ({
 }));
 
 // ─── Mocks de Clerk ──────────────────────────────────────────────────────────
-vi.mock('@clerk/clerk-react', () => ({
+vi.mock('@clerk/react', () => ({
     UserProfile: () => <div data-testid="clerk-user-profile" />,
     OrganizationProfile: () => <div data-testid="clerk-org-profile" />,
 }));

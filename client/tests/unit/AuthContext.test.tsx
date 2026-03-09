@@ -40,7 +40,7 @@ const refs = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('@clerk/clerk-react', () => ({
+vi.mock('@clerk/react', () => ({
   useUser: () => refs.userStateRef.value,
   useAuth: () => refs.authStateRef.value,
   useOrganization: () => refs.orgStateRef.value,

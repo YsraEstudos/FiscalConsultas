@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { SignedIn, SignedOut, UserButton, OrganizationSwitcher, SignInButton, useClerk } from '@clerk/clerk-react';
+import { UserButton, OrganizationSwitcher, SignInButton, useClerk } from '@clerk/react';
 import { SearchBar } from './SearchBar';
 import { HistoryItem } from '../hooks/useHistory';
 import {
@@ -53,7 +53,7 @@ export function Header({
     const [isSigningOut, setIsSigningOut] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
     const { signOut } = useClerk();
-    const { userName, userEmail } = useAuth();
+    const { isSignedIn, userName, userEmail } = useAuth();
     const isAdmin = useIsAdmin();
 
     // Close menu when clicking outside
@@ -176,37 +176,39 @@ export function Header({
                         {/* Clerk Auth Section */}
                         {shouldRenderClerkWidgets && (
                             <>
-                                <SignedOut>
+                                {!isSignedIn && (
                                     <SignInButton mode="modal" appearance={clerkTheme}>
                                         <button onClick={() => setIsMenuOpen(false)}>
                                             <span>🔐</span> Entrar
                                         </button>
                                     </SignInButton>
-                                </SignedOut>
+                                )}
 
-                                <SignedIn>
-                                    {/* Admin: apenas OrganizationSwitcher (dropdown já tem "Manage account") */}
-                                    {isAdmin ? (
-                                        <div className={styles.orgSwitcher}>
-                                            <OrganizationSwitcher appearance={clerkOrganizationSwitcherAppearance} />
+                                {isSignedIn && (
+                                    <>
+                                        {/* Admin: apenas OrganizationSwitcher (dropdown já tem "Manage account") */}
+                                        {isAdmin ? (
+                                            <div className={styles.orgSwitcher}>
+                                                <OrganizationSwitcher appearance={clerkOrganizationSwitcherAppearance} />
+                                            </div>
+                                        ) : (
+                                            /* Usuário comum: apenas UserButton — sem avatar duplicado */
+                                            <div className={styles.userSection}>
+                                                <UserButton appearance={clerkUserButtonAppearance} />
+                                            </div>
+                                        )}
+                                        <div className={styles.userSummary}>
+                                            <strong>{userName || 'Usuário'}</strong>
+                                            <span>{userEmail || 'Conta autenticada'}</span>
                                         </div>
-                                    ) : (
-                                        /* Usuário comum: apenas UserButton — sem avatar duplicado */
-                                        <div className={styles.userSection}>
-                                            <UserButton appearance={clerkUserButtonAppearance} afterSignOutUrl="/" />
-                                        </div>
-                                    )}
-                                    <div className={styles.userSummary}>
-                                        <strong>{userName || 'Usuário'}</strong>
-                                        <span>{userEmail || 'Conta autenticada'}</span>
-                                    </div>
-                                    <button onClick={() => { setIsMenuOpen(false); onOpenProfile(); }}>
-                                        <span>👤</span> Meu Perfil
-                                    </button>
-                                    <button className={styles.logoutMenuButton} onClick={handleLogoutClick}>
-                                        <span>🚪</span> Sair da conta
-                                    </button>
-                                </SignedIn>
+                                        <button onClick={() => { setIsMenuOpen(false); onOpenProfile(); }}>
+                                            <span>👤</span> Meu Perfil
+                                        </button>
+                                        <button className={styles.logoutMenuButton} onClick={handleLogoutClick}>
+                                            <span>🚪</span> Sair da conta
+                                        </button>
+                                    </>
+                                )}
                             </>
                         )}
                     </div>
