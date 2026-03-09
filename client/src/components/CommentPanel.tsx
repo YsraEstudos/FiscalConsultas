@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useMemo, useLayoutEffect } from 'react';
 import styles from './CommentPanel.module.css';
+import { sanitizeImageUrl } from '../utils/contentSecurity';
 
 // ── Interfaces ────────────────────────────────────────────────────────────
 
@@ -326,6 +327,7 @@ export function CommentPanel({ pending, comments, onSubmit, onDismiss, onEdit, o
                 const isOwner = currentUserId && comment.userId === currentUserId;
                 const isEditing = editingId === comment.id;
                 const isConfirmingDelete = confirmDeleteId === comment.id;
+                const safeUserImageUrl = sanitizeImageUrl(comment.userImageUrl);
 
                 return (
                     <div
@@ -339,12 +341,14 @@ export function CommentPanel({ pending, comments, onSubmit, onDismiss, onEdit, o
                         {/* Header: Avatar + Nome + Data + Badge + Ações */}
                         <div className={styles.commentHeader}>
                             <div className={styles.authorInfo}>
-                                {comment.userImageUrl ? (
+                                {safeUserImageUrl ? (
                                     <img
                                         className={styles.avatar}
-                                        src={comment.userImageUrl}
+                                        src={safeUserImageUrl}
                                         alt={comment.userName}
                                         loading="lazy"
+                                        decoding="async"
+                                        referrerPolicy="no-referrer"
                                     />
                                 ) : (
                                     <span

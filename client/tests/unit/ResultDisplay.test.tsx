@@ -128,6 +128,42 @@ describe('ResultDisplay Component', () => {
         });
     });
 
+    it('sanitizes rendered markdown content before inserting into the DOM', async () => {
+        const mockData = {
+            type: 'code' as const,
+            markdown: [
+                '# Safe Title',
+                '<script>alert("xss")</script>',
+                '<a href="javascript:alert(1)" target="_blank">unsafe link</a>',
+                '<img src="javascript:alert(1)" alt="unsafe image" />',
+            ].join('\n'),
+            resultados: []
+        };
+        const { container } = render(
+            <SettingsProvider>
+                <ResultDisplay
+                    data={mockData as any}
+                    mobileMenuOpen={false}
+                    onCloseMobileMenu={vi.fn()}
+                    isActive={true}
+                    tabId="tab-sanitize"
+                    isNewSearch={false}
+                    onConsumeNewSearch={vi.fn()}
+                />
+            </SettingsProvider>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Safe Title');
+        });
+
+        const unsafeLink = screen.getByText('unsafe link');
+        expect(container.querySelector('script')).toBeNull();
+        expect(container.querySelector('img')).toBeNull();
+        expect(unsafeLink).not.toHaveAttribute('href');
+        expect(unsafeLink).not.toHaveAttribute('rel');
+    });
+
     it('renders code content from data.results when data.resultados is missing', async () => {
         const mockData = {
             type: 'code' as const,

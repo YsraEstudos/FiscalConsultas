@@ -6,6 +6,7 @@ import { ModalManager } from '../../src/components/ModalManager';
 const authState = {
     isSignedIn: true,
     userEmail: 'blocked@example.com',
+    isAdmin: false,
 };
 
 const modalManagerProps = {
@@ -62,7 +63,7 @@ vi.mock('../../src/components/CrossNavContextMenu', () => ({
 }));
 
 vi.mock('../../src/components/AdminCommentModal', () => ({
-    AdminCommentModal: () => null
+    AdminCommentModal: () => <div data-testid="admin-comment-modal">Admin moderation</div>
 }));
 
 describe('ModalManager', () => {
@@ -70,6 +71,7 @@ describe('ModalManager', () => {
         vi.stubEnv('VITE_RESTRICTED_UI_EMAILS', 'israelseja2@gmail.com');
         authState.isSignedIn = true;
         authState.userEmail = 'blocked@example.com';
+        authState.isAdmin = false;
         vi.clearAllMocks();
     });
 
@@ -87,5 +89,29 @@ describe('ModalManager', () => {
 
         expect(await screen.findByTestId('ai-chat-trigger')).toBeInTheDocument();
         expect(await screen.findByTitle('Abrir Chat IA')).toBeInTheDocument();
+    });
+
+    it('keeps moderation modal hidden for non-admin users even when requested', () => {
+        render(
+            <ModalManager
+                {...modalManagerProps}
+                modals={{ ...modalManagerProps.modals, moderate: true }}
+            />
+        );
+
+        expect(screen.queryByTestId('admin-comment-modal')).not.toBeInTheDocument();
+    });
+
+    it('renders moderation modal for admins when requested', async () => {
+        authState.isAdmin = true;
+
+        render(
+            <ModalManager
+                {...modalManagerProps}
+                modals={{ ...modalManagerProps.modals, moderate: true }}
+            />
+        );
+
+        expect(await screen.findByTestId('admin-comment-modal')).toBeInTheDocument();
     });
 });

@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import styles from './CommentDrawer.module.css';
 import type { LocalComment, PendingCommentEntry } from './CommentPanel';
+import { sanitizeImageUrl } from '../utils/contentSecurity';
 
 interface CommentDrawerProps {
     /** Drawer visível? */
@@ -238,6 +239,7 @@ export function CommentDrawer({
                         const isOwner = currentUserId && comment.userId === currentUserId;
                         const isEditing = editingId === comment.id;
                         const isConfirmingDelete = confirmDeleteId === comment.id;
+                        const safeUserImageUrl = sanitizeImageUrl(comment.userImageUrl);
 
                         return (
                         <div
@@ -247,12 +249,14 @@ export function CommentDrawer({
                             {/* Header: Avatar + Nome + Data + Ações */}
                             <div className={styles.commentHeader}>
                                 <div className={styles.authorInfo}>
-                                    {comment.userImageUrl ? (
+                                    {safeUserImageUrl ? (
                                         <img
                                             className={styles.avatar}
-                                            src={comment.userImageUrl}
+                                            src={safeUserImageUrl}
                                             alt={comment.userName}
                                             loading="lazy"
+                                            decoding="async"
+                                            referrerPolicy="no-referrer"
                                         />
                                     ) : (
                                         <span

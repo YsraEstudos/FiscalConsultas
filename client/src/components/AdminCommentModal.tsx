@@ -12,6 +12,7 @@ import {
 } from '../services/commentService';
 import toast from 'react-hot-toast';
 import styles from './AdminCommentModal.module.css';
+import { sanitizeImageUrl } from '../utils/contentSecurity';
 
 interface AdminCommentModalProps {
     isOpen: boolean;
@@ -151,17 +152,22 @@ export function AdminCommentModal({ isOpen, onClose }: AdminCommentModalProps) {
                         </div>
                     )}
 
-                    {!loading && comments.map(comment => (
+                    {!loading && comments.map(comment => {
+                        const safeUserImageUrl = sanitizeImageUrl(comment.user_image_url);
+
+                        return (
                         <div key={comment.id} className={styles.card}>
                             {/* Author info */}
                             <div className={styles.cardHeader}>
                                 <div className={styles.authorInfo}>
-                                    {comment.user_image_url ? (
+                                    {safeUserImageUrl ? (
                                         <img
                                             className={styles.avatar}
-                                            src={comment.user_image_url}
+                                            src={safeUserImageUrl}
                                             alt={comment.user_name || 'Usuário'}
                                             loading="lazy"
+                                            decoding="async"
+                                            referrerPolicy="no-referrer"
                                         />
                                     ) : (
                                         <span
@@ -239,7 +245,7 @@ export function AdminCommentModal({ isOpen, onClose }: AdminCommentModalProps) {
                                 </div>
                             </div>
                         </div>
-                    ))}
+                    )})}
                 </div>
             </div>
         </div>

@@ -1,6 +1,6 @@
 import { marked } from 'marked';
-import DOMPurify from 'dompurify';
 import { useEffect, useRef } from 'react';
+import { replaceElementWithSanitizedHtml } from '../utils/contentSecurity';
 
 interface MarkdownPaneProps {
     markdown: string | null | undefined;
@@ -10,22 +10,17 @@ interface MarkdownPaneProps {
 export function MarkdownPane({ markdown, className }: MarkdownPaneProps) {
     const containerRef = useRef<HTMLDivElement>(null);
 
-    const sanitizeHtml = (html: string) => DOMPurify.sanitize(html, {
-        ALLOW_DATA_ATTR: true,
-        ADD_ATTR: ['data-ncm', 'data-note', 'data-chapter', 'aria-label', 'data-tooltip', 'role', 'tabindex']
-    });
-
     useEffect(() => {
         if (!containerRef.current) return;
 
         if (!markdown) {
-            containerRef.current.innerHTML = '';
+            containerRef.current.replaceChildren();
             return;
         }
 
         try {
             const rawHtml = marked.parse(markdown) as string;
-            containerRef.current.innerHTML = sanitizeHtml(rawHtml);
+            replaceElementWithSanitizedHtml(containerRef.current, rawHtml);
 
             const container = containerRef.current;
             const headings = Array.from(container.querySelectorAll('h3.nesh-section'));
@@ -61,7 +56,7 @@ export function MarkdownPane({ markdown, className }: MarkdownPaneProps) {
             });
         } catch (e) {
             console.error('Markdown parse error:', e);
-            containerRef.current.innerText = 'Erro ao renderizar conteúdo.';
+            containerRef.current.textContent = 'Erro ao renderizar conteúdo.';
         }
     }, [markdown]);
 
