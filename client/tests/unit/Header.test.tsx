@@ -7,19 +7,19 @@ import styles from '../../src/components/Header.module.css';
 
 const {
   signOutMock,
+  isSignedInRef,
   userNameRef,
   userEmailRef,
   isAdminRef,
 } = vi.hoisted(() => ({
   signOutMock: vi.fn(),
+  isSignedInRef: { value: true },
   userNameRef: { value: 'Usuário Teste' as string | null },
   userEmailRef: { value: 'teste@demo.com' as string | null },
   isAdminRef: { value: true },
 }));
 
-vi.mock('@clerk/clerk-react', () => ({
-  SignedIn: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  SignedOut: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+vi.mock('@clerk/react', () => ({
   UserButton: () => <div data-testid="user-button" />,
   OrganizationSwitcher: () => <div data-testid="org-switcher" />,
   SignInButton: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -36,6 +36,7 @@ vi.mock('../../src/components/SearchBar', () => ({
 
 vi.mock('../../src/context/AuthContext', () => ({
   useAuth: () => ({
+    isSignedIn: isSignedInRef.value,
     userName: userNameRef.value,
     userEmail: userEmailRef.value,
   }),
@@ -71,6 +72,7 @@ describe('Header', () => {
 
   beforeEach(() => {
     signOutMock.mockReset();
+    isSignedInRef.value = true;
     userNameRef.value = 'Usuário Teste';
     userEmailRef.value = 'teste@demo.com';
     isAdminRef.value = true;
@@ -173,6 +175,16 @@ describe('Header', () => {
     expect(screen.getByText('Conta autenticada')).toBeInTheDocument();
   });
 
+  it('renders sign-in entry when the user is signed out', () => {
+    isSignedInRef.value = false;
+    renderHeader();
+
+    fireEvent.click(screen.getByRole('button', { name: /menu/i }));
+
+    expect(screen.getByRole('button', { name: /entrar/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /sair da conta/i })).not.toBeInTheDocument();
+  });
+
   it('confirms logout, blocks duplicate requests and closes modal on completion', async () => {
     let resolveSignOut: (() => void) | null = null;
     signOutMock.mockImplementation(
@@ -200,6 +212,7 @@ describe('Header', () => {
     expect(loadingButton).toBeDisabled();
     fireEvent.click(loadingButton);
     expect(signOutMock).toHaveBeenCalledTimes(1);
+    expect(signOutMock).toHaveBeenCalledWith({ redirectUrl: '/' });
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.getByText('Confirmar saída')).toBeInTheDocument();
