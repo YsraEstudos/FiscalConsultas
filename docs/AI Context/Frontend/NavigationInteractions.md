@@ -121,6 +121,18 @@ Detalhe critico:
 - `AuthProvider` registra `getToken` no interceptor axios.
 - chamadas de API enviam Bearer automaticamente quando rota nao e publica.
 - menu/context/navigation nao dependem de auth para abrir, mas algumas acoes backend podem falhar se sem token.
+- `api.ts` usa `withCredentials: false`; o browser nao deve enviar cookies ambiente para APIs cross-origin.
+- `useIsAdmin` depende de `AuthContext.isAdmin`, que hoje e derivado de `membership.role` do Clerk (nao por email hardcoded).
+- `AdminCommentModal` so e montado quando `modals.moderate=true` **e** o usuario possui role privilegiada.
+- `canAccessRestrictedUi(userEmail)` faz gating adicional de superfícies opcionais:
+  - `AIChat`
+  - comentarios em `ResultDisplay`
+  - aba `Contribuições` em `UserProfilePage`
+
+Importante:
+
+- `VITE_RESTRICTED_UI_EMAILS` e apenas gating de UX/frontend.
+- controles sensiveis continuam exigindo validacao backend.
 
 ## 9) Riscos atuais de navegacao
 

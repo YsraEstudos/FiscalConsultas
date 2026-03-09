@@ -7,7 +7,6 @@ import {
 } from './contentSecurity';
 
 const unsafeJavascriptUrl = `javascript${':alert(1)'}`;
-
 describe('contentSecurity', () => {
     it('removes active content from rich HTML while preserving safe data attributes', () => {
         const container = document.createElement('div');

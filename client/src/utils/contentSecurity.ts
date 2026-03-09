@@ -52,7 +52,6 @@ function normalizeUrlCandidate(value: string | null | undefined): string | null 
             index += 1;
         }
     }
-
     return trimmed;
 }
 
