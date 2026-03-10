@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import { render, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { ResultDisplay } from '../../src/components/ResultDisplay';
+import { TabsBar } from '../../src/components/TabsBar';
+import { TabPanel } from '../../src/components/Tabs/TabPanel';
 import { SettingsProvider } from '../../src/context/SettingsContext';
 import { AuthProvider } from '../../src/context/AuthContext';
+import type { Tab } from '../../src/hooks/useTabs';
 
 type TabState = {
     id: string;
@@ -195,5 +198,95 @@ describe('Tab scroll persistence (integration)', () => {
 
         globalThis.requestIdleCallback = originalIdle;
         globalThis.cancelIdleCallback = originalCancelIdle;
+    });
+
+    it('keeps the previous content position when switching tabs through TabsBar clicks', () => {
+        const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+            cb(0);
+            return 0;
+        });
+
+        const TestTabs = () => {
+            const [tabs, setTabs] = useState<Tab[]>([
+                {
+                    id: 'tab-1',
+                    title: 'Aba NESH',
+                    document: 'nesh',
+                    content: null,
+                    loading: false,
+                    error: null,
+                    scrollTop: 0,
+                    results: { type: 'text', results: [1, 2, 3], query: 'test-1' }
+                },
+                {
+                    id: 'tab-2',
+                    title: 'Aba TIPI',
+                    document: 'tipi',
+                    content: null,
+                    loading: false,
+                    error: null,
+                    scrollTop: 0,
+                    results: { type: 'text', results: [4, 5, 6], query: 'test-2' }
+                }
+            ]);
+            const [activeId, setActiveId] = useState('tab-1');
+
+            const updateTab = (tabId: string, scrollTop: number) => {
+                setTabs(prev => prev.map(tab => (tab.id === tabId ? { ...tab, scrollTop } : tab)));
+            };
+
+            return (
+                <div>
+                    <TabsBar
+                        tabs={tabs}
+                        activeTabId={activeId}
+                        onSwitch={setActiveId}
+                        onClose={() => { }}
+                        onReorder={() => { }}
+                        onNewTab={() => { }}
+                    />
+
+                    {tabs.map(tab => (
+                        <TabPanel key={tab.id} id={tab.id} activeTabId={activeId}>
+                            {tab.results && (
+                                <ResultDisplay
+                                    data={tab.results}
+                                    mobileMenuOpen={false}
+                                    onCloseMobileMenu={vi.fn()}
+                                    isActive={tab.id === activeId}
+                                    tabId={tab.id}
+                                    isNewSearch={false}
+                                    onConsumeNewSearch={vi.fn()}
+                                    initialScrollTop={tab.scrollTop}
+                                    onPersistScroll={(id, top) => updateTab(id, top)}
+                                />
+                            )}
+                        </TabPanel>
+                    ))}
+                </div>
+            );
+        };
+
+        const { container, getByText } = render(
+            <AuthProvider>
+                <SettingsProvider>
+                    <TestTabs />
+                </SettingsProvider>
+            </AuthProvider>
+        );
+
+        const tab1Scroll = container.querySelector('#results-content-tab-1') as HTMLDivElement | null;
+        expect(tab1Scroll).not.toBeNull();
+        if (!tab1Scroll) return;
+
+        tab1Scroll.scrollTop = 275;
+        fireEvent.scroll(tab1Scroll);
+
+        fireEvent.click(getByText('Aba TIPI'));
+        fireEvent.click(getByText('Aba NESH'));
+
+        expect(tab1Scroll.scrollTop).toBe(275);
+
+        rafSpy.mockRestore();
     });
 });

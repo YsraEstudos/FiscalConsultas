@@ -12,6 +12,7 @@ interface TabsBarProps {
 }
 
 export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch, onClose, onReorder, onNewTab }: TabsBarProps) {
+    const tabsContainerRef = useRef<HTMLDivElement | null>(null);
     const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const draggedTabIdRef = useRef<string | null>(null);
 
@@ -22,20 +23,40 @@ export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch
         onClose(event, tabId);
     };
 
-    // Scroll to active tab when it changes
+    // Keep the active tab visible inside the horizontal strip without nudging the page vertically.
     useEffect(() => {
+        const tabsContainer = tabsContainerRef.current;
         const activeTabElement = tabRefs.current.get(activeTabId);
-        if (activeTabElement) {
-            activeTabElement.scrollIntoView({
-                behavior: 'smooth',
-                block: 'nearest',
-                inline: 'nearest'
-            });
+        if (!tabsContainer || !activeTabElement) return;
+
+        const containerRect = tabsContainer.getBoundingClientRect();
+        const activeRect = activeTabElement.getBoundingClientRect();
+        const edgePadding = 16;
+        let nextScrollLeft = tabsContainer.scrollLeft;
+
+        if (activeRect.left < containerRect.left + edgePadding) {
+            nextScrollLeft -= (containerRect.left + edgePadding) - activeRect.left;
+        } else if (activeRect.right > containerRect.right - edgePadding) {
+            nextScrollLeft += activeRect.right - (containerRect.right - edgePadding);
+        } else {
+            return;
         }
+
+        const maxScrollLeft = Math.max(0, tabsContainer.scrollWidth - tabsContainer.clientWidth);
+        const clampedScrollLeft = Math.min(Math.max(0, nextScrollLeft), maxScrollLeft);
+
+        if (Math.abs(clampedScrollLeft - tabsContainer.scrollLeft) < 1) return;
+
+        if (typeof tabsContainer.scrollTo === 'function') {
+            tabsContainer.scrollTo({ left: clampedScrollLeft, behavior: 'smooth' });
+            return;
+        }
+
+        tabsContainer.scrollLeft = clampedScrollLeft;
     }, [activeTabId]);
 
     return (
-        <div className={styles.tabsContainer}>
+        <div ref={tabsContainerRef} className={styles.tabsContainer}>
             {tabs.map(tab => (
                 <div
                     key={tab.id}
