@@ -103,6 +103,28 @@ vi.mock('@clerk/react', () => ({
 // Mock scrollIntoView - not implemented in JSDOM
 Element.prototype.scrollIntoView = vi.fn();
 
+// Mock scrollTo - used by the tabs strip to keep the active tab visible
+Element.prototype.scrollTo = vi.fn(function scrollTo(this: Element, optionsOrX?: ScrollToOptions | number, y?: number) {
+    const target = this as Element & { scrollLeft?: number; scrollTop?: number };
+
+    if (typeof optionsOrX === 'object' && optionsOrX !== null) {
+        if (typeof optionsOrX.left === 'number') {
+            target.scrollLeft = optionsOrX.left;
+        }
+        if (typeof optionsOrX.top === 'number') {
+            target.scrollTop = optionsOrX.top;
+        }
+        return;
+    }
+
+    if (typeof optionsOrX === 'number') {
+        target.scrollLeft = optionsOrX;
+    }
+    if (typeof y === 'number') {
+        target.scrollTop = y;
+    }
+});
+
 // Mock ResizeObserver - not implemented in JSDOM
 class MockResizeObserver {
     observe = vi.fn();
