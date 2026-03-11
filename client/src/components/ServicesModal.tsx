@@ -292,6 +292,7 @@ export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>)
     return (
         <div
             className={styles.overlay}
+            role="none"
             onMouseDown={(event) => {
                 if (event.target === event.currentTarget) onClose();
             }}
