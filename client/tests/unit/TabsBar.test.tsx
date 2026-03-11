@@ -123,6 +123,72 @@ describe('TabsBar', () => {
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
   });
 
+  it('falls back to scrollLeft assignment when scrollTo is not available', () => {
+    const onSwitch = vi.fn();
+    const onClose = vi.fn();
+    const onReorder = vi.fn();
+    const onNewTab = vi.fn();
+
+    const { container, rerender } = render(
+      <TabsBar
+        tabs={tabs}
+        activeTabId="tab-1"
+        onSwitch={onSwitch}
+        onClose={onClose}
+        onReorder={onReorder}
+        onNewTab={onNewTab}
+      />,
+    );
+
+    const tabsContainer = container.querySelector(`.${styles.tabsContainer}`) as HTMLDivElement | null;
+    const activeTab = screen.getByText('Aba TIPI').closest('div') as HTMLDivElement | null;
+
+    expect(tabsContainer).not.toBeNull();
+    expect(activeTab).not.toBeNull();
+    if (!tabsContainer || !activeTab) return;
+
+    Object.defineProperty(tabsContainer, 'scrollLeft', {
+      configurable: true,
+      writable: true,
+      value: 0,
+    });
+    Object.defineProperty(tabsContainer, 'scrollWidth', {
+      configurable: true,
+      value: 480,
+    });
+    Object.defineProperty(tabsContainer, 'clientWidth', {
+      configurable: true,
+      value: 200,
+    });
+
+    vi.spyOn(tabsContainer, 'getBoundingClientRect').mockReturnValue(createRect(0, 200));
+    vi.spyOn(activeTab, 'getBoundingClientRect').mockReturnValue(createRect(260, 80));
+
+    // Remove scrollTo to exercise the fallback branch
+    const originalScrollTo = Element.prototype.scrollTo;
+    // @ts-ignore — intentionally removing scrollTo
+    delete Element.prototype.scrollTo;
+
+    try {
+      rerender(
+        <TabsBar
+          tabs={tabs}
+          activeTabId="tab-2"
+          onSwitch={onSwitch}
+          onClose={onClose}
+          onReorder={onReorder}
+          onNewTab={onNewTab}
+        />,
+      );
+
+      // The fallback should have assigned scrollLeft directly
+      expect(tabsContainer.scrollLeft).toBe(156);
+      expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      Element.prototype.scrollTo = originalScrollTo;
+    }
+  });
+
   it('handles click and keyboard interactions to switch tabs', () => {
     const onSwitch = vi.fn();
     render(

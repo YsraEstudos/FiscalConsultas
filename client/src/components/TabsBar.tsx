@@ -53,7 +53,7 @@ export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch
         }
 
         tabsContainer.scrollLeft = clampedScrollLeft;
-    }, [activeTabId]);
+    }, [activeTabId, tabs, onReorder]);
 
     return (
         <div ref={tabsContainerRef} className={styles.tabsContainer}>
