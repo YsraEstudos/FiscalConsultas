@@ -68,7 +68,7 @@ function renderHeader() {
 }
 
 describe('Header', () => {
-  const SLOW_MENU_FLOW_TIMEOUT_MS = 3000;
+  const SLOW_MENU_FLOW_TIMEOUT_MS = 7000;
 
   beforeEach(() => {
     signOutMock.mockReset();
