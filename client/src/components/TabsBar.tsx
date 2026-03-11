@@ -53,7 +53,8 @@ export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch
         }
 
         tabsContainer.scrollLeft = clampedScrollLeft;
-    }, [activeTabId, tabs, onReorder]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTabId, tabs]);
 
     return (
         <div ref={tabsContainerRef} className={styles.tabsContainer}>

@@ -108,7 +108,8 @@ describe('Tab scroll persistence (integration)', () => {
         // @ts-ignore
         globalThis.cancelIdleCallback = (id: number) => globalThis.clearTimeout(id);
 
-        const TestTabs = () => {
+        try {
+            const TestTabs = () => {
             const [tabs, setTabs] = useState<TabState[]>([
                 { id: 'tab-1', scrollTop: 0 },
                 { id: 'tab-2', scrollTop: 0 }
@@ -197,9 +198,10 @@ describe('Tab scroll persistence (integration)', () => {
         expect(tab1Scroll.scrollTop).toBe(210);
         fireEvent.click(getByText('Tab 2'));
         expect(tab2Scroll.scrollTop).toBe(420);
-
-        globalThis.requestIdleCallback = originalIdle;
-        globalThis.cancelIdleCallback = originalCancelIdle;
+        } finally {
+            globalThis.requestIdleCallback = originalIdle;
+            globalThis.cancelIdleCallback = originalCancelIdle;
+        }
     });
 
     it('keeps the previous content position when switching tabs through TabsBar clicks', () => {

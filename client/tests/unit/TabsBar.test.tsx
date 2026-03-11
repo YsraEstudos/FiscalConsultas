@@ -134,10 +134,10 @@ describe('TabsBar', () => {
     expect(activeTab).not.toBeNull();
     if (!tabsContainer || !activeTab) return;
 
-    // Remove scrollTo to exercise the fallback branch
-    const originalScrollTo = Element.prototype.scrollTo;
-    // @ts-ignore — intentionally removing scrollTo
-    delete Element.prototype.scrollTo;
+    // Mock tabsContainer.scrollTo to undefined to exercise the fallback branch
+    const originalScrollTo = tabsContainer.scrollTo;
+    // @ts-ignore — intentionally removing scrollTo on the instance
+    tabsContainer.scrollTo = undefined;
 
     try {
       rerender(
@@ -152,7 +152,7 @@ describe('TabsBar', () => {
       expect(tabsContainer.scrollLeft).toBe(156);
       expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
     } finally {
-      Element.prototype.scrollTo = originalScrollTo;
+      tabsContainer.scrollTo = originalScrollTo;
     }
   });
 
