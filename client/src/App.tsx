@@ -442,7 +442,6 @@ function App() {
                 onOpenStats={() => setIsStatsOpen(true)}
                 onOpenComparator={() => setIsComparatorOpen(true)}
                 onOpenServices={() => {
-                    setDoc('nbs');
                     setIsServicesOpen(true);
                 }}
                 onOpenModerate={() => setIsModerateOpen(true)}

@@ -61,8 +61,10 @@ const INITIAL_NEBS_STATE: NebsViewState = {
     hasSearched: false,
 };
 
-function fireAndForget(task: Promise<unknown>) {
-    task.catch(() => undefined);
+function fireAndForget(task: Promise<unknown>, label = 'ServicesModal task') {
+    task.catch((error) => {
+        console.error(`[ServicesModal] ${label} failed`, error);
+    });
 }
 
 export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>) {
@@ -393,7 +395,7 @@ export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>)
                                                 type="button"
                                                 className={`${styles.resultCard} ${nbsState.selectedCode === item.code ? styles.resultCardActive : ''}`}
                                                 onClick={() => {
-                                                    fireAndForget(loadNbsDetail(item.code));
+                                    fireAndForget(loadNbsDetail(item.code), 'loadNbsDetail');
                                                 }}
                                             >
                                                 <div className={styles.resultMeta}>
@@ -430,7 +432,7 @@ export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>)
                                                     type="button"
                                                     className={styles.crumb}
                                                     onClick={() => {
-                                                        fireAndForget(loadNbsDetail(ancestor.code));
+                                    fireAndForget(loadNbsDetail(ancestor.code), 'loadNbsDetail');
                                                     }}
                                                 >
                                                     {ancestor.code}
@@ -488,7 +490,7 @@ export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>)
                                                             type="button"
                                                             className={styles.childItem}
                                                             onClick={() => {
-                                                                fireAndForget(loadNbsDetail(child.code));
+                                    fireAndForget(loadNbsDetail(child.code), 'loadNbsDetail');
                                                             }}
                                                         >
                                                             <span className={styles.childCode}>{child.code}</span>
@@ -532,7 +534,7 @@ export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>)
                                                 type="button"
                                                 className={`${styles.resultCard} ${nebsState.selectedCode === item.code ? styles.resultCardActive : ''}`}
                                                 onClick={() => {
-                                                    fireAndForget(loadNebsDetail(item.code));
+                                    fireAndForget(loadNebsDetail(item.code), 'loadNebsDetail');
                                                 }}
                                             >
                                                 <div className={styles.resultMeta}>

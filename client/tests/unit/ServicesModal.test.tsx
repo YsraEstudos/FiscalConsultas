@@ -211,6 +211,7 @@ describe('ServicesModal', () => {
   });
 
   it('keeps NEBS idle until a query is typed, then searches and shows note details', { timeout: 15000 }, async () => {
+    vi.useFakeTimers();
     const item = makeServiceItem({
       code: '1.0102.61',
       code_clean: '1010261',
@@ -228,41 +229,41 @@ describe('ServicesModal', () => {
         },
       }),
     );
+    try {
+      render(<ServicesModal isOpen onClose={vi.fn()} />);
 
-    render(<ServicesModal isOpen onClose={vi.fn()} />);
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
 
-    await waitFor(() => {
       expect(refs.searchNbsServicesMock).toHaveBeenCalledWith('');
-    });
 
-    fireEvent.click(screen.getByRole('button', { name: 'NEBS' }));
+      fireEvent.click(screen.getByRole('button', { name: 'NEBS' }));
 
-    expect(screen.getByText('Busque uma nota explicativa')).toBeInTheDocument();
-    expect(refs.searchNebsEntriesMock).not.toHaveBeenCalled();
+      expect(screen.getByText('Busque uma nota explicativa')).toBeInTheDocument();
+      expect(refs.searchNebsEntriesMock).not.toHaveBeenCalled();
 
-    vi.useFakeTimers();
+      fireEvent.change(screen.getByLabelText('Buscar por codigo ou termo da nota'), {
+        target: { value: 'energia' },
+      });
 
-    fireEvent.change(screen.getByLabelText('Buscar por codigo ou termo da nota'), {
-      target: { value: 'energia' },
-    });
+      await act(async () => {
+        vi.advanceTimersByTime(220);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
 
-    await act(async () => {
-      vi.advanceTimersByTime(220);
-      await Promise.resolve();
-    });
-
-    vi.useRealTimers();
-
-    await waitFor(() => {
       expect(refs.searchNebsEntriesMock).toHaveBeenCalledWith('energia');
-    });
-    await waitFor(() => {
       expect(refs.getNebsEntryDetailMock).toHaveBeenCalledWith(item.code);
-    });
 
-    expect(screen.getByRole('heading', { name: item.description })).toBeInTheDocument();
-    expect(screen.getByText('Abrir item NBS relacionado')).toBeInTheDocument();
-    expect(screen.getByText('Construção de usinas.')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: item.description })).toBeInTheDocument();
+      expect(screen.getByText('Abrir item NBS relacionado')).toBeInTheDocument();
+      expect(screen.getByText('Construção de usinas.')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('preserves tab state and opens the related NBS item from a NEBS detail', { timeout: 15000 }, async () => {

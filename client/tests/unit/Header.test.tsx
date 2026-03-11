@@ -79,6 +79,8 @@ function openMenu() {
 }
 
 describe('Header', () => {
+  const SLOW_MENU_FLOW_TIMEOUT_MS = 7000;
+
   beforeEach(() => {
     signOutMock.mockReset();
     isSignedInRef.value = true;

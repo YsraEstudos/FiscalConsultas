@@ -1,5 +1,10 @@
 import type { DocType } from '../hooks/useTabs';
-import type { NbsSearchResponse, NebsSearchResponse } from '../types/api.types';
+import {
+    isNebsSearchResponse,
+    isNbsSearchResponse,
+    type NbsSearchResponse,
+    type NebsSearchResponse,
+} from '../types/api.types';
 import styles from './ServicesTabContent.module.css';
 
 type ServicesSearchResponse = NbsSearchResponse | NebsSearchResponse;
@@ -10,13 +15,9 @@ interface ServicesTabContentProps {
     readonly onSwitchDoc: (nextDoc: DocType, query: string) => void;
 }
 
-function isNbsResponse(data: ServicesSearchResponse): data is NbsSearchResponse {
-    return 'results' in data && data.results.length > 0 && 'description' in data.results[0];
-}
-
 export function ServicesTabContent({ doc, data, onSwitchDoc }: Readonly<ServicesTabContentProps>) {
-    if (doc === 'nbs' && (isNbsResponse(data) || data.results.length === 0)) {
-        const nbsData = data as NbsSearchResponse;
+    if (doc === 'nbs' && isNbsSearchResponse(data)) {
+        const nbsData = data;
 
         return (
             <div className={styles.container}>
@@ -47,8 +48,12 @@ export function ServicesTabContent({ doc, data, onSwitchDoc }: Readonly<Services
         );
     }
 
+    if (!isNebsSearchResponse(data)) {
+        return null;
+    }
+
     // NEBS view
-    const nebsData = data as NebsSearchResponse;
+    const nebsData = data;
     return (
         <div className={styles.container}>
             <div className={styles.header}>

@@ -311,6 +311,36 @@ export function isCodeSearchResponse(
     return 'type' in response && response.type === 'code';
 }
 
+/** Verifica se a resposta é uma busca de serviços NBS */
+export function isNbsSearchResponse(
+    response: SearchResponse
+): response is NbsSearchResponse {
+    if (!response || typeof response !== 'object' || !('total' in response) || !('results' in response)) {
+        return false;
+    }
+
+    if (!Array.isArray(response.results)) {
+        return false;
+    }
+
+    return response.results.length === 0 || 'code_clean' in response.results[0];
+}
+
+/** Verifica se a resposta é uma busca de notas NEBS */
+export function isNebsSearchResponse(
+    response: SearchResponse
+): response is NebsSearchResponse {
+    if (!response || typeof response !== 'object' || !('total' in response) || !('results' in response)) {
+        return false;
+    }
+
+    if (!Array.isArray(response.results)) {
+        return false;
+    }
+
+    return response.results.length === 0 || 'excerpt' in response.results[0];
+}
+
 /** Verifica se a resposta é um erro da API */
 export function isApiError(response: unknown): response is ApiErrorResponse {
     if (!response || typeof response !== 'object') return false;
