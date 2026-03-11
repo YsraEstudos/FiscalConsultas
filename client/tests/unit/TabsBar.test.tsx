@@ -63,46 +63,53 @@ describe('TabsBar', () => {
     expect(tabButtons[0].className).not.toContain(styles.tabButtonActive);
   });
 
-  it('keeps the active tab visible by scrolling the tab strip horizontally', () => {
-    const onSwitch = vi.fn();
-    const onClose = vi.fn();
-    const onReorder = vi.fn();
-    const onNewTab = vi.fn();
+  const setupHorizontalScrollTest = () => {
+    const handlers = {
+      onSwitch: vi.fn(),
+      onClose: vi.fn(),
+      onReorder: vi.fn(),
+      onNewTab: vi.fn(),
+    };
 
-    const { container, rerender } = render(
+    const result = render(
       <TabsBar
         tabs={tabs}
         activeTabId="tab-1"
-        onSwitch={onSwitch}
-        onClose={onClose}
-        onReorder={onReorder}
-        onNewTab={onNewTab}
+        {...handlers}
       />,
     );
 
-    const tabsContainer = container.querySelector(`.${styles.tabsContainer}`) as HTMLDivElement | null;
+    const tabsContainer = result.container.querySelector(`.${styles.tabsContainer}`) as HTMLDivElement | null;
     const activeTab = screen.getByText('Aba TIPI').closest('div') as HTMLDivElement | null;
+
+    if (tabsContainer && activeTab) {
+      Object.defineProperty(tabsContainer, 'scrollLeft', {
+        configurable: true,
+        writable: true,
+        value: 0,
+      });
+      Object.defineProperty(tabsContainer, 'scrollWidth', {
+        configurable: true,
+        value: 480,
+      });
+      Object.defineProperty(tabsContainer, 'clientWidth', {
+        configurable: true,
+        value: 200,
+      });
+
+      vi.spyOn(tabsContainer, 'getBoundingClientRect').mockReturnValue(createRect(0, 200));
+      vi.spyOn(activeTab, 'getBoundingClientRect').mockReturnValue(createRect(260, 80));
+    }
+
+    return { ...result, handlers, tabsContainer, activeTab };
+  };
+
+  it('keeps the active tab visible by scrolling the tab strip horizontally', () => {
+    const { rerender, handlers, tabsContainer, activeTab } = setupHorizontalScrollTest();
 
     expect(tabsContainer).not.toBeNull();
     expect(activeTab).not.toBeNull();
     if (!tabsContainer || !activeTab) return;
-
-    Object.defineProperty(tabsContainer, 'scrollLeft', {
-      configurable: true,
-      writable: true,
-      value: 0,
-    });
-    Object.defineProperty(tabsContainer, 'scrollWidth', {
-      configurable: true,
-      value: 480,
-    });
-    Object.defineProperty(tabsContainer, 'clientWidth', {
-      configurable: true,
-      value: 200,
-    });
-
-    vi.spyOn(tabsContainer, 'getBoundingClientRect').mockReturnValue(createRect(0, 200));
-    vi.spyOn(activeTab, 'getBoundingClientRect').mockReturnValue(createRect(260, 80));
 
     const scrollToSpy = vi.spyOn(tabsContainer, 'scrollTo');
     scrollToSpy.mockClear();
@@ -111,10 +118,7 @@ describe('TabsBar', () => {
       <TabsBar
         tabs={tabs}
         activeTabId="tab-2"
-        onSwitch={onSwitch}
-        onClose={onClose}
-        onReorder={onReorder}
-        onNewTab={onNewTab}
+        {...handlers}
       />,
     );
 
@@ -124,45 +128,11 @@ describe('TabsBar', () => {
   });
 
   it('falls back to scrollLeft assignment when scrollTo is not available', () => {
-    const onSwitch = vi.fn();
-    const onClose = vi.fn();
-    const onReorder = vi.fn();
-    const onNewTab = vi.fn();
-
-    const { container, rerender } = render(
-      <TabsBar
-        tabs={tabs}
-        activeTabId="tab-1"
-        onSwitch={onSwitch}
-        onClose={onClose}
-        onReorder={onReorder}
-        onNewTab={onNewTab}
-      />,
-    );
-
-    const tabsContainer = container.querySelector(`.${styles.tabsContainer}`) as HTMLDivElement | null;
-    const activeTab = screen.getByText('Aba TIPI').closest('div') as HTMLDivElement | null;
+    const { rerender, handlers, tabsContainer, activeTab } = setupHorizontalScrollTest();
 
     expect(tabsContainer).not.toBeNull();
     expect(activeTab).not.toBeNull();
     if (!tabsContainer || !activeTab) return;
-
-    Object.defineProperty(tabsContainer, 'scrollLeft', {
-      configurable: true,
-      writable: true,
-      value: 0,
-    });
-    Object.defineProperty(tabsContainer, 'scrollWidth', {
-      configurable: true,
-      value: 480,
-    });
-    Object.defineProperty(tabsContainer, 'clientWidth', {
-      configurable: true,
-      value: 200,
-    });
-
-    vi.spyOn(tabsContainer, 'getBoundingClientRect').mockReturnValue(createRect(0, 200));
-    vi.spyOn(activeTab, 'getBoundingClientRect').mockReturnValue(createRect(260, 80));
 
     // Remove scrollTo to exercise the fallback branch
     const originalScrollTo = Element.prototype.scrollTo;
@@ -174,10 +144,7 @@ describe('TabsBar', () => {
         <TabsBar
           tabs={tabs}
           activeTabId="tab-2"
-          onSwitch={onSwitch}
-          onClose={onClose}
-          onReorder={onReorder}
-          onNewTab={onNewTab}
+          {...handlers}
         />,
       );
 
