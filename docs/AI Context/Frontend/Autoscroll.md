@@ -67,6 +67,7 @@ Observer monitora:
 - persiste `scrollTop` quando aba fica inativa.
 - restaura `initialScrollTop` quando aba volta ativa e `isNewSearch=false`.
 - ignora restauracao durante nova busca para priorizar autoscroll.
+- click em aba nao deve disparar nenhum scroll vertical extra; a barra de abas so pode ajustar seu proprio eixo horizontal.
 
 ### 4.3 Render chunked
 
@@ -116,6 +117,7 @@ Impacto:
 2. `isNewSearch` deve ser consumido apenas apos scroll bem-sucedido.
 3. restauracao de scroll nao pode competir com auto-scroll da mesma busca.
 4. classe `.smart-link` e atributos `data-ncm`/`data-note` devem continuar consistentes.
+5. ativacao da aba no `TabsBar` nao pode usar `scrollIntoView` no elemento da aba, para nao interferir no scroll restaurado do conteudo.
 
 ## 8) Testes relacionados
 
