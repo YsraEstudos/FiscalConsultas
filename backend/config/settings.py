@@ -25,6 +25,7 @@ class DatabaseSettings(BaseModel):
     # SQLite paths (dev/legacy)
     filename: str = "database/nesh.db"
     tipi_filename: str = "database/tipi.db"
+    services_filename: str = "database/services.db"
 
     # PostgreSQL (production)
     postgres_url: Optional[str] = None  # postgresql+asyncpg://user:pass@host/db
@@ -50,6 +51,13 @@ class DatabaseSettings(BaseModel):
         if os.path.isabs(self.tipi_filename):
             return self.tipi_filename
         return os.path.join(PROJECT_ROOT, self.tipi_filename)
+
+    @property
+    def services_path(self) -> str:
+        """Returns services SQLite DB path."""
+        if os.path.isabs(self.services_filename):
+            return self.services_filename
+        return os.path.join(PROJECT_ROOT, self.services_filename)
 
     @property
     def async_url(self) -> str:
@@ -107,6 +115,8 @@ class SecuritySettings(BaseModel):
     """Security and anti-abuse controls."""
 
     ai_chat_requests_per_minute: int = 5
+    services_search_requests_per_minute: int = 30
+    services_detail_requests_per_minute: int = 120
     ai_chat_max_message_chars: int = 4000
     trusted_proxy_ips: List[str] = Field(default_factory=list)
 

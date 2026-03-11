@@ -66,6 +66,14 @@ class _FakeTipiService:
         return obj
 
 
+class _FakeNbsService:
+    def __init__(self):
+        self.closed = False
+
+    async def close(self):
+        self.closed = True
+
+
 class _FakeAiService:
     pass
 
@@ -100,6 +108,7 @@ def core_mocks(monkeypatch):
     )
     monkeypatch.setattr(app_module.redis_cache, "close", _redis_close)
     monkeypatch.setattr(app_module.redis_cache, "connect", _redis_connect)
+    monkeypatch.setattr(app_module, "NbsService", _FakeNbsService)
 
     if hasattr(app_module, "tipi_service_module"):
         monkeypatch.setattr(
@@ -153,12 +162,14 @@ async def test_lifespan_sqlite_init_db_failure_keeps_startup_and_shutdown(
         assert app.state.sqlmodel_enabled is False
         assert app.state.service.db is fake_db
         assert app.state.tipi_service.mode == "sqlite"
+        assert isinstance(app.state.nbs_service, _FakeNbsService)
         assert isinstance(app.state.ai_service, _FakeAiService)
         assert fake_db.pool_ready is True
         assert core_mocks["glossary"] is True
         assert core_mocks["frontend"] is True
 
     assert fake_db.closed is True
+    assert app.state.nbs_service.closed is True
     assert core_mocks["redis_closed"] is True
 
 
@@ -187,6 +198,7 @@ async def test_lifespan_sqlite_handles_import_error_for_db_engine(
         assert fake_db.pool_ready is True
 
     assert fake_db.closed is True
+    assert app.state.nbs_service.closed is True
 
 
 @pytest.mark.asyncio
@@ -214,6 +226,7 @@ async def test_lifespan_sqlite_init_db_success_closes_sqlmodel_engine(
         assert app.state.sqlmodel_enabled is True
 
     assert fake_db.closed is True
+    assert app.state.nbs_service.closed is True
     assert close_db_called["value"] is True
 
 
@@ -255,8 +268,10 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
         assert app.state.sqlmodel_enabled is True
         assert isinstance(app.state.service, _FailingPrewarmNeshService)
         assert app.state.tipi_service.mode == "repo"
+        assert isinstance(app.state.nbs_service, _FakeNbsService)
         assert core_mocks["redis_connected"] is True
 
+    assert app.state.nbs_service.closed is True
     assert core_mocks["redis_closed"] is True
 
 

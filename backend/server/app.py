@@ -16,6 +16,7 @@ from backend.presentation.routes import (
     comments,
     profile,
     search,
+    services,
     system,
     tipi,
     webhooks,
@@ -26,6 +27,7 @@ from backend.server.error_handlers import (
 )
 from backend.server.middleware import TenantMiddleware
 from backend.services.ai_service import AiService
+from backend.services.nbs_service import NbsService
 from backend.services.tipi_service import TipiService
 from backend.utils.frontend_check import verify_frontend_build
 from fastapi import FastAPI, Request
@@ -162,6 +164,11 @@ async def _init_tipi_service(app: FastAPI) -> None:
     )
 
 
+async def _init_nbs_service(app: FastAPI) -> None:
+    app.state.nbs_service = NbsService()
+    logger.info("NbsService initialized in SQLite mode (services.db)")
+
+
 async def _shutdown_resources(app: FastAPI) -> None:
     logger.info("Shutting down...")
 
@@ -175,6 +182,12 @@ async def _shutdown_resources(app: FastAPI) -> None:
         await redis_cache.close()
     except Exception as e:
         logger.warning("Error closing Redis cache: %s", e)
+
+    if hasattr(app.state, "nbs_service") and app.state.nbs_service:
+        try:
+            await app.state.nbs_service.close()
+        except Exception as e:
+            logger.warning("Error closing NbsService: %s", e)
 
     if not getattr(app.state, "sqlmodel_enabled", False):
         return
@@ -197,6 +210,7 @@ async def lifespan(app: FastAPI):
         await _init_nesh_service(app)
         await _init_cache_warmup(app)
         await _init_tipi_service(app)
+        await _init_nbs_service(app)
         app.state.ai_service = AiService()
 
         logger.info("Initializing Glossary...")
@@ -278,6 +292,7 @@ app.include_router(search.router, prefix="/api", tags=["Search"])
 app.include_router(
     tipi.router, prefix="/api/tipi", tags=["TIPI"]
 )  # Note: routes inside are /search, /chapters etc
+app.include_router(services.router, prefix="/api/services", tags=["Services"])
 app.include_router(system.router, prefix="/api", tags=["System"])
 app.include_router(webhooks.router, prefix="/api/webhooks", tags=["Webhooks"])
 app.include_router(comments.router, prefix="/api", tags=["Comments"])
