@@ -20,16 +20,16 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'html'],
-      // PR-26 tech debt: comment UI flows are excluded while integration coverage is stabilized;
-      // branches stay at 70 temporarily due to conditional UI paths in drawer/panel/service wiring.
-      // Debt target (PR-26): restore branches >= 80 after adding integration tests for comment drawer/panel/service flows.
+      include: ['src/**/*.ts', 'src/**/*.tsx'],
       exclude: [
         '**/*.css',
         '**/*.module.css',
-        'src/components/CommentPanel.tsx',
-        'src/components/CommentDrawer.tsx',
-        'src/services/commentService.ts',
+        'src/**/*.test.ts',
+        'src/**/*.test.tsx',
+        'src/setupTests.ts',
+        'src/vite-env.d.ts',
       ],
+      reportOnFailure: true,
       thresholds: {
         lines: 80,
         statements: 80,
