@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import type { SearchResponse } from "../types/api.types";
 
 /** Tipo de documento suportado */
@@ -96,6 +96,7 @@ export function useTabs() {
     },
   ]);
   const [activeTabId, setActiveTabId] = useState<string>("tab-1");
+  const nextActiveIdRef = useRef<string | null>(null);
 
   const createTab = useCallback((document: DocType = "nesh") => {
     const newTabId = generateTabId();
@@ -115,6 +116,8 @@ export function useTabs() {
 
   const closeTab = useCallback((e: any, tabId: string) => {
     e.stopPropagation();
+    nextActiveIdRef.current = null;
+
     setTabs((prev) => {
       if (prev.length <= 1) return prev; // Nao fechar a ultima aba
 
@@ -122,21 +125,16 @@ export function useTabs() {
       if (closedIndex < 0) return prev;
 
       const newTabs = [...prev.slice(0, closedIndex), ...prev.slice(closedIndex + 1)];
+      const nextActive = newTabs[closedIndex - 1] || newTabs[0] || null;
+      nextActiveIdRef.current = nextActive?.id || null;
       return newTabs;
     });
 
-    // Schedule separate state update for active tab (outside setTabs for purity)
     setActiveTabId((currentActive) => {
       if (currentActive !== tabId) return currentActive;
-      // Need to determine the replacement — use the current tabs snapshot
-      const currentTabs = tabs;
-      const closedIndex = currentTabs.findIndex((t) => t.id === tabId);
-      if (closedIndex < 0) return currentActive;
-      const remainingTabs = [...currentTabs.slice(0, closedIndex), ...currentTabs.slice(closedIndex + 1)];
-      const nextActive = remainingTabs[closedIndex - 1] || remainingTabs[0];
-      return nextActive ? nextActive.id : currentActive;
+      return nextActiveIdRef.current || currentActive;
     });
-  }, [tabs]);
+  }, []);
 
   const switchTab = useCallback((tabId: string) => {
     setActiveTabId((current) => (current === tabId ? current : tabId));

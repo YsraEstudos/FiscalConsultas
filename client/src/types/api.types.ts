@@ -299,16 +299,16 @@ export interface LoginResponse extends BaseApiResponse {
 
 /** Verifica se a resposta é de busca textual */
 export function isTextSearchResponse(
-    response: NeshSearchResponse | TipiSearchResponse
+    response: SearchResponse
 ): response is TextSearchResponse | TipiTextSearchResponse {
-    return response.type === 'text';
+    return 'type' in response && response.type === 'text';
 }
 
 /** Verifica se a resposta é de busca por código */
 export function isCodeSearchResponse(
-    response: NeshSearchResponse | TipiSearchResponse
+    response: SearchResponse
 ): response is CodeSearchResponse | TipiCodeSearchResponse {
-    return response.type === 'code';
+    return 'type' in response && response.type === 'code';
 }
 
 /** Verifica se a resposta é um erro da API */

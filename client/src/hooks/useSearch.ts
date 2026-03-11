@@ -88,13 +88,19 @@ export function useSearch(
         });
 
         try {
-            const searchHandlers: Record<string, () => Promise<SearchResponse>> = {
+            const searchHandlers: Record<DocType, () => Promise<SearchResponse>> = {
                 nesh: () => searchNCM(query),
                 tipi: () => searchTipi(query, tipiViewModeRef.current),
                 nbs: () => searchNbsServices(query),
                 nebs: () => searchNebsEntries(query),
             };
-            const data = await (searchHandlers[doc] || searchHandlers.nebs)();
+            const handler = searchHandlers[doc];
+
+            if (!handler) {
+                throw new Error(`Unknown document type: ${doc}`);
+            }
+
+            const data = await handler();
 
             // Extrai capitulos apenas para respostas do tipo code
             const codeResults = isCodeSearchResponse(data)
@@ -109,7 +115,7 @@ export function useSearch(
 
             updateTab(tabId, {
                 results: updateResultsQuery(data, query),
-                content: data.markdown || data.resultados || '',
+                content: isCodeSearchResponse(data) ? data.markdown || '' : '',
                 loading: false,
                 isNewSearch: true,
                 isContentReady: false,

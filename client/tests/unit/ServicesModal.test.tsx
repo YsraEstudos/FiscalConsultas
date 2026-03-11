@@ -251,6 +251,8 @@ describe('ServicesModal', () => {
       await Promise.resolve();
     });
 
+    vi.useRealTimers();
+
     await waitFor(() => {
       expect(refs.searchNebsEntriesMock).toHaveBeenCalledWith('energia');
     });
@@ -295,13 +297,17 @@ describe('ServicesModal', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'NEBS' }));
+    vi.useFakeTimers();
     fireEvent.change(screen.getByLabelText('Buscar por codigo ou termo da nota'), {
       target: { value: item.code },
     });
 
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 260));
+      vi.advanceTimersByTime(260);
+      await Promise.resolve();
     });
+
+    vi.useRealTimers();
 
     await waitFor(() => {
       expect(screen.getByText('Abrir item NBS relacionado')).toBeInTheDocument();
@@ -338,13 +344,17 @@ describe('ServicesModal', () => {
       });
 
       fireEvent.click(screen.getByRole('button', { name: 'NEBS' }));
+      vi.useFakeTimers();
       fireEvent.change(screen.getByLabelText('Buscar por codigo ou termo da nota'), {
         target: { value: 'energia' },
       });
 
       await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 260));
+        vi.advanceTimersByTime(260);
+        await Promise.resolve();
       });
+
+      vi.useRealTimers();
 
       await waitFor(() => {
         expect(refs.toastErrorMock).toHaveBeenCalledWith('Erro ao carregar o catálogo NEBS.');

@@ -15,22 +15,24 @@ function isNbsResponse(data: ServicesSearchResponse): data is NbsSearchResponse 
 }
 
 export function ServicesTabContent({ doc, data, onSwitchDoc }: Readonly<ServicesTabContentProps>) {
-    if (doc === 'nbs' && isNbsResponse(data)) {
+    if (doc === 'nbs' && (isNbsResponse(data) || data.results.length === 0)) {
+        const nbsData = data as NbsSearchResponse;
+
         return (
             <div className={styles.container}>
                 <div className={styles.header}>
                     <h3 className={styles.title}>Resultados NBS</h3>
-                    <span className={styles.badge}>{data.total} itens</span>
+                    <span className={styles.badge}>{nbsData.total} itens</span>
                     <button
                         type="button"
                         className={styles.switchButton}
-                        onClick={() => onSwitchDoc('nebs', data.query)}
+                        onClick={() => onSwitchDoc('nebs', nbsData.query)}
                     >
                         Ver NEBS →
                     </button>
                 </div>
                 <div className={styles.resultsList}>
-                    {data.results.map((item) => (
+                    {nbsData.results.map((item) => (
                         <div key={item.code} className={styles.resultCard}>
                             <div className={styles.resultMeta}>
                                 <span className={styles.codeBadge}>{item.code}</span>

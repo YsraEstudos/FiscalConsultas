@@ -52,6 +52,7 @@ function App() {
     const [isStatsOpen, setIsStatsOpen] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [isComparatorOpen, setIsComparatorOpen] = useState(false);
+    const [isServicesOpen, setIsServicesOpen] = useState(false);
     const [isModerateOpen, setIsModerateOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [noteModal, setNoteModal] = useState<{
@@ -323,6 +324,19 @@ function App() {
     // Define o documento na aba ativa (ou abre nova se ja houver conteudo)
     const setDoc = useCallback((doc: string) => {
         const nextDoc = doc as DocType;
+        const currentTab = activeTabRef.current;
+        const shouldOpenNewTab = Boolean(
+            currentTab?.loading ||
+            currentTab?.results ||
+            currentTab?.content ||
+            currentTab?.ncm
+        );
+
+        if (shouldOpenNewTab) {
+            createTab(nextDoc);
+            return;
+        }
+
         updateTab(activeTabId, {
             document: nextDoc,
             results: null,
@@ -336,7 +350,7 @@ function App() {
             isContentReady: false,
             loadedChaptersByDoc: resetLoadedChaptersForDoc(nextDoc)
         });
-    }, [activeTabId, resetLoadedChaptersForDoc, updateTab]);
+    }, [activeTabId, createTab, resetLoadedChaptersForDoc, updateTab]);
 
     const switchTabDocument = useCallback(async (tabId: string, doc: DocType, query?: string) => {
         updateTab(tabId, {
@@ -392,7 +406,7 @@ function App() {
                         tutorial: isTutorialOpen,
                         stats: isStatsOpen,
                         comparator: isComparatorOpen,
-                        services: false,
+                        services: isServicesOpen,
                         moderate: isModerateOpen,
                     }}
                     onClose={{
@@ -400,7 +414,7 @@ function App() {
                         tutorial: () => setIsTutorialOpen(false),
                         stats: () => setIsStatsOpen(false),
                         comparator: () => setIsComparatorOpen(false),
-                        services: noop,
+                        services: () => setIsServicesOpen(false),
                         moderate: () => setIsModerateOpen(false),
                     }}
                     currentDoc={(activeTab?.document || 'nesh') === 'tipi' ? 'tipi' : 'nesh'}
@@ -427,7 +441,10 @@ function App() {
                 onOpenTutorial={() => setIsTutorialOpen(true)}
                 onOpenStats={() => setIsStatsOpen(true)}
                 onOpenComparator={() => setIsComparatorOpen(true)}
-                onOpenServices={() => setDoc('nbs')}
+                onOpenServices={() => {
+                    setDoc('nbs');
+                    setIsServicesOpen(true);
+                }}
                 onOpenModerate={() => setIsModerateOpen(true)}
                 onOpenProfile={() => setIsProfileOpen(true)}
                 history={history}

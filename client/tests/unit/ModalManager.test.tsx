@@ -41,7 +41,7 @@ vi.mock('../../src/context/AuthContext', () => ({
 }));
 
 vi.mock('../../src/utils/featureAccess', () => ({
-    canAccessRestrictedUi: (email: string | null | undefined) => (email || '').toLowerCase() === 'allowed-test@example.com',
+    canAccessRestrictedUi: (email: string | null | undefined) => (email || '').trim().toLowerCase() === 'allowed-test@example.com',
 }));
 
 vi.mock('../../src/components/AIChat', () => ({

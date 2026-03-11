@@ -12,6 +12,13 @@ import { useIsAdmin } from '../hooks/useIsAdmin';
 import { Modal } from './Modal';
 import styles from './Header.module.css';
 
+const DOC_SUBTITLES: Record<string, string> = {
+    nbs: 'Classificação Brasileira de Serviços',
+    nebs: 'Classificação Brasileira de Serviços',
+    nesh: 'Notas Explicativas do Sistema Harmonizado',
+    tipi: 'Tabela de Incidência do IPI',
+};
+
 interface HeaderProps {
     onSearch: (term: string) => void;
     doc: string;
@@ -57,12 +64,6 @@ export function Header({
     const { signOut } = useClerk();
     const { isSignedIn, userName, userEmail } = useAuth();
     const isAdmin = useIsAdmin();
-    const DOC_SUBTITLES: Record<string, string> = {
-        nbs: 'Classificação Brasileira de Serviços',
-        nebs: 'Classificação Brasileira de Serviços',
-        nesh: 'Notas Explicativas do Sistema Harmonizado',
-        tipi: 'Tabela de Incidência do IPI',
-    };
     const isServiceDoc = doc === 'nbs' || doc === 'nebs';
     const titleSubtitle = DOC_SUBTITLES[doc] || DOC_SUBTITLES.tipi;
 

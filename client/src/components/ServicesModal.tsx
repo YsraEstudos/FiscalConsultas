@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import DOMPurify from 'dompurify';
+import { marked } from 'marked';
 import { toast } from 'react-hot-toast';
 import {
     getNbsServiceDetail,
@@ -58,6 +60,10 @@ const INITIAL_NEBS_STATE: NebsViewState = {
     isLoadingDetail: false,
     hasSearched: false,
 };
+
+function fireAndForget(task: Promise<unknown>) {
+    task.catch(() => undefined);
+}
 
 export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>) {
     const [doc, setDoc] = useState<ServiceDocType>('nbs');
@@ -138,11 +144,11 @@ export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>)
                 results: response.results,
                 selectedCode: nextSelectedCode,
                 isSearching: false,
-                detail: nextSelectedCode ? current.detail : null,
+                detail: nextSelectedCode && current.detail?.item.code === nextSelectedCode ? current.detail : null,
             }));
 
             if (nextSelectedCode) {
-                void loadNbsDetail(nextSelectedCode);
+                fireAndForget(loadNbsDetail(nextSelectedCode));
             } else {
                 nbsDetailRequestRef.current += 1;
                 setNbsState((current) => ({
@@ -186,11 +192,11 @@ export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>)
                 results: response.results,
                 selectedCode: nextSelectedCode,
                 isSearching: false,
-                detail: nextSelectedCode ? current.detail : null,
+                detail: nextSelectedCode && current.detail?.entry.code === nextSelectedCode ? current.detail : null,
             }));
 
             if (nextSelectedCode) {
-                void loadNebsDetail(nextSelectedCode);
+                fireAndForget(loadNebsDetail(nextSelectedCode));
             } else {
                 nebsDetailRequestRef.current += 1;
                 setNebsState((current) => ({
@@ -222,7 +228,7 @@ export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>)
             selectedCode: code,
             query: code,
         }));
-        void loadNbsResults(code);
+        fireAndForget(loadNbsResults(code));
     }, [loadNbsResults]);
 
     useEffect(() => {
@@ -235,7 +241,7 @@ export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>)
     useEffect(() => {
         if (!isOpen || doc !== 'nbs') return;
         const timeoutId = globalThis.setTimeout(() => {
-            void loadNbsResults(nbsState.query);
+            fireAndForget(loadNbsResults(nbsState.query));
         }, nbsState.query.trim() ? 220 : 0);
         return () => globalThis.clearTimeout(timeoutId);
     }, [doc, isOpen, loadNbsResults, nbsState.query]);
@@ -259,7 +265,7 @@ export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>)
         }
 
         const timeoutId = globalThis.setTimeout(() => {
-            void loadNebsResults(trimmedQuery);
+            fireAndForget(loadNebsResults(trimmedQuery));
         }, 220);
         return () => globalThis.clearTimeout(timeoutId);
     }, [doc, isOpen, loadNebsResults, nebsState.query]);
@@ -281,6 +287,21 @@ export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>)
         globalThis.addEventListener('keydown', onKeyDown);
         return () => globalThis.removeEventListener('keydown', onKeyDown);
     }, [isOpen, onClose]);
+
+    const noteBodyHtml = useMemo(() => {
+        const noteBody = nebsState.detail?.entry.body_markdown || nebsState.detail?.entry.body_text || '';
+        if (!noteBody) return '';
+
+        const renderedMarkdown = marked.parse(noteBody, {
+            async: false,
+            breaks: true,
+            gfm: true,
+        }) as string;
+
+        return DOMPurify.sanitize(renderedMarkdown, {
+            USE_PROFILES: { html: true },
+        });
+    }, [nebsState.detail?.entry.body_markdown, nebsState.detail?.entry.body_text]);
 
     if (!isOpen) return null;
 
@@ -371,7 +392,9 @@ export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>)
                                                 key={item.code}
                                                 type="button"
                                                 className={`${styles.resultCard} ${nbsState.selectedCode === item.code ? styles.resultCardActive : ''}`}
-                                                onClick={() => void loadNbsDetail(item.code)}
+                                                onClick={() => {
+                                                    fireAndForget(loadNbsDetail(item.code));
+                                                }}
                                             >
                                                 <div className={styles.resultMeta}>
                                                     <span className={styles.codeBadge}>{item.code}</span>
@@ -406,7 +429,9 @@ export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>)
                                                     key={ancestor.code}
                                                     type="button"
                                                     className={styles.crumb}
-                                                    onClick={() => void loadNbsDetail(ancestor.code)}
+                                                    onClick={() => {
+                                                        fireAndForget(loadNbsDetail(ancestor.code));
+                                                    }}
                                                 >
                                                     {ancestor.code}
                                                 </button>
@@ -462,7 +487,9 @@ export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>)
                                                             key={child.code}
                                                             type="button"
                                                             className={styles.childItem}
-                                                            onClick={() => void loadNbsDetail(child.code)}
+                                                            onClick={() => {
+                                                                fireAndForget(loadNbsDetail(child.code));
+                                                            }}
                                                         >
                                                             <span className={styles.childCode}>{child.code}</span>
                                                             <span>{child.description}</span>
@@ -504,7 +531,9 @@ export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>)
                                                 key={item.code}
                                                 type="button"
                                                 className={`${styles.resultCard} ${nebsState.selectedCode === item.code ? styles.resultCardActive : ''}`}
-                                                onClick={() => void loadNebsDetail(item.code)}
+                                                onClick={() => {
+                                                    fireAndForget(loadNebsDetail(item.code));
+                                                }}
                                             >
                                                 <div className={styles.resultMeta}>
                                                     <span className={styles.codeBadge}>{item.code}</span>
@@ -571,20 +600,10 @@ export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>)
 
                                         <section className={styles.card}>
                                             <div className={styles.cardLabel}>Conteudo da nota</div>
-                                            <div className={styles.noteBody}>
-                                                {(nebsState.detail.entry.body_markdown || nebsState.detail.entry.body_text)
-                                                    .split(/\n{2,}|\n/)
-                                                    .filter(Boolean)
-                                                    .map((paragraph, index) => (
-                                                        paragraph.startsWith('- ') ? (
-                                                            <div key={`${paragraph}-${index}`} className={styles.noteBullet}>
-                                                                {paragraph.replace(/^- /, '')}
-                                                            </div>
-                                                        ) : (
-                                                            <p key={`${paragraph}-${index}`}>{paragraph}</p>
-                                                        )
-                                                    ))}
-                                            </div>
+                                            <div
+                                                className={styles.noteBody}
+                                                dangerouslySetInnerHTML={{ __html: noteBodyHtml }}
+                                            />
                                         </section>
 
                                         <div className={styles.detailActions}>

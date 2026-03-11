@@ -388,23 +388,26 @@
     gap: 0.75rem;
 }
 
-.noteBody p {
+.noteBody :global(p) {
     margin: 0;
     color: #d7e5ec;
     line-height: 1.75;
 }
 
-.noteBullet {
-    position: relative;
-    padding-left: 1rem;
+.noteBody :global(ul),
+.noteBody :global(ol) {
+    display: grid;
+    gap: 0.55rem;
+    margin: 0;
+    padding-left: 1.2rem;
+}
+
+.noteBody :global(li) {
     color: #d7e5ec;
     line-height: 1.7;
 }
 
-.noteBullet::before {
-    content: "•";
-    position: absolute;
-    left: 0;
+.noteBody :global(li::marker) {
     color: #88d5bf;
 }
 
