@@ -82,7 +82,8 @@ Origem 3: pivot de documento (context menu/modais).
 
 - `switchTab(tabId)` em `useTabs`.
 - `TabsBar` dispara por clique e teclado (`Enter`/`Space`).
-- `TabsBar` faz `scrollIntoView` da aba ativa para manter visibilidade horizontal.
+- `TabsBar` mantem a aba ativa visivel apenas com scroll horizontal do proprio strip.
+- `TabsBar` nao deve usar `element.scrollIntoView()` para isso, porque essa estrategia pode puxar viewport/pagina para cima e competir com a restauracao de scroll do conteudo.
 - App propaga `activeTabId` para `TabPanel` e `ResultDisplay`.
 
 ## 4.3 Fechamento de aba
@@ -164,6 +165,7 @@ Comportamento:
 - ao ficar inativa, aba persiste scroll em `scrollTop`.
 - ao reativar com `isNewSearch=false`, restaura `initialScrollTop`.
 - quando nova busca conclui autoscroll, App consome `isNewSearch` e opcionalmente atualiza `scrollTop`.
+- trocar de aba pode mover apenas o scroll horizontal da barra de abas; nao pode resetar o scroll vertical do conteudo da aba.
 
 Interferencia direta:
 
@@ -218,6 +220,7 @@ Interferencia direta:
 5. Semantica de `isNewSearch` (auto-scroll primeiro, restore depois).
 6. `loadedChaptersByDoc` segmentado por documento (`nesh`, `tipi`).
 7. `TabsBar` deve manter suporte a click, teclado, close e drag/drop.
+8. visibilidade da aba ativa no strip deve ser resolvida sem alterar o scroll vertical da pagina ou do conteudo.
 
 ## 7) Matriz rapida de impacto por arquivo
 
