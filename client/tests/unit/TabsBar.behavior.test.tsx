@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TabsBar } from '../../src/components/TabsBar';
 import type { Tab } from '../../src/hooks/useTabs';
@@ -41,7 +41,11 @@ function createDataTransfer(initialText = '') {
 
 describe('TabsBar behavior', () => {
   beforeEach(() => {
-    Element.prototype.scrollIntoView = vi.fn();
+    vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('configures drag metadata and reorders tabs on drop', () => {

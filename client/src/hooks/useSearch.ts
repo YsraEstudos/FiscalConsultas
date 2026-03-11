@@ -88,13 +88,13 @@ export function useSearch(
         });
 
         try {
-            const data = doc === 'nesh'
-                ? await searchNCM(query)
-                : doc === 'tipi'
-                    ? await searchTipi(query, tipiViewModeRef.current)
-                    : doc === 'nbs'
-                        ? await searchNbsServices(query)
-                        : await searchNebsEntries(query);
+            const searchHandlers: Record<string, () => Promise<SearchResponse>> = {
+                nesh: () => searchNCM(query),
+                tipi: () => searchTipi(query, tipiViewModeRef.current),
+                nbs: () => searchNbsServices(query),
+                nebs: () => searchNebsEntries(query),
+            };
+            const data = await (searchHandlers[doc] || searchHandlers.nebs)();
 
             // Extrai capitulos apenas para respostas do tipo code
             const codeResults = isCodeSearchResponse(data)

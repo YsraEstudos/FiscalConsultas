@@ -57,12 +57,14 @@ export function Header({
     const { signOut } = useClerk();
     const { isSignedIn, userName, userEmail } = useAuth();
     const isAdmin = useIsAdmin();
+    const DOC_SUBTITLES: Record<string, string> = {
+        nbs: 'Classificação Brasileira de Serviços',
+        nebs: 'Classificação Brasileira de Serviços',
+        nesh: 'Notas Explicativas do Sistema Harmonizado',
+        tipi: 'Tabela de Incidência do IPI',
+    };
     const isServiceDoc = doc === 'nbs' || doc === 'nebs';
-    const titleSubtitle = isServiceDoc
-        ? 'Classificação Brasileira de Serviços'
-        : doc === 'nesh'
-            ? 'Notas Explicativas do Sistema Harmonizado'
-            : 'Tabela de Incidência do IPI';
+    const titleSubtitle = DOC_SUBTITLES[doc] || DOC_SUBTITLES.tipi;
 
     // Close menu when clicking outside
     useEffect(() => {

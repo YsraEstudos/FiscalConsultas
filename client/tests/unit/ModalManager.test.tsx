@@ -41,7 +41,7 @@ vi.mock('../../src/context/AuthContext', () => ({
 }));
 
 vi.mock('../../src/utils/featureAccess', () => ({
-    canAccessRestrictedUi: (email: string | null | undefined) => (email || '').toLowerCase() === 'israelseja2@gmail.com',
+    canAccessRestrictedUi: (email: string | null | undefined) => (email || '').toLowerCase() === 'allowed-test@example.com',
 }));
 
 vi.mock('../../src/components/AIChat', () => ({
@@ -98,7 +98,7 @@ describe('ModalManager', () => {
     });
 
     it('shows AI chat for the allowed email', async () => {
-        authState.userEmail = 'israelseja2@gmail.com';
+        authState.userEmail = 'allowed-test@example.com';
 
         renderModalManager();
 
@@ -108,7 +108,7 @@ describe('ModalManager', () => {
 
     it('keeps AI chat hidden when the user is signed out even with an allowed email', () => {
         authState.isSignedIn = false;
-        authState.userEmail = 'israelseja2@gmail.com';
+        authState.userEmail = 'allowed-test@example.com';
 
         renderModalManager();
 

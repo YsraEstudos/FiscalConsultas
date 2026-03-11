@@ -122,15 +122,21 @@ export function useTabs() {
       if (closedIndex < 0) return prev;
 
       const newTabs = [...prev.slice(0, closedIndex), ...prev.slice(closedIndex + 1)];
-      const nextActive = newTabs[closedIndex - 1] || newTabs[0];
-
-      setActiveTabId((current) =>
-        current === tabId && nextActive ? nextActive.id : current,
-      );
-
       return newTabs;
     });
-  }, []);
+
+    // Schedule separate state update for active tab (outside setTabs for purity)
+    setActiveTabId((currentActive) => {
+      if (currentActive !== tabId) return currentActive;
+      // Need to determine the replacement — use the current tabs snapshot
+      const currentTabs = tabs;
+      const closedIndex = currentTabs.findIndex((t) => t.id === tabId);
+      if (closedIndex < 0) return currentActive;
+      const remainingTabs = [...currentTabs.slice(0, closedIndex), ...currentTabs.slice(closedIndex + 1)];
+      const nextActive = remainingTabs[closedIndex - 1] || remainingTabs[0];
+      return nextActive ? nextActive.id : currentActive;
+    });
+  }, [tabs]);
 
   const switchTab = useCallback((tabId: string) => {
     setActiveTabId((current) => (current === tabId ? current : tabId));

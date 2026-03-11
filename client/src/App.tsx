@@ -12,6 +12,7 @@ import { useSearch } from './hooks/useSearch';
 import { useHistory } from './hooks/useHistory';
 import { extractChapter } from './utils/chapterDetection';
 import { isCodeSearchResponse } from './types/api.types';
+import type { NbsSearchResponse, NebsSearchResponse } from './types/api.types';
 import { useSettings } from './context/SettingsContext';
 import { NotePanel } from './components/NotePanel';
 import { UserProfilePage } from './components/UserProfilePage';
@@ -478,7 +479,7 @@ function App() {
                             {!tab.loading && tab.results && (tab.document === 'nbs' || tab.document === 'nebs') && (
                                 <ServicesTabContent
                                     doc={tab.document}
-                                    data={tab.results as any}
+                                    data={tab.results as NbsSearchResponse | NebsSearchResponse}
                                     onSwitchDoc={(nextDoc, query) => {
                                         runNonBlockingTask(
                                             switchTabDocument(tab.id, nextDoc, query),

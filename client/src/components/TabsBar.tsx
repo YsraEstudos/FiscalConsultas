@@ -11,6 +11,20 @@ interface TabsBarProps {
     onNewTab: () => void;
 }
 
+const DOC_BADGE_CLASS: Record<string, string> = {
+    nesh: styles.tabDocBadgeNesh,
+    tipi: styles.tabDocBadgeTipi,
+    nbs: styles.tabDocBadgeNbs,
+    nebs: styles.tabDocBadgeNebs,
+};
+
+const DOC_BADGE_LABEL: Record<string, string> = {
+    nesh: 'N',
+    tipi: 'T',
+    nbs: 'B',
+    nebs: 'E',
+};
+
 export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch, onClose, onReorder, onNewTab }: TabsBarProps) {
     const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const draggedTabIdRef = useRef<string | null>(null);
@@ -78,17 +92,9 @@ export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch
                     }}
                 >
                     <span
-                        className={`${styles.tabDocBadge} ${
-                            tab.document === 'nesh'
-                                ? styles.tabDocBadgeNesh
-                                : tab.document === 'tipi'
-                                    ? styles.tabDocBadgeTipi
-                                    : tab.document === 'nbs'
-                                        ? styles.tabDocBadgeNbs
-                                        : styles.tabDocBadgeNebs
-                        }`}
+                        className={`${styles.tabDocBadge} ${DOC_BADGE_CLASS[tab.document] || styles.tabDocBadgeNesh}`}
                     >
-                        {tab.document === 'nesh' ? 'N' : tab.document === 'tipi' ? 'T' : tab.document === 'nbs' ? 'B' : 'E'}
+                        {DOC_BADGE_LABEL[tab.document] || 'N'}
                     </span>
                     <span className={styles.tabLabel}>
                         {tab.title}

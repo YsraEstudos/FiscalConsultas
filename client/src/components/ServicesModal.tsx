@@ -59,7 +59,7 @@ const INITIAL_NEBS_STATE: NebsViewState = {
     hasSearched: false,
 };
 
-export function ServicesModal({ isOpen, onClose }: ServicesModalProps) {
+export function ServicesModal({ isOpen, onClose }: Readonly<ServicesModalProps>) {
     const [doc, setDoc] = useState<ServiceDocType>('nbs');
     const [nbsState, setNbsState] = useState<NbsViewState>(INITIAL_NBS_STATE);
     const [nebsState, setNebsState] = useState<NebsViewState>(INITIAL_NEBS_STATE);
@@ -234,10 +234,10 @@ export function ServicesModal({ isOpen, onClose }: ServicesModalProps) {
 
     useEffect(() => {
         if (!isOpen || doc !== 'nbs') return;
-        const timeoutId = window.setTimeout(() => {
+        const timeoutId = globalThis.setTimeout(() => {
             void loadNbsResults(nbsState.query);
         }, nbsState.query.trim() ? 220 : 0);
-        return () => window.clearTimeout(timeoutId);
+        return () => globalThis.clearTimeout(timeoutId);
     }, [doc, isOpen, loadNbsResults, nbsState.query]);
 
     useEffect(() => {
@@ -258,10 +258,10 @@ export function ServicesModal({ isOpen, onClose }: ServicesModalProps) {
             return;
         }
 
-        const timeoutId = window.setTimeout(() => {
+        const timeoutId = globalThis.setTimeout(() => {
             void loadNebsResults(trimmedQuery);
         }, 220);
-        return () => window.clearTimeout(timeoutId);
+        return () => globalThis.clearTimeout(timeoutId);
     }, [doc, isOpen, loadNebsResults, nebsState.query]);
 
     useEffect(() => {
@@ -278,8 +278,8 @@ export function ServicesModal({ isOpen, onClose }: ServicesModalProps) {
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') onClose();
         };
-        window.addEventListener('keydown', onKeyDown);
-        return () => window.removeEventListener('keydown', onKeyDown);
+        globalThis.addEventListener('keydown', onKeyDown);
+        return () => globalThis.removeEventListener('keydown', onKeyDown);
     }, [isOpen, onClose]);
 
     if (!isOpen) return null;

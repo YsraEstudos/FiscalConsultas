@@ -240,12 +240,15 @@ describe('ServicesModal', () => {
     expect(screen.getByText('Busque uma nota explicativa')).toBeInTheDocument();
     expect(refs.searchNebsEntriesMock).not.toHaveBeenCalled();
 
+    vi.useFakeTimers();
+
     fireEvent.change(screen.getByLabelText('Buscar por codigo ou termo da nota'), {
       target: { value: 'energia' },
     });
 
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 260));
+      vi.advanceTimersByTime(220);
+      await Promise.resolve();
     });
 
     await waitFor(() => {
