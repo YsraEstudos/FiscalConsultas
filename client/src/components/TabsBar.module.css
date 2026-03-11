@@ -148,11 +148,11 @@
 }
 
 .tabDocBadgeNbs {
-    background: linear-gradient(135deg, var(--badge-nbs-start, #0f766e), var(--badge-nbs-end, #34d399));
+    background: linear-gradient(135deg, var(--badge-nbs-start, #065f46), var(--badge-nbs-end, #0f766e));
     color: white;
 }
 
 .tabDocBadgeNebs {
-    background: linear-gradient(135deg, var(--badge-nebs-start, #92400e), var(--badge-nebs-end, #f59e0b));
+    background: linear-gradient(135deg, var(--badge-nebs-start, #7c2d12), var(--badge-nebs-end, #b45309));
     color: white;
 }
