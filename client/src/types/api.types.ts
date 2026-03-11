@@ -167,7 +167,79 @@ export interface TipiTextSearchResponse extends BaseApiResponse {
 export type TipiSearchResponse = TipiCodeSearchResponse | TipiTextSearchResponse;
 
 /** Union genérico para qualquer resposta de busca */
-export type SearchResponse = NeshSearchResponse | TipiSearchResponse;
+export type SearchResponse = NeshSearchResponse | TipiSearchResponse | NbsSearchResponse | NebsSearchResponse;
+
+// --------------------------------------------
+// NBS / Services Types
+// --------------------------------------------
+
+export type ServiceDocType = 'nbs' | 'nebs';
+
+export interface NbsServiceItem {
+    code: string;
+    code_clean: string;
+    description: string;
+    parent_code: string | null;
+    level: number;
+    has_nebs: boolean;
+}
+
+export interface NebsEntry {
+    code: string;
+    code_clean: string;
+    title: string;
+    title_normalized: string;
+    body_text: string;
+    body_markdown: string | null;
+    body_normalized: string;
+    section_title: string | null;
+    page_start: number;
+    page_end: number;
+    parser_status: 'trusted' | 'suspect' | 'rejected';
+    parse_warnings: string | null;
+    source_hash: string;
+    updated_at: string;
+}
+
+export interface NebsSearchItem {
+    code: string;
+    title: string;
+    excerpt: string;
+    page_start: number;
+    page_end: number;
+    section_title: string | null;
+}
+
+export interface NbsSearchResponse extends BaseApiResponse {
+    success: true;
+    query: string;
+    normalized: string;
+    results: NbsServiceItem[];
+    total: number;
+}
+
+export interface NbsDetailResponse extends BaseApiResponse {
+    success: true;
+    item: NbsServiceItem;
+    ancestors: NbsServiceItem[];
+    children: NbsServiceItem[];
+    nebs: NebsEntry | null;
+}
+
+export interface NebsSearchResponse extends BaseApiResponse {
+    success: true;
+    query: string;
+    normalized: string;
+    results: NebsSearchItem[];
+    total: number;
+}
+
+export interface NebsDetailResponse extends BaseApiResponse {
+    success: true;
+    item: NbsServiceItem;
+    ancestors: NbsServiceItem[];
+    entry: NebsEntry;
+}
 
 // --------------------------------------------
 // Other Endpoints

@@ -6,7 +6,7 @@ import { ResultDisplay } from './components/ResultDisplay';
 import { TabsBar } from './components/TabsBar';
 import { ResultSkeleton } from './components/ResultSkeleton';
 import { TabPanel } from './components/Tabs/TabPanel';
-import { useTabs, type Tab } from './hooks/useTabs';
+import { useTabs, type DocType, type Tab } from './hooks/useTabs';
 import { useCrossChapterNotes } from './context/CrossChapterNoteContext';
 import { useSearch } from './hooks/useSearch';
 import { useHistory } from './hooks/useHistory';
@@ -18,9 +18,7 @@ import { UserProfilePage } from './components/UserProfilePage';
 import styles from './App.module.css';
 
 import { ModalManager } from './components/ModalManager';
-
-// Declaracao global movida para vite-env.d.ts
-type DocType = 'nesh' | 'tipi';
+import { ServicesTabContent } from './components/ServicesTabContent';
 
 function splitSearchTerms(raw: string): string[] {
     // Split only on commas — spaces are kept as part of multi-word queries
@@ -76,7 +74,7 @@ function App() {
 
     const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
     const resetLoadedChaptersForDoc = useCallback((doc: DocType) => {
-        const current = activeTabRef.current?.loadedChaptersByDoc || { nesh: [], tipi: [] };
+        const current = activeTabRef.current?.loadedChaptersByDoc || { nesh: [], tipi: [], nbs: [], nebs: [] };
         return { ...current, [doc]: [] };
     }, []);
     const runNonBlockingTask = useCallback((task: Promise<unknown> | void, context: string) => {
@@ -280,7 +278,8 @@ function App() {
     }, [createTab, executeSearchForTab]);
 
     const openTextResultInNewTab = useCallback(async (ncm: string, textQuery?: string) => {
-        const doc = (activeTabRef.current?.document || 'nesh') as DocType;
+        const activeDoc = (activeTabRef.current?.document || 'nesh') as DocType;
+        const doc: DocType = activeDoc === 'nbs' || activeDoc === 'nebs' ? 'nesh' : activeDoc;
         const tabId = createTab(doc);
         const nextTextQuery = (textQuery || '').trim();
 
@@ -322,24 +321,41 @@ function App() {
 
     // Define o documento na aba ativa (ou abre nova se ja houver conteudo)
     const setDoc = useCallback((doc: string) => {
-        const currentTab = activeTabRef.current;
+        const nextDoc = doc as DocType;
+        updateTab(activeTabId, {
+            document: nextDoc,
+            results: null,
+            content: null,
+            error: null,
+            ncm: '',
+            title: 'Nova busca',
+            latestTextQuery: '',
+            isNewSearch: false,
+            scrollTop: 0,
+            isContentReady: false,
+            loadedChaptersByDoc: resetLoadedChaptersForDoc(nextDoc)
+        });
+    }, [activeTabId, resetLoadedChaptersForDoc, updateTab]);
 
-        // Se a aba atual tem resultados ou busca em andamento, abre nova aba
-        if (currentTab?.results || currentTab?.ncm || currentTab?.loading) {
-            createTab(doc as DocType);
-        } else {
-            // Se a aba atual esta vazia/inicial, apenas troca o documento
-            updateTab(activeTabId, {
-                document: doc as DocType,
-                results: null,
-                content: null,
-                error: null,
-                ncm: '',
-                isContentReady: false, // Reseta estado de pronto
-                loadedChaptersByDoc: resetLoadedChaptersForDoc(doc as DocType) // Reseta cache de capitulos por documento
-            });
+    const switchTabDocument = useCallback(async (tabId: string, doc: DocType, query?: string) => {
+        updateTab(tabId, {
+            document: doc,
+            results: null,
+            content: null,
+            error: null,
+            ncm: '',
+            title: 'Nova busca',
+            latestTextQuery: '',
+            isNewSearch: false,
+            scrollTop: 0,
+            isContentReady: false,
+            loadedChaptersByDoc: resetLoadedChaptersForDoc(doc)
+        });
+
+        if (query?.trim()) {
+            await executeSearchForTab(tabId, doc, query.trim(), false);
         }
-    }, [activeTabId, createTab, resetLoadedChaptersForDoc, updateTab]);
+    }, [executeSearchForTab, resetLoadedChaptersForDoc, updateTab]);
 
     // Ponte legado + ponte de configuracoes
     useEffect(() => {
@@ -375,6 +391,7 @@ function App() {
                         tutorial: isTutorialOpen,
                         stats: isStatsOpen,
                         comparator: isComparatorOpen,
+                        services: false,
                         moderate: isModerateOpen,
                     }}
                     onClose={{
@@ -382,9 +399,10 @@ function App() {
                         tutorial: () => setIsTutorialOpen(false),
                         stats: () => setIsStatsOpen(false),
                         comparator: () => setIsComparatorOpen(false),
+                        services: noop,
                         moderate: () => setIsModerateOpen(false),
                     }}
-                    currentDoc={(activeTab?.document || 'nesh') as DocType}
+                    currentDoc={(activeTab?.document || 'nesh') === 'tipi' ? 'tipi' : 'nesh'}
                     onOpenInDoc={openInDocCurrentTab}
                     onOpenInNewTab={openInDocNewTab}
                 />
@@ -408,6 +426,7 @@ function App() {
                 onOpenTutorial={() => setIsTutorialOpen(true)}
                 onOpenStats={() => setIsStatsOpen(true)}
                 onOpenComparator={() => setIsComparatorOpen(true)}
+                onOpenServices={() => setDoc('nbs')}
                 onOpenModerate={() => setIsModerateOpen(true)}
                 onOpenProfile={() => setIsProfileOpen(true)}
                 history={history}
@@ -447,14 +466,29 @@ function App() {
                                 <div className={styles.emptyState}>
                                     <div className={styles.emptyStateIcon}>🔎</div>
                                     <h3 className={styles.emptyStateTitle}>Pronto para buscar</h3>
-                                    <p>Digite um NCM acima ou use o histórico</p>
+                                    <p>{tab.document === 'nbs' || tab.document === 'nebs'
+                                        ? 'Digite um codigo de servico ou termo textual acima'
+                                        : 'Digite um NCM acima ou use o histórico'}</p>
                                     <p className={styles.emptyStateHint}>
                                         Dica: Pressione <kbd>/</kbd> para buscar
                                     </p>
                                 </div>
                             )}
 
-                            {!tab.loading && tab.results && (
+                            {!tab.loading && tab.results && (tab.document === 'nbs' || tab.document === 'nebs') && (
+                                <ServicesTabContent
+                                    doc={tab.document}
+                                    data={tab.results as any}
+                                    onSwitchDoc={(nextDoc, query) => {
+                                        runNonBlockingTask(
+                                            switchTabDocument(tab.id, nextDoc, query),
+                                            'switchTabDocument (services)'
+                                        );
+                                    }}
+                                />
+                            )}
+
+                            {!tab.loading && tab.results && tab.document !== 'nbs' && tab.document !== 'nebs' && (
                                 <ResultDisplay
                                     data={tab.results}
                                     latestTextQuery={tab.latestTextQuery}

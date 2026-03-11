@@ -77,8 +77,18 @@ export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch
                         }
                     }}
                 >
-                    <span className={`${styles.tabDocBadge} ${tab.document === 'nesh' ? styles.tabDocBadgeNesh : styles.tabDocBadgeTipi}`}>
-                        {tab.document === 'nesh' ? 'N' : 'T'}
+                    <span
+                        className={`${styles.tabDocBadge} ${
+                            tab.document === 'nesh'
+                                ? styles.tabDocBadgeNesh
+                                : tab.document === 'tipi'
+                                    ? styles.tabDocBadgeTipi
+                                    : tab.document === 'nbs'
+                                        ? styles.tabDocBadgeNbs
+                                        : styles.tabDocBadgeNebs
+                        }`}
+                    >
+                        {tab.document === 'nesh' ? 'N' : tab.document === 'tipi' ? 'T' : tab.document === 'nbs' ? 'B' : 'E'}
                     </span>
                     <span className={styles.tabLabel}>
                         {tab.title}

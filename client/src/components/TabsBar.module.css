@@ -146,3 +146,13 @@
     background: var(--badge-tipi-gradient);
     color: white;
 }
+
+.tabDocBadgeNbs {
+    background: linear-gradient(135deg, #0f766e, #34d399);
+    color: white;
+}
+
+.tabDocBadgeNebs {
+    background: linear-gradient(135deg, #92400e, #f59e0b);
+    color: white;
+}

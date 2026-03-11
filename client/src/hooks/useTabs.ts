@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo } from "react";
 import type { SearchResponse } from "../types/api.types";
 
 /** Tipo de documento suportado */
-export type DocType = "nesh" | "tipi";
+export type DocType = "nesh" | "tipi" | "nbs" | "nebs";
 
 /** Representa uma aba no sistema */
 export interface Tab {
@@ -42,6 +42,8 @@ export interface Tab {
 const createLoadedChaptersByDoc = (): Record<DocType, string[]> => ({
   nesh: [],
   tipi: [],
+  nbs: [],
+  nebs: [],
 });
 
 let fallbackTabIdCounter = 0;
@@ -78,6 +80,9 @@ const resolveTabIndex = (tabs: Tab[], tabReference: TabReference): number => {
 const isTabIndexWithinBounds = (tabs: Tab[], tabIndex: number): boolean =>
   tabIndex >= 0 && tabIndex < tabs.length;
 
+const hasTabUpdates = (current: Tab, updates: Partial<Tab>): boolean =>
+  Object.entries(updates).some(([key, value]) => current[key as keyof Tab] !== value);
+
 export function useTabs() {
   const [tabs, setTabs] = useState<Tab[]>([
     {
@@ -108,35 +113,41 @@ export function useTabs() {
     return newTabId;
   }, []);
 
-  const closeTab = useCallback(
-    (e: any, tabId: string) => {
-      e.stopPropagation();
-      setTabs((prev) => {
-        if (prev.length <= 1) return prev; // Nao fechar a ultima aba
+  const closeTab = useCallback((e: any, tabId: string) => {
+    e.stopPropagation();
+    setTabs((prev) => {
+      if (prev.length <= 1) return prev; // Nao fechar a ultima aba
 
-        const newTabs = prev.filter((t) => t.id !== tabId);
+      const closedIndex = prev.findIndex((t) => t.id === tabId);
+      if (closedIndex < 0) return prev;
 
-        // Se fechar a aba ativa, troca para outra
-        if (tabId === activeTabId) {
-          // Tenta ir para a anterior, ou para a primeira
-          const index = prev.findIndex((t) => t.id === tabId);
-          const nextActive = newTabs[index - 1] || newTabs[0];
-          setActiveTabId(nextActive.id);
-        }
-        return newTabs;
-      });
-    },
-    [activeTabId],
-  );
+      const newTabs = [...prev.slice(0, closedIndex), ...prev.slice(closedIndex + 1)];
+      const nextActive = newTabs[closedIndex - 1] || newTabs[0];
+
+      setActiveTabId((current) =>
+        current === tabId && nextActive ? nextActive.id : current,
+      );
+
+      return newTabs;
+    });
+  }, []);
 
   const switchTab = useCallback((tabId: string) => {
-    setActiveTabId(tabId);
+    setActiveTabId((current) => (current === tabId ? current : tabId));
   }, []);
 
   const updateTab = useCallback((tabId: string, updates: Partial<Tab>) => {
-    setTabs((prev) =>
-      prev.map((tab) => (tab.id === tabId ? { ...tab, ...updates } : tab)),
-    );
+    setTabs((prev) => {
+      const targetIndex = prev.findIndex((tab) => tab.id === tabId);
+      if (targetIndex < 0) return prev;
+
+      const current = prev[targetIndex];
+      if (!hasTabUpdates(current, updates)) return prev;
+
+      const next = [...prev];
+      next[targetIndex] = { ...current, ...updates };
+      return next;
+    });
   }, []);
 
   const reorderTabs = useCallback(

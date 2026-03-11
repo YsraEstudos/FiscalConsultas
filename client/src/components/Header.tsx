@@ -21,6 +21,7 @@ interface HeaderProps {
     onOpenTutorial: () => void;
     onOpenStats: () => void;
     onOpenComparator: () => void;
+    onOpenServices: () => void;
     onOpenModerate: () => void;
     onOpenProfile: () => void;
     history: HistoryItem[];
@@ -39,6 +40,7 @@ export function Header({
     onOpenTutorial,
     onOpenStats,
     onOpenComparator,
+    onOpenServices,
     onOpenModerate,
     onOpenProfile,
     history,
@@ -55,6 +57,12 @@ export function Header({
     const { signOut } = useClerk();
     const { isSignedIn, userName, userEmail } = useAuth();
     const isAdmin = useIsAdmin();
+    const isServiceDoc = doc === 'nbs' || doc === 'nebs';
+    const titleSubtitle = isServiceDoc
+        ? 'Classificação Brasileira de Serviços'
+        : doc === 'nesh'
+            ? 'Notas Explicativas do Sistema Harmonizado'
+            : 'Tabela de Incidência do IPI';
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -110,7 +118,7 @@ export function Header({
                     <div className={styles.logoIcon}>📦</div>
                     <div className={styles.logoText}>
                         <h1>Busca NCM</h1>
-                        <span className={styles.logoSubtitle}>{doc === 'nesh' ? 'Notas Explicativas do Sistema Harmonizado' : 'Tabela de Incidência do IPI'}</span>
+                        <span className={styles.logoSubtitle}>{titleSubtitle}</span>
                     </div>
                 </div>
 
@@ -127,16 +135,16 @@ export function Header({
 
                 <div className={styles.docSelector}>
                     <button
-                        className={`${styles.docButton} ${doc === 'nesh' ? styles.docButtonActive : ''}`}
-                        onClick={() => setDoc('nesh')}
+                        className={`${styles.docButton} ${doc === (isServiceDoc ? 'nbs' : 'nesh') ? styles.docButtonActive : ''}`}
+                        onClick={() => setDoc(isServiceDoc ? 'nbs' : 'nesh')}
                     >
-                        NESH
+                        {isServiceDoc ? 'NBS' : 'NESH'}
                     </button>
                     <button
-                        className={`${styles.docButton} ${doc === 'tipi' ? styles.docButtonActive : ''}`}
-                        onClick={() => setDoc('tipi')}
+                        className={`${styles.docButton} ${doc === (isServiceDoc ? 'nebs' : 'tipi') ? styles.docButtonActive : ''}`}
+                        onClick={() => setDoc(isServiceDoc ? 'nebs' : 'tipi')}
                     >
-                        TIPI
+                        {isServiceDoc ? 'NEBS' : 'TIPI'}
                     </button>
                 </div>
 
@@ -149,8 +157,22 @@ export function Header({
                     </button>
 
                     <div className={`${styles.menuContent} ${isMenuOpen ? styles.menuContentOpen : ''}`}>
+                        {isServiceDoc && (
+                            <>
+                                <button onClick={() => { setIsMenuOpen(false); setDoc('nesh'); }}>
+                                    <span>📘</span> Voltar para NESH
+                                </button>
+                                <button onClick={() => { setIsMenuOpen(false); setDoc('tipi'); }}>
+                                    <span>🏷️</span> Ir para TIPI
+                                </button>
+                                <div className={styles.menuDivider}></div>
+                            </>
+                        )}
                         <button onClick={() => { setIsMenuOpen(false); onOpenComparator(); }}>
                             <span>⚖️</span> Comparar NCMs
+                        </button>
+                        <button onClick={() => { setIsMenuOpen(false); onOpenServices(); }}>
+                            <span>🧭</span> Serviços (NBS)
                         </button>
                         <div className={styles.menuDivider}></div>
                         <button onClick={() => { setIsMenuOpen(false); onOpenSettings(); }}>
