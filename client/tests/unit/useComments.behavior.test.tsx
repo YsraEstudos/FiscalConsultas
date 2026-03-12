@@ -161,10 +161,10 @@ describe('useComments behavior', () => {
   it('removes optimistic comments and reports LAN-host Clerk token issues on 401 create failures', async () => {
     refs.createCommentMock.mockRejectedValue(makeAxiosError(401, 'Token ausente'));
 
-    const originalLocation = window.location;
+    const originalLocation = globalThis.location;
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      Object.defineProperty(window, 'location', {
+      Object.defineProperty(globalThis, 'location', {
         configurable: true,
         value: makeLanHostLocation('192.168.0.23'),
       });
@@ -188,7 +188,7 @@ describe('useComments behavior', () => {
         'Token do Clerk indisponível neste host de rede. Abra em http://localhost:5173 para comentar.',
       );
     } finally {
-      Object.defineProperty(window, 'location', {
+      Object.defineProperty(globalThis, 'location', {
         configurable: true,
         value: originalLocation,
       });
@@ -329,10 +329,10 @@ describe('useComments behavior', () => {
   });
 
   it('skips commented-anchor lookups on LAN hosts during development', async () => {
-    const originalLocation = window.location;
+    const originalLocation = globalThis.location;
     const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      Object.defineProperty(window, 'location', {
+      Object.defineProperty(globalThis, 'location', {
         configurable: true,
         value: makeLanHostLocation('192.168.0.11'),
       });
@@ -349,7 +349,7 @@ describe('useComments behavior', () => {
       expect(result.current.commentedAnchors).toEqual([]);
       expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
     } finally {
-      Object.defineProperty(window, 'location', {
+      Object.defineProperty(globalThis, 'location', {
         configurable: true,
         value: originalLocation,
       });
