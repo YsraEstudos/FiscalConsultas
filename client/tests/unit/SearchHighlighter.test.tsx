@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SearchHighlighter } from '../../src/components/SearchHighlighter';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -287,5 +287,115 @@ describe('SearchHighlighter', () => {
         );
 
         expect(await screen.findByText("2 subposições com alta correspondência")).toBeInTheDocument();
+    });
+
+    it('classifica alta correspondência em bloco quando não existe subposição identificável', async () => {
+        const scrollSpy = vi
+            .spyOn(globalThis.HTMLElement.prototype, 'scrollIntoView')
+            .mockImplementation(() => {});
+
+        const div = document.createElement('div');
+        div.innerHTML = `
+            <div id="cap-1" class="tipi-chapter">
+                <p>Motor centrífugo no mesmo bloco sem âncora específica.</p>
+            </div>
+        `;
+        const testContainerRef = { current: div } as React.RefObject<HTMLElement>;
+
+        render(
+            <SearchHighlighter
+                query="motor centrífugo"
+                contentContainerRef={testContainerRef}
+                isContentReady={true}
+                isFullyRendered={true}
+            />
+        );
+
+        expect(await screen.findByText("Match Alto")).toBeInTheDocument();
+        expect(screen.getByText("1 bloco com alta correspondência")).toBeInTheDocument();
+        await screen.findByLabelText("Fechar busca de página");
+        await waitFor(() => {
+            expect(scrollSpy).toHaveBeenCalled();
+        });
+    });
+
+    it('permite salto manual para uma subposição de alta relevância', async () => {
+        const scrollSpy = vi
+            .spyOn(globalThis.HTMLElement.prototype, 'scrollIntoView')
+            .mockImplementation(() => {});
+
+        const div = document.createElement('div');
+        div.innerHTML = `
+            <div id="cap-1" class="tipi-chapter">
+                <h3 id="pos-84-10" class="nesh-section">84.10</h3>
+                <p>Motor centrífugo para teste.</p>
+                <h3 id="pos-84-11" class="nesh-section">84.11</h3>
+                <p>Outro motor centrífugo no mesmo capítulo.</p>
+            </div>
+        `;
+        const testContainerRef = { current: div } as React.RefObject<HTMLElement>;
+
+        render(
+            <SearchHighlighter
+                query="motor centrífugo"
+                contentContainerRef={testContainerRef}
+                isContentReady={true}
+                isFullyRendered={true}
+            />
+        );
+
+        await screen.findByText("2 subposições com alta correspondência");
+        const select = screen.getByRole('combobox');
+        fireEvent.change(select, { target: { value: 'pos-84-11' } });
+
+        expect(scrollSpy).toHaveBeenCalled();
+    });
+
+    it('renders nothing until content is ready and hides itself when closed', async () => {
+        const { rerender } = render(
+            <SearchHighlighter
+                query="motor"
+                contentContainerRef={containerRef}
+                isContentReady={false}
+                isFullyRendered={false}
+            />
+        );
+
+        expect(screen.queryByRole('button', { name: "Fechar busca de página" })).not.toBeInTheDocument();
+
+        rerender(
+            <SearchHighlighter
+                query="motor"
+                contentContainerRef={containerRef}
+                isContentReady={true}
+                isFullyRendered={true}
+            />
+        );
+
+        const closeButton = await screen.findByRole('button', { name: "Fechar busca de página" });
+        fireEvent.click(closeButton);
+        expect(screen.queryByRole('button', { name: "Fechar busca de página" })).not.toBeInTheDocument();
+    });
+
+    it('keeps navigation controls disabled when there is only one match', async () => {
+        const div = document.createElement('div');
+        div.innerHTML = `<div id="cap-1" class="tipi-chapter"><p>Um único motor aqui.</p></div>`;
+        const testContainerRef = { current: div } as React.RefObject<HTMLElement>;
+
+        render(
+            <SearchHighlighter
+                query="motor"
+                contentContainerRef={testContainerRef}
+                isContentReady={true}
+                isFullyRendered={true}
+            />
+        );
+
+        const nextBtn = await screen.findByRole('button', { name: "Navegar para a próxima ocorrência" });
+        const prevBtn = await screen.findByRole('button', { name: "Navegar para a ocorrência anterior" });
+
+        expect(nextBtn).toBeDisabled();
+        expect(prevBtn).toBeDisabled();
+        expect(screen.getByText("1 / 1")).toBeInTheDocument();
     });
 });

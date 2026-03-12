@@ -142,6 +142,16 @@ describe('UserProfilePage', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
+    it('fecha o modal ao clicar no backdrop principal', async () => {
+        const onClose = vi.fn();
+        render(<UserProfilePage isOpen={true} onClose={onClose} />);
+
+        await waitFor(() => expect(mockGetMyProfile).toHaveBeenCalled());
+
+        fireEvent.click(screen.getByLabelText('Fechar perfil'));
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
     // --- Aba Perfil ---
 
     it('carrega e exibe dados do perfil na aba Perfil', async () => {
@@ -199,6 +209,35 @@ describe('UserProfilePage', () => {
         });
     });
 
+    it('mantém o editor utilizável quando salvar a bio falha', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        mockUpdateMyProfile.mockRejectedValueOnce(new Error('save failed'));
+
+        try {
+            render(<UserProfilePage isOpen={true} onClose={vi.fn()} />);
+
+            await waitFor(() => {
+                expect(screen.getByPlaceholderText('Conte um pouco sobre você...')).toBeInTheDocument();
+            });
+
+            fireEvent.change(screen.getByPlaceholderText('Conte um pouco sobre você...'), {
+                target: { value: 'Bio falhou' },
+            });
+            fireEvent.click(screen.getByRole('button', { name: /salvar bio/i }));
+
+            await waitFor(() => {
+                expect(mockUpdateMyProfile).toHaveBeenCalledWith({ bio: 'Bio falhou' });
+            });
+
+            await waitFor(() => {
+                expect(screen.getByRole('button', { name: /salvar bio/i })).toBeEnabled();
+            });
+            expect(screen.queryByText('✓ Salvo!')).not.toBeInTheDocument();
+        } finally {
+            consoleErrorSpy.mockRestore();
+        }
+    });
+
     it('mostra contagem de caracteres na bio', async () => {
         render(<UserProfilePage isOpen={true} onClose={vi.fn()} />);
 
@@ -225,6 +264,28 @@ describe('UserProfilePage', () => {
         expect(mockGetMyContributions).toHaveBeenCalledWith(
             expect.objectContaining({ page: 1, page_size: 15 }),
         );
+    });
+
+    it('mostra estado vazio e falha silenciosa quando contribuições não carregam', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        mockGetMyContributions.mockRejectedValueOnce(new Error('contrib failed'));
+
+        try {
+            render(<UserProfilePage isOpen={true} onClose={vi.fn()} />);
+
+            await waitFor(() => expect(mockGetMyProfile).toHaveBeenCalled());
+
+            fireEvent.click(screen.getByRole('button', { name: /contribuições/i }));
+
+            await waitFor(() => {
+                expect(mockGetMyContributions).toHaveBeenCalled();
+            });
+            await waitFor(() => {
+                expect(screen.getByText('Você ainda não fez nenhum comentário.')).toBeInTheDocument();
+            });
+        } finally {
+            consoleErrorSpy.mockRestore();
+        }
     });
 
     it('filtra contribuições por busca', async () => {
@@ -349,6 +410,27 @@ describe('UserProfilePage', () => {
         expect(mockDeleteMyAccount).not.toHaveBeenCalled();
     });
 
+    it('fecha apenas a confirmação quando backdrop ou Escape são usados no fluxo de deleção', async () => {
+        const onClose = vi.fn();
+        render(<UserProfilePage isOpen={true} onClose={onClose} />);
+
+        await waitFor(() => expect(mockGetMyProfile).toHaveBeenCalled());
+
+        fireEvent.click(screen.getByRole('button', { name: /desativar minha conta/i }));
+        expect(screen.getByText('⚠️ Desativar Conta')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByLabelText('Fechar confirmação'));
+        expect(screen.queryByText('⚠️ Desativar Conta')).not.toBeInTheDocument();
+        expect(onClose).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: /desativar minha conta/i }));
+        expect(screen.getByText('⚠️ Desativar Conta')).toBeInTheDocument();
+
+        fireEvent.keyDown(globalThis, { key: 'Escape' });
+        expect(screen.queryByText('⚠️ Desativar Conta')).not.toBeInTheDocument();
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
     it('executa deleção após confirmar com "deletar"', async () => {
         const originalConsoleError = console.error.bind(console);
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation((...args) => {
@@ -376,6 +458,36 @@ describe('UserProfilePage', () => {
                 expect(mockDeleteMyAccount).toHaveBeenCalledTimes(1);
             });
             expect(onClose).toHaveBeenCalledTimes(1);
+        } finally {
+            consoleErrorSpy.mockRestore();
+        }
+    });
+
+    it('mantém a confirmação aberta e sai do estado de loading quando a deleção falha', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const onClose = vi.fn();
+        mockDeleteMyAccount.mockRejectedValueOnce(new Error('delete failed'));
+
+        try {
+            render(<UserProfilePage isOpen={true} onClose={onClose} />);
+
+            await waitFor(() => expect(mockGetMyProfile).toHaveBeenCalled());
+
+            fireEvent.click(screen.getByRole('button', { name: /desativar minha conta/i }));
+            fireEvent.click(screen.getByRole('button', { name: 'Sim, continuar' }));
+            fireEvent.change(screen.getByPlaceholderText(/digite "deletar"/i), {
+                target: { value: 'deletar' },
+            });
+            fireEvent.click(screen.getByRole('button', { name: /desativar conta/i }));
+
+            await waitFor(() => {
+                expect(mockDeleteMyAccount).toHaveBeenCalledTimes(1);
+            });
+            await waitFor(() => {
+                expect(screen.getByRole('button', { name: /desativar conta/i })).toBeEnabled();
+            });
+            expect(onClose).not.toHaveBeenCalled();
+            expect(screen.getByText('🚨 Confirmação Final')).toBeInTheDocument();
         } finally {
             consoleErrorSpy.mockRestore();
         }
