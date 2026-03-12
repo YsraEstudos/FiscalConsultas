@@ -7,7 +7,13 @@
  * - Timeout configurável
  */
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
-import type { SystemStatusResponse } from '../types/api.types';
+import type {
+    NbsDetailResponse,
+    NbsSearchResponse,
+    NebsDetailResponse,
+    NebsSearchResponse,
+    SystemStatusResponse
+} from '../types/api.types';
 
 const explicitBaseUrl = import.meta.env.VITE_API_FILTER_URL || import.meta.env.VITE_API_URL;
 const isLocalHost = (host: string) => host === 'localhost' || host === '127.0.0.1';
@@ -557,6 +563,26 @@ export const getGlossaryTerm = async (term: string): Promise<any> => {
 
 export const getSystemStatus = async (): Promise<SystemStatusResponse> => {
     const response = await api.get('/status');
+    return response.data;
+};
+
+export const searchNbsServices = async (query: string): Promise<NbsSearchResponse> => {
+    const response = await api.get(`/services/nbs/search?q=${encodeURIComponent(query)}`);
+    return response.data;
+};
+
+export const getNbsServiceDetail = async (code: string): Promise<NbsDetailResponse> => {
+    const response = await api.get(`/services/nbs/${encodeURIComponent(code)}`);
+    return response.data;
+};
+
+export const searchNebsEntries = async (query: string): Promise<NebsSearchResponse> => {
+    const response = await api.get(`/services/nebs/search?q=${encodeURIComponent(query)}`);
+    return response.data;
+};
+
+export const getNebsEntryDetail = async (code: string): Promise<NebsDetailResponse> => {
+    const response = await api.get(`/services/nebs/${encodeURIComponent(code)}`);
     return response.data;
 };
 

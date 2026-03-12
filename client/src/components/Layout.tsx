@@ -14,6 +14,7 @@ interface LayoutProps {
     onOpenTutorial: () => void;
     onOpenStats: () => void;
     onOpenComparator: () => void;
+    onOpenServices: () => void;
     onOpenModerate: () => void;
     onOpenProfile: () => void;
     history: HistoryItem[];
@@ -33,6 +34,7 @@ export function Layout({
     onOpenTutorial,
     onOpenStats,
     onOpenComparator,
+    onOpenServices,
     onOpenModerate,
     onOpenProfile,
     history,
@@ -52,6 +54,7 @@ export function Layout({
                 onOpenTutorial={onOpenTutorial}
                 onOpenStats={onOpenStats}
                 onOpenComparator={onOpenComparator}
+                onOpenServices={onOpenServices}
                 onOpenModerate={onOpenModerate}
                 onOpenProfile={onOpenProfile}
                 history={history}
