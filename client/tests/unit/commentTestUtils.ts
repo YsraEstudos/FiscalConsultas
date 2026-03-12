@@ -51,18 +51,33 @@ export function makeApiComment(overrides: Partial<CommentOut> = {}): CommentOut 
   };
 }
 
+export function makePendingApiComment(overrides: Partial<CommentOut> = {}): CommentOut {
+  return makeApiComment({
+    status: 'pending',
+    body: 'Comentário aguardando moderação',
+    anchor_key: 'pos-84-13-long-anchor-key',
+    selected_text: 'Trecho selecionado que pode ser longo para truncamento visual no modal',
+    user_name: 'Alice Silva',
+    ...overrides,
+  });
+}
+
 export function makeCommentCreatePayload(
   overrides: Partial<CommentCreatePayload> = {},
 ): CommentCreatePayload {
-  return {
+  const { user_image_url, ...restOverrides } = overrides;
+  const payload: CommentCreatePayload = {
     anchor_key: 'pos-84-13',
     selected_text: 'Motores elétricos',
     body: 'Novo comentário',
     is_private: true,
     user_name: 'Alice',
-    user_image_url: undefined,
-    ...overrides,
+    ...restOverrides,
   };
+
+  return 'user_image_url' in overrides
+    ? { ...payload, user_image_url }
+    : payload;
 }
 
 export function makeAxiosError(status: number, detail?: string) {
@@ -75,8 +90,8 @@ export function makeAxiosError(status: number, detail?: string) {
   });
 }
 
-export function makeLanHostLocation(ipAddress: string): URL {
-  return new URL(`https://${ipAddress}/`);
+export function makeLanHostLocation(hostname: string): URL {
+  return new URL(`https://${hostname}/`);
 }
 
 export async function loadUseComments() {

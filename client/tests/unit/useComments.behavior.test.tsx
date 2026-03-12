@@ -35,6 +35,42 @@ vi.mock('react-hot-toast', () => ({
   },
 }));
 
+const hookPending = () => makePendingCommentEntry({ anchorTop: 32, selectedText: 'Motores elétricos' });
+
+async function renderUseCommentsHook() {
+  const useComments = await loadUseComments();
+  return renderHook(() => useComments());
+}
+
+async function withSilencedConsole<T>(
+  method: 'error' | 'warn',
+  callback: () => Promise<T>,
+): Promise<T> {
+  const consoleSpy = vi.spyOn(console, method).mockImplementation(() => {});
+  try {
+    return await callback();
+  } finally {
+    consoleSpy.mockRestore();
+  }
+}
+
+async function withMockedLocation<T>(location: URL, callback: () => Promise<T>): Promise<T> {
+  const originalLocation = globalThis.location;
+  Object.defineProperty(globalThis, 'location', {
+    configurable: true,
+    value: location,
+  });
+
+  try {
+    return await callback();
+  } finally {
+    Object.defineProperty(globalThis, 'location', {
+      configurable: true,
+      value: originalLocation,
+    });
+  }
+}
+
 describe('useComments behavior', () => {
   beforeEach(() => {
     refs.createCommentMock.mockReset();
@@ -49,8 +85,7 @@ describe('useComments behavior', () => {
   it('loads comments for an anchor, maps API fields, and avoids duplicate loads until reset', async () => {
     refs.fetchCommentsByAnchorMock.mockResolvedValue([makeApiComment()]);
 
-    const useComments = await loadUseComments();
-    const { result } = renderHook(() => useComments());
+    const { result } = await renderUseCommentsHook();
 
     await act(async () => {
       await result.current.loadComments('pos-84-13', 64);
@@ -83,12 +118,10 @@ describe('useComments behavior', () => {
   });
 
   it('handles loadComments failures silently and clears the loading flag', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
+    await withSilencedConsole('error', async () => {
       refs.fetchCommentsByAnchorMock.mockRejectedValue(new Error('network'));
 
-      const useComments = await loadUseComments();
-      const { result } = renderHook(() => useComments());
+      const { result } = await renderUseCommentsHook();
 
       await act(async () => {
         await result.current.loadComments('pos-84-13');
@@ -97,10 +130,8 @@ describe('useComments behavior', () => {
       expect(result.current.loading).toBe(false);
       expect(result.current.comments).toEqual([]);
       expect(refs.toastErrorMock).not.toHaveBeenCalled();
-      expect(consoleErrorSpy).toHaveBeenCalled();
-    } finally {
-      consoleErrorSpy.mockRestore();
-    }
+      expect(console.error).toHaveBeenCalled();
+    });
   });
 
   it('optimistically adds comments, replaces the temp item on success, and shows a success toast', async () => {
@@ -111,9 +142,8 @@ describe('useComments behavior', () => {
       }),
     );
 
-    const useComments = await loadUseComments();
-    const { result } = renderHook(() => useComments());
-    const pending = makePendingCommentEntry({ anchorTop: 32, selectedText: 'Motores elétricos' });
+    const { result } = await renderUseCommentsHook();
+    const pending = hookPending();
     let addPromise: Promise<boolean> | undefined;
 
     await act(async () => {
@@ -144,9 +174,7 @@ describe('useComments behavior', () => {
       await addPromise;
     });
 
-    expect(refs.createCommentMock).toHaveBeenCalledWith(
-      makeCommentCreatePayload(),
-    );
+    expect(refs.createCommentMock).toHaveBeenCalledWith(makeCommentCreatePayload());
     expect(result.current.comments).toEqual([
       expect.objectContaining({
         id: '2',
@@ -161,52 +189,38 @@ describe('useComments behavior', () => {
   it('removes optimistic comments and reports LAN-host Clerk token issues on 401 create failures', async () => {
     refs.createCommentMock.mockRejectedValue(makeAxiosError(401, 'Token ausente'));
 
-    const originalLocation = globalThis.location;
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      Object.defineProperty(globalThis, 'location', {
-        configurable: true,
-        value: makeLanHostLocation('192.168.0.23'),
-      });
+    await withSilencedConsole('error', async () => {
+      await withMockedLocation(makeLanHostLocation('lan-host.test'), async () => {
+        const { result } = await renderUseCommentsHook();
 
-      const useComments = await loadUseComments();
-      const { result } = renderHook(() => useComments());
+        await act(async () => {
+          const ok = await result.current.addComment(
+            hookPending(),
+            'Comentário LAN',
+            false,
+            'Alice',
+            null,
+          );
+          expect(ok).toBe(false);
+        });
 
-      await act(async () => {
-        const ok = await result.current.addComment(
-          makePendingCommentEntry({ anchorTop: 32, selectedText: 'Motores elétricos' }),
-          'Comentário LAN',
-          false,
-          'Alice',
-          null,
+        expect(result.current.comments).toEqual([]);
+        expect(refs.toastErrorMock).toHaveBeenCalledWith(
+          'Token do Clerk indisponível neste host de rede. Abra em http://localhost:5173 para comentar.',
         );
-        expect(ok).toBe(false);
       });
-
-      expect(result.current.comments).toEqual([]);
-      expect(refs.toastErrorMock).toHaveBeenCalledWith(
-        'Token do Clerk indisponível neste host de rede. Abra em http://localhost:5173 para comentar.',
-      );
-    } finally {
-      Object.defineProperty(globalThis, 'location', {
-        configurable: true,
-        value: originalLocation,
-      });
-      consoleErrorSpy.mockRestore();
-    }
+    });
   });
 
   it('rolls back optimistic comments and reports generic failures when createComment fails', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
+    await withSilencedConsole('error', async () => {
       refs.createCommentMock.mockRejectedValue(new Error('save failed'));
 
-      const useComments = await loadUseComments();
-      const { result } = renderHook(() => useComments());
+      const { result } = await renderUseCommentsHook();
 
       await act(async () => {
         const ok = await result.current.addComment(
-          makePendingCommentEntry({ anchorTop: 32, selectedText: 'Motores elétricos' }),
+          hookPending(),
           'Comentário falhou',
           false,
           'Alice',
@@ -217,21 +231,20 @@ describe('useComments behavior', () => {
 
       expect(result.current.comments).toEqual([]);
       expect(refs.toastErrorMock).toHaveBeenCalledWith('Erro ao salvar comentário. Tente novamente.');
-    } finally {
-      consoleErrorSpy.mockRestore();
-    }
+    });
   });
 
   it('validates IDs before editing and deleting', async () => {
-    const useComments = await loadUseComments();
-    const { result } = renderHook(() => useComments());
+    const { result } = await renderUseCommentsHook();
 
     await act(async () => {
       await result.current.editComment('abc', 'novo corpo');
       await result.current.removeComment('xyz');
     });
 
-    expect(refs.toastErrorMock).toHaveBeenCalledWith('ID de comentário inválido');
+    expect(refs.toastErrorMock).toHaveBeenCalledTimes(2);
+    expect(refs.toastErrorMock).toHaveBeenNthCalledWith(1, 'ID de comentário inválido');
+    expect(refs.toastErrorMock).toHaveBeenNthCalledWith(2, 'ID de comentário inválido');
     expect(refs.updateCommentMock).not.toHaveBeenCalled();
     expect(refs.deleteCommentMock).not.toHaveBeenCalled();
   });
@@ -242,10 +255,8 @@ describe('useComments behavior', () => {
       .mockResolvedValueOnce(makeApiComment({ body: 'Comentário editado' }))
       .mockRejectedValueOnce(makeAxiosError(403));
 
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      const useComments = await loadUseComments();
-      const { result } = renderHook(() => useComments());
+    await withSilencedConsole('error', async () => {
+      const { result } = await renderUseCommentsHook();
 
       await act(async () => {
         result.current.resetFetchedAnchors();
@@ -271,9 +282,7 @@ describe('useComments behavior', () => {
         body: 'Comentário editado',
       }));
       expect(refs.toastErrorMock).toHaveBeenCalledWith('Sem permissão para editar este comentário.');
-    } finally {
-      consoleErrorSpy.mockRestore();
-    }
+    });
   });
 
   it('removes comments, keeps deletions on success, and rolls back forbidden deletes', async () => {
@@ -284,10 +293,8 @@ describe('useComments behavior', () => {
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(makeAxiosError(403));
 
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      const useComments = await loadUseComments();
-      const { result } = renderHook(() => useComments());
+    await withSilencedConsole('error', async () => {
+      const { result } = await renderUseCommentsHook();
 
       await act(async () => {
         await result.current.loadComments('pos-84-13', 64);
@@ -323,83 +330,57 @@ describe('useComments behavior', () => {
         }),
       ]);
       expect(refs.toastErrorMock).toHaveBeenCalledWith('Sem permissão para remover este comentário.');
-    } finally {
-      consoleErrorSpy.mockRestore();
-    }
+    });
   });
 
   it('skips commented-anchor lookups on LAN hosts during development', async () => {
-    const originalLocation = globalThis.location;
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      Object.defineProperty(globalThis, 'location', {
-        configurable: true,
-        value: makeLanHostLocation('192.168.0.11'),
-      });
+    await withSilencedConsole('warn', async () => {
+      await withMockedLocation(makeLanHostLocation('dev-lan-host.test'), async () => {
+        const { result } = await renderUseCommentsHook();
 
-      const useComments = await loadUseComments();
-      const { result } = renderHook(() => useComments());
+        await act(async () => {
+          const anchors = await result.current.loadCommentedAnchors();
+          expect(anchors).toEqual([]);
+        });
 
-      await act(async () => {
-        const anchors = await result.current.loadCommentedAnchors();
-        expect(anchors).toEqual([]);
+        expect(refs.fetchCommentedAnchorsMock).not.toHaveBeenCalled();
+        expect(result.current.commentedAnchors).toEqual([]);
+        expect(console.warn).toHaveBeenCalledTimes(1);
       });
-
-      expect(refs.fetchCommentedAnchorsMock).not.toHaveBeenCalled();
-      expect(result.current.commentedAnchors).toEqual([]);
-      expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
-    } finally {
-      Object.defineProperty(globalThis, 'location', {
-        configurable: true,
-        value: originalLocation,
-      });
-      consoleWarnSpy.mockRestore();
-    }
+    });
   });
 
   it('shows the specific 401 Clerk messages for missing and expired tokens on localhost', async () => {
-    const originalLocation = window.location;
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      Object.defineProperty(window, 'location', {
-        configurable: true,
-        value: new URL('http://localhost:5173/'),
+    await withSilencedConsole('error', async () => {
+      await withMockedLocation(new URL('http://localhost:5173/'), async () => {
+        refs.createCommentMock
+          .mockRejectedValueOnce(makeAxiosError(401, 'Token ausente'))
+          .mockRejectedValueOnce(makeAxiosError(401, 'Token inválido ou expirado: session expired'))
+          .mockRejectedValueOnce(makeAxiosError(401, 'Outra resposta 401'));
+
+        const { result } = await renderUseCommentsHook();
+        const pending = hookPending();
+
+        await act(async () => {
+          expect(await result.current.addComment(pending, 'Primeiro', false, 'Alice', null)).toBe(false);
+          expect(await result.current.addComment(pending, 'Segundo', false, 'Alice', null)).toBe(false);
+          expect(await result.current.addComment(pending, 'Terceiro', false, 'Alice', null)).toBe(false);
+        });
+
+        expect(refs.toastErrorMock).toHaveBeenNthCalledWith(
+          1,
+          'Token não enviado pelo Clerk. Faça logout/login e tente novamente.',
+        );
+        expect(refs.toastErrorMock).toHaveBeenNthCalledWith(
+          2,
+          'Token inválido/expirado. Faça login novamente.',
+        );
+        expect(refs.toastErrorMock).toHaveBeenNthCalledWith(
+          3,
+          'Sessão expirada. Faça login novamente para comentar.',
+        );
       });
-
-      refs.createCommentMock
-        .mockRejectedValueOnce(makeAxiosError(401, 'Token ausente'))
-        .mockRejectedValueOnce(makeAxiosError(401, 'Token inválido ou expirado: session expired'))
-        .mockRejectedValueOnce(makeAxiosError(401, 'Outra resposta 401'));
-
-      const useComments = await loadUseComments();
-      const { result } = renderHook(() => useComments());
-      const pending = makePendingCommentEntry({ anchorTop: 32, selectedText: 'Motores elétricos' });
-
-      await act(async () => {
-        expect(await result.current.addComment(pending, 'Primeiro', false, 'Alice', null)).toBe(false);
-        expect(await result.current.addComment(pending, 'Segundo', false, 'Alice', null)).toBe(false);
-        expect(await result.current.addComment(pending, 'Terceiro', false, 'Alice', null)).toBe(false);
-      });
-
-      expect(refs.toastErrorMock).toHaveBeenNthCalledWith(
-        1,
-        'Token não enviado pelo Clerk. Faça logout/login e tente novamente.',
-      );
-      expect(refs.toastErrorMock).toHaveBeenNthCalledWith(
-        2,
-        'Token inválido/expirado. Faça login novamente.',
-      );
-      expect(refs.toastErrorMock).toHaveBeenNthCalledWith(
-        3,
-        'Sessão expirada. Faça login novamente para comentar.',
-      );
-    } finally {
-      Object.defineProperty(window, 'location', {
-        configurable: true,
-        value: originalLocation,
-      });
-      consoleErrorSpy.mockRestore();
-    }
+    });
   });
 
   it('rolls back edits and deletes with generic errors when the API does not return 403', async () => {
@@ -407,25 +388,21 @@ describe('useComments behavior', () => {
     refs.updateCommentMock.mockRejectedValueOnce(new Error('edit broke'));
     refs.deleteCommentMock.mockRejectedValueOnce(new Error('delete broke'));
 
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      const useComments = await loadUseComments();
-      const { result } = renderHook(() => useComments());
+    await withSilencedConsole('error', async () => {
+      const { result } = await renderUseCommentsHook();
 
       await act(async () => {
         await result.current.loadComments('pos-84-13', 64);
       });
 
       await act(async () => {
-        await result.current.editComment('1', 'Mudança temporária');
+        await result.current.editComment('1', 'Novo corpo');
       });
 
-      expect(result.current.comments).toEqual([
-        expect.objectContaining({
-          id: '1',
-          body: 'Comentário inicial',
-        }),
-      ]);
+      expect(result.current.comments[0]).toEqual(expect.objectContaining({
+        id: '1',
+        body: 'Comentário inicial',
+      }));
       expect(refs.toastErrorMock).toHaveBeenCalledWith('Erro ao editar comentário.');
 
       await act(async () => {
@@ -439,8 +416,6 @@ describe('useComments behavior', () => {
         }),
       ]);
       expect(refs.toastErrorMock).toHaveBeenCalledWith('Erro ao remover comentário.');
-    } finally {
-      consoleErrorSpy.mockRestore();
-    }
+    });
   });
 });
