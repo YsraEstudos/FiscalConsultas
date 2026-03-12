@@ -1,0 +1,10 @@
+title = "Fiscal gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Comment test fixtures that use anchor_key DTO fields"
+paths = [
+  '''client/tests/unit/commentTestUtils\.ts''',
+]

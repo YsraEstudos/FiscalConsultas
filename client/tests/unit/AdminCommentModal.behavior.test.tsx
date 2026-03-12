@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AdminCommentModal } from '../../src/components/AdminCommentModal';
 import { fetchPendingComments, moderateComment } from '../../src/services/commentService';
+import { makePendingApiComment, unsafeJavascriptUrl } from './commentTestUtils';
 
 const refs = vi.hoisted(() => ({
   toastSuccessMock: vi.fn(),
@@ -22,22 +23,7 @@ vi.mock('react-hot-toast', () => ({
 }));
 
 function makePendingComment(overrides: Partial<Awaited<ReturnType<typeof fetchPendingComments>>[number]> = {}) {
-  return {
-    id: 1,
-    tenant_id: 'org_test',
-    user_id: 'user_test',
-    anchor_key: 'pos-84-13-long-anchor-key',
-    selected_text: 'Trecho selecionado que pode ser longo para truncamento visual no modal',
-    body: 'Comentário aguardando moderação',
-    status: 'pending' as const,
-    created_at: '2026-03-01T10:00:00Z',
-    updated_at: '2026-03-01T10:00:00Z',
-    moderated_by: null,
-    moderated_at: null,
-    user_name: 'Alice Silva',
-    user_image_url: null,
-    ...overrides,
-  };
+  return makePendingApiComment(overrides);
 }
 
 describe('AdminCommentModal moderation flows', () => {
@@ -50,7 +36,7 @@ describe('AdminCommentModal moderation flows', () => {
 
   it('renders pending comments with fallback avatars and approves them with moderation notes', async () => {
     vi.mocked(fetchPendingComments).mockResolvedValue([
-      makePendingComment({ user_image_url: 'javascript:alert(1)' }),
+      makePendingComment({ user_image_url: unsafeJavascriptUrl }),
     ]);
     vi.mocked(moderateComment).mockResolvedValue(makePendingComment());
 

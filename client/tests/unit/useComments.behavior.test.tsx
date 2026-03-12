@@ -1,6 +1,15 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  loadUseComments,
+  makeApiComment,
+  makeAxiosError,
+  makeCommentCreatePayload,
+  makeLanHostLocation,
+  makePendingCommentEntry,
+} from './commentTestUtils';
+
 const refs = vi.hoisted(() => ({
   createCommentMock: vi.fn(),
   fetchCommentsByAnchorMock: vi.fn(),
@@ -25,58 +34,6 @@ vi.mock('react-hot-toast', () => ({
     error: refs.toastErrorMock,
   },
 }));
-
-type ApiComment = {
-  id: number;
-  anchor_key: string;
-  selected_text: string;
-  body: string;
-  status: 'pending' | 'approved' | 'rejected' | 'private';
-  created_at: string;
-  updated_at: string;
-  user_name: string | null;
-  user_image_url: string | null;
-  user_id: string;
-};
-
-function makeApiComment(overrides: Partial<ApiComment> = {}): ApiComment {
-  return {
-    id: 1,
-    anchor_key: 'pos-84-13',
-    selected_text: 'Motores elétricos',
-    body: 'Comentário inicial',
-    status: 'approved',
-    created_at: '2026-03-01T10:00:00Z',
-    updated_at: '2026-03-01T10:00:00Z',
-    user_name: 'Usuário Teste',
-    user_image_url: null,
-    user_id: 'user_test',
-    ...overrides,
-  };
-}
-
-function makePending() {
-  return {
-    anchorTop: 32,
-    anchorKey: 'pos-84-13',
-    selectedText: 'Motores elétricos',
-  };
-}
-
-function makeAxiosError(status: number, detail?: string) {
-  return Object.assign(new Error(detail || `HTTP ${status}`), {
-    isAxiosError: true,
-    response: {
-      status,
-      data: detail ? { detail } : {},
-    },
-  });
-}
-
-async function loadUseComments() {
-  vi.resetModules();
-  return (await import('../../src/hooks/useComments')).useComments;
-}
 
 describe('useComments behavior', () => {
   beforeEach(() => {
@@ -147,20 +104,21 @@ describe('useComments behavior', () => {
   });
 
   it('optimistically adds comments, replaces the temp item on success, and shows a success toast', async () => {
-    let resolveCreate: ((value: ApiComment) => void) | null = null;
+    let resolveCreate: ((value: ReturnType<typeof makeApiComment>) => void) | null = null;
     refs.createCommentMock.mockReturnValue(
-      new Promise<ApiComment>((resolve) => {
+      new Promise<ReturnType<typeof makeApiComment>>((resolve) => {
         resolveCreate = resolve;
       }),
     );
 
     const useComments = await loadUseComments();
     const { result } = renderHook(() => useComments());
+    const pending = makePendingCommentEntry({ anchorTop: 32, selectedText: 'Motores elétricos' });
     let addPromise: Promise<boolean> | undefined;
 
     await act(async () => {
       addPromise = result.current.addComment(
-        makePending(),
+        pending,
         'Novo comentário',
         true,
         'Alice',
@@ -186,14 +144,7 @@ describe('useComments behavior', () => {
       await addPromise;
     });
 
-    expect(refs.createCommentMock).toHaveBeenCalledWith({
-      anchor_key: 'pos-84-13',
-      selected_text: 'Motores elétricos',
-      body: 'Novo comentário',
-      is_private: true,
-      user_name: 'Alice',
-      user_image_url: undefined,
-    });
+    expect(refs.createCommentMock).toHaveBeenCalledWith(makeCommentCreatePayload());
     expect(result.current.comments).toEqual([
       expect.objectContaining({
         id: '2',
@@ -213,7 +164,7 @@ describe('useComments behavior', () => {
     try {
       Object.defineProperty(window, 'location', {
         configurable: true,
-        value: new URL('http://192.168.0.23/'),
+        value: makeLanHostLocation('192.168.0.23'),
       });
 
       const useComments = await loadUseComments();
@@ -221,7 +172,7 @@ describe('useComments behavior', () => {
 
       await act(async () => {
         const ok = await result.current.addComment(
-          makePending(),
+          makePendingCommentEntry({ anchorTop: 32, selectedText: 'Motores elétricos' }),
           'Comentário LAN',
           false,
           'Alice',
@@ -253,7 +204,7 @@ describe('useComments behavior', () => {
 
       await act(async () => {
         const ok = await result.current.addComment(
-          makePending(),
+          makePendingCommentEntry({ anchorTop: 32, selectedText: 'Motores elétricos' }),
           'Comentário falhou',
           false,
           'Alice',
@@ -381,7 +332,7 @@ describe('useComments behavior', () => {
     try {
       Object.defineProperty(window, 'location', {
         configurable: true,
-        value: new URL('http://192.168.0.11/'),
+        value: makeLanHostLocation('192.168.0.11'),
       });
 
       const useComments = await loadUseComments();
@@ -420,11 +371,12 @@ describe('useComments behavior', () => {
 
       const useComments = await loadUseComments();
       const { result } = renderHook(() => useComments());
+      const pending = makePendingCommentEntry({ anchorTop: 32, selectedText: 'Motores elétricos' });
 
       await act(async () => {
-        expect(await result.current.addComment(makePending(), 'Primeiro', false, 'Alice', null)).toBe(false);
-        expect(await result.current.addComment(makePending(), 'Segundo', false, 'Alice', null)).toBe(false);
-        expect(await result.current.addComment(makePending(), 'Terceiro', false, 'Alice', null)).toBe(false);
+        expect(await result.current.addComment(pending, 'Primeiro', false, 'Alice', null)).toBe(false);
+        expect(await result.current.addComment(pending, 'Segundo', false, 'Alice', null)).toBe(false);
+        expect(await result.current.addComment(pending, 'Terceiro', false, 'Alice', null)).toBe(false);
       });
 
       expect(refs.toastErrorMock).toHaveBeenNthCalledWith(
