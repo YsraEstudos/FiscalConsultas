@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
-import { searchNCM, searchTipi } from '../services/api';
+import { searchNCM, searchNbsServices, searchNebsEntries, searchTipi } from '../services/api';
 import { useTabs, type DocType } from './useTabs';
 import { useHistory } from './useHistory';
 import { useSettings } from '../context/SettingsContext';
@@ -11,7 +11,9 @@ import { isCodeSearchResponse } from '../types/api.types';
 
 const buildLoadedChaptersByDoc = (value?: Record<DocType, string[]>): Record<DocType, string[]> => ({
     nesh: value?.nesh ?? [],
-    tipi: value?.tipi ?? []
+    tipi: value?.tipi ?? [],
+    nbs: value?.nbs ?? [],
+    nebs: value?.nebs ?? [],
 });
 
 export function useSearch(
@@ -59,6 +61,7 @@ export function useSearch(
         // Se o NCM alvo pertence a um capitulo ja carregado, pula o fetch e apenas dispara auto-scroll
         // CRITICO: Atualizar results.query para manter sincronizado com o targetId do ResultDisplay
         if (
+            (doc === 'nesh' || doc === 'tipi') &&
             targetChapter &&
             loadedChaptersForDoc.length > 0 &&
             isSameChapter(query, loadedChaptersForDoc) &&
@@ -85,9 +88,19 @@ export function useSearch(
         });
 
         try {
-            const data = doc === 'nesh'
-                ? await searchNCM(query)
-                : await searchTipi(query, tipiViewModeRef.current);
+            const searchHandlers: Record<DocType, () => Promise<SearchResponse>> = {
+                nesh: () => searchNCM(query),
+                tipi: () => searchTipi(query, tipiViewModeRef.current),
+                nbs: () => searchNbsServices(query),
+                nebs: () => searchNebsEntries(query),
+            };
+            const handler = searchHandlers[doc];
+
+            if (!handler) {
+                throw new Error(`Unknown document type: ${doc}`);
+            }
+
+            const data = await handler();
 
             // Extrai capitulos apenas para respostas do tipo code
             const codeResults = isCodeSearchResponse(data)
@@ -102,7 +115,7 @@ export function useSearch(
 
             updateTab(tabId, {
                 results: updateResultsQuery(data, query),
-                content: data.markdown || data.resultados || '',
+                content: isCodeSearchResponse(data) ? data.markdown || '' : '',
                 loading: false,
                 isNewSearch: true,
                 isContentReady: false,

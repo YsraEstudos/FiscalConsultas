@@ -167,7 +167,79 @@ export interface TipiTextSearchResponse extends BaseApiResponse {
 export type TipiSearchResponse = TipiCodeSearchResponse | TipiTextSearchResponse;
 
 /** Union genérico para qualquer resposta de busca */
-export type SearchResponse = NeshSearchResponse | TipiSearchResponse;
+export type SearchResponse = NeshSearchResponse | TipiSearchResponse | NbsSearchResponse | NebsSearchResponse;
+
+// --------------------------------------------
+// NBS / Services Types
+// --------------------------------------------
+
+export type ServiceDocType = 'nbs' | 'nebs';
+
+export interface NbsServiceItem {
+    code: string;
+    code_clean: string;
+    description: string;
+    parent_code: string | null;
+    level: number;
+    has_nebs: boolean;
+}
+
+export interface NebsEntry {
+    code: string;
+    code_clean: string;
+    title: string;
+    title_normalized: string;
+    body_text: string;
+    body_markdown: string | null;
+    body_normalized: string;
+    section_title: string | null;
+    page_start: number;
+    page_end: number;
+    parser_status: 'trusted' | 'suspect' | 'rejected';
+    parse_warnings: string | null;
+    source_hash: string;
+    updated_at: string;
+}
+
+export interface NebsSearchItem {
+    code: string;
+    title: string;
+    excerpt: string;
+    page_start: number;
+    page_end: number;
+    section_title: string | null;
+}
+
+export interface NbsSearchResponse extends BaseApiResponse {
+    success: true;
+    query: string;
+    normalized: string;
+    results: NbsServiceItem[];
+    total: number;
+}
+
+export interface NbsDetailResponse extends BaseApiResponse {
+    success: true;
+    item: NbsServiceItem;
+    ancestors: NbsServiceItem[];
+    children: NbsServiceItem[];
+    nebs: NebsEntry | null;
+}
+
+export interface NebsSearchResponse extends BaseApiResponse {
+    success: true;
+    query: string;
+    normalized: string;
+    results: NebsSearchItem[];
+    total: number;
+}
+
+export interface NebsDetailResponse extends BaseApiResponse {
+    success: true;
+    item: NbsServiceItem;
+    ancestors: NbsServiceItem[];
+    entry: NebsEntry;
+}
 
 // --------------------------------------------
 // Other Endpoints
@@ -227,16 +299,46 @@ export interface LoginResponse extends BaseApiResponse {
 
 /** Verifica se a resposta é de busca textual */
 export function isTextSearchResponse(
-    response: NeshSearchResponse | TipiSearchResponse
+    response: SearchResponse
 ): response is TextSearchResponse | TipiTextSearchResponse {
-    return response.type === 'text';
+    return 'type' in response && response.type === 'text';
 }
 
 /** Verifica se a resposta é de busca por código */
 export function isCodeSearchResponse(
-    response: NeshSearchResponse | TipiSearchResponse
+    response: SearchResponse
 ): response is CodeSearchResponse | TipiCodeSearchResponse {
-    return response.type === 'code';
+    return 'type' in response && response.type === 'code';
+}
+
+/** Verifica se a resposta é uma busca de serviços NBS */
+export function isNbsSearchResponse(
+    response: SearchResponse
+): response is NbsSearchResponse {
+    if (!response || typeof response !== 'object' || !('total' in response) || !('results' in response)) {
+        return false;
+    }
+
+    if (!Array.isArray(response.results)) {
+        return false;
+    }
+
+    return response.results.length === 0 || 'code_clean' in response.results[0];
+}
+
+/** Verifica se a resposta é uma busca de notas NEBS */
+export function isNebsSearchResponse(
+    response: SearchResponse
+): response is NebsSearchResponse {
+    if (!response || typeof response !== 'object' || !('total' in response) || !('results' in response)) {
+        return false;
+    }
+
+    if (!Array.isArray(response.results)) {
+        return false;
+    }
+
+    return response.results.length === 0 || 'excerpt' in response.results[0];
 }
 
 /** Verifica se a resposta é um erro da API */
