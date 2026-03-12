@@ -164,7 +164,7 @@ describe('useComments behavior', () => {
     try {
       Object.defineProperty(globalThis, 'location', {
         configurable: true,
-        value: makeLanHostLocation('192.168.0.23'),
+        value: makeLanHostLocation('lan-host.test'),
       });
 
       const useComments = await loadUseComments();
@@ -332,7 +332,7 @@ describe('useComments behavior', () => {
     try {
       Object.defineProperty(globalThis, 'location', {
         configurable: true,
-        value: makeLanHostLocation('192.168.0.11'),
+        value: makeLanHostLocation('dev-lan-host.test'),
       });
 
       const useComments = await loadUseComments();

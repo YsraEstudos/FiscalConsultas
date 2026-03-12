@@ -86,8 +86,8 @@ export function makeAxiosError(status: number, detail?: string) {
   });
 }
 
-export function makeLanHostLocation(ipAddress: string): URL {
-  return new URL(`https://${ipAddress}/`);
+export function makeLanHostLocation(hostname: string): URL {
+  return new URL(`https://${hostname}/`);
 }
 
 export async function loadUseComments() {
