@@ -74,7 +74,7 @@ describe('CommentPanel', () => {
 
   it('renders fallback avatars and hides owner actions for non-owners', () => {
     render(
-        <CommentPanel
+      <CommentPanel
         pending={null}
         comments={[makeComment({ userImageUrl: unsafeJavascriptUrl, userId: 'another-user' })]}
         onSubmit={vi.fn().mockResolvedValue(true)}

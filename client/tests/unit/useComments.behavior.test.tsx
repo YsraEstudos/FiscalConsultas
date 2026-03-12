@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -242,7 +242,9 @@ describe('useComments behavior', () => {
       await result.current.removeComment('xyz');
     });
 
-    expect(refs.toastErrorMock).toHaveBeenCalledWith('ID de comentário inválido');
+    expect(refs.toastErrorMock).toHaveBeenCalledTimes(2);
+    expect(refs.toastErrorMock).toHaveBeenNthCalledWith(1, 'ID de comentário inválido');
+    expect(refs.toastErrorMock).toHaveBeenNthCalledWith(2, 'ID de comentário inválido');
     expect(refs.updateCommentMock).not.toHaveBeenCalled();
     expect(refs.deleteCommentMock).not.toHaveBeenCalled();
   });

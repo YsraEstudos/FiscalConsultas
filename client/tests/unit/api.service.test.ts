@@ -33,6 +33,8 @@ const mockAxios = vi.hoisted(() => {
       },
     },
     get: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
     request: vi.fn(),
   };
 
@@ -45,6 +47,8 @@ const mockAxios = vi.hoisted(() => {
     handlers.responseRejected = undefined;
     create.mockClear();
     instance.get.mockReset();
+    instance.patch.mockReset();
+    instance.delete.mockReset();
     instance.request.mockReset();
     instance.interceptors.request.use.mockClear();
     instance.interceptors.response.use.mockClear();
@@ -121,6 +125,25 @@ describe('api service', () => {
     expect(warnSpy).toHaveBeenCalled();
     expect(headers.set).not.toHaveBeenCalled();
     apiModule.unregisterClerkTokenGetter();
+  });
+
+  it('warns in dev when no auth token is available after the fallback refresh attempt', async () => {
+    const apiModule = await loadApiModule();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const getter = vi.fn().mockResolvedValue(null);
+    const headers = { set: vi.fn() };
+
+    apiModule.registerClerkTokenGetter(getter);
+
+    await mockAxios.handlers.requestFulfilled?.({ url: '/profile/me', headers });
+
+    expect(getter).toHaveBeenCalledTimes(2);
+    expect(getter).toHaveBeenNthCalledWith(2, expect.objectContaining({ skipCache: true }));
+    expect(headers.set).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith('[API] No Clerk token available for authenticated request:', '/profile/me');
+
+    apiModule.unregisterClerkTokenGetter();
+    warnSpy.mockRestore();
   });
 
   it('propagates request and response interceptor errors and logs 401', async () => {
@@ -233,6 +256,36 @@ describe('api service', () => {
         refreshMode: 'not_applicable',
       }),
     );
+    warnSpy.mockRestore();
+  });
+
+  it('logs refresh failures and still rejects the original 401 response', async () => {
+    const apiModule = await loadApiModule();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const getter = vi.fn().mockRejectedValue(new Error('refresh exploded'));
+    const err = {
+      response: { status: 401, data: { detail: 'Token inválido ou expirado' } },
+      config: { url: '/comments/anchors', headers: { set: vi.fn() } },
+    } as any;
+
+    apiModule.registerClerkTokenGetter(getter);
+
+    await expect(mockAxios.handlers.responseRejected?.(err)).rejects.toBe(err);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[API] Failed to refresh token after 401:',
+      expect.any(Error),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[API] 401 Unauthorized - Token missing, expired, or invalid',
+      expect.objectContaining({
+        path: '/comments/anchors',
+        detail: 'Token inválido ou expirado',
+        refreshAttempt: 'attempted',
+        refreshMode: 'fresh',
+      }),
+    );
+
     warnSpy.mockRestore();
   });
 
@@ -378,5 +431,29 @@ describe('api service', () => {
     expect(mockAxios.instance.get).toHaveBeenNthCalledWith(2, '/status');
     expect(mockAxios.instance.get).toHaveBeenNthCalledWith(3, '/auth/me');
     expect(mockAxios.instance.get).toHaveBeenNthCalledWith(4, '/nesh/chapter/85/notes');
+  });
+
+  it('delegates the profile endpoints', async () => {
+    const apiModule = await loadApiModule();
+    mockAxios.instance.get
+      .mockResolvedValueOnce({ data: { id: 'me' } })
+      .mockResolvedValueOnce({ data: { items: [], total: 0 } })
+      .mockResolvedValueOnce({ data: { id: 'user-card' } });
+    mockAxios.instance.patch.mockResolvedValueOnce({ data: { bio: 'Atualizada' } });
+    mockAxios.instance.delete.mockResolvedValueOnce({ data: { success: true } });
+
+    await expect(apiModule.getMyProfile()).resolves.toEqual({ id: 'me' });
+    await expect(apiModule.updateMyProfile({ bio: 'Atualizada' })).resolves.toEqual({ bio: 'Atualizada' });
+    await expect(apiModule.getMyContributions({ page: 2, page_size: 5, search: 'ncm' })).resolves.toEqual({ items: [], total: 0 });
+    await expect(apiModule.getUserCard('user/42')).resolves.toEqual({ id: 'user-card' });
+    await expect(apiModule.deleteMyAccount()).resolves.toEqual({ success: true });
+
+    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(1, '/profile/me');
+    expect(mockAxios.instance.patch).toHaveBeenCalledWith('/profile/me', { bio: 'Atualizada' });
+    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(2, '/profile/me/contributions', {
+      params: { page: 2, page_size: 5, search: 'ncm' },
+    });
+    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(3, '/profile/user%2F42/card');
+    expect(mockAxios.instance.delete).toHaveBeenCalledWith('/profile/me');
   });
 });

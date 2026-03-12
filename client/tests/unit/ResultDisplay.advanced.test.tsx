@@ -9,6 +9,36 @@ const hoisted = vi.hoisted(() => ({
   sidebarPositionRef: { value: 'right' as 'left' | 'right' },
   robustCallsRef: { value: [] as any[] },
   debugWarnMock: vi.fn(),
+  toastErrorMock: vi.fn(),
+  authStateRef: {
+    value: {
+      userName: 'Teste',
+      userImageUrl: null as string | null,
+      isSignedIn: true,
+      isLoading: false,
+      userId: 'user_test',
+      userEmail: 'allowed@example.com',
+    },
+  },
+  commentsStateRef: {
+    value: {
+      comments: [] as any[],
+      addComment: vi.fn(),
+      editComment: vi.fn(),
+      removeComment: vi.fn(),
+      commentedAnchors: [] as string[],
+      loadCommentedAnchors: vi.fn().mockResolvedValue([]),
+      loadComments: vi.fn().mockResolvedValue(undefined),
+      resetFetchedAnchors: vi.fn(),
+    },
+  },
+  selectionStateRef: {
+    value: {
+      selection: null as any,
+      clearSelection: vi.fn(),
+      onPopoverMouseDown: vi.fn(),
+    },
+  },
 }));
 
 vi.mock('../../src/context/SettingsContext', () => ({
@@ -24,43 +54,108 @@ vi.mock('../../src/hooks/useRobustScroll', () => ({
 }));
 
 vi.mock('../../src/context/AuthContext', () => ({
-  useAuth: () => ({
-    userName: 'Teste',
-    userImageUrl: null,
-  }),
+  useAuth: () => hoisted.authStateRef.value,
 }));
 
 vi.mock('../../src/hooks/useComments', () => ({
-  useComments: () => ({
-    comments: [],
-    addComment: vi.fn(),
-    editComment: vi.fn(),
-    removeComment: vi.fn(),
-    commentedAnchors: [],
-    loadCommentedAnchors: vi.fn().mockResolvedValue([]),
-    loadComments: vi.fn().mockResolvedValue(undefined),
-    resetFetchedAnchors: vi.fn(),
-  }),
+  useComments: () => hoisted.commentsStateRef.value,
 }));
 
 vi.mock('../../src/hooks/useTextSelection', () => ({
-  useTextSelection: () => ({
-    selection: null,
-    clearSelection: vi.fn(),
-    onPopoverMouseDown: vi.fn(),
-  }),
+  useTextSelection: () => hoisted.selectionStateRef.value,
 }));
 
 vi.mock('../../src/components/HighlightPopover', () => ({
-  HighlightPopover: () => null,
+  HighlightPopover: ({ selection, onRequestComment, onPopoverMouseDown }: any) => (
+    <div data-testid="highlight-popover">
+      <span data-testid="highlight-selection">{selection?.text ?? ''}</span>
+      <button data-testid="highlight-request-comment" onMouseDown={onPopoverMouseDown} onClick={onRequestComment}>
+        request-comment
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock('../../src/components/CommentPanel', () => ({
-  CommentPanel: () => null,
+  CommentPanel: ({ pending, comments, currentUserId, onSubmit, onDismiss, onEdit, onDelete }: any) => (
+    <div data-testid="comment-panel" data-user-id={currentUserId ?? ''}>
+      <span data-testid="comment-panel-pending">{pending?.anchorKey ?? ''}</span>
+      <span data-testid="comment-panel-count">{comments.length}</span>
+      <button
+        data-testid="comment-panel-submit"
+        onClick={async () => {
+          await onSubmit('Comentário enviado', false);
+        }}
+      >
+        submit-comment
+      </button>
+      <button data-testid="comment-panel-dismiss" onClick={onDismiss}>
+        dismiss-comment
+      </button>
+      <button
+        data-testid="comment-panel-edit"
+        onClick={async () => {
+          await onEdit?.('comment-1', 'Editado');
+        }}
+      >
+        edit-comment
+      </button>
+      <button
+        data-testid="comment-panel-delete"
+        onClick={async () => {
+          await onDelete?.('comment-1');
+        }}
+      >
+        delete-comment
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock('../../src/components/CommentDrawer', () => ({
-  CommentDrawer: () => null,
+  CommentDrawer: ({ open, pending, comments, onClose, onSubmit, onDismiss, onEdit, onDelete, currentUserId }: any) => (
+    <div data-testid="comment-drawer" data-open={String(Boolean(open))} data-user-id={currentUserId ?? ''}>
+      <span data-testid="comment-drawer-pending">{pending?.anchorKey ?? ''}</span>
+      <span data-testid="comment-drawer-count">{comments.length}</span>
+      <button data-testid="comment-drawer-close" onClick={onClose}>
+        close-drawer
+      </button>
+      <button
+        data-testid="comment-drawer-submit"
+        onClick={async () => {
+          await onSubmit('Comentário drawer', true);
+        }}
+      >
+        submit-drawer
+      </button>
+      <button data-testid="comment-drawer-dismiss" onClick={onDismiss}>
+        dismiss-drawer
+      </button>
+      <button
+        data-testid="comment-drawer-edit"
+        onClick={async () => {
+          await onEdit?.('comment-1', 'Editado drawer');
+        }}
+      >
+        edit-drawer
+      </button>
+      <button
+        data-testid="comment-drawer-delete"
+        onClick={async () => {
+          await onDelete?.('comment-1');
+        }}
+      >
+        delete-drawer
+      </button>
+    </div>
+  ),
+}));
+
+vi.mock('react-hot-toast', () => ({
+  default: {
+    error: hoisted.toastErrorMock,
+    success: vi.fn(),
+  },
 }));
 
 vi.mock('../../src/utils/debug', () => ({
@@ -112,8 +207,33 @@ describe('ResultDisplay advanced behavior', () => {
   beforeEach(() => {
     hoisted.robustCallsRef.value = [];
     hoisted.debugWarnMock.mockReset();
+    hoisted.toastErrorMock.mockReset();
     hoisted.sidebarPositionRef.value = 'right';
+    hoisted.authStateRef.value = {
+      userName: 'Teste',
+      userImageUrl: null,
+      isSignedIn: true,
+      isLoading: false,
+      userId: 'user_test',
+      userEmail: 'allowed@example.com',
+    };
+    hoisted.commentsStateRef.value = {
+      comments: [],
+      addComment: vi.fn().mockResolvedValue(true),
+      editComment: vi.fn().mockResolvedValue(undefined),
+      removeComment: vi.fn().mockResolvedValue(undefined),
+      commentedAnchors: [],
+      loadCommentedAnchors: vi.fn().mockResolvedValue([]),
+      loadComments: vi.fn().mockResolvedValue(undefined),
+      resetFetchedAnchors: vi.fn(),
+    };
+    hoisted.selectionStateRef.value = {
+      selection: null,
+      clearSelection: vi.fn(),
+      onPopoverMouseDown: vi.fn(),
+    };
     intersectionCallbacks = [];
+    vi.stubEnv('VITE_RESTRICTED_UI_EMAILS', 'allowed@example.com');
 
     // @ts-expect-error - test bridge
     globalThis.nesh = { smartLinkSearch: vi.fn(), openTextResultInNewTab: vi.fn() };
@@ -150,6 +270,21 @@ describe('ResultDisplay advanced behavior', () => {
 
     // @ts-expect-error - test replacement
     globalThis.IntersectionObserver = MockIntersectionObserver;
+
+    Object.defineProperty(globalThis, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
   });
 
   afterEach(() => {
@@ -696,5 +831,322 @@ describe('ResultDisplay advanced behavior', () => {
 
     parseSpy.mockRestore();
     errorSpy.mockRestore();
+  });
+
+  it('blocks comment toggling while auth is still loading', async () => {
+    hoisted.authStateRef.value = {
+      ...hoisted.authStateRef.value,
+      isLoading: true,
+    };
+
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          markdown: '<h3 id="pos-85-17">Item 8517</h3>',
+          resultados: { '85': { capitulo: '85', posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17' }] } },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-comments-auth-loading"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Ativar comentários' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ativar comentários' }));
+    expect(hoisted.toastErrorMock).toHaveBeenCalledWith('Aguarde a autenticação carregar e tente novamente.');
+  });
+
+  it('blocks comment toggling for signed-out users and LAN development hosts', async () => {
+    const originalLocation = globalThis.location;
+    try {
+      hoisted.authStateRef.value = {
+        ...hoisted.authStateRef.value,
+        isSignedIn: false,
+      };
+
+      const { rerender } = render(
+        <ResultDisplay
+          data={{
+            type: 'code',
+            markdown: '<h3 id="pos-85-17">Item 8517</h3>',
+            resultados: { '85': { capitulo: '85', posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17' }] } },
+          }}
+          mobileMenuOpen={false}
+          onCloseMobileMenu={vi.fn()}
+          isActive={true}
+          tabId="tab-comments-auth"
+          isNewSearch={false}
+          onConsumeNewSearch={vi.fn()}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Ativar comentários' })).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Ativar comentários' }));
+      expect(hoisted.toastErrorMock).toHaveBeenCalledWith('Faça login para usar comentários.');
+
+      hoisted.toastErrorMock.mockReset();
+      hoisted.authStateRef.value = {
+        ...hoisted.authStateRef.value,
+        isSignedIn: true,
+      };
+      Object.defineProperty(globalThis, 'location', {
+        configurable: true,
+        // Hostname-only stub for branch coverage; no real network request is made.
+        value: new URL('https://192.168.0.25/'),
+      });
+
+      rerender(
+        <ResultDisplay
+          data={{
+            type: 'code',
+            markdown: '<h3 id="pos-85-17">Item 8517</h3>',
+            resultados: { '85': { capitulo: '85', posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17' }] } },
+          }}
+          mobileMenuOpen={false}
+          onCloseMobileMenu={vi.fn()}
+          isActive={true}
+          tabId="tab-comments-auth"
+          isNewSearch={false}
+          onConsumeNewSearch={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Ativar comentários' }));
+      expect(hoisted.toastErrorMock).toHaveBeenCalledWith(
+        'Comentários exigem token Clerk válido. Em desenvolvimento, use http://localhost:5173.',
+      );
+    } finally {
+      Object.defineProperty(globalThis, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
+  });
+
+  it('loads commented anchors, applies DOM markers, and opens the drawer when a commented anchor is clicked on narrow screens', async () => {
+    hoisted.commentsStateRef.value = {
+      ...hoisted.commentsStateRef.value,
+      comments: [{ id: 'comment-1', body: 'Já existe' }],
+      commentedAnchors: ['pos-85-17'],
+    };
+    globalThis.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(max-width: 1280px)',
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as any;
+
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          markdown: '<h3 id="pos-85-17">Item 8517</h3><p>Conteúdo com comentário</p>',
+          resultados: {
+            '85': {
+              capitulo: '85',
+              posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-comments-markers"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Ativar comentários' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ativar comentários' }));
+
+    await waitFor(() => {
+      expect(hoisted.commentsStateRef.value.loadCommentedAnchors).toHaveBeenCalledTimes(1);
+      expect(document.getElementById('pos-85-17')?.classList.contains('has-comment')).toBe(true);
+    });
+
+    fireEvent.click(document.getElementById('pos-85-17') as HTMLElement);
+
+    await waitFor(() => {
+      expect(hoisted.commentsStateRef.value.loadComments).toHaveBeenCalledWith('pos-85-17', expect.any(Number));
+      expect(screen.getByTestId('comment-drawer')).toHaveAttribute('data-open', 'true');
+      expect(screen.getByTestId('comment-panel-count')).toHaveTextContent('1');
+    });
+  });
+
+  it('reports invalid text selections and opens a pending comment for valid selections', async () => {
+    globalThis.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(max-width: 1280px)',
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as any;
+
+    hoisted.selectionStateRef.value = {
+      selection: {
+        text: 'Texto sem anchor',
+        anchorKey: '',
+        rect: { top: 120 },
+      },
+      clearSelection: vi.fn(),
+      onPopoverMouseDown: vi.fn(),
+    };
+
+    const { rerender } = render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          markdown: '<h3 id="pos-85-17">Item 8517</h3><p>Texto selecionável</p>',
+          resultados: {
+            '85': {
+              capitulo: '85',
+              posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-selection"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ativar comentários' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('highlight-popover')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('highlight-request-comment'));
+    expect(hoisted.toastErrorMock).toHaveBeenCalledWith('Selecione texto dentro de um elemento NCM para comentar.');
+
+    hoisted.toastErrorMock.mockReset();
+    hoisted.selectionStateRef.value = {
+      selection: {
+        text: 'Texto com anchor',
+        anchorKey: 'pos-85-17',
+        rect: { top: 150 },
+      },
+      clearSelection: vi.fn(),
+      onPopoverMouseDown: vi.fn(),
+    };
+
+    rerender(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          markdown: '<h3 id="pos-85-17">Item 8517</h3><p>Texto selecionável</p>',
+          resultados: {
+            '85': {
+              capitulo: '85',
+              posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-selection"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('highlight-request-comment'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('comment-panel-pending')).toHaveTextContent('pos-85-17');
+      expect(screen.getByTestId('comment-drawer')).toHaveAttribute('data-open', 'true');
+    });
+    expect(hoisted.selectionStateRef.value.clearSelection).toHaveBeenCalled();
+  });
+
+  it('submits, dismisses, edits, and deletes comments through the mocked comment surfaces', async () => {
+    hoisted.selectionStateRef.value = {
+      selection: {
+        text: 'Texto com anchor',
+        anchorKey: 'pos-85-17',
+        rect: { top: 150 },
+      },
+      clearSelection: vi.fn(),
+      onPopoverMouseDown: vi.fn(),
+    };
+
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          markdown: '<h3 id="pos-85-17">Item 8517</h3><p>Texto selecionável</p>',
+          resultados: {
+            '85': {
+              capitulo: '85',
+              posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-comment-actions"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ativar comentários' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('highlight-popover')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('highlight-request-comment'));
+    await waitFor(() => {
+      expect(screen.getByTestId('comment-panel-pending')).toHaveTextContent('pos-85-17');
+    });
+
+    fireEvent.click(screen.getByTestId('comment-panel-submit'));
+    await waitFor(() => {
+      expect(hoisted.commentsStateRef.value.addComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          anchorKey: 'pos-85-17',
+          selectedText: 'Texto com anchor',
+        }),
+        'Comentário enviado',
+        false,
+        'Teste',
+        null,
+      );
+      expect(screen.getByTestId('comment-panel-pending')).toHaveTextContent('');
+    });
+
+    fireEvent.click(screen.getByTestId('comment-panel-edit'));
+    expect(hoisted.commentsStateRef.value.editComment).toHaveBeenCalledWith('comment-1', 'Editado');
+
+    fireEvent.click(screen.getByTestId('comment-panel-delete'));
+    expect(hoisted.commentsStateRef.value.removeComment).toHaveBeenCalledWith('comment-1');
+
+    fireEvent.click(screen.getByTestId('comment-panel-dismiss'));
+    expect(screen.getByTestId('comment-panel-pending')).toHaveTextContent('');
   });
 });

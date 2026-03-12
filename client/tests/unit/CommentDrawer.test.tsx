@@ -92,7 +92,7 @@ describe('CommentDrawer', () => {
 
   it('renders fallback avatars and hides owner actions for non-owners', () => {
     render(
-        <CommentDrawer
+      <CommentDrawer
         open={true}
         onClose={vi.fn()}
         pending={null}

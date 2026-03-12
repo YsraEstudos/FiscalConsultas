@@ -65,15 +65,19 @@ export function makePendingApiComment(overrides: Partial<CommentOut> = {}): Comm
 export function makeCommentCreatePayload(
   overrides: Partial<CommentCreatePayload> = {},
 ): CommentCreatePayload {
-  return {
+  const { user_image_url, ...restOverrides } = overrides;
+  const payload: CommentCreatePayload = {
     anchor_key: 'pos-84-13',
     selected_text: 'Motores elétricos',
     body: 'Novo comentário',
     is_private: true,
     user_name: 'Alice',
-    user_image_url: undefined,
-    ...overrides,
+    ...restOverrides,
   };
+
+  return 'user_image_url' in overrides
+    ? { ...payload, user_image_url }
+    : payload;
 }
 
 export function makeAxiosError(status: number, detail?: string) {
