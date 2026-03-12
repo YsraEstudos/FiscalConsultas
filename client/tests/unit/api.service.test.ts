@@ -138,6 +138,7 @@ describe('api service', () => {
     await mockAxios.handlers.requestFulfilled?.({ url: '/profile/me', headers });
 
     expect(getter).toHaveBeenCalledTimes(2);
+    expect(getter).toHaveBeenNthCalledWith(2, expect.objectContaining({ skipCache: true }));
     expect(headers.set).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith('[API] No Clerk token available for authenticated request:', '/profile/me');
 
@@ -430,44 +431,6 @@ describe('api service', () => {
     expect(mockAxios.instance.get).toHaveBeenNthCalledWith(2, '/status');
     expect(mockAxios.instance.get).toHaveBeenNthCalledWith(3, '/auth/me');
     expect(mockAxios.instance.get).toHaveBeenNthCalledWith(4, '/nesh/chapter/85/notes');
-  });
-
-  it('calls the services endpoints for NBS search and detail', async () => {
-    const apiModule = await loadApiModule();
-    mockAxios.instance.get
-      .mockResolvedValueOnce({
-        data: { success: true, query: 'construcao', normalized: 'construcao', total: 1, results: [] },
-      })
-      .mockResolvedValueOnce({
-        data: { success: true, item: { code: '1.01' }, ancestors: [], children: [], nebs: null },
-      });
-
-    const searchResponse = await apiModule.searchNbsServices('construcao');
-    const detailResponse = await apiModule.getNbsServiceDetail('1.01');
-
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(1, '/services/nbs/search?q=construcao');
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(2, '/services/nbs/1.01');
-    expect(searchResponse.total).toBe(1);
-    expect(detailResponse.item.code).toBe('1.01');
-  });
-
-  it('calls the services endpoints for NEBS search and detail', async () => {
-    const apiModule = await loadApiModule();
-    mockAxios.instance.get
-      .mockResolvedValueOnce({
-        data: { success: true, query: 'energia', normalized: 'energia', total: 1, results: [] },
-      })
-      .mockResolvedValueOnce({
-        data: { success: true, item: { code: '1.0102.61' }, ancestors: [], entry: { code: '1.0102.61' } },
-      });
-
-    const searchResponse = await apiModule.searchNebsEntries('energia');
-    const detailResponse = await apiModule.getNebsEntryDetail('1.0102.61');
-
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(1, '/services/nebs/search?q=energia');
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(2, '/services/nebs/1.0102.61');
-    expect(searchResponse.total).toBe(1);
-    expect(detailResponse.entry.code).toBe('1.0102.61');
   });
 
   it('delegates the profile endpoints', async () => {

@@ -81,16 +81,31 @@ vi.mock('../../src/components/CommentPanel', () => ({
     <div data-testid="comment-panel" data-user-id={currentUserId ?? ''}>
       <span data-testid="comment-panel-pending">{pending?.anchorKey ?? ''}</span>
       <span data-testid="comment-panel-count">{comments.length}</span>
-      <button data-testid="comment-panel-submit" onClick={() => void onSubmit('Comentário enviado', false)}>
+      <button
+        data-testid="comment-panel-submit"
+        onClick={async () => {
+          await onSubmit('Comentário enviado', false);
+        }}
+      >
         submit-comment
       </button>
       <button data-testid="comment-panel-dismiss" onClick={onDismiss}>
         dismiss-comment
       </button>
-      <button data-testid="comment-panel-edit" onClick={() => void onEdit('comment-1', 'Editado')}>
+      <button
+        data-testid="comment-panel-edit"
+        onClick={async () => {
+          await onEdit?.('comment-1', 'Editado');
+        }}
+      >
         edit-comment
       </button>
-      <button data-testid="comment-panel-delete" onClick={() => void onDelete('comment-1')}>
+      <button
+        data-testid="comment-panel-delete"
+        onClick={async () => {
+          await onDelete?.('comment-1');
+        }}
+      >
         delete-comment
       </button>
     </div>
@@ -98,15 +113,39 @@ vi.mock('../../src/components/CommentPanel', () => ({
 }));
 
 vi.mock('../../src/components/CommentDrawer', () => ({
-  CommentDrawer: ({ open, pending, comments, onClose, onSubmit }: any) => (
-    <div data-testid="comment-drawer" data-open={String(Boolean(open))}>
+  CommentDrawer: ({ open, pending, comments, onClose, onSubmit, onDismiss, onEdit, onDelete, currentUserId }: any) => (
+    <div data-testid="comment-drawer" data-open={String(Boolean(open))} data-user-id={currentUserId ?? ''}>
       <span data-testid="comment-drawer-pending">{pending?.anchorKey ?? ''}</span>
       <span data-testid="comment-drawer-count">{comments.length}</span>
       <button data-testid="comment-drawer-close" onClick={onClose}>
         close-drawer
       </button>
-      <button data-testid="comment-drawer-submit" onClick={() => void onSubmit('Comentário drawer', true)}>
+      <button
+        data-testid="comment-drawer-submit"
+        onClick={async () => {
+          await onSubmit('Comentário drawer', true);
+        }}
+      >
         submit-drawer
+      </button>
+      <button data-testid="comment-drawer-dismiss" onClick={onDismiss}>
+        dismiss-drawer
+      </button>
+      <button
+        data-testid="comment-drawer-edit"
+        onClick={async () => {
+          await onEdit?.('comment-1', 'Editado drawer');
+        }}
+      >
+        edit-drawer
+      </button>
+      <button
+        data-testid="comment-drawer-delete"
+        onClick={async () => {
+          await onDelete?.('comment-1');
+        }}
+      >
+        delete-drawer
       </button>
     </div>
   ),
@@ -232,7 +271,7 @@ describe('ResultDisplay advanced behavior', () => {
     // @ts-expect-error - test replacement
     globalThis.IntersectionObserver = MockIntersectionObserver;
 
-    Object.defineProperty(window, 'matchMedia', {
+    Object.defineProperty(globalThis, 'matchMedia', {
       writable: true,
       configurable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -825,7 +864,7 @@ describe('ResultDisplay advanced behavior', () => {
   });
 
   it('blocks comment toggling for signed-out users and LAN development hosts', async () => {
-    const originalLocation = window.location;
+    const originalLocation = globalThis.location;
     try {
       hoisted.authStateRef.value = {
         ...hoisted.authStateRef.value,
@@ -860,9 +899,10 @@ describe('ResultDisplay advanced behavior', () => {
         ...hoisted.authStateRef.value,
         isSignedIn: true,
       };
-      Object.defineProperty(window, 'location', {
+      Object.defineProperty(globalThis, 'location', {
         configurable: true,
-        value: new URL('http://192.168.0.25/'),
+        // Hostname-only stub for branch coverage; no real network request is made.
+        value: new URL('https://192.168.0.25/'),
       });
 
       rerender(
@@ -886,7 +926,7 @@ describe('ResultDisplay advanced behavior', () => {
         'Comentários exigem token Clerk válido. Em desenvolvimento, use http://localhost:5173.',
       );
     } finally {
-      Object.defineProperty(window, 'location', {
+      Object.defineProperty(globalThis, 'location', {
         configurable: true,
         value: originalLocation,
       });
@@ -899,7 +939,7 @@ describe('ResultDisplay advanced behavior', () => {
       comments: [{ id: 'comment-1', body: 'Já existe' }],
       commentedAnchors: ['pos-85-17'],
     };
-    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    globalThis.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === '(max-width: 1280px)',
       media: query,
       onchange: null,
@@ -952,7 +992,7 @@ describe('ResultDisplay advanced behavior', () => {
   });
 
   it('reports invalid text selections and opens a pending comment for valid selections', async () => {
-    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    globalThis.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === '(max-width: 1280px)',
       media: query,
       onchange: null,

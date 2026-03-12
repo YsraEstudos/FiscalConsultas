@@ -1,21 +1,19 @@
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CommentPanel, type LocalComment } from '../../src/components/CommentPanel';
+import { CommentPanel } from '../../src/components/CommentPanel';
+import { makeLocalComment } from './commentTestUtils';
 
-function makeComment(id: string, anchorTop: number, body: string): LocalComment {
-  return {
+function makeComment(id: string, anchorTop: number, body: string) {
+  return makeLocalComment({
     id,
     anchorTop,
     anchorKey: `pos-${id}`,
     selectedText: 'trecho selecionado',
     body,
-    isPrivate: false,
     createdAt: new Date('2026-02-26T12:00:00Z'),
     userName: 'Test User',
-    userImageUrl: null,
-    userId: 'user_test',
-  };
+  });
 }
 
 describe('CommentPanel layout behavior', () => {
