@@ -29,6 +29,8 @@ describe("useTabs", () => {
     expect(result.current.activeTab.loadedChaptersByDoc).toEqual({
       nesh: [],
       tipi: [],
+      nbs: [],
+      nebs: [],
     });
     expect(result.current.tabsById.get("tab-1")?.title).toBe("Nova busca");
   });
@@ -50,6 +52,8 @@ describe("useTabs", () => {
       {
         nesh: [],
         tipi: [],
+        nbs: [],
+        nebs: [],
       },
     );
 
@@ -103,6 +107,21 @@ describe("useTabs", () => {
     uuidSpy.mockRestore();
   });
 
+  it("avoids state updates when updateTab receives unchanged values", () => {
+    const { result } = renderHook(() => useTabs());
+    const previousTabs = result.current.tabs;
+
+    act(() => {
+      result.current.updateTab("tab-1", {
+        title: "Nova busca",
+        loading: false,
+        error: null,
+      });
+    });
+
+    expect(result.current.tabs).toBe(previousTabs);
+  });
+
   it("does not close when there is only one tab", () => {
     const { result } = renderHook(() => useTabs());
     const stopPropagation = vi.fn();
@@ -114,6 +133,29 @@ describe("useTabs", () => {
     expect(stopPropagation).toHaveBeenCalledTimes(1);
     expect(result.current.tabs).toHaveLength(1);
     expect(result.current.activeTabId).toBe("tab-1");
+  });
+
+
+  it("ignores close requests for unknown tab ids", () => {
+    const uuidSpy = mockRandomUuid("900");
+    const { result } = renderHook(() => useTabs());
+
+    act(() => {
+      result.current.createTab("tipi");
+    });
+
+    const previousTabs = result.current.tabs;
+    const stopPropagation = vi.fn();
+
+    act(() => {
+      result.current.closeTab({ stopPropagation } as any, "tab-does-not-exist");
+    });
+
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+    expect(result.current.tabs).toBe(previousTabs);
+    expect(result.current.tabs.map((tab) => tab.id)).toEqual(["tab-1", "tab-900"]);
+    expect(result.current.activeTabId).toBe("tab-900");
+    uuidSpy.mockRestore();
   });
 
   it("closes non-active tab without changing active selection", () => {
@@ -180,6 +222,25 @@ describe("useTabs", () => {
     uuidSpy.mockRestore();
   });
 
+
+  it("closes the latest active tab correctly even with batched updates", () => {
+    const uuidSpy = mockRandomUuid("801");
+    const { result } = renderHook(() => useTabs());
+
+    act(() => {
+      result.current.createTab("tipi");
+    });
+
+    act(() => {
+      result.current.switchTab("tab-1");
+      result.current.closeTab({ stopPropagation: vi.fn() } as any, "tab-1");
+    });
+
+    expect(result.current.tabs.map((tab) => tab.id)).toEqual(["tab-801"]);
+    expect(result.current.activeTabId).toBe("tab-801");
+    uuidSpy.mockRestore();
+  });
+
   it("reorders tabs within bounds and ignores invalid indices", () => {
     const uuidSpy = mockRandomUuid("701", "702");
     const { result } = renderHook(() => useTabs());
@@ -216,5 +277,18 @@ describe("useTabs", () => {
       "tab-702",
     ]);
     uuidSpy.mockRestore();
+  });
+
+  it("keeps active tab when switchTab receives the current tab id", () => {
+    const { result } = renderHook(() => useTabs());
+
+    const beforeSwitch = result.current.activeTab;
+
+    act(() => {
+      result.current.switchTab("tab-1");
+    });
+
+    expect(result.current.activeTabId).toBe("tab-1");
+    expect(result.current.activeTab).toBe(beforeSwitch);
   });
 });

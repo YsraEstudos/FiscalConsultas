@@ -15,6 +15,7 @@ const modalManagerProps = {
         tutorial: false,
         stats: false,
         comparator: false,
+        services: false,
         moderate: false,
     },
     onClose: {
@@ -22,6 +23,7 @@ const modalManagerProps = {
         tutorial: vi.fn(),
         stats: vi.fn(),
         comparator: vi.fn(),
+        services: vi.fn(),
         moderate: vi.fn(),
     },
     currentDoc: 'nesh' as const,
@@ -38,28 +40,42 @@ vi.mock('../../src/context/AuthContext', () => ({
     useAuth: () => authState,
 }));
 
+vi.mock('../../src/utils/featureAccess', () => ({
+    canAccessRestrictedUi: (email: string | null | undefined) => (email || '').trim().toLowerCase() === 'allowed-test@example.com',
+}));
+
 vi.mock('../../src/components/AIChat', () => ({
     AIChat: () => <div data-testid="ai-chat-trigger" title="Abrir Chat IA">AI Chat</div>
 }));
 
 vi.mock('../../src/components/SettingsModal', () => ({
-    SettingsModal: () => null
+    SettingsModal: ({ isOpen }: { isOpen: boolean }) => <div data-testid="settings-modal" data-open={String(isOpen)} />
 }));
 
 vi.mock('../../src/components/TutorialModal', () => ({
-    TutorialModal: () => null
+    TutorialModal: ({ isOpen }: { isOpen: boolean }) => <div data-testid="tutorial-modal" data-open={String(isOpen)} />
 }));
 
 vi.mock('../../src/components/StatsModal', () => ({
-    StatsModal: () => null
+    StatsModal: ({ isOpen }: { isOpen: boolean }) => <div data-testid="stats-modal" data-open={String(isOpen)} />
 }));
 
 vi.mock('../../src/components/ComparatorModal', () => ({
-    ComparatorModal: () => null
+    ComparatorModal: ({ isOpen, defaultDoc }: { isOpen: boolean; defaultDoc: string }) => (
+        <div data-testid="comparator-modal" data-open={String(isOpen)} data-doc={defaultDoc} />
+    )
+}));
+
+vi.mock('../../src/components/ServicesModal', () => ({
+    ServicesModal: ({ isOpen }: { isOpen: boolean }) => (
+        <div data-testid="services-modal" data-open={String(isOpen)} />
+    )
 }));
 
 vi.mock('../../src/components/CrossNavContextMenu', () => ({
-    CrossNavContextMenu: () => null
+    CrossNavContextMenu: ({ currentDoc }: { currentDoc: string }) => (
+        <div data-testid="cross-nav-context" data-doc={currentDoc} />
+    )
 }));
 
 vi.mock('../../src/components/AdminCommentModal', () => ({
@@ -68,7 +84,6 @@ vi.mock('../../src/components/AdminCommentModal', () => ({
 
 describe('ModalManager', () => {
     beforeEach(() => {
-        vi.stubEnv('VITE_RESTRICTED_UI_EMAILS', 'israelseja2@gmail.com');
         authState.isSignedIn = true;
         authState.userEmail = 'blocked@example.com';
         authState.isAdmin = false;
@@ -83,12 +98,21 @@ describe('ModalManager', () => {
     });
 
     it('shows AI chat for the allowed email', async () => {
-        authState.userEmail = 'israelseja2@gmail.com';
+        authState.userEmail = 'allowed-test@example.com';
 
         renderModalManager();
 
         expect(await screen.findByTestId('ai-chat-trigger')).toBeInTheDocument();
         expect(await screen.findByTitle('Abrir Chat IA')).toBeInTheDocument();
+    });
+
+    it('keeps AI chat hidden when the user is signed out even with an allowed email', () => {
+        authState.isSignedIn = false;
+        authState.userEmail = 'allowed-test@example.com';
+
+        renderModalManager();
+
+        expect(screen.queryByTestId('ai-chat-trigger')).not.toBeInTheDocument();
     });
 
     it('keeps moderation modal hidden for non-admin users even when requested', () => {
@@ -113,5 +137,30 @@ describe('ModalManager', () => {
         );
 
         expect(await screen.findByTestId('admin-comment-modal')).toBeInTheDocument();
+    });
+
+    it('passes modal open state and current document to the lazy modal children', async () => {
+        render(
+            <ModalManager
+                {...modalManagerProps}
+                modals={{
+                    ...modalManagerProps.modals,
+                    settings: true,
+                    tutorial: true,
+                    stats: true,
+                    comparator: true,
+                    services: true,
+                }}
+                currentDoc="tipi"
+            />
+        );
+
+        expect(await screen.findByTestId('settings-modal')).toHaveAttribute('data-open', 'true');
+        expect(await screen.findByTestId('tutorial-modal')).toHaveAttribute('data-open', 'true');
+        expect(await screen.findByTestId('stats-modal')).toHaveAttribute('data-open', 'true');
+        expect(await screen.findByTestId('comparator-modal')).toHaveAttribute('data-open', 'true');
+        expect(await screen.findByTestId('comparator-modal')).toHaveAttribute('data-doc', 'tipi');
+        expect(await screen.findByTestId('services-modal')).toHaveAttribute('data-open', 'true');
+        expect(await screen.findByTestId('cross-nav-context')).toHaveAttribute('data-doc', 'tipi');
     });
 });

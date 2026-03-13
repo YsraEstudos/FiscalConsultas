@@ -155,12 +155,16 @@ describe('useSearch Hook', () => {
         expect(updateTab.mock.calls[1]).toEqual([
             'tab-1',
             expect.objectContaining({
+                content: '<h3 id="pos-73-22">73.22</h3>',
                 loading: false,
                 isNewSearch: true,
+                isContentReady: false,
                 results: expect.objectContaining({ query: '7308' }),
                 loadedChaptersByDoc: {
                     nesh: expect.arrayContaining(['84', '73']),
-                    tipi: []
+                    tipi: [],
+                    nbs: [],
+                    nebs: []
                 }
             })
         ]);

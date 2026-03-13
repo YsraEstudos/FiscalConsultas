@@ -1,6 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { loadUseComments } from './commentTestUtils';
+
 const refs = vi.hoisted(() => ({
   createCommentMock: vi.fn(),
   fetchCommentsByAnchorMock: vi.fn(),
@@ -25,11 +27,6 @@ vi.mock('react-hot-toast', () => ({
     error: refs.toastErrorMock,
   },
 }));
-
-async function loadUseComments() {
-  vi.resetModules();
-  return (await import('../../src/hooks/useComments')).useComments;
-}
 
 describe('useComments loadCommentedAnchors', () => {
   beforeEach(() => {

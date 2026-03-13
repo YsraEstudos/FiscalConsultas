@@ -1,0 +1,621 @@
+diff --git a/client/src/components/TabsBar.tsx b/client/src/components/TabsBar.tsx
+index d841dda..2aee54c 100644
+--- a/client/src/components/TabsBar.tsx
++++ b/client/src/components/TabsBar.tsx
+@@ -12,6 +12,7 @@ interface TabsBarProps {
+ }
+ 
+ export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch, onClose, onReorder, onNewTab }: TabsBarProps) {
++    const tabsContainerRef = useRef<HTMLDivElement | null>(null);
+     const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+     const draggedTabIdRef = useRef<string | null>(null);
+ 
+@@ -22,20 +23,40 @@ export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch
+         onClose(event, tabId);
+     };
+ 
+-    // Scroll to active tab when it changes
++    // Keep the active tab visible inside the horizontal strip without nudging the page vertically.
+     useEffect(() => {
++        const tabsContainer = tabsContainerRef.current;
+         const activeTabElement = tabRefs.current.get(activeTabId);
+-        if (activeTabElement) {
+-            activeTabElement.scrollIntoView({
+-                behavior: 'smooth',
+-                block: 'nearest',
+-                inline: 'nearest'
+-            });
++        if (!tabsContainer || !activeTabElement) return;
++
++        const containerRect = tabsContainer.getBoundingClientRect();
++        const activeRect = activeTabElement.getBoundingClientRect();
++        const edgePadding = 16;
++        let nextScrollLeft = tabsContainer.scrollLeft;
++
++        if (activeRect.left < containerRect.left + edgePadding) {
++            nextScrollLeft -= (containerRect.left + edgePadding) - activeRect.left;
++        } else if (activeRect.right > containerRect.right - edgePadding) {
++            nextScrollLeft += activeRect.right - (containerRect.right - edgePadding);
++        } else {
++            return;
+         }
+-    }, [activeTabId]);
++
++        const maxScrollLeft = Math.max(0, tabsContainer.scrollWidth - tabsContainer.clientWidth);
++        const clampedScrollLeft = Math.min(Math.max(0, nextScrollLeft), maxScrollLeft);
++
++        if (Math.abs(clampedScrollLeft - tabsContainer.scrollLeft) < 1) return;
++
++        if (typeof tabsContainer.scrollTo === 'function') {
++            tabsContainer.scrollTo({ left: clampedScrollLeft, behavior: 'smooth' });
++            return;
++        }
++
++        tabsContainer.scrollLeft = clampedScrollLeft;
++    }, [activeTabId, tabs, onReorder]);
+ 
+     return (
+-        <div className={styles.tabsContainer}>
++        <div ref={tabsContainerRef} className={styles.tabsContainer}>
+             {tabs.map(tab => (
+                 <div
+                     key={tab.id}
+diff --git a/client/src/setupTests.ts b/client/src/setupTests.ts
+index e697c87..0f65dcc 100644
+--- a/client/src/setupTests.ts
++++ b/client/src/setupTests.ts
+@@ -103,6 +103,28 @@ vi.mock('@clerk/react', () => ({
+ // Mock scrollIntoView - not implemented in JSDOM
+ Element.prototype.scrollIntoView = vi.fn();
+ 
++// Mock scrollTo - used by the tabs strip to keep the active tab visible
++Element.prototype.scrollTo = vi.fn(function scrollTo(this: Element, optionsOrX?: ScrollToOptions | number, y?: number) {
++    const target = this as Element & { scrollLeft?: number; scrollTop?: number };
++
++    if (typeof optionsOrX === 'object' && optionsOrX !== null) {
++        if (typeof optionsOrX.left === 'number') {
++            target.scrollLeft = optionsOrX.left;
++        }
++        if (typeof optionsOrX.top === 'number') {
++            target.scrollTop = optionsOrX.top;
++        }
++        return;
++    }
++
++    if (typeof optionsOrX === 'number') {
++        target.scrollLeft = optionsOrX;
++    }
++    if (typeof y === 'number') {
++        target.scrollTop = y;
++    }
++});
++
+ // Mock ResizeObserver - not implemented in JSDOM
+ class MockResizeObserver {
+     observe = vi.fn();
+diff --git a/client/tests/integration/TabScrollPersistence.test.tsx b/client/tests/integration/TabScrollPersistence.test.tsx
+index 6731055..263812b 100644
+--- a/client/tests/integration/TabScrollPersistence.test.tsx
++++ b/client/tests/integration/TabScrollPersistence.test.tsx
+@@ -2,8 +2,11 @@ import React, { useState } from 'react';
+ import { render, fireEvent } from '@testing-library/react';
+ import { describe, it, expect, vi } from 'vitest';
+ import { ResultDisplay } from '../../src/components/ResultDisplay';
++import { TabsBar } from '../../src/components/TabsBar';
++import { TabPanel } from '../../src/components/Tabs/TabPanel';
+ import { SettingsProvider } from '../../src/context/SettingsContext';
+ import { AuthProvider } from '../../src/context/AuthContext';
++import type { Tab } from '../../src/hooks/useTabs';
+ 
+ type TabState = {
+     id: string;
+@@ -16,81 +19,83 @@ vi.mock('../../src/components/TextSearchResults', () => ({
+ 
+ describe('Tab scroll persistence (integration)', () => {
+     it('captures scroll before switch and restores on return', () => {
+-        const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
++        const rafSpy = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+             cb(0);
+             return 0;
+         });
+ 
+-        const TestTabs = () => {
+-            const [tabs, setTabs] = useState<TabState[]>([
+-                { id: 'tab-1', scrollTop: 0 },
+-                { id: 'tab-2', scrollTop: 0 }
+-            ]);
+-            const [activeId, setActiveId] = useState('tab-1');
+-
+-            const updateTab = (tabId: string, scrollTop: number) => {
+-                setTabs(prev => prev.map(tab => (tab.id === tabId ? { ...tab, scrollTop } : tab)));
+-            };
++        try {
++            const TestTabs = () => {
++                const [tabs, setTabs] = useState<TabState[]>([
++                    { id: 'tab-1', scrollTop: 0 },
++                    { id: 'tab-2', scrollTop: 0 }
++                ]);
++                const [activeId, setActiveId] = useState('tab-1');
+ 
+-            return (
+-                <div>
+-                    <button onClick={() => setActiveId('tab-1')}>Tab 1</button>
+-                    <button onClick={() => setActiveId('tab-2')}>Tab 2</button>
++                const updateTab = (tabId: string, scrollTop: number) => {
++                    setTabs(prev => prev.map(tab => (tab.id === tabId ? { ...tab, scrollTop } : tab)));
++                };
+ 
+-                    {tabs.map(tab => {
+-                        const isActive = tab.id === activeId;
+-                        return (
+-                            <div
+-                                key={tab.id}
+-                                data-tab-id={tab.id}
+-                                style={{ display: isActive ? 'block' : 'none', height: 300 }}
+-                            >
+-                                <ResultDisplay
+-                                    data={{ type: 'text', results: [1, 2, 3], query: 'test' }}
+-                                    mobileMenuOpen={false}
+-                                    onCloseMobileMenu={vi.fn()}
+-                                    isActive={isActive}
+-                                    tabId={tab.id}
+-                                    isNewSearch={false}
+-                                    onConsumeNewSearch={vi.fn()}
+-                                    initialScrollTop={tab.scrollTop}
+-                                    onPersistScroll={(id, top) => updateTab(id, top)}
+-                                />
+-                            </div>
+-                        );
+-                    })}
+-                </div>
+-            );
+-        };
++                return (
++                    <div>
++                        <button onClick={() => setActiveId('tab-1')}>Tab 1</button>
++                        <button onClick={() => setActiveId('tab-2')}>Tab 2</button>
+ 
+-        const { container, getByText } = render(
+-            <AuthProvider>
+-                <SettingsProvider>
+-                    <TestTabs />
+-                </SettingsProvider>
+-            </AuthProvider>
+-        );
++                        {tabs.map(tab => {
++                            const isActive = tab.id === activeId;
++                            return (
++                                <div
++                                    key={tab.id}
++                                    data-tab-id={tab.id}
++                                    style={{ display: isActive ? 'block' : 'none', height: 300 }}
++                                >
++                                    <ResultDisplay
++                                        data={{ type: 'text', results: [1, 2, 3], query: 'test' }}
++                                        mobileMenuOpen={false}
++                                        onCloseMobileMenu={vi.fn()}
++                                        isActive={isActive}
++                                        tabId={tab.id}
++                                        isNewSearch={false}
++                                        onConsumeNewSearch={vi.fn()}
++                                        initialScrollTop={tab.scrollTop}
++                                        onPersistScroll={(id, top) => updateTab(id, top)}
++                                    />
++                                </div>
++                            );
++                        })}
++                    </div>
++                );
++            };
+ 
+-        const tab1Scroll = container.querySelector('#results-content-tab-1') as HTMLDivElement | null;
+-        expect(tab1Scroll).not.toBeNull();
+-        if (!tab1Scroll) return;
++            const { container, getByText } = render(
++                <AuthProvider>
++                    <SettingsProvider>
++                        <TestTabs />
++                    </SettingsProvider>
++                </AuthProvider>
++            );
+ 
+-        tab1Scroll.scrollTop = 320;
+-        fireEvent.scroll(tab1Scroll);
++            const tab1Scroll = container.querySelector('#results-content-tab-1') as HTMLDivElement | null;
++            expect(tab1Scroll).not.toBeNull();
++            if (!tab1Scroll) return;
+ 
+-        fireEvent.click(getByText('Tab 2'));
++            tab1Scroll.scrollTop = 320;
++            fireEvent.scroll(tab1Scroll);
+ 
+-        const tab1Pane = container.querySelector('[data-tab-id="tab-1"]') as HTMLDivElement | null;
+-        expect(tab1Pane).not.toBeNull();
+-        if (tab1Pane) {
+-            expect(tab1Pane.style.display).toBe('none');
+-        }
++            fireEvent.click(getByText('Tab 2'));
+ 
+-        fireEvent.click(getByText('Tab 1'));
++            const tab1Pane = container.querySelector('[data-tab-id="tab-1"]') as HTMLDivElement | null;
++            expect(tab1Pane).not.toBeNull();
++            if (tab1Pane) {
++                expect(tab1Pane.style.display).toBe('none');
++            }
+ 
+-        expect(tab1Scroll.scrollTop).toBe(320);
++            fireEvent.click(getByText('Tab 1'));
+ 
+-        rafSpy.mockRestore();
++            expect(tab1Scroll.scrollTop).toBe(320);
++        } finally {
++            rafSpy.mockRestore();
++        }
+     });
+ 
+     it('persists scroll on rapid tab switches (NESH + TIPI)', () => {
+@@ -99,9 +104,9 @@ describe('Tab scroll persistence (integration)', () => {
+ 
+         // Run idle callbacks immediately for deterministic render
+         // @ts-ignore
+-        globalThis.requestIdleCallback = (cb: any) => window.setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 50 }), 0);
++        globalThis.requestIdleCallback = (cb: any) => globalThis.setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 50 }), 0);
+         // @ts-ignore
+-        globalThis.cancelIdleCallback = (id: number) => window.clearTimeout(id);
++        globalThis.cancelIdleCallback = (id: number) => globalThis.clearTimeout(id);
+ 
+         const TestTabs = () => {
+             const [tabs, setTabs] = useState<TabState[]>([
+@@ -196,4 +201,96 @@ describe('Tab scroll persistence (integration)', () => {
+         globalThis.requestIdleCallback = originalIdle;
+         globalThis.cancelIdleCallback = originalCancelIdle;
+     });
++
++    it('keeps the previous content position when switching tabs through TabsBar clicks', () => {
++        const rafSpy = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
++            cb(0);
++            return 0;
++        });
++
++        try {
++            const TestTabs = () => {
++                const [tabs, setTabs] = useState<Tab[]>([
++                    {
++                        id: 'tab-1',
++                        title: 'Aba NESH',
++                        document: 'nesh',
++                        content: null,
++                        loading: false,
++                        error: null,
++                        scrollTop: 0,
++                        results: { type: 'text', results: [1, 2, 3], query: 'test-1' }
++                    },
++                    {
++                        id: 'tab-2',
++                        title: 'Aba TIPI',
++                        document: 'tipi',
++                        content: null,
++                        loading: false,
++                        error: null,
++                        scrollTop: 0,
++                        results: { type: 'text', results: [4, 5, 6], query: 'test-2' }
++                    }
++                ]);
++                const [activeId, setActiveId] = useState('tab-1');
++
++                const updateTab = (tabId: string, scrollTop: number) => {
++                    setTabs(prev => prev.map(tab => (tab.id === tabId ? { ...tab, scrollTop } : tab)));
++                };
++
++                return (
++                    <div>
++                        <TabsBar
++                            tabs={tabs}
++                            activeTabId={activeId}
++                            onSwitch={setActiveId}
++                            onClose={() => { }}
++                            onReorder={() => { }}
++                            onNewTab={() => { }}
++                        />
++
++                        {tabs.map(tab => (
++                            <TabPanel key={tab.id} id={tab.id} activeTabId={activeId}>
++                                {tab.results && (
++                                    <ResultDisplay
++                                        data={tab.results}
++                                        mobileMenuOpen={false}
++                                        onCloseMobileMenu={vi.fn()}
++                                        isActive={tab.id === activeId}
++                                        tabId={tab.id}
++                                        isNewSearch={false}
++                                        onConsumeNewSearch={vi.fn()}
++                                        initialScrollTop={tab.scrollTop}
++                                        onPersistScroll={(id, top) => updateTab(id, top)}
++                                    />
++                                )}
++                            </TabPanel>
++                        ))}
++                    </div>
++                );
++            };
++
++            const { container, getByText } = render(
++                <AuthProvider>
++                    <SettingsProvider>
++                        <TestTabs />
++                    </SettingsProvider>
++                </AuthProvider>
++            );
++
++            const tab1Scroll = container.querySelector('#results-content-tab-1') as HTMLDivElement | null;
++            expect(tab1Scroll).not.toBeNull();
++            if (!tab1Scroll) return;
++
++            tab1Scroll.scrollTop = 275;
++            fireEvent.scroll(tab1Scroll);
++
++            fireEvent.click(getByText('Aba TIPI'));
++            fireEvent.click(getByText('Aba NESH'));
++
++            expect(tab1Scroll.scrollTop).toBe(275);
++        } finally {
++            rafSpy.mockRestore();
++        }
++    });
+ });
+diff --git a/client/tests/unit/TabsBar.test.tsx b/client/tests/unit/TabsBar.test.tsx
+index f991101..85f0670 100644
+--- a/client/tests/unit/TabsBar.test.tsx
++++ b/client/tests/unit/TabsBar.test.tsx
+@@ -25,33 +25,148 @@ const tabs: Tab[] = [
+   },
+ ];
+ 
++const createRect = (left: number, width: number): DOMRect =>
++  ({
++    x: left,
++    y: 0,
++    top: 0,
++    left,
++    right: left + width,
++    bottom: 32,
++    width,
++    height: 32,
++    toJSON: () => ({}),
++  } as DOMRect);
++
+ describe('TabsBar', () => {
+   beforeEach(() => {
++    vi.clearAllMocks();
+     Element.prototype.scrollIntoView = vi.fn();
+   });
+ 
+-  it('scrolls active tab into view and marks active class', () => {
++  it('marks the active tab class without using element scrollIntoView', () => {
+     render(
+       <TabsBar
+         tabs={tabs}
+         activeTabId="tab-2"
+         onSwitch={vi.fn()}
+         onClose={vi.fn()}
++        onReorder={vi.fn()}
+         onNewTab={vi.fn()}
+       />,
+     );
+ 
+-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
++    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+ 
+     const tabButtons = screen.getAllByText(/Aba/).map((node) => node.closest('div') as HTMLDivElement);
+     expect(tabButtons[1].className).toContain(styles.tabButtonActive);
+     expect(tabButtons[0].className).not.toContain(styles.tabButtonActive);
+   });
+ 
++  const setupHorizontalScrollTest = () => {
++    const handlers = {
++      onSwitch: vi.fn(),
++      onClose: vi.fn(),
++      onReorder: vi.fn(),
++      onNewTab: vi.fn(),
++    };
++
++    const result = render(
++      <TabsBar
++        tabs={tabs}
++        activeTabId="tab-1"
++        {...handlers}
++      />,
++    );
++
++    const tabsContainer = result.container.querySelector(`.${styles.tabsContainer}`) as HTMLDivElement | null;
++    const activeTab = screen.getByText('Aba TIPI').closest('div') as HTMLDivElement | null;
++
++    if (tabsContainer && activeTab) {
++      Object.defineProperty(tabsContainer, 'scrollLeft', {
++        configurable: true,
++        writable: true,
++        value: 0,
++      });
++      Object.defineProperty(tabsContainer, 'scrollWidth', {
++        configurable: true,
++        value: 480,
++      });
++      Object.defineProperty(tabsContainer, 'clientWidth', {
++        configurable: true,
++        value: 200,
++      });
++
++      vi.spyOn(tabsContainer, 'getBoundingClientRect').mockReturnValue(createRect(0, 200));
++      vi.spyOn(activeTab, 'getBoundingClientRect').mockReturnValue(createRect(260, 80));
++    }
++
++    return { ...result, handlers, tabsContainer, activeTab };
++  };
++
++  it('keeps the active tab visible by scrolling the tab strip horizontally', () => {
++    const { rerender, handlers, tabsContainer, activeTab } = setupHorizontalScrollTest();
++
++    expect(tabsContainer).not.toBeNull();
++    expect(activeTab).not.toBeNull();
++    if (!tabsContainer || !activeTab) return;
++
++    const scrollToSpy = vi.spyOn(tabsContainer, 'scrollTo');
++    scrollToSpy.mockClear();
++
++    rerender(
++      <TabsBar
++        tabs={tabs}
++        activeTabId="tab-2"
++        {...handlers}
++      />,
++    );
++
++    expect(scrollToSpy).toHaveBeenCalledWith({ left: 156, behavior: 'smooth' });
++    expect(tabsContainer.scrollLeft).toBe(156);
++    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
++  });
++
++  it('falls back to scrollLeft assignment when scrollTo is not available', () => {
++    const { rerender, handlers, tabsContainer, activeTab } = setupHorizontalScrollTest();
++
++    expect(tabsContainer).not.toBeNull();
++    expect(activeTab).not.toBeNull();
++    if (!tabsContainer || !activeTab) return;
++
++    // Remove scrollTo to exercise the fallback branch
++    const originalScrollTo = Element.prototype.scrollTo;
++    // @ts-ignore — intentionally removing scrollTo
++    delete Element.prototype.scrollTo;
++
++    try {
++      rerender(
++        <TabsBar
++          tabs={tabs}
++          activeTabId="tab-2"
++          {...handlers}
++        />,
++      );
++
++      // The fallback should have assigned scrollLeft directly
++      expect(tabsContainer.scrollLeft).toBe(156);
++      expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
++    } finally {
++      Element.prototype.scrollTo = originalScrollTo;
++    }
++  });
++
+   it('handles click and keyboard interactions to switch tabs', () => {
+     const onSwitch = vi.fn();
+     render(
+-      <TabsBar tabs={tabs} activeTabId="tab-1" onSwitch={onSwitch} onClose={vi.fn()} onNewTab={vi.fn()} />,
++      <TabsBar
++        tabs={tabs}
++        activeTabId="tab-1"
++        onSwitch={onSwitch}
++        onClose={vi.fn()}
++        onReorder={vi.fn()}
++        onNewTab={vi.fn()}
++      />,
+     );
+ 
+     fireEvent.click(screen.getByText('Aba TIPI'));
+@@ -67,7 +182,16 @@ describe('TabsBar', () => {
+   it('routes close and new tab actions through callbacks', () => {
+     const onClose = vi.fn((event: React.MouseEvent) => event.stopPropagation());
+     const onNewTab = vi.fn();
+-    render(<TabsBar tabs={tabs} activeTabId="tab-1" onSwitch={vi.fn()} onClose={onClose} onNewTab={onNewTab} />);
++    render(
++      <TabsBar
++        tabs={tabs}
++        activeTabId="tab-1"
++        onSwitch={vi.fn()}
++        onClose={onClose}
++        onReorder={vi.fn()}
++        onNewTab={onNewTab}
++      />,
++    );
+ 
+     const closeButtons = screen.getAllByTitle('Fechar aba');
+     fireEvent.click(closeButtons[0]);
+@@ -81,7 +205,14 @@ describe('TabsBar', () => {
+     const onClose = vi.fn((event: React.MouseEvent) => event.stopPropagation());
+     const onSwitch = vi.fn();
+     render(
+-      <TabsBar tabs={tabs} activeTabId="tab-1" onSwitch={onSwitch} onClose={onClose} onNewTab={vi.fn()} />,
++      <TabsBar
++        tabs={tabs}
++        activeTabId="tab-1"
++        onSwitch={onSwitch}
++        onClose={onClose}
++        onReorder={vi.fn()}
++        onNewTab={vi.fn()}
++      />,
+     );
+ 
+     const tabButton = screen.getByText('Aba TIPI').closest('div') as HTMLDivElement | null;
+@@ -103,7 +234,14 @@ describe('TabsBar', () => {
+ 
+   it('renders document badges for nesh and tipi tabs', () => {
+     render(
+-      <TabsBar tabs={tabs} activeTabId="tab-1" onSwitch={vi.fn()} onClose={vi.fn()} onNewTab={vi.fn()} />,
++      <TabsBar
++        tabs={tabs}
++        activeTabId="tab-1"
++        onSwitch={vi.fn()}
++        onClose={vi.fn()}
++        onReorder={vi.fn()}
++        onNewTab={vi.fn()}
++      />,
+     );
+ 
+     expect(screen.getByText('N')).toBeInTheDocument();
+diff --git a/docs/AI Context/Frontend/Autoscroll.md b/docs/AI Context/Frontend/Autoscroll.md
+index b5b4edd..8a531c8 100644
+--- a/docs/AI Context/Frontend/Autoscroll.md	
++++ b/docs/AI Context/Frontend/Autoscroll.md	
+@@ -67,6 +67,7 @@ Observer monitora:
+ - persiste `scrollTop` quando aba fica inativa.
+ - restaura `initialScrollTop` quando aba volta ativa e `isNewSearch=false`.
+ - ignora restauracao durante nova busca para priorizar autoscroll.
++- click em aba nao deve disparar nenhum scroll vertical extra; a barra de abas so pode ajustar seu proprio eixo horizontal.
+ 
+ ### 4.3 Render chunked
+ 
+@@ -116,6 +117,7 @@ Impacto:
+ 2. `isNewSearch` deve ser consumido apenas apos scroll bem-sucedido.
+ 3. restauracao de scroll nao pode competir com auto-scroll da mesma busca.
+ 4. classe `.smart-link` e atributos `data-ncm`/`data-note` devem continuar consistentes.
++5. ativacao da aba no `TabsBar` nao pode usar `scrollIntoView` no elemento da aba, para nao interferir no scroll restaurado do conteudo.
+ 
+ ## 8) Testes relacionados
+ 
+diff --git a/docs/AI Context/Frontend/Tabs.md b/docs/AI Context/Frontend/Tabs.md
+index a2e2797..f323de8 100644
+--- a/docs/AI Context/Frontend/Tabs.md	
++++ b/docs/AI Context/Frontend/Tabs.md	
+@@ -82,7 +82,8 @@ Origem 3: pivot de documento (context menu/modais).
+ 
+ - `switchTab(tabId)` em `useTabs`.
+ - `TabsBar` dispara por clique e teclado (`Enter`/`Space`).
+-- `TabsBar` faz `scrollIntoView` da aba ativa para manter visibilidade horizontal.
++- `TabsBar` mantem a aba ativa visivel apenas com scroll horizontal do proprio strip.
++- `TabsBar` nao deve usar `element.scrollIntoView()` para isso, porque essa estrategia pode puxar viewport/pagina para cima e competir com a restauracao de scroll do conteudo.
+ - App propaga `activeTabId` para `TabPanel` e `ResultDisplay`.
+ 
+ ## 4.3 Fechamento de aba
+@@ -164,6 +165,7 @@ Comportamento:
+ - ao ficar inativa, aba persiste scroll em `scrollTop`.
+ - ao reativar com `isNewSearch=false`, restaura `initialScrollTop`.
+ - quando nova busca conclui autoscroll, App consome `isNewSearch` e opcionalmente atualiza `scrollTop`.
++- trocar de aba pode mover apenas o scroll horizontal da barra de abas; nao pode resetar o scroll vertical do conteudo da aba.
+ 
+ Interferencia direta:
+ 
+@@ -218,6 +220,7 @@ Interferencia direta:
+ 5. Semantica de `isNewSearch` (auto-scroll primeiro, restore depois).
+ 6. `loadedChaptersByDoc` segmentado por documento (`nesh`, `tipi`).
+ 7. `TabsBar` deve manter suporte a click, teclado, close e drag/drop.
++8. visibilidade da aba ativa no strip deve ser resolvida sem alterar o scroll vertical da pagina ou do conteudo.
+ 
+ ## 7) Matriz rapida de impacto por arquivo
+ 
