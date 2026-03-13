@@ -1,19 +1,41 @@
+import logging
 from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from backend.config.constants import SearchConfig
 from backend.config.exceptions import ValidationError
 from backend.config.settings import settings
+from backend.server.dependencies import get_nbs_service
 from backend.server.middleware import decode_clerk_jwt, get_last_jwt_failure_reason
 from backend.server.rate_limit import (
     services_detail_rate_limiter,
     services_search_rate_limiter,
 )
-from backend.server.dependencies import get_nbs_service
 from backend.services.nbs_service import NbsService
 from backend.utils.auth import extract_bearer_token, extract_client_ip
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+
+logger = logging.getLogger("routes.services")
 
 router = APIRouter()
+
+SERVICE_AUTH_RESPONSES = {
+    401: {
+        "description": "Token Bearer ausente, inválido ou expirado.",
+    }
+}
+SERVICE_SEARCH_RESPONSES = {
+    **SERVICE_AUTH_RESPONSES,
+    429: {
+        "description": "Limite de requisições para busca de serviços excedido.",
+    },
+}
+SERVICE_DETAIL_RESPONSES = {
+    **SERVICE_AUTH_RESPONSES,
+    429: {
+        "description": "Limite de requisições para detalhes de serviços excedido.",
+    },
+}
 
 
 async def _require_payload(request: Request) -> dict:
@@ -24,10 +46,14 @@ async def _require_payload(request: Request) -> dict:
     payload = await decode_clerk_jwt(token)
     if not payload:
         reason = get_last_jwt_failure_reason()
-        detail = "Token inválido ou expirado"
         if reason:
-            detail = f"{detail} ({reason})"
-        raise HTTPException(status_code=401, detail=detail)  # NOSONAR
+            logger.warning("Services auth rejected invalid JWT: %s", reason)
+        else:
+            logger.warning("Services auth rejected invalid JWT")
+        raise HTTPException(
+            status_code=401,
+            detail="Token inválido ou expirado",
+        )  # NOSONAR
     return payload
 
 
@@ -66,7 +92,7 @@ async def _apply_detail_rate_limit(request: Request, payload: dict) -> None:
     )
 
 
-@router.get("/nbs/search")
+@router.get("/nbs/search", responses=SERVICE_SEARCH_RESPONSES)
 async def search_nbs(
     request: Request,
     service: Annotated[NbsService, Depends(get_nbs_service)],
@@ -82,7 +108,7 @@ async def search_nbs(
     return await service.search(q)
 
 
-@router.get("/nbs/{code}")
+@router.get("/nbs/{code}", responses=SERVICE_DETAIL_RESPONSES)
 async def get_nbs_detail(
     request: Request,
     code: str,
@@ -95,7 +121,7 @@ async def get_nbs_detail(
     return await service.get_item_details(code)
 
 
-@router.get("/nebs/search")
+@router.get("/nebs/search", responses=SERVICE_SEARCH_RESPONSES)
 async def search_nebs(
     request: Request,
     service: Annotated[NbsService, Depends(get_nbs_service)],
@@ -111,7 +137,7 @@ async def search_nebs(
     return await service.search_nebs(q)
 
 
-@router.get("/nebs/{code}")
+@router.get("/nebs/{code}", responses=SERVICE_DETAIL_RESPONSES)
 async def get_nebs_detail(
     request: Request,
     code: str,

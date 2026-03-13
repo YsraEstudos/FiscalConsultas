@@ -8,10 +8,10 @@ Para ambiente com multiplos workers/instancias, migrar para Redis.
 from __future__ import annotations
 
 import asyncio
-from collections import deque
-from math import ceil
 import time
 import uuid
+from collections import deque
+from math import ceil
 
 from backend.config.logging_config import service_logger as logger
 from backend.infrastructure.redis_client import redis_cache
@@ -88,7 +88,9 @@ class RedisBackedRateLimiter:
     ):
         self.window_seconds = window_seconds
         self.redis_prefix = redis_prefix
-        self.fallback = fallback or SlidingWindowRateLimiter(window_seconds=window_seconds)
+        self.fallback = fallback or SlidingWindowRateLimiter(
+            window_seconds=window_seconds
+        )
 
     def _redis_key(self, key: str) -> str:
         return f"{self.redis_prefix}:{key}"
@@ -120,7 +122,9 @@ class RedisBackedRateLimiter:
             try:
                 return await self._consume_via_redis(key, limit)
             except Exception as exc:
-                logger.debug("Redis rate limiter fallback (%s): %s", self.redis_prefix, exc)
+                logger.debug(
+                    "Redis rate limiter fallback (%s): %s", self.redis_prefix, exc
+                )
         return await self.fallback.consume(key, limit)
 
     def reset(self) -> None:

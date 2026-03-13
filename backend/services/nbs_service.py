@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 import re
+from pathlib import Path
 from typing import Any
 
 import aiosqlite
 
-from backend.config.exceptions import DatabaseError, DatabaseNotFoundError, NotFoundError
+from backend.config.exceptions import (
+    DatabaseError,
+    DatabaseNotFoundError,
+    NotFoundError,
+)
 from backend.config.logging_config import service_logger as logger
 from backend.config.settings import settings
 from backend.utils.nbs_parser import (
@@ -19,6 +23,7 @@ from backend.utils.nbs_parser import (
 )
 
 NBS_ALLOWED_TABLES = {"nbs_items", "nebs_entries", "catalog_metadata"}
+MAX_ANCESTOR_DEPTH = 64
 NEBS_PUBLIC_FIELDS = (
     "code",
     "code_clean",
@@ -161,7 +166,9 @@ class NbsService:
     @staticmethod
     def _resolve_code_aliases(code: str) -> tuple[list[str], list[str]]:
         aliases = list(build_nbs_code_variants((code or "").strip()))
-        clean_aliases = [clean_nbs_code(alias) for alias in aliases if clean_nbs_code(alias)]
+        clean_aliases = [
+            clean_nbs_code(alias) for alias in aliases if clean_nbs_code(alias)
+        ]
         return aliases, list(dict.fromkeys(clean_aliases))
 
     @staticmethod
@@ -206,14 +213,16 @@ class NbsService:
             where_clauses.append(f"code IN ({', '.join(['?'] * len(aliases))})")
             params.extend(aliases)
         if clean_aliases:
-            where_clauses.append(f"code_clean IN ({', '.join(['?'] * len(clean_aliases))})")
+            where_clauses.append(
+                f"code_clean IN ({', '.join(['?'] * len(clean_aliases))})"
+            )
             params.extend(clean_aliases)
 
         cursor = await conn.execute(
             f"""
             SELECT code, code_clean, description, parent_code, level, has_nebs
             FROM nbs_items
-            WHERE {' OR '.join(where_clauses)}
+            WHERE {" OR ".join(where_clauses)}
             ORDER BY LENGTH(code_clean) DESC, source_order ASC
             LIMIT 1
             """,
@@ -229,8 +238,23 @@ class NbsService:
     ) -> list[dict[str, Any]]:
         ancestors: list[dict[str, Any]] = []
         parent_code = item["parent_code"]
+        visited_codes = {item["code"]}
+        depth = 0
 
         while parent_code:
+            if depth >= MAX_ANCESTOR_DEPTH:
+                logger.warning(
+                    "Stopping ancestor traversal at max depth for NBS code %s",
+                    item["code"],
+                )
+                break
+            if parent_code in visited_codes:
+                logger.warning(
+                    "Detected cyclic NBS ancestor chain for code %s via parent %s",
+                    item["code"],
+                    parent_code,
+                )
+                break
             parent_cursor = await conn.execute(
                 """
                 SELECT code, code_clean, description, parent_code, level, has_nebs
@@ -244,8 +268,10 @@ class NbsService:
             if parent_row is None:
                 break
             parent_item = self._row_to_item(parent_row)
+            visited_codes.add(parent_item["code"])
             ancestors.append(parent_item)
             parent_code = parent_item["parent_code"]
+            depth += 1
 
         ancestors.reverse()
         return ancestors
@@ -345,7 +371,9 @@ class NbsService:
                 (item["code"],),
             )
             child_rows = await children_cursor.fetchall()
-            chapter_items = await self._fetch_items_by_prefix(conn, chapter_root["code"])
+            chapter_items = await self._fetch_items_by_prefix(
+                conn, chapter_root["code"]
+            )
 
             nebs_cursor = await conn.execute(
                 """
@@ -549,12 +577,16 @@ class NbsService:
             entry_where_clauses: list[str] = []
             entry_params: list[str] = []
             if aliases:
-                entry_where_clauses.append(f"code IN ({', '.join(['?'] * len(aliases))})")
+                entry_where_clauses.append(
+                    f"code IN ({', '.join(['?'] * len(aliases))})"
+                )
                 entry_params.extend(aliases)
             if clean_aliases:
-                entry_where_clauses.append(f"code_clean IN ({', '.join(['?'] * len(clean_aliases))})")
+                entry_where_clauses.append(
+                    f"code_clean IN ({', '.join(['?'] * len(clean_aliases))})"
+                )
                 entry_params.extend(clean_aliases)
-            entry_params.append('trusted')
+            entry_params.append("trusted")
             entry_cursor = await conn.execute(
                 f"""
                 SELECT
@@ -573,7 +605,7 @@ class NbsService:
                     source_hash,
                     updated_at
                 FROM nebs_entries
-                WHERE ({' OR '.join(entry_where_clauses)}) AND parser_status = ?
+                WHERE ({" OR ".join(entry_where_clauses)}) AND parser_status = ?
                 ORDER BY LENGTH(code_clean) DESC
                 LIMIT 1
                 """,

@@ -36,7 +36,9 @@ def main():
     Função principal que configura e inicia o servidor Uvicorn.
 
     Adiciona o diretório raiz ao PYTHONPATH e inicia o servidor
-    escutando em 127.0.0.1:8000 com reload automático ativado.
+    escutando em 127.0.0.1:8000 com reload desativado por padrão.
+    Para reativar o reload, defina NESH_RELOAD com um valor truthy
+    como "1", "true" ou "yes".
     """
     # Adiciona diretório atual ao path para garantir imports corretos
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))

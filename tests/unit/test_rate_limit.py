@@ -1,5 +1,6 @@
-import backend.server.rate_limit as rate_limit
 import pytest
+
+import backend.server.rate_limit as rate_limit
 from backend.server.rate_limit import RedisBackedRateLimiter, SlidingWindowRateLimiter
 
 pytestmark = pytest.mark.unit
@@ -76,7 +77,9 @@ class _FakeRedisSortedSet:
     async def zremrangebyscore(self, key, _minimum, maximum):
         cutoff = float(maximum)
         bucket = self.buckets.get(key, [])
-        self.buckets[key] = [(member, score) for member, score in bucket if score > cutoff]
+        self.buckets[key] = [
+            (member, score) for member, score in bucket if score > cutoff
+        ]
 
     async def zcard(self, key):
         return len(self.buckets.get(key, []))
@@ -118,7 +121,9 @@ async def test_redis_backed_rate_limiter_uses_redis_when_available(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_redis_backed_rate_limiter_falls_back_to_memory_when_redis_unavailable(monkeypatch):
+async def test_redis_backed_rate_limiter_falls_back_to_memory_when_redis_unavailable(
+    monkeypatch,
+):
     now = {"value": 50.0}
     monkeypatch.setattr(rate_limit.time, "monotonic", lambda: now["value"])
     monkeypatch.setattr(rate_limit.redis_cache, "_client", None)
