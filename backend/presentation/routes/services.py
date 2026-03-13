@@ -18,6 +18,7 @@ from backend.utils.auth import extract_bearer_token, extract_client_ip
 logger = logging.getLogger("routes.services")
 
 router = APIRouter()
+MAX_SERVICE_CODE_LENGTH = 64
 
 SERVICE_AUTH_RESPONSES = {
     401: {
@@ -57,14 +58,16 @@ async def _require_payload(request: Request) -> dict:
     return payload
 
 
-def _services_limiter_key(request: Request, payload: dict) -> str:
-    user_id = payload.get("sub")
+def _services_limiter_key(request: Request, payload: dict | None = None) -> str:
+    user_id = (payload or {}).get("sub")
     if isinstance(user_id, str) and user_id.strip():
         return f"services:user:{user_id.strip()}"
     return f"services:ip:{extract_client_ip(request)}"
 
 
-async def _apply_search_rate_limit(request: Request, payload: dict) -> None:
+async def _apply_search_rate_limit(
+    request: Request, payload: dict | None = None
+) -> None:
     allowed, retry_after = await services_search_rate_limiter.consume(
         key=_services_limiter_key(request, payload),
         limit=settings.security.services_search_requests_per_minute,
@@ -78,7 +81,9 @@ async def _apply_search_rate_limit(request: Request, payload: dict) -> None:
     )
 
 
-async def _apply_detail_rate_limit(request: Request, payload: dict) -> None:
+async def _apply_detail_rate_limit(
+    request: Request, payload: dict | None = None
+) -> None:
     allowed, retry_after = await services_detail_rate_limiter.consume(
         key=_services_limiter_key(request, payload),
         limit=settings.security.services_detail_requests_per_minute,
@@ -92,14 +97,26 @@ async def _apply_detail_rate_limit(request: Request, payload: dict) -> None:
     )
 
 
+def _validate_service_code(code: str) -> str:
+    normalized = code.strip()
+    if not normalized:
+        raise ValidationError("Parâmetro 'code' é obrigatório", field="code")
+    if len(normalized) > MAX_SERVICE_CODE_LENGTH:
+        raise ValidationError(
+            f"Parâmetro 'code' muito longo (máximo {MAX_SERVICE_CODE_LENGTH} caracteres)",
+            field="code",
+        )
+    return normalized
+
+
 @router.get("/nbs/search", responses=SERVICE_SEARCH_RESPONSES)
 async def search_nbs(
     request: Request,
     service: Annotated[NbsService, Depends(get_nbs_service)],
     q: Annotated[str, Query(description="Código NBS ou descrição")] = "",
 ):
-    payload = await _require_payload(request)
-    await _apply_search_rate_limit(request, payload)
+    await _apply_search_rate_limit(request)
+    await _require_payload(request)
     if len(q) > SearchConfig.MAX_QUERY_LENGTH:
         raise ValidationError(
             f"Query muito longa (máximo {SearchConfig.MAX_QUERY_LENGTH} caracteres)",
@@ -114,11 +131,10 @@ async def get_nbs_detail(
     code: str,
     service: Annotated[NbsService, Depends(get_nbs_service)],
 ):
-    payload = await _require_payload(request)
-    await _apply_detail_rate_limit(request, payload)
-    if not code.strip():
-        raise ValidationError("Parâmetro 'code' é obrigatório", field="code")
-    return await service.get_item_details(code)
+    await _apply_detail_rate_limit(request)
+    await _require_payload(request)
+    normalized_code = _validate_service_code(code)
+    return await service.get_item_details(normalized_code)
 
 
 @router.get("/nebs/search", responses=SERVICE_SEARCH_RESPONSES)
@@ -127,8 +143,8 @@ async def search_nebs(
     service: Annotated[NbsService, Depends(get_nbs_service)],
     q: Annotated[str, Query(description="Código NEBS ou termo textual")] = "",
 ):
-    payload = await _require_payload(request)
-    await _apply_search_rate_limit(request, payload)
+    await _apply_search_rate_limit(request)
+    await _require_payload(request)
     if len(q) > SearchConfig.MAX_QUERY_LENGTH:
         raise ValidationError(
             f"Query muito longa (máximo {SearchConfig.MAX_QUERY_LENGTH} caracteres)",
@@ -143,8 +159,7 @@ async def get_nebs_detail(
     code: str,
     service: Annotated[NbsService, Depends(get_nbs_service)],
 ):
-    payload = await _require_payload(request)
-    await _apply_detail_rate_limit(request, payload)
-    if not code.strip():
-        raise ValidationError("Parâmetro 'code' é obrigatório", field="code")
-    return await service.get_nebs_details(code)
+    await _apply_detail_rate_limit(request)
+    await _require_payload(request)
+    normalized_code = _validate_service_code(code)
+    return await service.get_nebs_details(normalized_code)

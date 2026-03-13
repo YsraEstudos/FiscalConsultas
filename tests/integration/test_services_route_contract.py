@@ -139,6 +139,25 @@ def test_services_routes_require_authorization_header(client):
         assert response.json()["detail"] == "Token ausente"
 
 
+def test_services_routes_rate_limit_anonymous_requests_before_auth(client, monkeypatch):
+    app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
+    consumed_keys: list[str] = []
+
+    async def _deny_consume(*, key: str, limit: int):
+        consumed_keys.append(key)
+        return False, 7
+
+    monkeypatch.setattr(
+        services_routes.services_search_rate_limiter, "consume", _deny_consume
+    )
+
+    response = client.get("/api/services/nbs/search?q=construcao")
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "7"
+    assert consumed_keys == ["services:ip:testclient"]
+
+
 @pytest.mark.parametrize(
     "failure_reason",
     [
@@ -218,6 +237,37 @@ def test_services_routes_document_auth_and_rate_limit_responses():
             "Token Bearer ausente, inválido ou expirado."
         )
         assert responses["429"]["description"] == expected_429
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "service_method"),
+    [
+        ("/api/services/nbs/{code}", "get_item_details"),
+        ("/api/services/nebs/{code}", "get_nebs_details"),
+    ],
+)
+def test_services_detail_rejects_overly_long_code(
+    client, endpoint, service_method, monkeypatch
+):
+    app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
+    headers = {"Authorization": "Bearer test-token"}
+    oversized_code = "1" * (services_routes.MAX_SERVICE_CODE_LENGTH + 1)
+    called = {"value": False}
+
+    async def _unexpected_call(self, _code: str):
+        called["value"] = True
+        raise AssertionError(f"{service_method} should not be called")
+
+    monkeypatch.setattr(_FakeServicesCatalog, service_method, _unexpected_call)
+
+    response = client.get(
+        endpoint.format(code=oversized_code),
+        headers=headers,
+    )
+
+    assert response.status_code == 400
+    assert "máximo" in response.json()["error"]["message"]
+    assert called["value"] is False
 
 
 def test_services_search_returns_retry_after_when_rate_limited(client, monkeypatch):

@@ -16,6 +16,28 @@ from math import ceil
 from backend.config.logging_config import service_logger as logger
 from backend.infrastructure.redis_client import redis_cache
 
+REDIS_SLIDING_WINDOW_SCRIPT = """
+local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local now = tonumber(ARGV[2])
+local window_seconds = tonumber(ARGV[3])
+local member = ARGV[4]
+local cutoff = now - window_seconds
+
+redis.call('ZREMRANGEBYSCORE', key, '-inf', cutoff)
+local count = redis.call('ZCARD', key)
+
+if count >= limit then
+    local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+    local oldest_score = tonumber(oldest[2]) or now
+    return {0, oldest_score}
+end
+
+redis.call('ZADD', key, now, member)
+redis.call('EXPIRE', key, window_seconds)
+return {1, 0}
+"""
+
 
 class SlidingWindowRateLimiter:
     """Rate limiter thread-safe por chave usando janela deslizante."""
@@ -101,20 +123,22 @@ class RedisBackedRateLimiter:
             raise RuntimeError("Redis indisponível")
 
         now = time.time()
-        cutoff = now - self.window_seconds
         redis_key = self._redis_key(key)
-
-        await client.zremrangebyscore(redis_key, "-inf", cutoff)
-        current_count = await client.zcard(redis_key)
-        if current_count >= limit:
-            oldest = await client.zrange(redis_key, 0, 0, withscores=True)
-            oldest_score = float(oldest[0][1]) if oldest else now
+        member = f"{now:.6f}:{uuid.uuid4().hex}"
+        allowed, oldest_score = await client.eval(
+            REDIS_SLIDING_WINDOW_SCRIPT,
+            1,
+            redis_key,
+            limit,
+            now,
+            self.window_seconds,
+            member,
+        )
+        if not bool(allowed):
+            oldest_score = float(oldest_score or now)
             retry_after = max(1, ceil(self.window_seconds - (now - oldest_score)))
             return False, retry_after
 
-        member = f"{now:.6f}:{uuid.uuid4().hex}"
-        await client.zadd(redis_key, {member: now})
-        await client.expire(redis_key, self.window_seconds)
         return True, 0
 
     async def consume(self, key: str, limit: int) -> tuple[bool, int]:

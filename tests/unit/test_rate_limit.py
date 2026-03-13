@@ -73,6 +73,7 @@ async def test_rate_limiter_drops_stale_empty_buckets(monkeypatch):
 class _FakeRedisSortedSet:
     def __init__(self):
         self.buckets = {}
+        self.expirations = {}
 
     async def zremrangebyscore(self, key, _minimum, maximum):
         cutoff = float(maximum)
@@ -102,6 +103,26 @@ class _FakeRedisSortedSet:
     async def expire(self, _key, _seconds):
         return True
 
+    async def eval(self, _script, numkeys, *args):
+        assert numkeys == 1
+        redis_key = args[0]
+        limit = int(args[1])
+        now = float(args[2])
+        window_seconds = int(args[3])
+        member = args[4]
+        cutoff = now - window_seconds
+
+        await self.zremrangebyscore(redis_key, "-inf", cutoff)
+        current_count = await self.zcard(redis_key)
+        if current_count >= limit:
+            oldest = await self.zrange(redis_key, 0, 0, withscores=True)
+            oldest_score = float(oldest[0][1]) if oldest else now
+            return [0, oldest_score]
+
+        await self.zadd(redis_key, {member: now})
+        self.expirations[redis_key] = window_seconds
+        return [1, 0]
+
 
 @pytest.mark.asyncio
 async def test_redis_backed_rate_limiter_uses_redis_when_available(monkeypatch):
@@ -118,6 +139,7 @@ async def test_redis_backed_rate_limiter_uses_redis_when_available(monkeypatch):
     allowed, retry_after = await limiter.consume("user-1", limit=2)
     assert allowed is False
     assert retry_after == 10
+    assert fake_redis.expirations["test:user-1"] == 10
 
 
 @pytest.mark.asyncio
