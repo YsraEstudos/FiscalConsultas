@@ -4,6 +4,7 @@ from pathlib import Path
 import fitz
 import pytest
 
+from backend.utils.hash_util import calculate_file_sha256
 from backend.utils.nebs_parser import (
     NebsAuditRecord,
     NebsParseOutcome,
@@ -12,6 +13,16 @@ from backend.utils.nebs_parser import (
 )
 
 pytestmark = pytest.mark.unit
+
+
+def test_calculate_file_sha256_hashes_file_contents(tmp_path: Path):
+    file_path = tmp_path / "sample.txt"
+    file_path.write_text("abc", encoding="utf-8")
+
+    assert (
+        calculate_file_sha256(file_path)
+        == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    )
 
 
 def _create_sample_nebs_pdf(path: Path) -> None:

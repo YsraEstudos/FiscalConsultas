@@ -7,12 +7,12 @@ import json
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
-from hashlib import sha256
 from pathlib import Path
 from typing import Iterable
 
 import fitz
 
+from backend.utils.hash_util import calculate_file_sha256
 from backend.utils.nbs_parser import (
     build_nbs_code_variants,
     clean_nbs_code,
@@ -101,14 +101,6 @@ class _CandidateEntry:
     def add_line(self, line: str, page_number: int) -> None:
         self.body_lines.append(line)
         self.page_end = page_number
-
-
-def calculate_file_sha256(path: str | Path) -> str:
-    digest = sha256()
-    with Path(path).open("rb") as handle:
-        for chunk in iter(lambda: handle.read(65536), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _clean_page_lines(text: str) -> list[str]:
@@ -230,6 +222,69 @@ def _token_overlap_ratio(left: str, right: str) -> float:
     return len(intersection) / max(len(left_tokens), len(right_tokens))
 
 
+def _check_nbs_existence(
+    resolved_nbs_item: tuple[str, str] | None, reasons: list[str]
+) -> str | None:
+    if resolved_nbs_item is not None:
+        return None
+    reasons.append("codigo_nao_encontrado_na_nbs")
+    return "rejected"
+
+
+def _check_duplicate(
+    code: str, duplicate_codes: set[str], reasons: list[str]
+) -> str | None:
+    if code not in duplicate_codes:
+        return None
+    reasons.append("codigo_duplicado_no_pdf")
+    return "suspect"
+
+
+def _check_title_presence(
+    title: str, expected_description: str | None, reasons: list[str]
+) -> str | None:
+    if title.strip():
+        return None
+    reasons.append("titulo_ausente")
+    return "suspect" if expected_description else "rejected"
+
+
+def _check_body_length(
+    normalized_body: str,
+    merged_lines: list[str],
+    expected_description: str | None,
+    reasons: list[str],
+) -> str | None:
+    if not normalized_body:
+        reasons.append("corpo_vazio")
+        return "suspect" if expected_description else "rejected"
+
+    has_structured_body = any(line.startswith("- ") for line in merged_lines) or len(merged_lines) >= 2
+    min_body_length = 30 if has_structured_body else 50
+    if len(normalized_body) >= min_body_length:
+        return None
+
+    reasons.append("corpo_muito_curto")
+    return "suspect"
+
+
+def _check_title_vs_nbs(
+    normalized_title: str, expected_description: str | None, reasons: list[str]
+) -> str | None:
+    if not expected_description:
+        return None
+
+    normalized_expected = normalize_nbs_text(expected_description)
+    if (
+        normalized_title
+        and normalized_title != normalized_expected
+        and _token_overlap_ratio(normalized_title, normalized_expected) < 0.6
+    ):
+        reasons.append("titulo_inconsistente_com_nbs")
+        return "suspect"
+    return None
+
+
 def _validate_candidate(
     candidate: _CandidateEntry,
     resolved_nbs_item: tuple[str, str] | None,
@@ -248,37 +303,16 @@ def _validate_candidate(
             parser_status = next_status
 
     expected_description = resolved_nbs_item[1] if resolved_nbs_item else None
-    if expected_description is None:
-        promote_status("rejected")
-        reasons.append("codigo_nao_encontrado_na_nbs")
-
-    if candidate.code in duplicate_codes:
-        promote_status("suspect")
-        reasons.append("codigo_duplicado_no_pdf")
-
-    if not candidate.title.strip():
-        promote_status("suspect" if expected_description else "rejected")
-        reasons.append("titulo_ausente")
-
-    if not normalized_body:
-        promote_status("suspect" if expected_description else "rejected")
-        reasons.append("corpo_vazio")
-    else:
-        has_structured_body = any(line.startswith("- ") for line in merged_lines) or len(merged_lines) >= 2
-        min_body_length = 30 if has_structured_body else 50
-        if len(normalized_body) < min_body_length:
-            promote_status("suspect")
-            reasons.append("corpo_muito_curto")
-
-    if expected_description:
-        normalized_expected = normalize_nbs_text(expected_description)
-        if (
-            normalized_title
-            and normalized_title != normalized_expected
-            and _token_overlap_ratio(normalized_title, normalized_expected) < 0.6
-        ):
-            promote_status("suspect")
-            reasons.append("titulo_inconsistente_com_nbs")
+    checks = (
+        _check_nbs_existence(resolved_nbs_item, reasons),
+        _check_duplicate(candidate.code, duplicate_codes, reasons),
+        _check_title_presence(candidate.title, expected_description, reasons),
+        _check_body_length(normalized_body, merged_lines, expected_description, reasons),
+        _check_title_vs_nbs(normalized_title, expected_description, reasons),
+    )
+    for status in checks:
+        if status is not None:
+            promote_status(status)
 
     return parser_status, tuple(reasons)
 

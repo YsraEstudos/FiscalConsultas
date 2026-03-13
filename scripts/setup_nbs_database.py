@@ -8,7 +8,6 @@ restore NEBS data.
 
 from __future__ import annotations
 
-import hashlib
 import sqlite3
 import sys
 from pathlib import Path
@@ -22,6 +21,7 @@ try:
         SERVICES_INDEXES_SQL,
     )
     from backend.config.settings import settings
+    from backend.utils.hash_util import calculate_file_sha256
     from backend.utils.nbs_parser import ParsedNbsItem, build_nbs_items, iter_nbs_rows
 except ModuleNotFoundError:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -33,20 +33,12 @@ except ModuleNotFoundError:
         SERVICES_INDEXES_SQL,
     )
     from backend.config.settings import settings
+    from backend.utils.hash_util import calculate_file_sha256
     from backend.utils.nbs_parser import ParsedNbsItem, build_nbs_items, iter_nbs_rows
 
 
 DATA_FILE = Path(__file__).resolve().parents[1] / "data" / "nbs.csv"
 DB_FILE = Path(settings.database.services_path)
-
-
-def _calculate_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(65536), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
 
 def _create_schema(conn: sqlite3.Connection) -> None:
     cursor = conn.cursor()
@@ -121,7 +113,7 @@ def main() -> int:
 
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
     items = build_nbs_items(iter_nbs_rows(DATA_FILE))
-    content_hash = _calculate_sha256(DATA_FILE)
+    content_hash = calculate_file_sha256(DATA_FILE)
     if DB_FILE.exists():
         print(
             "AVISO: _create_schema() removerá `nebs_entries` e `nebs_entries_fts`. "

@@ -15,9 +15,9 @@ try:
         SERVICES_INDEXES_SQL,
     )
     from backend.config.settings import settings
+    from backend.utils.hash_util import calculate_file_sha256
     from backend.utils.nebs_parser import (
         NebsParseOutcome,
-        calculate_file_sha256,
         parse_nebs_pdf,
         write_nebs_audit_report,
     )
@@ -30,9 +30,9 @@ except ModuleNotFoundError:
         SERVICES_INDEXES_SQL,
     )
     from backend.config.settings import settings
+    from backend.utils.hash_util import calculate_file_sha256
     from backend.utils.nebs_parser import (
         NebsParseOutcome,
-        calculate_file_sha256,
         parse_nebs_pdf,
         write_nebs_audit_report,
     )
