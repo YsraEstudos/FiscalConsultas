@@ -31,12 +31,12 @@ export default defineConfig({
   projects: [
     {
       name: 'mocked-chromium',
-      testIgnore: /.*\.live\.spec\.ts/,
+      testIgnore: '**/*.live.spec.ts',
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'live-chromium',
-      testMatch: /.*\.live\.spec\.ts/,
+      testMatch: '**/*.live.spec.ts',
       use: {
         ...devices['Desktop Chrome'],
         baseURL: liveBaseUrl,
