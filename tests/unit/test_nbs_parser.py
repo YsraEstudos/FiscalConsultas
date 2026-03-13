@@ -3,8 +3,10 @@ from pathlib import Path
 import pytest
 
 from backend.utils.nbs_parser import (
+    build_nbs_code_variants,
     build_nbs_items,
     build_sort_path,
+    clean_nbs_code,
     iter_nbs_rows,
     normalize_nbs_text,
 )
@@ -50,3 +52,11 @@ def test_build_nbs_items_creates_hierarchy_from_prefix_chain():
 def test_build_nbs_items_rejects_duplicate_codes():
     with pytest.raises(ValueError, match="duplicado"):
         build_nbs_items([("1.01", "A"), ("1.01", "B")])
+
+
+def test_clean_nbs_code_keeps_only_digits():
+    assert clean_nbs_code("1.0101.11.00") == "101011100"
+
+
+def test_build_nbs_code_variants_returns_empty_literal_for_blank_code():
+    assert build_nbs_code_variants("") == ()

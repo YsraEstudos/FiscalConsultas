@@ -1,9 +1,15 @@
+import csv
 from pathlib import Path
 
 import fitz
 import pytest
 
-from backend.utils.nebs_parser import parse_nebs_pdf, write_nebs_audit_report
+from backend.utils.nebs_parser import (
+    NebsAuditRecord,
+    NebsParseOutcome,
+    parse_nebs_pdf,
+    write_nebs_audit_report,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -72,6 +78,36 @@ def test_write_nebs_audit_report_outputs_csv_and_json(tmp_path: Path):
     assert "1.0999.99" in csv_content
     assert "codigo_nao_encontrado_na_nbs" in csv_content
     assert '"parser_status": "rejected"' in json_content
+
+
+def test_write_nebs_audit_report_uses_csv_writer_for_multiline_fields(tmp_path: Path):
+    outcome = NebsParseOutcome(
+        audit_records=[
+            NebsAuditRecord(
+                code="1.0999.99",
+                parser_status="rejected",
+                reasons=("codigo_nao_encontrado_na_nbs",),
+                section_title="SEÇÃO I",
+                title="Título com, vírgula",
+                page_start=1,
+                page_end=2,
+                excerpt="Primeira linha\nSegunda linha",
+                raw_text="Texto bruto",
+            )
+        ]
+    )
+
+    csv_path = tmp_path / "reports" / "nebs_audit.csv"
+    json_path = tmp_path / "reports" / "nebs_audit.json"
+
+    write_nebs_audit_report(outcome, csv_path=csv_path, json_path=json_path)
+
+    with csv_path.open("r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.reader(handle))
+
+    assert rows[1][0] == "1.0999.99"
+    assert rows[1][4] == "Título com, vírgula"
+    assert rows[1][7] == "Primeira linha\nSegunda linha"
 
 
 def test_parse_nebs_pdf_merges_multiline_titles_and_keeps_structured_body_trusted(tmp_path: Path):

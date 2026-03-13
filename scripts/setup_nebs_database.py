@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 try:
@@ -15,6 +16,7 @@ try:
     )
     from backend.config.settings import settings
     from backend.utils.nebs_parser import (
+        NebsParseOutcome,
         calculate_file_sha256,
         parse_nebs_pdf,
         write_nebs_audit_report,
@@ -29,6 +31,7 @@ except ModuleNotFoundError:
     )
     from backend.config.settings import settings
     from backend.utils.nebs_parser import (
+        NebsParseOutcome,
         calculate_file_sha256,
         parse_nebs_pdf,
         write_nebs_audit_report,
@@ -90,7 +93,7 @@ def _load_valid_nbs_items(conn: sqlite3.Connection) -> dict[str, str]:
     return {row[0]: row[1] for row in rows}
 
 
-def _replace_nebs_entries(conn: sqlite3.Connection, outcome) -> None:
+def _replace_nebs_entries(conn: sqlite3.Connection, outcome: NebsParseOutcome) -> None:
     conn.execute("DELETE FROM nebs_entries")
     conn.execute("DELETE FROM nebs_entries_fts")
     conn.execute("UPDATE nbs_items SET has_nebs = 0")
@@ -161,14 +164,17 @@ def _replace_nebs_entries(conn: sqlite3.Connection, outcome) -> None:
     conn.commit()
 
 
-def _write_metadata(conn: sqlite3.Connection, outcome, source_hash: str) -> None:
+def _write_metadata(
+    conn: sqlite3.Connection, outcome: NebsParseOutcome, source_hash: str
+) -> None:
+    updated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     metadata = {
         "nebs_source_path": str(PDF_FILE),
         "nebs_source_hash": source_hash,
         "nebs_trusted_count": str(outcome.counts["trusted"]),
         "nebs_suspect_count": str(outcome.counts["suspect"]),
         "nebs_rejected_count": str(outcome.counts["rejected"]),
-        "nebs_updated_at": outcome.entries[0].updated_at if outcome.entries else "",
+        "nebs_updated_at": updated_at,
         "nebs_audit_csv": str(AUDIT_CSV),
         "nebs_audit_json": str(AUDIT_JSON),
     }

@@ -1,4 +1,10 @@
-"""Build the SQLite catalog for NBS and placeholder NEBS entries."""
+"""Build the SQLite catalog for NBS and placeholder NEBS entries.
+
+Execution order matters: `_create_schema()` recreates the NBS schema and drops
+the `nebs_entries` and `nebs_entries_fts` tables. Run this script before
+`setup_nebs_database.py`, or rerun `setup_nebs_database.py` afterward to
+restore NEBS data.
+"""
 
 from __future__ import annotations
 
@@ -16,7 +22,7 @@ try:
         SERVICES_INDEXES_SQL,
     )
     from backend.config.settings import settings
-    from backend.utils.nbs_parser import build_nbs_items, iter_nbs_rows
+    from backend.utils.nbs_parser import ParsedNbsItem, build_nbs_items, iter_nbs_rows
 except ModuleNotFoundError:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
     from backend.config.services_db_schema import (
@@ -27,7 +33,7 @@ except ModuleNotFoundError:
         SERVICES_INDEXES_SQL,
     )
     from backend.config.settings import settings
-    from backend.utils.nbs_parser import build_nbs_items, iter_nbs_rows
+    from backend.utils.nbs_parser import ParsedNbsItem, build_nbs_items, iter_nbs_rows
 
 
 DATA_FILE = Path(__file__).resolve().parents[1] / "data" / "nbs.csv"
@@ -74,7 +80,7 @@ def _insert_metadata(
     conn.commit()
 
 
-def _insert_items(conn: sqlite3.Connection, items) -> None:
+def _insert_items(conn: sqlite3.Connection, items: list[ParsedNbsItem]) -> None:
     rows = [
         (
             item.code,
@@ -116,6 +122,11 @@ def main() -> int:
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
     items = build_nbs_items(iter_nbs_rows(DATA_FILE))
     content_hash = _calculate_sha256(DATA_FILE)
+    if DB_FILE.exists():
+        print(
+            "AVISO: _create_schema() removerá `nebs_entries` e `nebs_entries_fts`. "
+            "Execute setup_nebs_database.py depois deste script para restaurar os dados NEBS."
+        )
 
     conn = sqlite3.connect(DB_FILE)
     try:

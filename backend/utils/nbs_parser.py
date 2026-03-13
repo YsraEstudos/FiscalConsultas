@@ -32,14 +32,14 @@ def normalize_nbs_text(text: str) -> str:
 
 def clean_nbs_code(code: str) -> str:
     """Return an NBS code with punctuation removed."""
-    return re.sub(r"[^0-9]", "", code or "")
+    return re.sub(r"\D", "", code or "")
 
 
 def build_nbs_code_variants(code: str) -> tuple[str, ...]:
     """Return canonical and alias forms used across NBS/NEBS sources."""
     segments = [segment.strip() for segment in str(code or "").split(".") if segment.strip()]
     if not segments:
-        return tuple()
+        return ()
 
     variants: list[str] = []
 

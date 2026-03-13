@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import re
 from dataclasses import asdict, dataclass, field
@@ -19,11 +20,12 @@ from backend.utils.nbs_parser import (
 )
 
 SECTION_RE = re.compile(r"^SEÇÃO\s+[IVXLCDM]+\b.*$", re.IGNORECASE)
-ENTRY_RE = re.compile(r"^(?P<code>\d(?:\.\d+)+)\s+(?P<title>.+?)\s*$")
-PAGE_HEADER_RE = re.compile(
-    r"^\(?Fl\.\s*\d+\s+do\s+Anexo\s+II\s+da\s+Portaria\s+Conjunta.+\)?$",
+ENTRY_RE = re.compile(r"^(?P<code>\d(?:\.\d+)+)\s+(?P<title>.+)$")
+PAGE_HEADER_PREFIX_RE = re.compile(
+    r"^Fl\.\s*\d+\s+do\s+Anexo\s+II\s+da\s+Portaria\s+Conjunta\b",
     re.IGNORECASE,
 )
+DIGIT_DASH_RE = re.compile(r"^\d+\s*-\s+")
 TITLE_CONTINUATION_BLOCKLIST = (
     "esta ",
     "este ",
@@ -113,16 +115,21 @@ def _clean_page_lines(text: str) -> list[str]:
     lines: list[str] = []
     for raw_line in text.splitlines():
         line = re.sub(r"\s+", " ", raw_line).strip()
-        if not line or PAGE_HEADER_RE.match(line):
+        if not line or _is_page_header(line):
             continue
         lines.append(line)
     return lines
 
 
+def _is_page_header(line: str) -> bool:
+    candidate = line.strip().strip("()").strip()
+    return bool(candidate) and PAGE_HEADER_PREFIX_RE.match(candidate) is not None
+
+
 def _should_join_line(previous: str, current: str) -> bool:
     if not previous:
         return False
-    if current.startswith("- ") or re.match(r"^\d+\s*-\s+", current):
+    if current.startswith("- ") or DIGIT_DASH_RE.match(current):
         return False
     if SECTION_RE.match(current) or ENTRY_RE.match(current):
         return False
@@ -140,7 +147,7 @@ def _should_extend_title(current_title: str, body_lines: list[str], line: str) -
         return False
     if not line or SECTION_RE.match(line) or ENTRY_RE.match(line):
         return False
-    if line.startswith("- ") or re.match(r"^\d+\s*-\s+", line):
+    if line.startswith("- ") or DIGIT_DASH_RE.match(line):
         return False
     lowered = line.lower()
     if any(lowered.startswith(prefix) for prefix in TITLE_CONTINUATION_BLOCKLIST):
@@ -197,7 +204,7 @@ def _body_lines_to_markdown(lines: list[str]) -> str | None:
         if line.startswith("- "):
             bullet_buffer.append(line)
             continue
-        if re.match(r"^\d+\s*-\s+", line):
+        if DIGIT_DASH_RE.match(line):
             bullet_buffer.append(f"- {line}")
             continue
         flush_bullets()
@@ -221,6 +228,59 @@ def _token_overlap_ratio(left: str, right: str) -> float:
         return 0.0
     intersection = left_tokens & right_tokens
     return len(intersection) / max(len(left_tokens), len(right_tokens))
+
+
+def _validate_candidate(
+    candidate: _CandidateEntry,
+    resolved_nbs_item: tuple[str, str] | None,
+    duplicate_codes: set[str],
+    normalized_title: str,
+    normalized_body: str,
+    merged_lines: list[str],
+) -> tuple[str, tuple[str, ...]]:
+    reasons: list[str] = []
+    status_rank = {"trusted": 0, "suspect": 1, "rejected": 2}
+    parser_status = "trusted"
+
+    def promote_status(next_status: str) -> None:
+        nonlocal parser_status
+        if status_rank[next_status] > status_rank[parser_status]:
+            parser_status = next_status
+
+    expected_description = resolved_nbs_item[1] if resolved_nbs_item else None
+    if expected_description is None:
+        promote_status("rejected")
+        reasons.append("codigo_nao_encontrado_na_nbs")
+
+    if candidate.code in duplicate_codes:
+        promote_status("suspect")
+        reasons.append("codigo_duplicado_no_pdf")
+
+    if not candidate.title.strip():
+        promote_status("suspect" if expected_description else "rejected")
+        reasons.append("titulo_ausente")
+
+    if not normalized_body:
+        promote_status("suspect" if expected_description else "rejected")
+        reasons.append("corpo_vazio")
+    else:
+        has_structured_body = any(line.startswith("- ") for line in merged_lines) or len(merged_lines) >= 2
+        min_body_length = 30 if has_structured_body else 50
+        if len(normalized_body) < min_body_length:
+            promote_status("suspect")
+            reasons.append("corpo_muito_curto")
+
+    if expected_description:
+        normalized_expected = normalize_nbs_text(expected_description)
+        if (
+            normalized_title
+            and normalized_title != normalized_expected
+            and _token_overlap_ratio(normalized_title, normalized_expected) < 0.6
+        ):
+            promote_status("suspect")
+            reasons.append("titulo_inconsistente_com_nbs")
+
+    return parser_status, tuple(reasons)
 
 
 def _should_merge_duplicate_candidate(left: _CandidateEntry, right: _CandidateEntry) -> bool:
@@ -342,51 +402,18 @@ def parse_nebs_pdf(
         merged_lines = _merge_body_lines(candidate.body_lines)
         body_text = _body_lines_to_text(merged_lines)
         title = candidate.title.strip()
-        reasons: list[str] = []
-        status_rank = {"trusted": 0, "suspect": 1, "rejected": 2}
-        parser_status = "trusted"
         normalized_title = normalize_nbs_text(title)
         normalized_body = normalize_nbs_text(body_text)
-
-        def promote_status(next_status: str) -> None:
-            nonlocal parser_status
-            if status_rank[next_status] > status_rank[parser_status]:
-                parser_status = next_status
-
         resolved_nbs_item = resolved_nbs_items.get(candidate.code)
         canonical_code = resolved_nbs_item[0] if resolved_nbs_item else candidate.code
-        expected_description = resolved_nbs_item[1] if resolved_nbs_item else None
-        if expected_description is None:
-            promote_status("rejected")
-            reasons.append("codigo_nao_encontrado_na_nbs")
-
-        if candidate.code in duplicate_codes:
-            promote_status("suspect")
-            reasons.append("codigo_duplicado_no_pdf")
-
-        if not title:
-            promote_status("suspect" if expected_description else "rejected")
-            reasons.append("titulo_ausente")
-
-        if not body_text:
-            promote_status("suspect" if expected_description else "rejected")
-            reasons.append("corpo_vazio")
-        else:
-            has_structured_body = any(line.startswith("- ") for line in merged_lines) or len(merged_lines) >= 2
-            min_body_length = 30 if has_structured_body else 50
-            if len(normalized_body) < min_body_length:
-                promote_status("suspect")
-                reasons.append("corpo_muito_curto")
-
-        if expected_description:
-            normalized_expected = normalize_nbs_text(expected_description)
-            if (
-                normalized_title
-                and normalized_title != normalized_expected
-                and _token_overlap_ratio(normalized_title, normalized_expected) < 0.6
-            ):
-                promote_status("suspect")
-                reasons.append("titulo_inconsistente_com_nbs")
+        parser_status, reasons = _validate_candidate(
+            candidate,
+            resolved_nbs_item,
+            duplicate_codes,
+            normalized_title,
+            normalized_body,
+            merged_lines,
+        )
 
         if parser_status == "trusted":
             entry = ParsedNebsEntry(
@@ -437,24 +464,34 @@ def write_nebs_audit_report(
     csv_target.parent.mkdir(parents=True, exist_ok=True)
     json_target.parent.mkdir(parents=True, exist_ok=True)
 
-    csv_lines = [
-        "code,parser_status,reasons,section_title,title,page_start,page_end,excerpt"
-    ]
-    for record in outcome.audit_records:
-        row = [
-            record.code or "",
-            record.parser_status,
-            "|".join(record.reasons),
-            record.section_title or "",
-            record.title,
-            str(record.page_start),
-            str(record.page_end),
-            record.excerpt,
-        ]
-        escaped = ['"' + item.replace('"', '""') + '"' for item in row]
-        csv_lines.append(",".join(escaped))
+    with csv_target.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle, quoting=csv.QUOTE_ALL)
+        writer.writerow(
+            [
+                "code",
+                "parser_status",
+                "reasons",
+                "section_title",
+                "title",
+                "page_start",
+                "page_end",
+                "excerpt",
+            ]
+        )
+        for record in outcome.audit_records:
+            writer.writerow(
+                [
+                    record.code or "",
+                    record.parser_status,
+                    "|".join(record.reasons),
+                    record.section_title or "",
+                    record.title,
+                    str(record.page_start),
+                    str(record.page_end),
+                    record.excerpt,
+                ]
+            )
 
-    csv_target.write_text("\n".join(csv_lines) + "\n", encoding="utf-8")
     payload = [asdict(record) for record in outcome.audit_records]
     json_target.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
