@@ -52,10 +52,12 @@ PYTHON_BANDIT_ARGUMENTS: "--skip B101,B105,B108,B110,B404,B603,B608"
 # - flake8/pylint are redundant with Ruff in this repo configuration
 # - ts-standard requires root tsconfig and overlaps with TypeScript/ESLint checks
 # - kingfisher has persistent noise from virtual env dependencies
+# - dustilock intermittently fails on a non-repo `/github/workspace/github_conf` path in CI
 DISABLE_LINTERS:
   - PYTHON_FLAKE8
   - PYTHON_PYLINT
   - TYPESCRIPT_STANDARD
+  - REPOSITORY_DUSTILOCK
   - REPOSITORY_KINGFISHER
 # Flavors
 # FLAVOR_SUGGESTION: python, javascript
