@@ -58,7 +58,8 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     }
     if "nebs_entries" in existing_tables:
         existing_columns = {
-            row[1] for row in cursor.execute("PRAGMA table_info(nebs_entries)").fetchall()
+            row[1]
+            for row in cursor.execute("PRAGMA table_info(nebs_entries)").fetchall()
         }
         required_columns = {
             "code_clean",
@@ -70,6 +71,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             "source_hash",
         }
         if not required_columns.issubset(existing_columns):
+            cursor.execute("DROP TABLE IF EXISTS nebs_entries_fts")
             cursor.execute("DROP TABLE nebs_entries")
 
     cursor.execute(NEBS_ENTRIES_CREATE_SQL)

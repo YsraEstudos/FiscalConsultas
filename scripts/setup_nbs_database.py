@@ -8,6 +8,7 @@ restore NEBS data.
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -39,6 +40,24 @@ except ModuleNotFoundError:
 
 DATA_FILE = Path(__file__).resolve().parents[1] / "data" / "nbs.csv"
 DB_FILE = Path(settings.database.services_path)
+
+
+def _confirm_destructive_schema_reset(db_file: Path) -> bool:
+    if not db_file.exists():
+        return True
+
+    print(
+        "AVISO: _create_schema() removerá `nebs_entries` e `nebs_entries_fts`. "
+        "Execute setup_nebs_database.py depois deste script para restaurar os dados NEBS."
+    )
+    if os.getenv("CI") or not sys.stdin.isatty():
+        return True
+
+    answer = input(
+        "This will remove nebs_entries and nebs_entries_fts. Continue? [y/N] "
+    ).strip()
+    return answer.lower() in {"y", "yes"}
+
 
 def _create_schema(conn: sqlite3.Connection) -> None:
     cursor = conn.cursor()
@@ -114,11 +133,9 @@ def main() -> int:
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
     items = build_nbs_items(iter_nbs_rows(DATA_FILE))
     content_hash = calculate_file_sha256(DATA_FILE)
-    if DB_FILE.exists():
-        print(
-            "AVISO: _create_schema() removerá `nebs_entries` e `nebs_entries_fts`. "
-            "Execute setup_nebs_database.py depois deste script para restaurar os dados NEBS."
-        )
+    if not _confirm_destructive_schema_reset(DB_FILE):
+        print("Operação cancelada.")
+        return 1
 
     conn = sqlite3.connect(DB_FILE)
     try:

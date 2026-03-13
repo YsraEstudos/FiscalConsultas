@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+from collections import Counter
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -259,7 +260,9 @@ def _check_body_length(
         reasons.append("corpo_vazio")
         return "suspect" if expected_description else "rejected"
 
-    has_structured_body = any(line.startswith("- ") for line in merged_lines) or len(merged_lines) >= 2
+    has_structured_body = (
+        any(line.startswith("- ") for line in merged_lines) or len(merged_lines) >= 2
+    )
     min_body_length = 30 if has_structured_body else 50
     if len(normalized_body) >= min_body_length:
         return None
@@ -307,7 +310,9 @@ def _validate_candidate(
         _check_nbs_existence(resolved_nbs_item, reasons),
         _check_duplicate(candidate.code, duplicate_codes, reasons),
         _check_title_presence(candidate.title, expected_description, reasons),
-        _check_body_length(normalized_body, merged_lines, expected_description, reasons),
+        _check_body_length(
+            normalized_body, merged_lines, expected_description, reasons
+        ),
         _check_title_vs_nbs(normalized_title, expected_description, reasons),
     )
     for status in checks:
@@ -317,10 +322,16 @@ def _validate_candidate(
     return parser_status, tuple(reasons)
 
 
-def _should_merge_duplicate_candidate(left: _CandidateEntry, right: _CandidateEntry) -> bool:
+def _should_merge_duplicate_candidate(
+    left: _CandidateEntry, right: _CandidateEntry
+) -> bool:
     if left.code != right.code:
         return False
-    if left.section_title and right.section_title and left.section_title != right.section_title:
+    if (
+        left.section_title
+        and right.section_title
+        and left.section_title != right.section_title
+    ):
         return False
     titles_overlap = _token_overlap_ratio(
         normalize_nbs_text(left.title),
@@ -333,12 +344,16 @@ def _should_merge_duplicate_candidate(left: _CandidateEntry, right: _CandidateEn
     return True
 
 
-def _merge_duplicate_candidate(left: _CandidateEntry, right: _CandidateEntry) -> _CandidateEntry:
+def _merge_duplicate_candidate(
+    left: _CandidateEntry, right: _CandidateEntry
+) -> _CandidateEntry:
     merged_title = left.title if len(left.title) >= len(right.title) else right.title
     merged_body_lines = [*left.body_lines]
+    seen_lines = set(merged_body_lines)
     for line in right.body_lines:
-        if line not in merged_body_lines:
+        if line not in seen_lines:
             merged_body_lines.append(line)
+            seen_lines.add(line)
     return _CandidateEntry(
         code=left.code,
         title=merged_title,
@@ -349,7 +364,9 @@ def _merge_duplicate_candidate(left: _CandidateEntry, right: _CandidateEntry) ->
     )
 
 
-def _coalesce_duplicate_candidates(candidates: list[_CandidateEntry]) -> list[_CandidateEntry]:
+def _coalesce_duplicate_candidates(
+    candidates: list[_CandidateEntry],
+) -> list[_CandidateEntry]:
     grouped: dict[str, list[_CandidateEntry]] = {}
     for candidate in candidates:
         grouped.setdefault(candidate.code, []).append(candidate)
@@ -370,7 +387,9 @@ def _coalesce_duplicate_candidates(candidates: list[_CandidateEntry]) -> list[_C
                 current = candidate
         merged_candidates.append(current)
 
-    return sorted(merged_candidates, key=lambda item: (item.page_start, item.page_end, item.code))
+    return sorted(
+        merged_candidates, key=lambda item: (item.page_start, item.page_end, item.code)
+    )
 
 
 def _iter_candidate_entries(pdf_path: str | Path) -> list[_CandidateEntry]:
@@ -402,7 +421,9 @@ def _iter_candidate_entries(pdf_path: str | Path) -> list[_CandidateEntry]:
                 if current_entry is None:
                     continue
 
-                if _should_extend_title(current_entry.title, current_entry.body_lines, line):
+                if _should_extend_title(
+                    current_entry.title, current_entry.body_lines, line
+                ):
                     current_entry.title = f"{current_entry.title} {line}".strip()
                     current_entry.page_end = page_number
                     continue
@@ -423,9 +444,9 @@ def parse_nebs_pdf(
     updated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     outcome = NebsParseOutcome()
     candidates = _iter_candidate_entries(pdf_path)
+    duplicate_code_counts = Counter(candidate.code for candidate in candidates)
     duplicate_codes = {
-        code for code in {candidate.code for candidate in candidates}
-        if sum(1 for candidate in candidates if candidate.code == code) > 1
+        code for code, count in duplicate_code_counts.items() if count > 1
     }
     resolved_nbs_items: dict[str, tuple[str, str]] = {}
     for canonical_code, description in valid_nbs_items.items():
