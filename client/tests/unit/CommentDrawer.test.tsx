@@ -2,16 +2,30 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { CommentDrawer } from '../../src/components/CommentDrawer';
-import { makeLocalComment, makePendingCommentEntry, unsafeJavascriptUrl } from './commentTestUtils';
+import type { LocalComment, PendingCommentEntry } from '../../src/components/CommentPanel';
 
-function makeComment(overrides: Parameters<typeof makeLocalComment>[0] = {}) {
-  return makeLocalComment({ body: 'Comentário do drawer', ...overrides });
+function makeComment(overrides: Partial<LocalComment> = {}): LocalComment {
+  return {
+    id: 'comment-1',
+    anchorTop: 16,
+    anchorKey: 'pos-84-13',
+    selectedText: 'Motores elétricos monofásicos com descrição longa',
+    body: 'Comentário do drawer',
+    isPrivate: false,
+    createdAt: new Date('2026-03-01T10:00:00Z'),
+    userName: 'Alice Silva',
+    userImageUrl: null,
+    userId: 'user_test',
+    ...overrides,
+  };
 }
 
-function makePending() {
-  return makePendingCommentEntry({
+function makePending(): PendingCommentEntry {
+  return {
+    anchorTop: 24,
+    anchorKey: 'pos-84-13',
     selectedText: 'Trecho pendente com conteúdo suficiente para truncar se necessário',
-  });
+  };
 }
 
 describe('CommentDrawer', () => {
@@ -96,7 +110,7 @@ describe('CommentDrawer', () => {
         open={true}
         onClose={vi.fn()}
         pending={null}
-        comments={[makeComment({ userImageUrl: unsafeJavascriptUrl, userId: 'another-user' })]}
+        comments={[makeComment({ userImageUrl: 'javascript:alert(1)', userId: 'another-user' })]}
         onSubmit={vi.fn().mockResolvedValue(true)}
         onDismiss={vi.fn()}
         onEdit={vi.fn()}

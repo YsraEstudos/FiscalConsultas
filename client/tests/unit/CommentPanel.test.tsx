@@ -1,15 +1,30 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CommentPanel } from '../../src/components/CommentPanel';
-import { makeLocalComment, makePendingCommentEntry, unsafeJavascriptUrl } from './commentTestUtils';
+import { CommentPanel, type LocalComment, type PendingCommentEntry } from '../../src/components/CommentPanel';
 
-function makeComment(overrides: Parameters<typeof makeLocalComment>[0] = {}) {
-  return makeLocalComment(overrides);
+function makeComment(overrides: Partial<LocalComment> = {}): LocalComment {
+  return {
+    id: 'comment-1',
+    anchorTop: 16,
+    anchorKey: 'pos-84-13',
+    selectedText: 'Motores elétricos monofásicos com descrição longa',
+    body: 'Comentário original',
+    isPrivate: false,
+    createdAt: new Date('2026-03-01T10:00:00Z'),
+    userName: 'Alice Silva',
+    userImageUrl: null,
+    userId: 'user_test',
+    ...overrides,
+  };
 }
 
-function makePending() {
-  return makePendingCommentEntry();
+function makePending(): PendingCommentEntry {
+  return {
+    anchorTop: 24,
+    anchorKey: 'pos-84-13',
+    selectedText: 'Trecho pendente para comentar com bastante conteúdo',
+  };
 }
 
 describe('CommentPanel', () => {
@@ -17,11 +32,11 @@ describe('CommentPanel', () => {
   let cancelAnimationFrameSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    requestAnimationFrameSpy = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
+    requestAnimationFrameSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
       callback(0);
       return 1;
     });
-    cancelAnimationFrameSpy = vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
+    cancelAnimationFrameSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -76,7 +91,7 @@ describe('CommentPanel', () => {
     render(
       <CommentPanel
         pending={null}
-        comments={[makeComment({ userImageUrl: unsafeJavascriptUrl, userId: 'another-user' })]}
+        comments={[makeComment({ userImageUrl: 'javascript:alert(1)', userId: 'another-user' })]}
         onSubmit={vi.fn().mockResolvedValue(true)}
         onDismiss={vi.fn()}
         onEdit={vi.fn()}

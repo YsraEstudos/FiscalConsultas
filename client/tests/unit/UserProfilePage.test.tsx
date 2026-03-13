@@ -426,7 +426,7 @@ describe('UserProfilePage', () => {
         fireEvent.click(screen.getByRole('button', { name: /desativar minha conta/i }));
         expect(screen.getByText('⚠️ Desativar Conta')).toBeInTheDocument();
 
-        fireEvent.keyDown(globalThis, { key: 'Escape' });
+        fireEvent.keyDown(window, { key: 'Escape' });
         expect(screen.queryByText('⚠️ Desativar Conta')).not.toBeInTheDocument();
         expect(onClose).not.toHaveBeenCalled();
     });
