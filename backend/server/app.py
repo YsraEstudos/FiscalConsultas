@@ -164,7 +164,7 @@ async def _init_tipi_service(app: FastAPI) -> None:
     )
 
 
-async def _init_nbs_service(app: FastAPI) -> None:
+def _init_nbs_service(app: FastAPI) -> None:
     app.state.nbs_service = NbsService()
     logger.info("NbsService initialized in SQLite mode (services.db)")
 
@@ -210,7 +210,7 @@ async def lifespan(app: FastAPI):
         await _init_nesh_service(app)
         await _init_cache_warmup(app)
         await _init_tipi_service(app)
-        await _init_nbs_service(app)
+        _init_nbs_service(app)
         app.state.ai_service = AiService()
 
         logger.info("Initializing Glossary...")
