@@ -1,7 +1,7 @@
 # Nesh / Fiscal - AI_CONTEXT
 
-Atualizado em: 2026-03-09
-Base desta revisao: leitura constante de backend/frontend/scripts/docs durante a migração para SaaS (PostgreSQL, Clerk JWT, Asaas) e do hardening recente de frontend/testes.
+Atualizado em: 2026-03-13
+Base desta revisao: README, `start_nesh_dev.bat`, `client/package.json`, `docs/TESTING.md` e workflows atuais de CI/MegaLinter.
 
 ## 1) Proposito
 
@@ -180,9 +180,11 @@ Notas:
 
 Local:
 
-- Backend default: `pytest -q` (sem `perf` por padrao).
+- Backend default: `uv run pytest -q` (sem `perf` e `snapshot` por padrao).
 - Frontend default: `cd client && npm run test`.
 - Frontend type-check: `cd client && npm run type-check`.
+- Full stack Windows: `.\start_nesh_dev.bat` (`--auth-debug` para diagnostico Clerk no frontend; `--rebuild` para recriar indices/bancos locais antes do boot).
+- Validacao dedicada de auth env: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate_auth_env.ps1`.
 - Testes de performance existem, mas sao opt-in.
 - Existe cobertura de contratos de rota, renderer, middleware e hooks.
 - Snapshot observado em 2026-03-09:
@@ -192,15 +194,15 @@ Local:
 CI observado em `.github/workflows/tests.yml`:
 
 - Job backend:
-  - Python `3.13`
+  - Python `3.14`
   - `uv sync --group dev`
   - `uv run ruff format --check`
   - `uv run ruff check`
-  - `uv run --with pyright pyright migrations`
-  - `uv run --with pylint pylint migrations/env.py migrations/versions/001_initial.py migrations/versions/006_precomputed_columns_and_gin.py --disable=all --enable=E,F --disable=E0401,E1101`
+  - `uv run pyright migrations`
+  - `uv run pylint migrations/env.py migrations/versions/001_initial.py migrations/versions/006_precomputed_columns_and_gin.py --disable=all --enable=E,F --disable=E0401,E1101`
   - `uv run pytest -q --cov=backend --cov-report=xml --cov-report=term-missing --cov-fail-under=70`
 - Job frontend:
-  - Node `22`
+  - Node `24`
   - `npm ci`
   - `npm run lint`
   - `npm run type-check`
@@ -238,8 +240,8 @@ Status:
 Opcao A (pyproject/uv):
 
 ```powershell
-uv sync
-uv run python Nesh.py
+uv sync --group dev
+uv run Nesh.py
 ```
 
 Opcao B (venv + install local):
@@ -260,17 +262,30 @@ Observacoes:
 
 ```powershell
 cd client
-npm install
+npm ci
 npm run dev
 ```
 
 ### Dados SQLite
 
 ```powershell
-python scripts/setup_tipi_database.py
-$env:PYTHONUTF8="1"; python scripts/setup_database.py
-$env:PYTHONUTF8="1"; python scripts/setup_fulltext.py
+uv run scripts/setup_tipi_database.py
+$env:PYTHONUTF8="1"; uv run scripts/setup_database.py
+$env:PYTHONUTF8="1"; uv run scripts/setup_fulltext.py
 ```
+
+### Bootstrap Windows assistido
+
+```powershell
+.\start_nesh_dev.bat
+```
+
+Notas:
+
+- o script faz `docker compose up -d`, valida `.env` e `client/.env.local`, espera `db`, `redis` e `pgadmin`, e bloqueia startup se o preflight de migracao PostgreSQL falhar.
+- para diagnostico de auth do frontend, use `.\start_nesh_dev.bat --auth-debug`.
+- para rebuild local antes do boot, use `.\start_nesh_dev.bat --rebuild`.
+- se houver volume legado do PostgreSQL 15, verifique com `.\.venv\Scripts\python scripts\migrate_postgres_cluster.py --check-only` e migre com `.\.venv\Scripts\python scripts\migrate_postgres_cluster.py --run`.
 
 ## 14) Regras para Mudancas por IA
 
