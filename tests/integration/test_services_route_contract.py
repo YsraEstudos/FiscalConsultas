@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -143,12 +145,14 @@ def test_services_routes_rate_limit_anonymous_requests_before_auth(client, monke
     app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
     consumed_keys: list[str] = []
 
-    async def _deny_consume(*, key: str, limit: int):
+    def _deny_consume(*, key: str, limit: int):
         consumed_keys.append(key)
         return False, 7
 
     monkeypatch.setattr(
-        services_routes.services_search_rate_limiter, "consume", _deny_consume
+        services_routes.services_search_rate_limiter,
+        "consume",
+        AsyncMock(side_effect=_deny_consume),
     )
 
     response = client.get("/api/services/nbs/search?q=construcao")
@@ -254,11 +258,15 @@ def test_services_detail_rejects_overly_long_code(
     oversized_code = "1" * (services_routes.MAX_SERVICE_CODE_LENGTH + 1)
     called = {"value": False}
 
-    async def _unexpected_call(self, _code: str):
+    def _unexpected_call(_code: str):
         called["value"] = True
         raise AssertionError(f"{service_method} should not be called")
 
-    monkeypatch.setattr(_FakeServicesCatalog, service_method, _unexpected_call)
+    monkeypatch.setattr(
+        _FakeServicesCatalog,
+        service_method,
+        AsyncMock(side_effect=_unexpected_call),
+    )
 
     response = client.get(
         endpoint.format(code=oversized_code),
