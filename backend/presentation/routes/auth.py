@@ -12,10 +12,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 router = APIRouter()
 
 
-def _extract_client_ip(request: Request) -> str:
-    return extract_client_ip(request)
-
-
 async def _is_authenticated(token: str | None) -> bool:
     if not token:
         return False
