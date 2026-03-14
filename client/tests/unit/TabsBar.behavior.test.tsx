@@ -23,6 +23,8 @@ const tabs: Tab[] = [
   },
 ];
 
+const originalScrollIntoView = Element.prototype.scrollIntoView;
+
 function findTabContainer(label: string) {
   return screen.getByText(label).closest('[data-document]') as HTMLDivElement;
 }
@@ -41,11 +43,11 @@ function createDataTransfer(initialText = '') {
 
 describe('TabsBar behavior', () => {
   beforeEach(() => {
-    vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+    Element.prototype.scrollIntoView = vi.fn();
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    Element.prototype.scrollIntoView = originalScrollIntoView;
   });
 
   it('configures drag metadata and reorders tabs on drop', () => {

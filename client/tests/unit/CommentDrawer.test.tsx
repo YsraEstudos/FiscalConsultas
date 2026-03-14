@@ -2,16 +2,27 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { CommentDrawer } from '../../src/components/CommentDrawer';
-import { makeLocalComment, makePendingCommentEntry, unsafeJavascriptUrl } from './commentTestUtils';
+import {
+  type CommentComponentRenderOptions,
+  makeComment,
+  makePending,
+  registerSharedOwnerCommentTests,
+} from './commentComponentTestUtils';
 
-function makeComment(overrides: Parameters<typeof makeLocalComment>[0] = {}) {
-  return makeLocalComment({ body: 'Comentário do drawer', ...overrides });
-}
-
-function makePending() {
-  return makePendingCommentEntry({
-    selectedText: 'Trecho pendente com conteúdo suficiente para truncar se necessário',
-  });
+function renderDrawer(options: CommentComponentRenderOptions = {}) {
+  return (
+    <CommentDrawer
+      open={true}
+      onClose={vi.fn()}
+      pending={options.pending ?? null}
+      comments={options.comments ?? []}
+      onSubmit={options.onSubmit ?? vi.fn().mockResolvedValue(true)}
+      onDismiss={options.onDismiss ?? vi.fn()}
+      onEdit={options.onEdit}
+      onDelete={options.onDelete}
+      currentUserId={options.currentUserId}
+    />
+  );
 }
 
 describe('CommentDrawer', () => {
@@ -90,65 +101,5 @@ describe('CommentDrawer', () => {
     expect(screen.getByLabelText('Comentário privado')).not.toBeChecked();
   });
 
-  it('renders fallback avatars and hides owner actions for non-owners', () => {
-    render(
-      <CommentDrawer
-        open={true}
-        onClose={vi.fn()}
-        pending={null}
-        comments={[makeComment({ userImageUrl: unsafeJavascriptUrl, userId: 'another-user' })]}
-        onSubmit={vi.fn().mockResolvedValue(true)}
-        onDismiss={vi.fn()}
-        onEdit={vi.fn()}
-        onDelete={vi.fn()}
-        currentUserId="user_test"
-      />,
-    );
-
-    expect(screen.getByText('AS')).toBeInTheDocument();
-    expect(screen.queryByTitle('Editar')).not.toBeInTheDocument();
-    expect(screen.queryByTitle('Excluir')).not.toBeInTheDocument();
-  });
-
-  it('supports owner edit and delete flows', async () => {
-    const onEdit = vi.fn().mockResolvedValue(undefined);
-    const onDelete = vi.fn().mockResolvedValue(undefined);
-
-    render(
-      <CommentDrawer
-        open={true}
-        onClose={vi.fn()}
-        pending={null}
-        comments={[makeComment()]}
-        onSubmit={vi.fn().mockResolvedValue(true)}
-        onDismiss={vi.fn()}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        currentUserId="user_test"
-      />,
-    );
-
-    fireEvent.click(screen.getByTitle('Editar'));
-    const editTextarea = screen.getByLabelText('Editar comentário');
-
-    fireEvent.change(editTextarea, { target: { value: 'Drawer editado' } });
-    fireEvent.keyDown(editTextarea, { key: 'Escape' });
-    expect(screen.queryByLabelText('Editar comentário')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByTitle('Editar'));
-    fireEvent.change(screen.getByLabelText('Editar comentário'), { target: { value: 'Drawer editado' } });
-    fireEvent.click(screen.getByText('Salvar'));
-
-    await waitFor(() => {
-      expect(onEdit).toHaveBeenCalledWith('comment-1', 'Drawer editado');
-    });
-
-    fireEvent.click(screen.getByTitle('Excluir'));
-    expect(screen.getByText('Excluir este comentário?')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Sim, excluir'));
-
-    await waitFor(() => {
-      expect(onDelete).toHaveBeenCalledWith('comment-1');
-    });
-  });
+  registerSharedOwnerCommentTests(renderDrawer, 'Drawer editado');
 });

@@ -36,7 +36,9 @@ def main():
     Função principal que configura e inicia o servidor Uvicorn.
 
     Adiciona o diretório raiz ao PYTHONPATH e inicia o servidor
-    escutando em 127.0.0.1:8000 com reload automático ativado.
+    escutando em 127.0.0.1:8000 com reload desativado por padrão.
+    Para reativar o reload, defina NESH_RELOAD com um valor truthy
+    como "1", "true" ou "yes".
     """
     # Adiciona diretório atual ao path para garantir imports corretos
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -48,9 +50,9 @@ def main():
     backend_dir = os.path.join(project_root, "backend")
 
     # Hot reload controlado:
-    # - Evita watcher global em todo o projeto (muito pesado no Windows/OneDrive)
-    # - Pode ser desabilitado com NESH_RELOAD=0
-    reload_enabled = os.getenv("NESH_RELOAD", "1").lower() not in {"0", "false", "no"}
+    # - Desligado por padrão porque o watcher costuma travar no Windows/OneDrive
+    # - Pode ser reativado explicitamente com NESH_RELOAD=1
+    reload_enabled = os.getenv("NESH_RELOAD", "0").lower() not in {"0", "false", "no"}
 
     print(f"Starting Nesh Server on http://{HOST}:{PORT}")
 

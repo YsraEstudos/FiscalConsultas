@@ -83,6 +83,8 @@ pull request pendences.md
 Scripts results/
 snapshots/
 tipi_tree_dump.html
+client/test-results/
+reports/nebs/
 
 # Coverage HTML report
 htmlcov/
