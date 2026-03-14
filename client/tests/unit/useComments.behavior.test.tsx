@@ -213,7 +213,7 @@ describe('useComments behavior', () => {
     try {
       Object.defineProperty(window, 'location', {
         configurable: true,
-        value: new URL('http://192.168.0.23/'),
+        value: new URL('https://192.168.0.23/'),
       });
 
       const useComments = await loadUseComments();
@@ -381,7 +381,7 @@ describe('useComments behavior', () => {
     try {
       Object.defineProperty(window, 'location', {
         configurable: true,
-        value: new URL('http://192.168.0.11/'),
+        value: new URL('https://192.168.0.11/'),
       });
 
       const useComments = await loadUseComments();

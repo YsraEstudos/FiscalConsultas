@@ -91,7 +91,7 @@ describe('CommentPanel', () => {
     render(
       <CommentPanel
         pending={null}
-        comments={[makeComment({ userImageUrl: 'javascript:alert(1)', userId: 'another-user' })]}
+        comments={[makeComment({ userImageUrl: 'data:text/html;base64,abc', userId: 'another-user' })]}
         onSubmit={vi.fn().mockResolvedValue(true)}
         onDismiss={vi.fn()}
         onEdit={vi.fn()}

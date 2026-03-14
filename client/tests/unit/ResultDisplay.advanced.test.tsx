@@ -862,7 +862,7 @@ describe('ResultDisplay advanced behavior', () => {
       };
       Object.defineProperty(window, 'location', {
         configurable: true,
-        value: new URL('http://192.168.0.25/'),
+        value: new URL('https://192.168.0.25/'),
       });
 
       rerender(
