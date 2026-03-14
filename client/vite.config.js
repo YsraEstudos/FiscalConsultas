@@ -15,7 +15,7 @@ export default defineConfig({
       ? {
           '@clerk/react': clerkMockPath,
         }
-      : undefined,
+      : {},
   },
   server: {
     proxy: {

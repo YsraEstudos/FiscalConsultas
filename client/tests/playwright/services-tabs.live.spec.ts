@@ -1,4 +1,4 @@
-import { expect, Page, test } from '@playwright/test';
+import { expect, type Locator, Page, test } from '@playwright/test';
 
 const liveEnv = {
   baseUrl: process.env.PLAYWRIGHT_LIVE_BASE_URL || '',
@@ -33,6 +33,27 @@ async function findFirstVisibleLocator(page: Page, selectors: string[]) {
   return null;
 }
 
+async function pollForLocator(
+  page: Page,
+  selectors: string[],
+  options: { interval?: number; maxAttempts?: number } = {},
+): Promise<Locator | null> {
+  const {
+    interval = 500,
+    maxAttempts = 20,
+  } = options;
+
+  for (let i = 0; i < maxAttempts; i += 1) {
+    const locator = await findFirstVisibleLocator(page, selectors);
+    if (locator) {
+      return locator;
+    }
+    await page.waitForTimeout(interval);
+  }
+
+  return null;
+}
+
 async function clickFirstVisibleButton(page: Page, labels: RegExp[]) {
   const targets = [page, ...page.frames()];
   for (const label of labels) {
@@ -58,32 +79,30 @@ async function ensureSignedIn(page: Page) {
   await signInButton.click();
 
   const emailInput = await test.step('find email field', async () => {
-    for (let i = 0; i < 20; i += 1) {
-      const locator = await findFirstVisibleLocator(page, [
-        'input[name="identifier"]',
-        'input[type="email"]',
-        'input[autocomplete="username"]',
-      ]);
-      if (locator) return locator;
-      await page.waitForTimeout(500);
+    const locator = await pollForLocator(page, [
+      'input[name="identifier"]',
+      'input[type="email"]',
+      'input[autocomplete="username"]',
+    ]);
+    if (!locator) {
+      throw new Error('Clerk email field not found');
     }
-    throw new Error('Clerk email field not found');
+    return locator;
   });
 
   await emailInput.fill(liveEnv.email);
   await clickFirstVisibleButton(page, [/continue/i, /continuar/i, /next/i]);
 
   const passwordInput = await test.step('find password field', async () => {
-    for (let i = 0; i < 20; i += 1) {
-      const locator = await findFirstVisibleLocator(page, [
-        'input[name="password"]',
-        'input[type="password"]',
-        'input[autocomplete="current-password"]',
-      ]);
-      if (locator) return locator;
-      await page.waitForTimeout(500);
+    const locator = await pollForLocator(page, [
+      'input[name="password"]',
+      'input[type="password"]',
+      'input[autocomplete="current-password"]',
+    ]);
+    if (!locator) {
+      throw new Error('Clerk password field not found');
     }
-    throw new Error('Clerk password field not found');
+    return locator;
   });
 
   await passwordInput.fill(liveEnv.password);

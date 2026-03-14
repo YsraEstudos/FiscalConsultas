@@ -1,264 +1,77 @@
-import { expect, Page, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
-function makeNbsSearch(query = '1.0101.11.00') {
-  return {
-    success: true,
-    query,
-    normalized: query,
-    results: [
-      {
-        code: query,
-        code_clean: query.replace(/\D/g, ''),
-        description: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
-        parent_code: '1.0101.1',
-        level: 3,
-        has_nebs: true,
-      },
-    ],
-    total: 1,
-  };
-}
+import { installServicesMock } from './fixtures/service-mocks';
 
-function makeNebsSearch(query = '1.0101.11.00') {
-  return {
-    success: true,
-    query,
-    normalized: query,
-    results: [
-      {
-        code: query,
-        title: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
-        excerpt: 'Esta subposição inclui serviços de novas construções e reparo.',
-        page_start: 12,
-        page_end: 13,
-        section_title: 'SEÇÃO I - SERVIÇOS DE CONSTRUÇÃO',
-      },
-    ],
-    total: 1,
-  };
-}
-
-function makeNbsDetail(code = '1.0101.11.00') {
-  return {
-    success: true,
-    item: {
-      code,
-      code_clean: code.replace(/\D/g, ''),
-      description: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
-      parent_code: '1.0101.1',
-      level: 3,
-      has_nebs: true,
-    },
-    ancestors: [
-      {
-        code: '1.01',
-        code_clean: '101',
-        description: 'Serviços de construção',
-        parent_code: null,
-        level: 0,
-        has_nebs: false,
-      },
-      {
-        code: '1.0101',
-        code_clean: '10101',
-        description: 'Serviços de construção de edificações',
-        parent_code: '1.01',
-        level: 1,
-        has_nebs: false,
-      },
-      {
-        code: '1.0101.1',
-        code_clean: '101011',
-        description: 'Serviços de construção de edificações residenciais',
-        parent_code: '1.0101',
-        level: 2,
-        has_nebs: false,
-      },
-    ],
-    children: [],
-    chapter_root: {
-      code: '1.0101',
-      code_clean: '10101',
-      description: 'Serviços de construção de edificações',
-      parent_code: '1.01',
-      level: 1,
-      has_nebs: false,
-    },
-    chapter_items: [
-      {
-        code: '1.0101',
-        code_clean: '10101',
-        description: 'Serviços de construção de edificações',
-        parent_code: '1.01',
-        level: 1,
-        has_nebs: false,
-      },
-      {
-        code: '1.0101.1',
-        code_clean: '101011',
-        description: 'Serviços de construção de edificações residenciais',
-        parent_code: '1.0101',
-        level: 2,
-        has_nebs: false,
-      },
-      {
-        code,
-        code_clean: code.replace(/\D/g, ''),
-        description: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
-        parent_code: '1.0101.1',
-        level: 3,
-        has_nebs: true,
-      },
-    ],
-    nebs: {
-      code,
-      code_clean: code.replace(/\D/g, ''),
-      title: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
-      title_normalized: 'servicos de construcao de edificacoes residenciais de um e dois pavimentos',
-      body_text: 'Esta subposição inclui serviços de novas construções e reparo.',
-      body_markdown: 'Esta subposição inclui serviços de novas construções e reparo.',
-      body_normalized: 'esta subposicao inclui servicos de novas construcoes e reparo',
-      section_title: 'SEÇÃO I - SERVIÇOS DE CONSTRUÇÃO',
-      page_start: 12,
-      page_end: 13,
-    },
-  };
-}
-
-function makeNebsDetail(code = '1.0101.11.00') {
-  return {
-    success: true,
-    item: {
-      code,
-      code_clean: code.replace(/\D/g, ''),
-      description: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
-      parent_code: '1.0101.1',
-      level: 3,
-      has_nebs: true,
-    },
-    ancestors: [
-      {
-        code: '1.01',
-        code_clean: '101',
-        description: 'Serviços de construção',
-        parent_code: null,
-        level: 0,
-        has_nebs: false,
-      },
-      {
-        code: '1.0101',
-        code_clean: '10101',
-        description: 'Serviços de construção de edificações',
-        parent_code: '1.01',
-        level: 1,
-        has_nebs: false,
-      },
-      {
-        code: '1.0101.1',
-        code_clean: '101011',
-        description: 'Serviços de construção de edificações residenciais',
-        parent_code: '1.0101',
-        level: 2,
-        has_nebs: false,
-      },
-    ],
-    entry: {
-      code,
-      code_clean: code.replace(/\D/g, ''),
-      title: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
-      title_normalized: 'servicos de construcao de edificacoes residenciais de um e dois pavimentos',
-      body_text: 'Esta subposição inclui serviços de novas construções e reparo.',
-      body_markdown: 'Esta subposição inclui serviços de novas construções e reparo.',
-      body_normalized: 'esta subposicao inclui servicos de novas construcoes e reparo',
-      section_title: 'SEÇÃO I - SERVIÇOS DE CONSTRUÇÃO',
-      page_start: 12,
-      page_end: 13,
-    },
-  };
-}
-
-async function mockServicesApi(page: Page) {
-  await page.route('**/api/**', async (route) => {
-    const url = new URL(route.request().url());
-    const path = url.pathname;
-    const q = url.searchParams.get('q') || '';
-
-    if (path.endsWith('/services/nbs/search')) {
-      await route.fulfill({ json: makeNbsSearch(q) });
-      return;
-    }
-
-    if (path.endsWith('/services/nebs/search')) {
-      await route.fulfill({ json: makeNebsSearch(q) });
-      return;
-    }
-
-    if (path.includes('/services/nbs/')) {
-      const code = decodeURIComponent(path.split('/services/nbs/')[1]);
-      await route.fulfill({ json: makeNbsDetail(code) });
-      return;
-    }
-
-    if (path.includes('/services/nebs/')) {
-      const code = decodeURIComponent(path.split('/services/nebs/')[1]);
-      await route.fulfill({ json: makeNebsDetail(code) });
-      return;
-    }
-
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ success: true }),
-    });
-  });
-}
-
-async function openServicesAndSearch(page: Page, query = '1.0101.11.00') {
+async function openServicesModal(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: /Menu/ }).click();
   await page.getByRole('button', { name: /Serviços \(NBS\)/ }).click();
-  await page.locator('#ncmInput').fill(query);
-  await page.getByRole('button', { name: /Buscar/ }).click();
-  await expect(page.getByRole('heading', { name: 'Estrutura completa' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'NBS 2.0' })).toBeVisible();
+}
+
+async function searchServices(page: Page, query: string, doc: 'nbs' | 'nebs' = 'nbs') {
+  const label = doc === 'nbs'
+    ? 'Buscar por codigo ou descricao'
+    : 'Buscar por codigo ou termo da nota';
+  const endpoint = doc === 'nbs'
+    ? '/api/services/nbs/search'
+    : '/api/services/nebs/search';
+
+  const request = page.waitForRequest((candidate) =>
+    candidate.url().includes(endpoint)
+    && new URL(candidate.url()).searchParams.get('q') === query,
+  );
+
+  await page.getByLabel(label).fill(query);
+  await request;
 }
 
 test.beforeEach(async ({ page }) => {
-  await mockServicesApi(page);
+  await installServicesMock(page);
 });
 
-test('opens NEBS in a new tab from the inline hierarchy action and keeps the original NBS tab intact', async ({ page }) => {
-  await openServicesAndSearch(page);
+test('loads NBS search results and the linked detail panel', async ({ page }) => {
+  await openServicesModal(page);
+  await searchServices(page, '1.0101.11.00');
 
-  await page.getByRole('button', { name: 'Ver NEBS' }).click();
-
-  await expect(page.locator('[data-document]')).toHaveCount(2);
-  await expect(page.locator('[data-document="nebs"]')).toHaveCount(1);
-  await expect(page.getByText('Conteudo da nota')).toBeVisible();
-
-  await page.locator('[data-document="nbs"]').click();
-
-  await expect(page.getByRole('heading', { name: 'Estrutura completa' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Ver na aba NEBS' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /NEBS Serviços de construção de edificações residenciais de um e dois pavimentos Nivel 3/ })).toBeVisible();
+  await expect(page.getByText('Descricao atual')).toBeVisible();
+  await expect(page.getByText('Ja existe uma nota explicativa publicada para este codigo.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Abrir na aba NEBS' })).toBeVisible();
 });
 
-test('reuses the same tab when opening NEBS through the primary NBS action', async ({ page }) => {
-  await openServicesAndSearch(page);
+test('switches from an NBS detail to the linked NEBS detail', async ({ page }) => {
+  await openServicesModal(page);
+  await searchServices(page, '1.0101.11.00');
 
-  await page.getByRole('button', { name: 'Ver na aba NEBS' }).click();
+  const nebsRequest = page.waitForRequest((request) =>
+    request.url().includes('/api/services/nebs/search')
+    && new URL(request.url()).searchParams.get('q') === '1.0101.11.00',
+  );
 
-  await expect(page.locator('[data-document]')).toHaveCount(1);
-  await expect(page.locator('[data-document="nebs"]')).toHaveCount(1);
-  await expect(page.getByText('Conteudo da nota')).toBeVisible();
+  await page.getByRole('button', { name: 'Abrir na aba NEBS' }).click();
+  await nebsRequest;
+
+  await expect(page.getByRole('heading', { name: 'NEBS' })).toBeVisible();
+  await expect(page.locator('p').filter({ hasText: 'Conteudo da nota' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Abrir item NBS relacionado' })).toBeVisible();
 });
 
-test('switches back to NBS in the same tab when the user clicks the NEBS breadcrumb code', async ({ page }) => {
-  await openServicesAndSearch(page);
-  await page.getByRole('button', { name: 'Ver na aba NEBS' }).click();
-  await expect(page.getByText('Conteudo da nota')).toBeVisible();
+test('returns from a NEBS detail to the linked NBS detail', async ({ page }) => {
+  await openServicesModal(page);
+  await searchServices(page, '1.0101.11.00');
+  await page.getByRole('button', { name: 'Abrir na aba NEBS' }).click();
+  await expect(page.locator('p').filter({ hasText: 'Conteudo da nota' })).toBeVisible();
 
-  await page.getByRole('button', { name: '1.0101.11.00', exact: true }).click();
+  const nbsRequest = page.waitForRequest((request) =>
+    request.url().includes('/api/services/nbs/search')
+    && new URL(request.url()).searchParams.get('q') === '1.0101.11.00',
+  );
 
-  await expect(page.locator('[data-document]')).toHaveCount(1);
-  await expect(page.locator('[data-document="nbs"]')).toHaveCount(1);
-  await expect(page.getByRole('heading', { name: 'Estrutura completa' })).toBeVisible();
+  await page.getByRole('button', { name: 'Abrir item NBS relacionado' }).click();
+  await nbsRequest;
+
+  await expect(page.getByRole('heading', { name: 'NBS 2.0' })).toBeVisible();
+  await expect(page.getByText('Descricao atual')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Abrir na aba NEBS' })).toBeVisible();
 });
