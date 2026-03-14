@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
 
 import type {
   NebsEntry,
@@ -14,6 +14,8 @@ type MockResponseEntry = {
   body?: unknown;
   status?: number;
 };
+
+type MockResponseQueue = MockResponseEntry[];
 
 export type ServicesMockOptions = {
   nebsSearchResponses?: MockResponseEntry[];
@@ -160,6 +162,42 @@ export function makeNebsDetail(code = '1.0101.11.00'): NebsDetailResponse {
   };
 }
 
+async function fulfillSearchRoute(
+  route: Route,
+  query: string,
+  queue: MockResponseQueue,
+  makeResponse: (requestedQuery: string) => NbsSearchResponse | NebsSearchResponse,
+) {
+  const trimmedQuery = query.trim();
+  const next = trimmedQuery ? queue.shift() : undefined;
+  if (next?.abort) {
+    await route.abort('failed');
+    return;
+  }
+
+  await route.fulfill({
+    status: next?.status ?? 200,
+    contentType: 'application/json',
+    body: JSON.stringify(next?.body ?? (trimmedQuery ? makeResponse(query) : makeEmptySearchResponse(query))),
+  });
+}
+
+async function handleNbsSearch(route: Route, query: string, nbsQueue: MockResponseQueue) {
+  await fulfillSearchRoute(route, query, nbsQueue, makeNbsSearch);
+}
+
+async function handleNebsSearch(route: Route, query: string, nebsQueue: MockResponseQueue) {
+  await fulfillSearchRoute(route, query, nebsQueue, makeNebsSearch);
+}
+
+async function handleNbsDetail(route: Route, code: string) {
+  await route.fulfill({ json: makeNbsDetail(code) });
+}
+
+async function handleNebsDetail(route: Route, code: string) {
+  await route.fulfill({ json: makeNebsDetail(code) });
+}
+
 export async function installServicesMock(page: Page, options: ServicesMockOptions = {}) {
   const nbsQueue = [...(options.nbsSearchResponses ?? [])];
   const nebsQueue = [...(options.nebsSearchResponses ?? [])];
@@ -168,47 +206,26 @@ export async function installServicesMock(page: Page, options: ServicesMockOptio
     const url = new URL(route.request().url());
     const path = url.pathname;
     const query = url.searchParams.get('q') ?? '';
-    const trimmedQuery = query.trim();
 
     if (path.endsWith('/services/nbs/search')) {
-      const next = trimmedQuery ? nbsQueue.shift() : undefined;
-      if (next?.abort) {
-        await route.abort('failed');
-        return;
-      }
-
-      await route.fulfill({
-        status: next?.status ?? 200,
-        contentType: 'application/json',
-        body: JSON.stringify(next?.body ?? (trimmedQuery ? makeNbsSearch(query) : makeEmptySearchResponse(query))),
-      });
+      await handleNbsSearch(route, query, nbsQueue);
       return;
     }
 
     if (path.endsWith('/services/nebs/search')) {
-      const next = trimmedQuery ? nebsQueue.shift() : undefined;
-      if (next?.abort) {
-        await route.abort('failed');
-        return;
-      }
-
-      await route.fulfill({
-        status: next?.status ?? 200,
-        contentType: 'application/json',
-        body: JSON.stringify(next?.body ?? (trimmedQuery ? makeNebsSearch(query) : makeEmptySearchResponse(query))),
-      });
+      await handleNebsSearch(route, query, nebsQueue);
       return;
     }
 
     if (path.includes('/services/nbs/')) {
       const code = decodeURIComponent(path.split('/services/nbs/')[1]);
-      await route.fulfill({ json: makeNbsDetail(code) });
+      await handleNbsDetail(route, code);
       return;
     }
 
     if (path.includes('/services/nebs/')) {
       const code = decodeURIComponent(path.split('/services/nebs/')[1]);
-      await route.fulfill({ json: makeNebsDetail(code) });
+      await handleNebsDetail(route, code);
       return;
     }
 
