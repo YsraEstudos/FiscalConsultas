@@ -15,7 +15,9 @@ pytestmark = pytest.mark.unit
 
 
 def test_normalize_nbs_text_removes_accents_and_spaces():
-    assert normalize_nbs_text("  Serviços   de Construção  ") == "servicos de construcao"
+    assert (
+        normalize_nbs_text("  Serviços   de Construção  ") == "servicos de construcao"
+    )
 
 
 def test_build_sort_path_zero_pads_segments():

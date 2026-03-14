@@ -13,13 +13,13 @@ pytestmark = pytest.mark.unit
 
 
 def _load_setup_nebs_database():
-    object.__setattr__(app_settings.database, "services_path", "database/services.db")
+    app_settings.database.services_filename = "database/services.db"
     sys.modules.pop("scripts.setup_nebs_database", None)
     return importlib.import_module("scripts.setup_nebs_database")
 
 
 def _load_setup_nbs_database():
-    object.__setattr__(app_settings.database, "services_path", "database/services.db")
+    app_settings.database.services_filename = "database/services.db"
     sys.modules.pop("scripts.setup_nbs_database", None)
     return importlib.import_module("scripts.setup_nbs_database")
 
