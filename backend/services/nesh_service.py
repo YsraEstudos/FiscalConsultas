@@ -20,7 +20,6 @@ from ..infrastructure import DatabaseAdapter
 from ..infrastructure.redis_client import redis_cache
 from ..utils import ncm_utils
 from ..utils.payload_cache_metrics import PayloadCacheMetrics
-from ..utils.text_processor import NeshTextProcessor
 
 # SQLModel Repository imports (optional - for new code paths)
 try:
@@ -31,6 +30,18 @@ try:
 except ImportError:
     _REPO_AVAILABLE = False
     ChapterRepository = None
+
+# Import text_processor - using absolute import from project root
+try:
+    from backend.utils.text_processor import NeshTextProcessor
+except ImportError:
+    # Fallback for direct module execution
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from backend.utils.text_processor import NeshTextProcessor
 
 from ..utils.id_utils import generate_anchor_id
 

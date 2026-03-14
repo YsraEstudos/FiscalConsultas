@@ -8,7 +8,6 @@ Usa banco de dados em memória com fixtures de teste.
 import os
 import sqlite3
 import tempfile
-import asyncio
 from pathlib import Path
 
 import pytest
@@ -101,9 +100,7 @@ def test_db():
 @pytest.fixture
 def service(test_db):
     """Cria instância do serviço com banco de teste."""
-    svc = TipiService(db_path=test_db["path"])
-    yield svc
-    asyncio.run(svc.close())
+    return TipiService(db_path=test_db["path"])
 
 
 class TestTipiServiceContract:

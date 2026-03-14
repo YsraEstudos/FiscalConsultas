@@ -460,10 +460,8 @@ class TipiService:
         self, ncm_query: str, view_mode: str, parts: List[str]
     ) -> Dict[str, Any]:
         merged: Dict[str, Any] = {}
-        part_responses = await asyncio.gather(
-            *(self.search_by_code(part, view_mode=view_mode) for part in parts)
-        )
-        for part_resp in part_responses:
+        for part in parts:
+            part_resp = await self.search_by_code(part, view_mode=view_mode)
             self._merge_part_payload_into_chapters(merged, part_resp)
         total_rows = sum(len((cap.get("posicoes") or [])) for cap in merged.values())
         return {

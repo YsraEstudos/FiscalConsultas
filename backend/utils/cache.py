@@ -4,11 +4,16 @@ import hashlib
 from typing import Any
 
 from fastapi import Request
-from backend.utils.tenant_context import get_current_tenant
 
 
 def cache_scope_key(request: Request) -> str:
-    tenant_id = get_current_tenant()
+    tenant_id = None
+    try:
+        from backend.server.middleware import get_current_tenant
+
+        tenant_id = get_current_tenant()
+    except ModuleNotFoundError:
+        tenant_id = None
 
     if tenant_id:
         return f"tenant:{tenant_id}"

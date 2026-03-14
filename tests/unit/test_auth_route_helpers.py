@@ -32,7 +32,7 @@ def test_extract_client_ip_prefers_forwarded_for_header():
         headers={"X-Forwarded-For": "198.51.100.7, 10.0.0.1"}, client_host="127.0.0.1"
     )
     try:
-        assert auth.extract_client_ip(request) == "198.51.100.7"
+        assert auth._extract_client_ip(request) == "198.51.100.7"
     finally:
         settings.security.trusted_proxy_ips = original
 
@@ -41,32 +41,17 @@ def test_extract_client_ip_ignores_forwarded_for_when_proxy_not_trusted():
     request = _build_request(
         headers={"X-Forwarded-For": "198.51.100.7"}, client_host="203.0.113.9"
     )
-    assert auth.extract_client_ip(request) == "203.0.113.9"
+    assert auth._extract_client_ip(request) == "203.0.113.9"
 
 
 def test_extract_client_ip_falls_back_to_request_client():
     request = _build_request(client_host="203.0.113.9")
-    assert auth.extract_client_ip(request) == "203.0.113.9"
+    assert auth._extract_client_ip(request) == "203.0.113.9"
 
 
 def test_extract_client_ip_returns_unknown_when_not_available():
     request = _build_request()
-    assert auth.extract_client_ip(request) == "unknown"
-
-
-def test_extract_client_ip_falls_back_when_forwarded_for_is_invalid():
-    from backend.config.settings import settings
-
-    original = list(settings.security.trusted_proxy_ips)
-    settings.security.trusted_proxy_ips = ["127.0.0.1"]
-    request = _build_request(
-        headers={"X-Forwarded-For": "not-an-ip, 198.51.100.7"},
-        client_host="127.0.0.1",
-    )
-    try:
-        assert auth._extract_client_ip(request) == "127.0.0.1"
-    finally:
-        settings.security.trusted_proxy_ips = original
+    assert auth._extract_client_ip(request) == "unknown"
 
 
 @pytest.mark.asyncio

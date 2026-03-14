@@ -121,22 +121,14 @@ async def test_get_json_and_set_json_happy_path():
 
 
 @pytest.mark.asyncio
-async def test_get_json_returns_none_on_absent_key():
+async def test_get_json_returns_none_on_absent_or_error(monkeypatch):
     cache = _cache()
     fake = _FakeRedis()
     cache._client = fake
-
     assert await cache.get_json("missing") is None
 
-
-@pytest.mark.asyncio
-async def test_get_json_returns_none_on_get_error(monkeypatch):
-    cache = _cache()
-    fake = _FakeRedis()
-    cache._client = fake
     fake.fail_get = True
     monkeypatch.setattr(redis_mod.logger, "debug", lambda *_args, **_kwargs: None)
-
     assert await cache.get_json("k2") is None
 
 
