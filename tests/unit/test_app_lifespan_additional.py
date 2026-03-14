@@ -432,7 +432,12 @@ async def test_lifespan_rejects_non_local_debug_tenant_override(monkeypatch):
 
     monkeypatch.setattr(app_module.settings.server, "env", "development", raising=False)
     monkeypatch.setattr(app_module.settings.features, "debug_mode", True, raising=False)
-    monkeypatch.setattr(app_module.settings.server, "host", "0.0.0.0", raising=False)
+    monkeypatch.setattr(
+        app_module.settings.server,
+        "host",
+        "debug-security.example.com",
+        raising=False,
+    )
     monkeypatch.setattr(app_module, "_init_primary_database", init_db_mock)
     monkeypatch.setattr(app_module, "_shutdown_resources", _shutdown)
 

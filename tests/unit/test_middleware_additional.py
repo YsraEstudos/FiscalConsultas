@@ -106,7 +106,9 @@ def test_jwt_observability_logs_do_not_include_token_fingerprint(monkeypatch):
     debug_calls: list[tuple[str, str]] = []
 
     monkeypatch.setattr(middleware.settings.features, "debug_mode", True, raising=False)
-    monkeypatch.setattr(middleware.logger, "warning", lambda message: warning_messages.append(message))
+    monkeypatch.setattr(
+        middleware.logger, "warning", lambda message: warning_messages.append(message)
+    )
     monkeypatch.setattr(
         middleware.logger,
         "debug",
@@ -122,6 +124,8 @@ def test_jwt_observability_logs_do_not_include_token_fingerprint(monkeypatch):
     middleware._log_jwt_failure("invalid_token", snapshot, "boom")
     middleware._log_jwt_validation_success(snapshot, payload)
 
+    assert warning_messages
+    assert debug_calls
     failure_payload = json.loads(warning_messages[0])
     success_payload = json.loads(debug_calls[0][1])
 
@@ -135,7 +139,7 @@ def test_is_loopback_host_handles_local_and_remote_inputs():
     assert middleware.is_loopback_host("127.0.0.1") is True
     assert middleware.is_loopback_host("::1") is True
     assert middleware.is_loopback_host("localhost") is True
-    assert middleware.is_loopback_host("10.0.0.8") is False
+    assert middleware.is_loopback_host("203.0.113.8") is False
     assert middleware.is_loopback_host(None) is False
 
 
@@ -628,7 +632,7 @@ async def test_dispatch_does_not_apply_dev_tenant_fallback_for_remote_client(
 
     mw = middleware.TenantMiddleware(app=app)
     remote_scope = _build_scope("/api/search")
-    remote_scope["client"] = ("10.20.30.40", 12345)
+    remote_scope["client"] = ("203.0.113.40", 12345)
 
     status, _ = await _invoke_middleware(mw, remote_scope)
     assert status == 200

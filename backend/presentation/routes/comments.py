@@ -20,6 +20,7 @@ from backend.server.middleware import (
     decode_clerk_jwt,
     get_current_tenant,
     get_last_jwt_failure_reason,
+    _resolve_full_name,
 )
 from backend.services.comment_service import CommentService
 from backend.utils.auth import extract_bearer_token, is_admin_payload
@@ -48,20 +49,12 @@ def _tenant_from_auth_payload(auth_payload: dict) -> str:
     raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
 
 
-def _resolve_comment_author_identity(auth_payload: dict) -> tuple[str | None, str | None]:
-    full_name = auth_payload.get("name")
-    if not isinstance(full_name, str) or not full_name.strip():
-        name_parts = [
-            part.strip()
-            for part in (
-                auth_payload.get("given_name"),
-                auth_payload.get("family_name"),
-            )
-            if isinstance(part, str) and part.strip()
-        ]
-        full_name = " ".join(name_parts) or None
-    else:
-        full_name = full_name.strip()
+def _resolve_comment_author_identity(
+    auth_payload: dict,
+) -> tuple[str | None, str | None]:
+    full_name = _resolve_full_name(auth_payload)
+    if isinstance(full_name, str):
+        full_name = full_name.strip() or None
 
     image_url = auth_payload.get("image_url") or auth_payload.get("picture")
     if not isinstance(image_url, str) or not image_url.strip():

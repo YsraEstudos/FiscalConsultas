@@ -106,6 +106,7 @@ def _build_jwks_url(raw_domain: Optional[str]) -> Optional[str]:
         return None
     return f"https://{normalized_domain}/.well-known/jwks.json"
 
+
 def _decode_jwt_json_segment(segment: str) -> dict[str, Any]:
     try:
         padded_segment = segment + ("=" * (-len(segment) % 4))

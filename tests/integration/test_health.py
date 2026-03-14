@@ -38,7 +38,9 @@ def test_status_details_requires_admin(client):
 
 
 def test_status_details_returns_internal_data_for_admin(client, monkeypatch):
-    monkeypatch.setattr(system, "is_valid_admin_token", lambda token: token == "admin-ok")
+    monkeypatch.setattr(
+        system, "is_valid_admin_token", lambda token: token == "admin-ok"
+    )
 
     response = client.get("/api/status/details", headers={"X-Admin-Token": "admin-ok"})
     assert response.status_code == 200
@@ -67,6 +69,7 @@ def test_status_details_returns_retry_after_when_rate_limited(client, monkeypatc
     async def _deny_consume(*_args, **_kwargs):  # NOSONAR
         return False, 9
 
+    monkeypatch.setattr(system, "is_valid_admin_token", lambda _token: True)
     monkeypatch.setattr(system.status_rate_limiter, "consume", _deny_consume)
 
     response = client.get("/api/status/details", headers={"X-Admin-Token": "admin-ok"})
@@ -102,9 +105,7 @@ def test_security_headers_are_sent_on_public_responses(client):
         assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
         assert response.headers["X-Frame-Options"] == "DENY"
         assert response.headers["X-Content-Type-Options"] == "nosniff"
-        assert (
-            response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
-        )
+        assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
         assert (
             response.headers["Permissions-Policy"]
             == "camera=(), microphone=(), geolocation=()"
