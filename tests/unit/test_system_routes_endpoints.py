@@ -106,9 +106,16 @@ async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypat
         def __init__(self):
             self.calls = 0
 
-        async def execute(self, _query):
+        async def execute(self, query):
             self.calls += 1
-            return _ScalarResult(12 if self.calls == 1 else 34)
+            query_str = str(query)
+            if "SELECT 1" in query_str:
+                return _ScalarResult(1)
+            elif "SELECT COUNT(*) FROM chapters" in query_str:
+                return _ScalarResult(12)
+            elif "SELECT COUNT(*) FROM positions" in query_str:
+                return _ScalarResult(34)
+            return _ScalarResult(0)
 
     @asynccontextmanager
     async def _fake_get_session():  # NOSONAR
