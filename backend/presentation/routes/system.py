@@ -74,6 +74,7 @@ def _normalize_tipi_status(raw_stats: dict | None) -> dict:
 _pg_stats_cache = {}
 _pg_stats_last_check_ts = 0.0
 
+
 async def _collect_db_status(request: Request) -> tuple[dict, float]:
     global _pg_stats_cache, _pg_stats_last_check_ts
 
