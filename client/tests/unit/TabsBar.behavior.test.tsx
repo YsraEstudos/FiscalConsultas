@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TabsBar } from '../../src/components/TabsBar';
 import type { Tab } from '../../src/hooks/useTabs';
@@ -23,6 +23,8 @@ const tabs: Tab[] = [
   },
 ];
 
+const originalScrollIntoView = Element.prototype.scrollIntoView;
+
 function findTabContainer(label: string) {
   return screen.getByText(label).closest('[data-document]') as HTMLDivElement;
 }
@@ -42,6 +44,10 @@ function createDataTransfer(initialText = '') {
 describe('TabsBar behavior', () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  afterEach(() => {
+    Element.prototype.scrollIntoView = originalScrollIntoView;
   });
 
   it('configures drag metadata and reorders tabs on drop', () => {

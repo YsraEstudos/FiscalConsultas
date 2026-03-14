@@ -825,7 +825,7 @@ describe('ResultDisplay advanced behavior', () => {
   });
 
   it('blocks comment toggling for signed-out users and LAN development hosts', async () => {
-    const originalLocation = window.location;
+    const originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, 'location');
     try {
       hoisted.authStateRef.value = {
         ...hoisted.authStateRef.value,
@@ -886,10 +886,9 @@ describe('ResultDisplay advanced behavior', () => {
         'Comentários exigem token Clerk válido. Em desenvolvimento, use http://localhost:5173.',
       );
     } finally {
-      Object.defineProperty(window, 'location', {
-        configurable: true,
-        value: originalLocation,
-      });
+      if (originalLocationDescriptor) {
+        Object.defineProperty(window, 'location', originalLocationDescriptor);
+      }
     }
   });
 

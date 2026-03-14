@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CommentOut } from '../../src/services/commentService';
 
 const refs = vi.hoisted(() => ({
   createCommentMock: vi.fn(),
@@ -26,31 +27,21 @@ vi.mock('react-hot-toast', () => ({
   },
 }));
 
-type ApiComment = {
-  id: number;
-  anchor_key: string;
-  selected_text: string;
-  body: string;
-  status: 'pending' | 'approved' | 'rejected' | 'private';
-  created_at: string;
-  updated_at: string;
-  user_name: string | null;
-  user_image_url: string | null;
-  user_id: string;
-};
-
-function makeApiComment(overrides: Partial<ApiComment> = {}): ApiComment {
+function makeApiComment(overrides: Partial<CommentOut> = {}): CommentOut {
   return {
     id: 1,
+    tenant_id: 'tenant_test',
+    user_id: 'user_test',
     anchor_key: 'pos-84-13',
     selected_text: 'Motores elétricos',
     body: 'Comentário inicial',
     status: 'approved',
     created_at: '2026-03-01T10:00:00Z',
     updated_at: '2026-03-01T10:00:00Z',
+    moderated_by: null,
+    moderated_at: null,
     user_name: 'Usuário Teste',
     user_image_url: null,
-    user_id: 'user_test',
     ...overrides,
   };
 }
@@ -147,9 +138,9 @@ describe('useComments behavior', () => {
   });
 
   it('optimistically adds comments, replaces the temp item on success, and shows a success toast', async () => {
-    let resolveCreate: ((value: ApiComment) => void) | null = null;
+    let resolveCreate: ((value: CommentOut) => void) | null = null;
     refs.createCommentMock.mockReturnValue(
-      new Promise<ApiComment>((resolve) => {
+      new Promise<CommentOut>((resolve) => {
         resolveCreate = resolve;
       }),
     );
@@ -275,10 +266,21 @@ describe('useComments behavior', () => {
 
     await act(async () => {
       await result.current.editComment('abc', 'novo corpo');
+    });
+
+    expect(refs.toastErrorMock).toHaveBeenCalledWith('ID de comentário inválido');
+    expect(refs.toastErrorMock).toHaveBeenCalledTimes(1);
+    expect(refs.updateCommentMock).not.toHaveBeenCalled();
+    expect(refs.deleteCommentMock).not.toHaveBeenCalled();
+
+    refs.toastErrorMock.mockReset();
+
+    await act(async () => {
       await result.current.removeComment('xyz');
     });
 
     expect(refs.toastErrorMock).toHaveBeenCalledWith('ID de comentário inválido');
+    expect(refs.toastErrorMock).toHaveBeenCalledTimes(1);
     expect(refs.updateCommentMock).not.toHaveBeenCalled();
     expect(refs.deleteCommentMock).not.toHaveBeenCalled();
   });
