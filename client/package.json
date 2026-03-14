@@ -17,7 +17,11 @@
     "test:perf": "vitest run tests/performance",
     "test:watch": "vitest --exclude \"tests/performance/**\"",
     "test:coverage": "vitest run --coverage --exclude \"tests/performance/**\"",
-    "type-check": "tsc --noEmit"
+    "test:e2e": "playwright test --project=mocked-chromium",
+    "test:e2e:headed": "playwright test --project=mocked-chromium --headed",
+    "test:e2e:live": "playwright test --project=live-chromium",
+    "type-check": "tsc --noEmit",
+    "test:perf:phase1": "vitest run tests/performance/Phase1MultiTabBaseline.perf.test.tsx"
   },
   "dependencies": {
     "@clerk/react": "^6.0.1",
@@ -32,22 +36,23 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.54.2",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
     "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^25.0.7",
+    "@types/node": "^25.5.0",
     "@types/react": "^19.2.8",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.1",
-    "@vitest/coverage-v8": "^4.0.17",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/coverage-v8": "^4.1.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.0",
     "globals": "^17.0.0",
     "jsdom": "^28.0.0",
     "typescript": "^5.9.3",
-    "vite": "^7.0.0",
-    "vitest": "^4.0.17"
+    "vite": "^8.0.0",
+    "vitest": "^4.1.0"
   }
 }
