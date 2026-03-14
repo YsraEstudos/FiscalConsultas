@@ -231,6 +231,8 @@ async def search(
     Raises:
         ValidationError: Se a query estiver vazia ou for muito longa.
     """
+    await _apply_search_rate_limit(request)
+
     if not ncm:
         raise ValidationError("Parâmetro 'ncm' é obrigatório", field="ncm")
 
@@ -239,8 +241,6 @@ async def search(
             f"Query muito longa (máximo {SearchConfig.MAX_QUERY_LENGTH} caracteres)",
             field="ncm",
         )
-
-    await _apply_search_rate_limit(request)
 
     safe_ncm = ncm.replace("\r", "\\r").replace("\n", "\\n")
     logger.debug("Busca: '%s'", safe_ncm)
