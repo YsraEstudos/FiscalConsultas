@@ -54,6 +54,21 @@ def test_extract_client_ip_returns_unknown_when_not_available():
     assert auth.extract_client_ip(request) == "unknown"
 
 
+def test_extract_client_ip_falls_back_when_forwarded_for_is_invalid():
+    from backend.config.settings import settings
+
+    original = list(settings.security.trusted_proxy_ips)
+    settings.security.trusted_proxy_ips = ["127.0.0.1"]
+    request = _build_request(
+        headers={"X-Forwarded-For": "not-an-ip, 198.51.100.7"},
+        client_host="127.0.0.1",
+    )
+    try:
+        assert auth._extract_client_ip(request) == "127.0.0.1"
+    finally:
+        settings.security.trusted_proxy_ips = original
+
+
 @pytest.mark.asyncio
 async def test_build_limiter_key_uses_user_id_when_token_has_sub(monkeypatch):
     request = _build_request(client_host="203.0.113.12")
