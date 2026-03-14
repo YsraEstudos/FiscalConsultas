@@ -132,6 +132,10 @@ class DatabaseAdapter:
         self._chapter_sql_cache: Optional[str] = None
         self._chapter_sql_has_sections: Optional[bool] = None
         self._chapter_sql_has_parsed_notes_json: Optional[bool] = None
+
+        # Cache for database stats to avoid repeated full table scans
+        self._stats_cache: Optional[Dict[str, int]] = None
+        self._stats_last_check_ts: float = 0.0
         logger.debug(f"DatabaseAdapter inicializado: {db_path}")
 
     async def _ensure_pool(self):
@@ -359,26 +363,36 @@ class DatabaseAdapter:
             return None
 
         try:
+            import time
+
             async with self.get_connection() as conn:
-                cursor = await conn.execute("SELECT COUNT(*) FROM chapters")
-                chapter_row = await cursor.fetchone()
-                if chapter_row is None:
-                    return None
-                num_chapters = chapter_row[0]
+                # Lightweight query to verify connection
+                await conn.execute("SELECT 1")
 
-                cursor = await conn.execute("SELECT COUNT(*) FROM positions")
-                positions_row = await cursor.fetchone()
-                if positions_row is None:
-                    return None
-                num_positions = positions_row[0]
+                now = time.time()
+                # Cache stats for 60 seconds
+                if not self._stats_cache or (now - self._stats_last_check_ts) > 60:
+                    cursor = await conn.execute("SELECT COUNT(*) FROM chapters")
+                    chapter_row = await cursor.fetchone()
+                    if chapter_row is None:
+                        return None
+                    num_chapters = chapter_row[0]
 
-                stats = {
-                    "chapters": num_chapters,
-                    "positions": num_positions,
-                    "size": os.path.getsize(self.db_path),
-                }
-                logger.info(f"DB OK: {num_chapters} caps, {num_positions} pos")
-                return stats
+                    cursor = await conn.execute("SELECT COUNT(*) FROM positions")
+                    positions_row = await cursor.fetchone()
+                    if positions_row is None:
+                        return None
+                    num_positions = positions_row[0]
+
+                    self._stats_cache = {
+                        "chapters": num_chapters,
+                        "positions": num_positions,
+                        "size": os.path.getsize(self.db_path),
+                    }
+                    self._stats_last_check_ts = now
+                    logger.info(f"DB OK: {num_chapters} caps, {num_positions} pos")
+
+                return self._stats_cache
 
         except Exception as e:
             logger.error(f"Erro ao verificar DB: {e}")

@@ -5,3 +5,7 @@
 ## 2026-03-13 - Optimize DOM Traversal Highlighting
 **Learning:** String normalization (like NFD and regex replace) inside tight DOM traversal loops (e.g., TreeWalker) is a massive performance bottleneck.
 **Action:** Use pre-compiled regex patterns before the loop to test values, eliminating the need to normalize every DOM node's text content.
+
+## $(date +%Y-%m-%d) - Database Healthcheck COUNT queries
+**Learning:** Performing `SELECT COUNT(*)` on large tables (e.g. chapters, positions) on every healthcheck ping causes full table scans and high database load, which degrades overall API performance.
+**Action:** Use a lightweight `SELECT 1` query to verify database connection viability. If table row counts are required for monitoring payloads, cache those specific statistics using a TTL (e.g., 60 seconds) to avoid redundant computation. Always initialize these caches inside the `__init__` constructor of the class executing the checks.

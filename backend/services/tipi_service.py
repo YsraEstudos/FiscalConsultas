@@ -228,17 +228,32 @@ class TipiService:
             return {"ok": False, "error": f"Banco TIPI não encontrado: {self.db_path}"}
 
         try:
+            import time
+
             conn = await self._get_connection()
             try:
-                cursor = await conn.execute("SELECT COUNT(*) FROM tipi_chapters")
-                chapters_row = await cursor.fetchone()
-                chapters = chapters_row[0] if chapters_row else 0
+                # Verify connection is alive
+                await conn.execute("SELECT 1")
 
-                cursor = await conn.execute("SELECT COUNT(*) FROM tipi_positions")
-                positions_row = await cursor.fetchone()
-                positions = positions_row[0] if positions_row else 0
+                now = time.time()
+                # Use cached stats if less than 60 seconds old to avoid full table scans
+                if not self._stats_cache or (now - self._stats_last_check_ts) > 60:
+                    cursor = await conn.execute("SELECT COUNT(*) FROM tipi_chapters")
+                    chapters_row = await cursor.fetchone()
+                    chapters = chapters_row[0] if chapters_row else 0
 
-                return {"ok": True, "chapters": chapters, "positions": positions}
+                    cursor = await conn.execute("SELECT COUNT(*) FROM tipi_positions")
+                    positions_row = await cursor.fetchone()
+                    positions = positions_row[0] if positions_row else 0
+
+                    self._stats_cache = {
+                        "ok": True,
+                        "chapters": chapters,
+                        "positions": positions,
+                    }
+                    self._stats_last_check_ts = now
+
+                return self._stats_cache
             finally:
                 await self._release_connection(conn)
         except Exception as e:
