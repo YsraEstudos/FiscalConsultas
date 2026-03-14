@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import { SearchHighlighter } from '../../src/components/SearchHighlighter';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -314,9 +314,10 @@ describe('SearchHighlighter', () => {
         expect(await screen.findByText("Match Alto")).toBeInTheDocument();
         expect(screen.getByText("1 bloco com alta correspondência")).toBeInTheDocument();
         await screen.findByLabelText("Fechar busca de página");
-        await waitFor(() => {
-            expect(scrollSpy).toHaveBeenCalled();
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 80));
         });
+        expect(scrollSpy).toHaveBeenCalled();
     });
 
     it('permite salto manual para uma subposição de alta relevância', async () => {

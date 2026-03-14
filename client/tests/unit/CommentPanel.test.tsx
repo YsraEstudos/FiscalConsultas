@@ -2,14 +2,25 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CommentPanel } from '../../src/components/CommentPanel';
-import { makeLocalComment, makePendingCommentEntry, unsafeJavascriptUrl } from './commentTestUtils';
+import {
+  type CommentComponentRenderOptions,
+  makeComment,
+  makePending,
+  registerSharedOwnerCommentTests,
+} from './commentComponentTestUtils';
 
-function makeComment(overrides: Parameters<typeof makeLocalComment>[0] = {}) {
-  return makeLocalComment(overrides);
-}
-
-function makePending() {
-  return makePendingCommentEntry();
+function renderPanel(options: CommentComponentRenderOptions = {}) {
+  return (
+    <CommentPanel
+      pending={options.pending ?? null}
+      comments={options.comments ?? []}
+      onSubmit={options.onSubmit ?? vi.fn().mockResolvedValue(true)}
+      onDismiss={options.onDismiss ?? vi.fn()}
+      onEdit={options.onEdit}
+      onDelete={options.onDelete}
+      currentUserId={options.currentUserId}
+    />
+  );
 }
 
 describe('CommentPanel', () => {
@@ -72,55 +83,7 @@ describe('CommentPanel', () => {
     expect(onDismiss).toHaveBeenCalledTimes(2);
   });
 
-  it('renders fallback avatars and hides owner actions for non-owners', () => {
-    render(
-      <CommentPanel
-        pending={null}
-        comments={[makeComment({ userImageUrl: unsafeJavascriptUrl, userId: 'another-user' })]}
-        onSubmit={vi.fn().mockResolvedValue(true)}
-        onDismiss={vi.fn()}
-        onEdit={vi.fn()}
-        onDelete={vi.fn()}
-        currentUserId="user_test"
-      />,
-    );
-
-    expect(screen.getByText('AS')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Editar comentário')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Excluir comentário')).not.toBeInTheDocument();
-  });
-
-  it('supports owner edit flows with save and cancel', async () => {
-    const onEdit = vi.fn().mockResolvedValue(undefined);
-
-    render(
-      <CommentPanel
-        pending={null}
-        comments={[makeComment()]}
-        onSubmit={vi.fn().mockResolvedValue(true)}
-        onDismiss={vi.fn()}
-        onEdit={onEdit}
-        onDelete={vi.fn()}
-        currentUserId="user_test"
-      />,
-    );
-
-    fireEvent.click(screen.getByTitle('Editar'));
-    const editTextarea = screen.getByRole('textbox', { name: 'Editar comentário' });
-
-    fireEvent.change(editTextarea, { target: { value: 'Comentário editado' } });
-    fireEvent.keyDown(editTextarea, { key: 'Escape' });
-    expect(screen.queryByRole('textbox', { name: 'Editar comentário' })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByTitle('Editar'));
-    const reopenedTextarea = screen.getByRole('textbox', { name: 'Editar comentário' });
-    fireEvent.change(reopenedTextarea, { target: { value: 'Comentário editado' } });
-    fireEvent.click(screen.getByText('Salvar'));
-
-    await waitFor(() => {
-      expect(onEdit).toHaveBeenCalledWith('comment-1', 'Comentário editado');
-    });
-  });
+  registerSharedOwnerCommentTests(renderPanel, 'Comentário editado');
 
   it('supports owner delete confirmation flows', async () => {
     const onDelete = vi.fn().mockResolvedValue(undefined);
