@@ -17,7 +17,11 @@
     "test:perf": "vitest run tests/performance",
     "test:watch": "vitest --exclude \"tests/performance/**\"",
     "test:coverage": "vitest run --coverage --exclude \"tests/performance/**\"",
-    "type-check": "tsc --noEmit"
+    "test:e2e": "playwright test --project=mocked-chromium",
+    "test:e2e:headed": "playwright test --project=mocked-chromium --headed",
+    "test:e2e:live": "playwright test --project=live-chromium",
+    "type-check": "tsc --noEmit",
+    "test:perf:phase1": "vitest run tests/performance/Phase1MultiTabBaseline.perf.test.tsx"
   },
   "dependencies": {
     "@clerk/react": "^6.0.1",
@@ -32,6 +36,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.54.2",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",

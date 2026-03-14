@@ -1,9 +1,22 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+
+const useE2eMockAuth = process.env.VITE_E2E_MOCK_AUTH === 'true';
+const clerkMockPath = fileURLToPath(
+  new URL('./tests/playwright/mocks/clerk.tsx', import.meta.url)
+);
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: useE2eMockAuth
+      ? {
+          '@clerk/react': clerkMockPath,
+        }
+      : {},
+  },
   server: {
     proxy: {
       '/api': {
