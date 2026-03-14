@@ -1,13 +1,14 @@
-import base64
 import asyncio
+import base64
 import json
 from types import SimpleNamespace
 
 import jwt
 import pytest
+from fastapi.responses import JSONResponse
+
 from backend.infrastructure.db_engine import tenant_context
 from backend.server import middleware
-from fastapi.responses import JSONResponse
 
 pytestmark = pytest.mark.unit
 
@@ -99,6 +100,43 @@ def test_safe_get_unverified_claims_parses_payload_and_handles_malformed():
     assert claims == {"sub": "user_1", "org_id": "org_1"}
     assert middleware._safe_get_unverified_claims("not-a-jwt") == {}
     assert middleware._safe_get_unverified_claims("a.b") == {}
+
+
+def test_jwt_observability_logs_do_not_include_token_fingerprint(monkeypatch):
+    warning_messages: list[str] = []
+    debug_calls: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(middleware.settings.features, "debug_mode", True, raising=False)
+    monkeypatch.setattr(
+        middleware.logger,
+        "warning",
+        lambda message: warning_messages.append(message),
+    )
+    monkeypatch.setattr(
+        middleware.logger,
+        "debug",
+        lambda template, payload: debug_calls.append((template, payload)),
+    )
+
+    snapshot = {
+        "header": {"alg": "RS256", "kid": "kid-1"},
+        "claims": {"sub": "user_1", "org_id": "org_1"},
+    }
+    payload = {"sub": "user_1", "org_id": "org_1", "exp": 123}
+
+    middleware._log_jwt_failure("invalid_token", snapshot, "boom")
+    middleware._log_jwt_validation_success(snapshot, payload)
+
+    assert warning_messages
+    assert debug_calls
+
+    failure_payload = json.loads(warning_messages[0])
+    success_payload = json.loads(debug_calls[0][1])
+
+    assert "fingerprint" not in json.dumps(failure_payload)
+    assert "fingerprint" not in json.dumps(success_payload)
+    assert failure_payload["token"] == snapshot
+    assert success_payload["header"] == snapshot["header"]
 
 
 def test_get_jwks_client_caches_instance(monkeypatch):
