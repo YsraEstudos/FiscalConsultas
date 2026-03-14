@@ -26,10 +26,13 @@ const runTabSwitchScenario = (openTabs: number, iterations: number): number[] =>
 
       expect(targetTabId).toBeDefined();
       expect(targetTabId).not.toBe(activeTabId);
+      if (!targetTabId) {
+        throw new Error('Expected a different tab id for the switch benchmark');
+      }
 
       const start = performance.now();
       act(() => {
-        result.current.switchTab(targetTabId!);
+        result.current.switchTab(targetTabId);
       });
       const end = performance.now();
 

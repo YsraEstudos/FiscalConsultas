@@ -81,16 +81,16 @@ vi.mock('../../src/components/CommentPanel', () => ({
     <div data-testid="comment-panel" data-user-id={currentUserId ?? ''}>
       <span data-testid="comment-panel-pending">{pending?.anchorKey ?? ''}</span>
       <span data-testid="comment-panel-count">{comments.length}</span>
-      <button data-testid="comment-panel-submit" onClick={() => void onSubmit('Comentário enviado', false)}>
+      <button data-testid="comment-panel-submit" onClick={() => onSubmit('Comentário enviado', false)}>
         submit-comment
       </button>
       <button data-testid="comment-panel-dismiss" onClick={onDismiss}>
         dismiss-comment
       </button>
-      <button data-testid="comment-panel-edit" onClick={() => void onEdit('comment-1', 'Editado')}>
+      <button data-testid="comment-panel-edit" onClick={() => onEdit('comment-1', 'Editado')}>
         edit-comment
       </button>
-      <button data-testid="comment-panel-delete" onClick={() => void onDelete('comment-1')}>
+      <button data-testid="comment-panel-delete" onClick={() => onDelete('comment-1')}>
         delete-comment
       </button>
     </div>
@@ -105,7 +105,7 @@ vi.mock('../../src/components/CommentDrawer', () => ({
       <button data-testid="comment-drawer-close" onClick={onClose}>
         close-drawer
       </button>
-      <button data-testid="comment-drawer-submit" onClick={() => void onSubmit('Comentário drawer', true)}>
+      <button data-testid="comment-drawer-submit" onClick={() => onSubmit('Comentário drawer', true)}>
         submit-drawer
       </button>
     </div>
@@ -232,7 +232,7 @@ describe('ResultDisplay advanced behavior', () => {
     // @ts-expect-error - test replacement
     globalThis.IntersectionObserver = MockIntersectionObserver;
 
-    Object.defineProperty(window, 'matchMedia', {
+    Object.defineProperty(globalThis, 'matchMedia', {
       writable: true,
       configurable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -825,7 +825,7 @@ describe('ResultDisplay advanced behavior', () => {
   });
 
   it('blocks comment toggling for signed-out users and LAN development hosts', async () => {
-    const originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, 'location');
+    const originalLocationDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'location');
     try {
       hoisted.authStateRef.value = {
         ...hoisted.authStateRef.value,
@@ -860,7 +860,7 @@ describe('ResultDisplay advanced behavior', () => {
         ...hoisted.authStateRef.value,
         isSignedIn: true,
       };
-      Object.defineProperty(window, 'location', {
+      Object.defineProperty(globalThis, 'location', {
         configurable: true,
         value: new URL('https://192.168.0.25/'),
       });
@@ -887,7 +887,7 @@ describe('ResultDisplay advanced behavior', () => {
       );
     } finally {
       if (originalLocationDescriptor) {
-        Object.defineProperty(window, 'location', originalLocationDescriptor);
+        Object.defineProperty(globalThis, 'location', originalLocationDescriptor);
       }
     }
   });
@@ -898,7 +898,7 @@ describe('ResultDisplay advanced behavior', () => {
       comments: [{ id: 'comment-1', body: 'Já existe' }],
       commentedAnchors: ['pos-85-17'],
     };
-    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    globalThis.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === '(max-width: 1280px)',
       media: query,
       onchange: null,
@@ -951,7 +951,7 @@ describe('ResultDisplay advanced behavior', () => {
   });
 
   it('reports invalid text selections and opens a pending comment for valid selections', async () => {
-    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    globalThis.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === '(max-width: 1280px)',
       media: query,
       onchange: null,

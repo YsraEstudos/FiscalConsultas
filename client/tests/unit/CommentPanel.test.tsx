@@ -28,11 +28,11 @@ describe('CommentPanel', () => {
   let cancelAnimationFrameSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    requestAnimationFrameSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    requestAnimationFrameSpy = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
       callback(0);
       return 1;
     });
-    cancelAnimationFrameSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+    cancelAnimationFrameSpy = vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
   });
 
   afterEach(() => {

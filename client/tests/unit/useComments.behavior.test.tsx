@@ -69,6 +69,20 @@ async function loadUseComments() {
   return (await import('../../src/hooks/useComments')).useComments;
 }
 
+function swapLocation(url: string) {
+  const originalLocationDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'location');
+  Object.defineProperty(globalThis, 'location', {
+    configurable: true,
+    value: new URL(url),
+  });
+
+  return () => {
+    if (originalLocationDescriptor) {
+      Object.defineProperty(globalThis, 'location', originalLocationDescriptor);
+    }
+  };
+}
+
 describe('useComments behavior', () => {
   beforeEach(() => {
     refs.createCommentMock.mockReset();
@@ -199,14 +213,9 @@ describe('useComments behavior', () => {
   it('removes optimistic comments and reports LAN-host Clerk token issues on 401 create failures', async () => {
     refs.createCommentMock.mockRejectedValue(makeAxiosError(401, 'Token ausente'));
 
-    const originalLocation = window.location;
+    const restoreLocation = swapLocation('https://192.168.0.23/');
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      Object.defineProperty(window, 'location', {
-        configurable: true,
-        value: new URL('https://192.168.0.23/'),
-      });
-
       const useComments = await loadUseComments();
       const { result } = renderHook(() => useComments());
 
@@ -226,10 +235,7 @@ describe('useComments behavior', () => {
         'Token do Clerk indisponível neste host de rede. Abra em http://localhost:5173 para comentar.',
       );
     } finally {
-      Object.defineProperty(window, 'location', {
-        configurable: true,
-        value: originalLocation,
-      });
+      restoreLocation();
       consoleErrorSpy.mockRestore();
     }
   });
@@ -378,14 +384,9 @@ describe('useComments behavior', () => {
   });
 
   it('skips commented-anchor lookups on LAN hosts during development', async () => {
-    const originalLocation = window.location;
+    const restoreLocation = swapLocation('https://192.168.0.11/');
     const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      Object.defineProperty(window, 'location', {
-        configurable: true,
-        value: new URL('https://192.168.0.11/'),
-      });
-
       const useComments = await loadUseComments();
       const { result } = renderHook(() => useComments());
 
@@ -398,23 +399,15 @@ describe('useComments behavior', () => {
       expect(result.current.commentedAnchors).toEqual([]);
       expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
     } finally {
-      Object.defineProperty(window, 'location', {
-        configurable: true,
-        value: originalLocation,
-      });
+      restoreLocation();
       consoleWarnSpy.mockRestore();
     }
   });
 
   it('shows the specific 401 Clerk messages for missing and expired tokens on localhost', async () => {
-    const originalLocation = window.location;
+    const restoreLocation = swapLocation('http://localhost:5173/');
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      Object.defineProperty(window, 'location', {
-        configurable: true,
-        value: new URL('http://localhost:5173/'),
-      });
-
       refs.createCommentMock
         .mockRejectedValueOnce(makeAxiosError(401, 'Token ausente'))
         .mockRejectedValueOnce(makeAxiosError(401, 'Token inválido ou expirado: session expired'))
@@ -442,10 +435,7 @@ describe('useComments behavior', () => {
         'Sessão expirada. Faça login novamente para comentar.',
       );
     } finally {
-      Object.defineProperty(window, 'location', {
-        configurable: true,
-        value: originalLocation,
-      });
+      restoreLocation();
       consoleErrorSpy.mockRestore();
     }
   });
