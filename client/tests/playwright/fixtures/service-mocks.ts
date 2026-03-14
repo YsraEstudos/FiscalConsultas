@@ -178,7 +178,7 @@ async function fulfillSearchRoute(
   await route.fulfill({
     status: next?.status ?? 200,
     contentType: 'application/json',
-    body: JSON.stringify(next?.body ?? (trimmedQuery ? makeResponse(query) : makeEmptySearchResponse(query))),
+    body: JSON.stringify(next?.body ?? (trimmedQuery ? makeResponse(trimmedQuery) : makeEmptySearchResponse(trimmedQuery))),
   });
 }
 
@@ -196,6 +196,11 @@ async function handleNbsDetail(route: Route, code: string) {
 
 async function handleNebsDetail(route: Route, code: string) {
   await route.fulfill({ json: makeNebsDetail(code) });
+}
+
+function getDetailCode(path: string, doc: 'nbs' | 'nebs'): string | null {
+  const match = path.match(new RegExp(`^/api/services/${doc}/([^/]+)$`));
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 export async function installServicesMock(page: Page, options: ServicesMockOptions = {}) {
@@ -217,15 +222,15 @@ export async function installServicesMock(page: Page, options: ServicesMockOptio
       return;
     }
 
-    if (path.includes('/services/nbs/')) {
-      const code = decodeURIComponent(path.split('/services/nbs/')[1]);
-      await handleNbsDetail(route, code);
+    const nbsCode = getDetailCode(path, 'nbs');
+    if (nbsCode) {
+      await handleNbsDetail(route, nbsCode);
       return;
     }
 
-    if (path.includes('/services/nebs/')) {
-      const code = decodeURIComponent(path.split('/services/nebs/')[1]);
-      await handleNebsDetail(route, code);
+    const nebsCode = getDetailCode(path, 'nebs');
+    if (nebsCode) {
+      await handleNebsDetail(route, nebsCode);
       return;
     }
 
