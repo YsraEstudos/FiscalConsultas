@@ -184,9 +184,6 @@ def _build_payload_response(
 
 
 router = APIRouter()
-SEARCH_RESPONSES = {
-    429: {"description": "Limite de requisições para busca pública excedido."},
-}
 
 
 def _public_search_limiter_key(request: Request) -> str:
@@ -210,8 +207,8 @@ async def _apply_search_rate_limit(request: Request) -> None:
 @router.get(
     "/search",
     responses={
+        429: {"description": "Limite de requisições para busca pública excedido."},
         500: {"description": "Formato de resposta inválido do serviço"},
-        **SEARCH_RESPONSES,
     },
 )
 async def search(

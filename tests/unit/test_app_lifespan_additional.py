@@ -1,3 +1,4 @@
+import asyncio
 import builtins
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -150,6 +151,7 @@ async def test_no_cache_html_hides_api_docs_without_debug_mode(monkeypatch):
     called = {"value": False}
 
     async def _next(_request):
+        await asyncio.sleep(0)
         called["value"] = True
         return Response("ok")
 
@@ -426,6 +428,7 @@ async def test_lifespan_rejects_non_local_debug_tenant_override(monkeypatch):
     shutdown_called = {"value": False}
 
     async def _shutdown(_app):
+        await asyncio.sleep(0)
         shutdown_called["value"] = True
 
     init_db_mock = AsyncMock()

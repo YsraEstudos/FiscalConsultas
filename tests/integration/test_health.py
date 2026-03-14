@@ -1,3 +1,5 @@
+import uuid
+
 from backend.presentation.routes import system
 
 
@@ -86,10 +88,13 @@ def test_status_public_rate_limit_blocks_burst_requests(client, monkeypatch):
         2,
         raising=False,
     )
+    system.status_rate_limiter.reset()
+    unique_ip = f"198.51.100.{uuid.uuid4().int % 250 + 1}"
+    request_headers = {"X-Forwarded-For": unique_ip}
 
-    first = client.get("/api/status")
-    second = client.get("/api/status")
-    third = client.get("/api/status")
+    first = client.get("/api/status", headers=request_headers)
+    second = client.get("/api/status", headers=request_headers)
+    third = client.get("/api/status", headers=request_headers)
 
     assert first.status_code == 200
     assert second.status_code == 200
@@ -113,7 +118,9 @@ def test_security_headers_are_sent_on_public_responses(client):
         assert "Strict-Transport-Security" not in response.headers
 
 
-def test_openapi_route_is_hidden_without_local_debug_mode(client):
+def test_openapi_route_is_hidden_without_local_debug_mode(client, monkeypatch):
+    monkeypatch.setattr(system.settings.features, "debug_mode", False, raising=False)
+
     response = client.get("/openapi.json")
 
     assert response.status_code == 404

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -43,6 +44,7 @@ class _FakeCommentService:
                 user_name (str | None): Resolved by the backend from the JWT.
                 user_image_url (str | None): Resolved by the backend from the JWT.
         """
+        await asyncio.sleep(0)
         now = datetime.now(timezone.utc)
         return SimpleNamespace(
             id=1,
@@ -70,6 +72,7 @@ class _FakeCommentService:
         Returns:
             list[str]: Anchor key strings for the tenant. Returns ["auto-anchor-1"] when tenant_id is "org_fallback", otherwise returns ["pos-84-07"].
         """
+        await asyncio.sleep(0)
         if tenant_id == "org_fallback":
             return ["auto-anchor-1"]
         return ["pos-84-07"]

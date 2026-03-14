@@ -56,11 +56,19 @@ def _resolve_comment_author_identity(
     if isinstance(full_name, str):
         full_name = full_name.strip() or None
 
-    image_url = auth_payload.get("image_url") or auth_payload.get("picture")
-    if not isinstance(image_url, str) or not image_url.strip():
-        image_url = None
-    else:
-        image_url = image_url.strip()
+    raw_image_url = auth_payload.get("image_url")
+    trimmed_image_url = (
+        raw_image_url.strip()
+        if isinstance(raw_image_url, str) and raw_image_url.strip()
+        else None
+    )
+    raw_picture = auth_payload.get("picture")
+    trimmed_picture = (
+        raw_picture.strip()
+        if isinstance(raw_picture, str) and raw_picture.strip()
+        else None
+    )
+    image_url = trimmed_image_url or trimmed_picture
 
     return full_name, image_url
 
