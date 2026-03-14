@@ -106,7 +106,11 @@ def test_jwt_observability_logs_do_not_include_token_fingerprint(monkeypatch):
     debug_calls: list[tuple[str, str]] = []
 
     monkeypatch.setattr(middleware.settings.features, "debug_mode", True, raising=False)
-    monkeypatch.setattr(middleware.logger, "warning", lambda message: warning_messages.append(message))
+    monkeypatch.setattr(
+        middleware.logger,
+        "warning",
+        lambda message: warning_messages.append(message),
+    )
     monkeypatch.setattr(
         middleware.logger,
         "debug",
@@ -121,6 +125,9 @@ def test_jwt_observability_logs_do_not_include_token_fingerprint(monkeypatch):
 
     middleware._log_jwt_failure("invalid_token", snapshot, "boom")
     middleware._log_jwt_validation_success(snapshot, payload)
+
+    assert warning_messages
+    assert debug_calls
 
     failure_payload = json.loads(warning_messages[0])
     success_payload = json.loads(debug_calls[0][1])
