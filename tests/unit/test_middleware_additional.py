@@ -101,6 +101,44 @@ def test_safe_get_unverified_claims_parses_payload_and_handles_malformed():
     assert middleware._safe_get_unverified_claims("a.b") == {}
 
 
+def test_jwt_observability_logs_do_not_include_token_fingerprint(monkeypatch):
+    warning_messages: list[str] = []
+    debug_calls: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(middleware.settings.features, "debug_mode", True, raising=False)
+    monkeypatch.setattr(middleware.logger, "warning", lambda message: warning_messages.append(message))
+    monkeypatch.setattr(
+        middleware.logger,
+        "debug",
+        lambda template, payload: debug_calls.append((template, payload)),
+    )
+
+    snapshot = {
+        "header": {"alg": "RS256", "kid": "kid-1"},
+        "claims": {"sub": "user_1", "org_id": "org_1"},
+    }
+    payload = {"sub": "user_1", "org_id": "org_1", "exp": 123}
+
+    middleware._log_jwt_failure("invalid_token", snapshot, "boom")
+    middleware._log_jwt_validation_success(snapshot, payload)
+
+    failure_payload = json.loads(warning_messages[0])
+    success_payload = json.loads(debug_calls[0][1])
+
+    assert "fingerprint" not in json.dumps(failure_payload)
+    assert "fingerprint" not in json.dumps(success_payload)
+    assert failure_payload["token"] == snapshot
+    assert success_payload["header"] == snapshot["header"]
+
+
+def test_is_loopback_host_handles_local_and_remote_inputs():
+    assert middleware.is_loopback_host("127.0.0.1") is True
+    assert middleware.is_loopback_host("::1") is True
+    assert middleware.is_loopback_host("localhost") is True
+    assert middleware.is_loopback_host("10.0.0.8") is False
+    assert middleware.is_loopback_host(None) is False
+
+
 def test_get_jwks_client_caches_instance(monkeypatch):
     class _FakeJWKS:
         def __init__(self, url):
@@ -568,6 +606,33 @@ async def test_dispatch_sets_tenant_from_debug_fallback_and_resets(monkeypatch):
     status, _ = await _invoke_middleware(mw, _build_scope("/api/search"))
     assert status == 200
     assert seen == ["org_default"]
+    assert tenant_context.get() == ""
+
+
+@pytest.mark.asyncio
+async def test_dispatch_does_not_apply_dev_tenant_fallback_for_remote_client(
+    monkeypatch,
+):
+    monkeypatch.setattr(middleware.settings.server, "env", "development", raising=False)
+    monkeypatch.setattr(middleware.settings.features, "debug_mode", True, raising=False)
+    monkeypatch.setattr(
+        middleware.settings.database, "engine", "postgresql", raising=False
+    )
+
+    seen = []
+
+    async def app(scope, receive, send):
+        seen.append(tenant_context.get())
+        response = JSONResponse({"ok": True})
+        await response(scope, receive, send)
+
+    mw = middleware.TenantMiddleware(app=app)
+    remote_scope = _build_scope("/api/search")
+    remote_scope["client"] = ("10.20.30.40", 12345)
+
+    status, _ = await _invoke_middleware(mw, remote_scope)
+    assert status == 200
+    assert seen == [""]
     assert tenant_context.get() == ""
 
 

@@ -7,10 +7,13 @@ import orjson as _orjson  # pyright: ignore[reportMissingImports]
 from backend.config.constants import SearchConfig
 from backend.config.exceptions import ValidationError
 from backend.config.logging_config import server_logger as logger
+from backend.config.settings import settings
 from backend.data.glossary_manager import glossary_manager
 from backend.presentation.renderer import HtmlRenderer
 from backend.server.dependencies import get_nesh_service
+from backend.server.rate_limit import public_search_rate_limiter
 from backend.services import NeshService
+from backend.utils.auth import extract_client_ip
 from backend.utils import ncm_utils
 from backend.utils.cache import cache_scope_key, weak_etag
 from backend.utils.payload_cache_metrics import search_payload_cache_metrics
@@ -181,11 +184,35 @@ def _build_payload_response(
 
 
 router = APIRouter()
+SEARCH_RESPONSES = {
+    429: {"description": "Limite de requisições para busca pública excedido."},
+}
+
+
+def _public_search_limiter_key(request: Request) -> str:
+    return f"search:ip:{extract_client_ip(request)}"
+
+
+async def _apply_search_rate_limit(request: Request) -> None:
+    allowed, retry_after = await public_search_rate_limiter.consume(
+        key=_public_search_limiter_key(request),
+        limit=settings.security.public_search_requests_per_minute,
+    )
+    if allowed:
+        return
+    raise HTTPException(
+        status_code=429,
+        detail="Rate limit exceeded for public search. Try again later.",
+        headers={"Retry-After": str(retry_after)},
+    )
 
 
 @router.get(
     "/search",
-    responses={500: {"description": "Formato de resposta inválido do serviço"}},
+    responses={
+        500: {"description": "Formato de resposta inválido do serviço"},
+        **SEARCH_RESPONSES,
+    },
 )
 async def search(
     request: Request,
@@ -215,6 +242,8 @@ async def search(
             f"Query muito longa (máximo {SearchConfig.MAX_QUERY_LENGTH} caracteres)",
             field="ncm",
         )
+
+    await _apply_search_rate_limit(request)
 
     safe_ncm = ncm.replace("\r", "\\r").replace("\n", "\\n")
     logger.debug("Busca: '%s'", safe_ncm)

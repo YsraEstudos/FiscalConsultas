@@ -48,6 +48,30 @@ def _tenant_from_auth_payload(auth_payload: dict) -> str:
     raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
 
 
+def _resolve_comment_author_identity(auth_payload: dict) -> tuple[str | None, str | None]:
+    full_name = auth_payload.get("name")
+    if not isinstance(full_name, str) or not full_name.strip():
+        name_parts = [
+            part.strip()
+            for part in (
+                auth_payload.get("given_name"),
+                auth_payload.get("family_name"),
+            )
+            if isinstance(part, str) and part.strip()
+        ]
+        full_name = " ".join(name_parts) or None
+    else:
+        full_name = full_name.strip()
+
+    image_url = auth_payload.get("image_url") or auth_payload.get("picture")
+    if not isinstance(image_url, str) or not image_url.strip():
+        image_url = None
+    else:
+        image_url = image_url.strip()
+
+    return full_name, image_url
+
+
 async def _require_payload(request: Request) -> dict:
     """Valida JWT e retorna o payload; levanta 401 se inválido."""
     token = extract_bearer_token(request)
@@ -103,8 +127,15 @@ async def create_comment(
     auth_payload = await _require_payload(request)
     tenant_id = _tenant_from_auth_payload(auth_payload)
     user_id: str = auth_payload.get("sub", "")
+    user_name, user_image_url = _resolve_comment_author_identity(auth_payload)
     try:
-        comment = await service.create_comment(payload, tenant_id, user_id)
+        comment = await service.create_comment(
+            payload,
+            tenant_id,
+            user_id,
+            user_name=user_name,
+            user_image_url=user_image_url,
+        )
         return CommentOut.model_validate(comment)
     except Exception as e:
         logger.error("Erro ao criar comentário: %s", e)

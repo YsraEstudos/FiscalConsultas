@@ -45,13 +45,6 @@ def test_is_valid_webhook_without_configured_token(monkeypatch):
     monkeypatch.setattr(settings.billing, "asaas_webhook_token", None)
     monkeypatch.setattr(settings.server, "env", "development")
     request = _request_with_headers()
-    assert webhooks._is_valid_asaas_webhook(request) is True
-
-
-def test_is_valid_webhook_without_token_in_production(monkeypatch):
-    monkeypatch.setattr(settings.billing, "asaas_webhook_token", None)
-    monkeypatch.setattr(settings.server, "env", "production")
-    request = _request_with_headers()
     assert webhooks._is_valid_asaas_webhook(request) is False
 
 

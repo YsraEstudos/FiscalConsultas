@@ -388,6 +388,39 @@ async def test_lifespan_postgres_import_error_still_enables_sqlmodel(
         assert app.state.tipi_service.mode == "repo"
 
 
+def test_validate_dev_tenant_override_safety_allows_localhost(monkeypatch):
+    monkeypatch.setattr(app_module.settings.server, "env", "development", raising=False)
+    monkeypatch.setattr(app_module.settings.features, "debug_mode", True, raising=False)
+    monkeypatch.setattr(app_module.settings.server, "host", "127.0.0.1", raising=False)
+
+    app_module._validate_dev_tenant_override_safety()
+
+
+@pytest.mark.asyncio
+async def test_lifespan_rejects_non_local_debug_tenant_override(monkeypatch):
+    shutdown_called = {"value": False}
+
+    async def _shutdown(_app):
+        shutdown_called["value"] = True
+
+    init_db_mock = AsyncMock()
+
+    monkeypatch.setattr(app_module.settings.server, "env", "development", raising=False)
+    monkeypatch.setattr(app_module.settings.features, "debug_mode", True, raising=False)
+    monkeypatch.setattr(app_module.settings.server, "host", "0.0.0.0", raising=False)
+    monkeypatch.setattr(app_module, "_init_primary_database", init_db_mock)
+    monkeypatch.setattr(app_module, "_shutdown_resources", _shutdown)
+
+    app = _make_fake_fastapi()
+
+    with pytest.raises(RuntimeError, match="localhost-only host binding"):
+        async with app_module.lifespan(app):
+            pytest.fail("lifespan yielded unexpectedly")
+
+    init_db_mock.assert_not_awaited()
+    assert shutdown_called["value"] is True
+
+
 @pytest.mark.asyncio
 async def test_shutdown_resources_continues_after_db_close_failure(monkeypatch):
     warnings = []

@@ -15,6 +15,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from backend.config import CONFIG
 from backend.config.settings import settings
 from backend.server.app import app
+from backend.server import rate_limit
 from backend.utils.text_processor import NeshTextProcessor
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -597,6 +598,21 @@ def client():
     """
     with TestClient(app) as c:
         yield c
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiters():
+    rate_limit.ai_chat_rate_limiter.reset()
+    rate_limit.public_search_rate_limiter.reset()
+    rate_limit.status_rate_limiter.reset()
+    rate_limit.services_search_rate_limiter.reset()
+    rate_limit.services_detail_rate_limiter.reset()
+    yield
+    rate_limit.ai_chat_rate_limiter.reset()
+    rate_limit.public_search_rate_limiter.reset()
+    rate_limit.status_rate_limiter.reset()
+    rate_limit.services_search_rate_limiter.reset()
+    rate_limit.services_detail_rate_limiter.reset()
 
 
 @pytest.fixture(scope="session")

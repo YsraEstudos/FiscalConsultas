@@ -28,12 +28,8 @@ def _is_valid_asaas_webhook(request: Request) -> bool:
     """
     configured = settings.billing.asaas_webhook_token
     if not configured:
-        if settings.server.env == "production":
-            logger.error(
-                "Asaas webhook token is not configured in production environment"
-            )
-            return False
-        return True
+        logger.error("Asaas webhook token is not configured")
+        return False
     token = _extract_asaas_token(request)
     if not token:
         return False

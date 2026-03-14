@@ -25,7 +25,7 @@ from backend.server.error_handlers import (
     generic_exception_handler,
     nesh_exception_handler,
 )
-from backend.server.middleware import TenantMiddleware
+from backend.server.middleware import TenantMiddleware, is_loopback_host
 from backend.services.ai_service import AiService
 from backend.services.nbs_service import NbsService
 from backend.services.tipi_service import TipiService
@@ -53,6 +53,19 @@ logger = logging.getLogger("server")
 
 def _resolve_project_root() -> str:
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _validate_dev_tenant_override_safety() -> None:
+    if settings.server.env != "development" or not settings.features.debug_mode:
+        return
+
+    if is_loopback_host(settings.server.host):
+        return
+
+    raise RuntimeError(
+        "Debug tenant overrides require a localhost-only host binding. "
+        f"Received SERVER__HOST={settings.server.host!r}."
+    )
 
 
 async def _init_primary_database(app: FastAPI) -> None:
@@ -205,6 +218,7 @@ async def _shutdown_resources(app: FastAPI) -> None:
 async def lifespan(app: FastAPI):
     project_root = _resolve_project_root()
     try:
+        _validate_dev_tenant_override_safety()
         await _init_primary_database(app)
         await _init_sqlmodel_engine(app)
         await _init_nesh_service(app)

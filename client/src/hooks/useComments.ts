@@ -133,8 +133,6 @@ export function useComments(): UseCommentsReturn {
             selected_text: pending.selectedText,
             body,
             is_private: isPrivate,
-            user_name: userName,
-            user_image_url: userImageUrl ?? undefined,
         };
 
         try {

@@ -22,10 +22,14 @@ class CommentCreate(BaseModel):
         default=False, description="True → status=private, False → status=pending"
     )
     user_name: Optional[str] = Field(
-        default=None, max_length=255, description="Nome do autor (do Clerk frontend)"
+        default=None,
+        max_length=255,
+        description="Campo legado ignorado; o backend usa a identidade do JWT.",
     )
     user_image_url: Optional[str] = Field(
-        default=None, max_length=1024, description="URL do avatar (do Clerk frontend)"
+        default=None,
+        max_length=1024,
+        description="Campo legado ignorado; o backend usa a identidade do JWT.",
     )
 
     @field_validator("anchor_key", "body", "selected_text")
