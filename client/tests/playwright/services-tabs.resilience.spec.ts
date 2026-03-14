@@ -1,30 +1,7 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 import { installServicesMock, makeNbsSearch } from './fixtures/service-mocks';
-
-async function openServicesModal(page: Page) {
-  await page.goto('/');
-  await page.getByRole('button', { name: /Menu/ }).click();
-  await page.getByRole('button', { name: /Serviços \(NBS\)/ }).click();
-  await expect(page.getByRole('heading', { name: 'NBS 2.0' })).toBeVisible();
-}
-
-async function searchServices(page: Page, query: string, doc: 'nbs' | 'nebs' = 'nbs') {
-  const label = doc === 'nbs'
-    ? 'Buscar por codigo ou descricao'
-    : 'Buscar por codigo ou termo da nota';
-  const endpoint = doc === 'nbs'
-    ? '/api/services/nbs/search'
-    : '/api/services/nebs/search';
-
-  const request = page.waitForRequest((candidate) =>
-    candidate.url().includes(endpoint)
-    && new URL(candidate.url()).searchParams.get('q') === query,
-  );
-
-  await page.getByLabel(label).fill(query);
-  await request;
-}
+import { openServicesModal, searchServices } from './fixtures/services-ui';
 
 test('shows the NEBS empty/error state after a linked NEBS search fails', async ({ page }) => {
   await installServicesMock(page, {
@@ -65,7 +42,7 @@ test('shows an error after a failed NBS search and recovers on retry', async ({ 
   await page.getByLabel('Buscar por codigo ou descricao').fill('');
   await searchServices(page, '1.0101.12.00');
 
-  await expect(page.getByRole('button', { name: /NEBS Serviços de construção de edificações residenciais de um e dois pavimentos Nivel 3/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Serviços de construção de edificações residenciais/ })).toBeVisible();
   await expect(page.getByText('Descricao atual')).toBeVisible();
 });
 

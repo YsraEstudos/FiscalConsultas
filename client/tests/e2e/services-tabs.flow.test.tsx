@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ServicesTabContent } from '../../src/components/ServicesTabContent';
 import {
+  makeNebsDetail,
   makeNebsSearch,
+  makeNbsDetail,
   makeNbsSearch,
 } from '../playwright/fixtures/service-mocks';
 import type {
@@ -54,10 +56,10 @@ function makeTab(id: string, doc: ServiceDocType, query: string): HarnessTab {
 function ServicesTabsHarness({
   initialDoc = 'nbs',
   initialQuery = '1.0101.11.00',
-}: {
+}: Readonly<{
   initialDoc?: ServiceDocType;
   initialQuery?: string;
-}) {
+}>) {
   const [tabs, setTabs] = useState<HarnessTab[]>([makeTab('tab-1', initialDoc, initialQuery)]);
   const [activeTabId, setActiveTabId] = useState('tab-1');
   const activeTab = useMemo(
@@ -104,8 +106,8 @@ describe('services tabs flow', () => {
   beforeEach(() => {
     refs.getNbsServiceDetailMock.mockReset();
     refs.getNebsEntryDetailMock.mockReset();
-    refs.getNbsServiceDetailMock.mockResolvedValue(null);
-    refs.getNebsEntryDetailMock.mockResolvedValue(null);
+    refs.getNbsServiceDetailMock.mockResolvedValue(makeNbsDetail());
+    refs.getNebsEntryDetailMock.mockResolvedValue(makeNebsDetail());
   });
 
   it('switches from NBS results to NEBS results in the same tab', async () => {

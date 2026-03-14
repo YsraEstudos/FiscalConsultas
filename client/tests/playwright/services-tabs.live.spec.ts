@@ -24,7 +24,7 @@ async function findFirstVisibleLocator(page: Page, selectors: string[]) {
   for (const selector of selectors) {
     for (const target of targets) {
       const locator = target.root.locator(selector).first();
-      if (await locator.count()) {
+      if (await locator.isVisible()) {
         return locator;
       }
     }
@@ -43,6 +43,8 @@ async function pollForLocator(
     maxAttempts = 20,
   } = options;
 
+  // Clerk can reshuffle its DOM and selectors between renders, so we use bounded polling
+  // instead of relying on a single auto-wait target; maxAttempts and interval cap flakiness.
   for (let i = 0; i < maxAttempts; i += 1) {
     const locator = await findFirstVisibleLocator(page, selectors);
     if (locator) {

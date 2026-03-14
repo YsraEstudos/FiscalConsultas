@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 
 import type {
+  NebsEntry,
   NebsDetailResponse,
   NebsSearchResponse,
   NbsDetailResponse,
@@ -39,6 +40,25 @@ function makeItem(code = '1.0101.11.00', overrides: Partial<NbsServiceItem> = {}
     level: 3,
     has_nebs: true,
     ...overrides,
+  };
+}
+
+function makeNebsEntry(code = '1.0101.11.00'): NebsEntry {
+  return {
+    code,
+    code_clean: code.replace(/\D/g, ''),
+    title: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
+    title_normalized: 'servicos de construcao de edificacoes residenciais de um e dois pavimentos',
+    body_text: 'Conteudo da nota',
+    body_markdown: 'Conteudo da nota',
+    body_normalized: 'conteudo da nota',
+    section_title: 'SEÇÃO I - SERVIÇOS DE CONSTRUÇÃO',
+    page_start: 12,
+    page_end: 13,
+    parser_status: 'trusted',
+    parse_warnings: null,
+    source_hash: `fixture-${code.replace(/\D/g, '')}`,
+    updated_at: '2026-03-13T00:00:00.000Z',
   };
 }
 
@@ -105,20 +125,7 @@ export function makeNbsDetail(code = '1.0101.11.00'): NbsDetailResponse {
       parent,
     ],
     children: [],
-    chapter_root: root,
-    chapter_items: [root, parent, leaf],
-    nebs: {
-      code: leaf.code,
-      code_clean: leaf.code_clean,
-      title: leaf.description,
-      title_normalized: 'servicos de construcao de edificacoes residenciais de um e dois pavimentos',
-      body_text: 'Conteudo da nota',
-      body_markdown: 'Conteudo da nota',
-      body_normalized: 'conteudo da nota',
-      section_title: 'SEÇÃO I - SERVIÇOS DE CONSTRUÇÃO',
-      page_start: 12,
-      page_end: 13,
-    },
+    nebs: makeNebsEntry(leaf.code),
   };
 }
 
@@ -149,18 +156,7 @@ export function makeNebsDetail(code = '1.0101.11.00'): NebsDetailResponse {
         has_nebs: false,
       }),
     ],
-    entry: {
-      code,
-      code_clean: code.replace(/\D/g, ''),
-      title: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
-      title_normalized: 'servicos de construcao de edificacoes residenciais de um e dois pavimentos',
-      body_text: 'Conteudo da nota',
-      body_markdown: 'Conteudo da nota',
-      body_normalized: 'conteudo da nota',
-      section_title: 'SEÇÃO I - SERVIÇOS DE CONSTRUÇÃO',
-      page_start: 12,
-      page_end: 13,
-    },
+    entry: makeNebsEntry(code),
   };
 }
 
