@@ -94,6 +94,31 @@ def test_status_public_rate_limit_blocks_burst_requests(client, monkeypatch):
     assert int(third.headers["Retry-After"]) >= 1
 
 
+def test_security_headers_are_sent_on_public_responses(client):
+    for path in ("/", "/api/status"):
+        response = client.get(path)
+
+        assert response.status_code == 200
+        assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
+        assert response.headers["X-Frame-Options"] == "DENY"
+        assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert (
+            response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+        )
+        assert (
+            response.headers["Permissions-Policy"]
+            == "camera=(), microphone=(), geolocation=()"
+        )
+        assert "Strict-Transport-Security" not in response.headers
+
+
+def test_openapi_route_is_hidden_without_local_debug_mode(client):
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Not Found"}
+
+
 def test_frontend_fallback(client):
     """
     Verify the root endpoint handles missing frontend build gracefully.

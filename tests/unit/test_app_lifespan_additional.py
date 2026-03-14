@@ -138,7 +138,32 @@ async def test_no_cache_html_sets_headers_for_html_paths_only():
         == "no-store, no-cache, must-revalidate, max-age=0"
     )
     assert root_response.headers["Pragma"] == "no-cache"
+    assert html_response.headers["X-Frame-Options"] == "DENY"
+    assert html_response.headers["X-Content-Type-Options"] == "nosniff"
+    assert "frame-ancestors 'none'" in html_response.headers["Content-Security-Policy"]
+    assert api_response.headers["X-Frame-Options"] == "DENY"
     assert "Cache-Control" not in api_response.headers
+
+
+@pytest.mark.asyncio
+async def test_no_cache_html_hides_api_docs_without_debug_mode(monkeypatch):
+    called = {"value": False}
+
+    async def _next(_request):
+        called["value"] = True
+        return Response("ok")
+
+    monkeypatch.setattr(app_module.settings.server, "env", "development", raising=False)
+    monkeypatch.setattr(
+        app_module.settings.features, "debug_mode", False, raising=False
+    )
+
+    response = await app_module.no_cache_html(_request_for_path("/openapi.json"), _next)
+
+    assert response.status_code == 404
+    assert response.body == b'{"detail":"Not Found"}'
+    assert called["value"] is False
+    assert response.headers["X-Frame-Options"] == "DENY"
 
 
 @pytest.mark.asyncio

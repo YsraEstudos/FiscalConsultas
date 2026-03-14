@@ -33,6 +33,7 @@ from backend.utils.frontend_check import verify_frontend_build
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 """
@@ -50,6 +51,29 @@ Responsável por:
 setup_logging()
 logger = logging.getLogger("server")
 
+_DOCS_PATHS = frozenset({"/docs", "/redoc", "/openapi.json"})
+_CONTENT_SECURITY_POLICY = "; ".join(
+    (
+        "default-src 'self'",
+        "base-uri 'self'",
+        "object-src 'none'",
+        "frame-ancestors 'none'",
+        "form-action 'self'",
+        (
+            "script-src 'self' https://*.clerk.accounts.dev "
+            "https://*.clerk.com https://challenges.cloudflare.com"
+        ),
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "img-src 'self' data: blob: https:",
+        "font-src 'self' https://fonts.gstatic.com data:",
+        (
+            "connect-src 'self' https: wss: http://127.0.0.1:8000 "
+            "http://localhost:8000 ws://127.0.0.1:* ws://localhost:*"
+        ),
+        "frame-src 'self' https:",
+    )
+)
+
 
 def _resolve_project_root() -> str:
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -66,6 +90,31 @@ def _validate_dev_tenant_override_safety() -> None:
         "Debug tenant overrides require a localhost-only host binding. "
         f"Received SERVER__HOST={settings.server.host!r}."
     )
+
+
+def _should_expose_api_docs() -> bool:
+    return settings.server.env == "development" and settings.features.debug_mode
+
+
+def _request_uses_https(request: Request) -> bool:
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    if forwarded_proto:
+        proto = forwarded_proto.split(",", 1)[0].strip().lower()
+        if proto == "https":
+            return True
+    return request.url.scheme.lower() == "https"
+
+
+def _apply_security_headers(request: Request, response) -> None:
+    response.headers["Content-Security-Policy"] = _CONTENT_SECURITY_POLICY
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if _request_uses_https(request):
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=63072000; includeSubDomains; preload"
+        )
 
 
 async def _init_primary_database(app: FastAPI) -> None:
@@ -289,8 +338,14 @@ app.add_middleware(
 
 @app.middleware("http")
 async def no_cache_html(request: Request, call_next):
-    response = await call_next(request)
     path = request.url.path
+    if path in _DOCS_PATHS and not _should_expose_api_docs():
+        response = JSONResponse(status_code=404, content={"detail": "Not Found"})
+        _apply_security_headers(request, response)
+        return response
+
+    response = await call_next(request)
+    _apply_security_headers(request, response)
     if path == "/" or path.endswith(".html"):
         response.headers["Cache-Control"] = (
             "no-store, no-cache, must-revalidate, max-age=0"
