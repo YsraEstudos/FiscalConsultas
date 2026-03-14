@@ -22,7 +22,11 @@ const runTabSwitchScenario = (openTabs: number, iterations: number): number[] =>
 
     for (let i = 0; i < iterations; i += 1) {
       const activeTabId = result.current.activeTabId;
-      const targetTabId = result.current.tabs.find((tab) => tab.id !== activeTabId)?.id;
+      const activeTabIndex = result.current.tabs.findIndex((tab) => tab.id === activeTabId);
+      const nextTabIndex = activeTabIndex >= 0
+        ? (activeTabIndex + 1) % result.current.tabs.length
+        : 0;
+      const targetTabId = result.current.tabs[nextTabIndex]?.id;
 
       expect(targetTabId).toBeDefined();
       expect(targetTabId).not.toBe(activeTabId);
@@ -46,12 +50,11 @@ const runTabSwitchScenario = (openTabs: number, iterations: number): number[] =>
   }
 };
 
-const runSearchTypingScenario = async (openTabs: number, inputValue: string): Promise<number> => {
+const runSingleTabSearchTypingScenario = async (inputValue: string): Promise<number> => {
   const uuidSpy = vi.spyOn(globalThis.crypto, 'randomUUID');
   let sequence = 0;
   uuidSpy.mockImplementation(() => `search-${++sequence}`);
 
-  const { result } = renderHook(() => useTabs());
   const { unmount } = render(
     <SearchBar
       onSearch={vi.fn()}
@@ -64,12 +67,6 @@ const runSearchTypingScenario = async (openTabs: number, inputValue: string): Pr
   const input = screen.getByPlaceholderText(/Digite os NCMs/i);
   const user = userEvent.setup();
   try {
-    act(() => {
-      for (let index = 1; index < openTabs; index += 1) {
-        result.current.createTab(index % 2 === 0 ? 'nesh' : 'tipi');
-      }
-    });
-
     const start = performance.now();
     await user.type(input, inputValue);
     const end = performance.now();
@@ -104,11 +101,11 @@ describe('Fase 1 - baseline multi-abas (C1-C4)', () => {
     expect(c3.p95).toBeLessThan(TAB_SWITCH_P95_GUARDRAIL_MS);
   });
 
-  it('collects search input-to-paint proxy for C4', async () => {
+  it('collects single-tab search input-to-paint proxy for C4', async () => {
     const durations: number[] = [];
 
     for (let attempt = 0; attempt < 10; attempt += 1) {
-      durations.push(await runSearchTypingScenario(10, '8413'));
+      durations.push(await runSingleTabSearchTypingScenario('8413'));
     }
 
     const c4 = summarizeDurations(durations);

@@ -38,7 +38,7 @@ export interface CommentComponentRenderOptions {
   currentUserId?: string | null;
 }
 
-type RenderCommentComponent = (options?: CommentComponentRenderOptions) => ReactElement;
+export type RenderCommentComponent = (options?: CommentComponentRenderOptions) => ReactElement;
 
 function getEditTextarea() {
   const textarea = screen
@@ -89,7 +89,7 @@ export function registerSharedOwnerCommentTests(
   renderUi: RenderCommentComponent,
   editedBody: string,
 ) {
-  it('renders fallback avatars and supports owner edit/delete flows', async () => {
+  it('renders fallback avatars and hides owner actions for non-owners', () => {
     renderCommentComponent(renderUi, {
       comments: [makeComment({ userImageUrl: 'data:text/html;base64,abc', userId: 'another-user' })],
       onEdit: vi.fn(),
@@ -101,7 +101,9 @@ export function registerSharedOwnerCommentTests(
     expect(screen.queryByTitle('Editar')).not.toBeInTheDocument();
     expect(screen.queryByTitle('Excluir')).not.toBeInTheDocument();
     cleanup();
+  });
 
+  it('supports owner edit and delete flows', async () => {
     const onEdit = vi.fn().mockResolvedValue(undefined);
     const onDelete = vi.fn().mockResolvedValue(undefined);
 

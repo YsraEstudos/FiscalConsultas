@@ -98,15 +98,25 @@ vi.mock('../../src/components/CommentPanel', () => ({
 }));
 
 vi.mock('../../src/components/CommentDrawer', () => ({
-  CommentDrawer: ({ open, pending, comments, onClose, onSubmit }: any) => (
-    <div data-testid="comment-drawer" data-open={String(Boolean(open))}>
+  CommentDrawer: ({ open, pending, comments, currentUserId, onClose, onSubmit, onDismiss, onEdit, onDelete }: any) => (
+    <div data-testid="comment-drawer" data-open={String(Boolean(open))} data-user-id={currentUserId ?? ''}>
       <span data-testid="comment-drawer-pending">{pending?.anchorKey ?? ''}</span>
       <span data-testid="comment-drawer-count">{comments.length}</span>
+      <span data-testid="comment-drawer-user-id">{currentUserId ?? ''}</span>
       <button data-testid="comment-drawer-close" onClick={onClose}>
         close-drawer
       </button>
       <button data-testid="comment-drawer-submit" onClick={() => onSubmit('Comentário drawer', true)}>
         submit-drawer
+      </button>
+      <button data-testid="comment-drawer-dismiss" onClick={onDismiss}>
+        dismiss-drawer
+      </button>
+      <button data-testid="comment-drawer-edit" onClick={() => onEdit?.('comment-1', 'Editado drawer')}>
+        edit-drawer
+      </button>
+      <button data-testid="comment-drawer-delete" onClick={() => onDelete?.('comment-1')}>
+        delete-drawer
       </button>
     </div>
   ),

@@ -398,6 +398,15 @@ describe('useComments behavior', () => {
       expect(refs.fetchCommentedAnchorsMock).not.toHaveBeenCalled();
       expect(result.current.commentedAnchors).toEqual([]);
       expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        const anchors = await result.current.loadCommentedAnchors();
+        expect(anchors).toEqual([]);
+      });
+
+      expect(refs.fetchCommentedAnchorsMock).not.toHaveBeenCalled();
+      expect(result.current.commentedAnchors).toEqual([]);
+      expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
     } finally {
       restoreLocation();
       consoleWarnSpy.mockRestore();
