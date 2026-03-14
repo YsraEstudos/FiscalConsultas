@@ -20,6 +20,7 @@ from backend.server.middleware import (
     decode_clerk_jwt,
     get_current_tenant,
     get_last_jwt_failure_reason,
+    _resolve_full_name,
 )
 from backend.services.comment_service import CommentService
 from backend.utils.auth import extract_bearer_token, is_admin_payload
@@ -46,6 +47,30 @@ def _tenant_from_auth_payload(auth_payload: dict) -> str:
         return fallback_tenant
 
     raise HTTPException(status_code=400, detail=ERROR_TENANT_MISSING)  # NOSONAR
+
+
+def _resolve_comment_author_identity(
+    auth_payload: dict,
+) -> tuple[str | None, str | None]:
+    full_name = _resolve_full_name(auth_payload)
+    if isinstance(full_name, str):
+        full_name = full_name.strip() or None
+
+    raw_image_url = auth_payload.get("image_url")
+    trimmed_image_url = (
+        raw_image_url.strip()
+        if isinstance(raw_image_url, str) and raw_image_url.strip()
+        else None
+    )
+    raw_picture = auth_payload.get("picture")
+    trimmed_picture = (
+        raw_picture.strip()
+        if isinstance(raw_picture, str) and raw_picture.strip()
+        else None
+    )
+    image_url = trimmed_image_url or trimmed_picture
+
+    return full_name, image_url
 
 
 async def _require_payload(request: Request) -> dict:
@@ -103,8 +128,15 @@ async def create_comment(
     auth_payload = await _require_payload(request)
     tenant_id = _tenant_from_auth_payload(auth_payload)
     user_id: str = auth_payload.get("sub", "")
+    user_name, user_image_url = _resolve_comment_author_identity(auth_payload)
     try:
-        comment = await service.create_comment(payload, tenant_id, user_id)
+        comment = await service.create_comment(
+            payload,
+            tenant_id,
+            user_id,
+            user_name=user_name,
+            user_image_url=user_image_url,
+        )
         return CommentOut.model_validate(comment)
     except Exception as e:
         logger.error("Erro ao criar comentário: %s", e)

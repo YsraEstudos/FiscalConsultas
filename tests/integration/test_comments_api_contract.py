@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -10,7 +11,15 @@ pytestmark = pytest.mark.integration
 
 
 class _FakeCommentService:
-    async def create_comment(self, payload, tenant_id: str, user_id: str):  # NOSONAR
+    async def create_comment(
+        self,
+        payload,
+        tenant_id: str,
+        user_id: str,
+        *,
+        user_name: str | None = None,
+        user_image_url: str | None = None,
+    ):  # NOSONAR
         """
         Create a comment object representing a newly created comment using the supplied payload and identifiers.
 
@@ -32,9 +41,10 @@ class _FakeCommentService:
                 updated_at (datetime): UTC timestamp equal to created_at.
                 moderated_by: None.
                 moderated_at: None.
-                user_name (str): From payload.user_name.
-                user_image_url (str): From payload.user_image_url.
+                user_name (str | None): Resolved by the backend from the JWT.
+                user_image_url (str | None): Resolved by the backend from the JWT.
         """
+        await asyncio.sleep(0)
         now = datetime.now(timezone.utc)
         return SimpleNamespace(
             id=1,
@@ -48,8 +58,8 @@ class _FakeCommentService:
             updated_at=now,
             moderated_by=None,
             moderated_at=None,
-            user_name=payload.user_name,
-            user_image_url=payload.user_image_url,
+            user_name=user_name,
+            user_image_url=user_image_url,
         )
 
     async def get_commented_anchors(self, tenant_id: str):  # NOSONAR
@@ -62,6 +72,7 @@ class _FakeCommentService:
         Returns:
             list[str]: Anchor key strings for the tenant. Returns ["auto-anchor-1"] when tenant_id is "org_fallback", otherwise returns ["pos-84-07"].
         """
+        await asyncio.sleep(0)
         if tenant_id == "org_fallback":
             return ["auto-anchor-1"]
         return ["pos-84-07"]
@@ -119,7 +130,11 @@ def test_create_comment_returns_201_with_expected_payload(client, monkeypatch):
         Returns:
             dict: A payload with the `sub` claim set to `"user_test_123"`.
         """
-        return {"sub": "user_test_123"}
+        return {
+            "sub": "user_test_123",
+            "name": "JWT User",
+            "image_url": "https://issuer.example/avatar.png",
+        }
 
     monkeypatch.setattr(comments, "decode_clerk_jwt", _mock_decode)
     monkeypatch.setattr(comments, "get_current_tenant", lambda: "org_test")
@@ -132,8 +147,8 @@ def test_create_comment_returns_201_with_expected_payload(client, monkeypatch):
             "selected_text": "texto selecionado",
             "body": "comentario teste",
             "is_private": False,
-            "user_name": "Test User",
-            "user_image_url": "https://example.com/avatar.png",
+            "user_name": "Spoofed User",
+            "user_image_url": "https://attacker.example/avatar.png",
         },
         headers={"Authorization": "Bearer mock-auth-header"},
     )
@@ -146,8 +161,8 @@ def test_create_comment_returns_201_with_expected_payload(client, monkeypatch):
     assert body["user_id"] == "user_test_123"
     assert body["anchor_key"] == "pos-84-07"
     assert body["status"] == "pending"
-    assert body["user_name"] == "Test User"
-    assert body["user_image_url"] == "https://example.com/avatar.png"
+    assert body["user_name"] == "JWT User"
+    assert body["user_image_url"] == "https://issuer.example/avatar.png"
 
     created_at = datetime.fromisoformat(body["created_at"].replace("Z", "+00:00"))
     updated_at = datetime.fromisoformat(body["updated_at"].replace("Z", "+00:00"))
@@ -184,6 +199,40 @@ def test_create_comment_uses_org_id_claim_when_tenant_context_is_missing(
 
     assert response.status_code == 201
     assert response.json()["tenant_id"] == "org_fallback"
+
+
+def test_create_comment_falls_back_to_given_and_family_name_for_identity(
+    client, monkeypatch
+):
+    async def _mock_decode(_t):  # NOSONAR
+        return {
+            "sub": "user_test_123",
+            "org_id": "org_test",
+            "given_name": "Fiscal",
+            "family_name": "Reviewer",
+            "picture": "https://issuer.example/fallback.png",
+        }
+
+    monkeypatch.setattr(comments, "decode_clerk_jwt", _mock_decode)
+    monkeypatch.setattr(comments, "get_current_tenant", lambda: None)
+    app.dependency_overrides[comments._get_service] = lambda: _FakeCommentService()
+
+    response = client.post(
+        "/api/comments/",
+        json={
+            "anchor_key": "pos-84-07",
+            "selected_text": "texto selecionado",
+            "body": "comentario teste",
+            "is_private": False,
+            "user_name": "Another Spoof",
+            "user_image_url": "https://attacker.example/avatar.png",
+        },
+        headers={"Authorization": "Bearer mock-auth-header"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["user_name"] == "Fiscal Reviewer"
+    assert response.json()["user_image_url"] == "https://issuer.example/fallback.png"
 
 
 def test_list_commented_anchors_uses_org_id_claim_when_tenant_context_is_missing(

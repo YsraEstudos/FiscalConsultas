@@ -33,24 +33,38 @@ def asaas_payment_confirmed_payload():
     return json.loads(fixture_path.read_text(encoding="utf-8"))
 
 
-def test_webhook_rejects_invalid_json_payload(client):
+def test_webhook_rejects_invalid_json_payload(client, monkeypatch):
+    monkeypatch.setattr(settings.billing, "asaas_webhook_token", "expected-signature")
     response = client.post(
         "/api/webhooks/asaas",
         content="not-json",
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "x-asaas-access-token": "expected-signature",
+        },
     )
     assert response.status_code == 400
     assert response.json()["detail"] == "Invalid JSON payload"
 
 
-def test_webhook_requires_event_field(client):
-    response = client.post("/api/webhooks/asaas", json={"payment": {"id": "pay_1"}})
+def test_webhook_requires_event_field(client, monkeypatch):
+    monkeypatch.setattr(settings.billing, "asaas_webhook_token", "expected-signature")
+    response = client.post(
+        "/api/webhooks/asaas",
+        json={"payment": {"id": "pay_1"}},
+        headers={"x-asaas-access-token": "expected-signature"},
+    )
     assert response.status_code == 400
     assert response.json()["detail"] == "Missing event in payload"
 
 
-def test_webhook_ignores_non_confirmed_event(client):
-    response = client.post("/api/webhooks/asaas", json={"event": "PAYMENT_RECEIVED"})
+def test_webhook_ignores_non_confirmed_event(client, monkeypatch):
+    monkeypatch.setattr(settings.billing, "asaas_webhook_token", "expected-signature")
+    response = client.post(
+        "/api/webhooks/asaas",
+        json={"event": "PAYMENT_RECEIVED"},
+        headers={"x-asaas-access-token": "expected-signature"},
+    )
     assert response.status_code == 200
     assert response.json() == {
         "success": True,
@@ -67,9 +81,23 @@ def test_webhook_requires_configured_token_when_present(client, monkeypatch):
     assert response.json()["detail"] == "Invalid Asaas webhook token"
 
 
+def test_webhook_rejects_requests_when_secret_is_not_configured(client, monkeypatch):
+    monkeypatch.setattr(settings.billing, "asaas_webhook_token", None)
+
+    response = client.post(
+        "/api/webhooks/asaas",
+        json={"event": "PAYMENT_RECEIVED"},
+        headers={"x-asaas-access-token": "anything"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid Asaas webhook token"
+
+
 @pytest.mark.asyncio
 async def test_webhook_rejects_oversized_payload_without_content_length(monkeypatch):
     monkeypatch.setattr(settings.billing, "asaas_max_payload_bytes", 32)
+    monkeypatch.setattr(settings.billing, "asaas_webhook_token", "expected-signature")
 
     body = b'{"event":"' + (b"A" * 128) + b'"}'
     messages = [{"type": "http.request", "body": body, "more_body": False}]
@@ -87,7 +115,10 @@ async def test_webhook_rejects_oversized_payload_without_content_length(monkeypa
         "path": "/api/webhooks/asaas",
         "raw_path": b"/api/webhooks/asaas",
         "query_string": b"",
-        "headers": [(b"content-type", b"application/json")],
+        "headers": [
+            (b"content-type", b"application/json"),
+            (b"x-asaas-access-token", b"expected-signature"),
+        ],
         "client": ("testclient", 50000),
         "server": ("testserver", 80),
     }

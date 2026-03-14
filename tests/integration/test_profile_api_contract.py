@@ -297,10 +297,7 @@ def test_get_profile_rejects_tenant_mismatch_between_context_and_jwt(
 
 
 def test_profile_openapi_documents_tenant_error_responses(client):
-    response = client.get("/openapi.json")
-
-    assert response.status_code == 200
-    paths = response.json()["paths"]
+    paths = app.openapi()["paths"]
     operations = [
         ("/api/profile/me", "get"),
         ("/api/profile/me", "patch"),

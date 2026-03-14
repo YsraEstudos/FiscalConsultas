@@ -14,6 +14,7 @@ from sqlalchemy import select
 router = APIRouter()
 logger = logging.getLogger("routes.webhooks")
 _TENANT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{3,128}$")
+_asaas_token_warning_logged = False
 
 
 def _extract_asaas_token(request: Request) -> str | None:
@@ -26,14 +27,14 @@ def _is_valid_asaas_webhook(request: Request) -> bool:
     """
     Valida token do webhook Asaas quando configurado.
     """
+    global _asaas_token_warning_logged
+
     configured = settings.billing.asaas_webhook_token
     if not configured:
-        if settings.server.env == "production":
-            logger.error(
-                "Asaas webhook token is not configured in production environment"
-            )
-            return False
-        return True
+        if not _asaas_token_warning_logged:
+            logger.error("Asaas webhook token is not configured")
+            _asaas_token_warning_logged = True
+        return False
     token = _extract_asaas_token(request)
     if not token:
         return False
