@@ -48,7 +48,9 @@ def _create_sample_nebs_pdf(path: Path) -> None:
     document.close()
 
 
-def test_parse_nebs_pdf_extracts_trusted_entries_and_marks_unknown_codes(tmp_path: Path):
+def test_parse_nebs_pdf_extracts_trusted_entries_and_marks_unknown_codes(
+    tmp_path: Path,
+):
     pdf_path = tmp_path / "nebs.pdf"
     _create_sample_nebs_pdf(pdf_path)
 
@@ -121,7 +123,9 @@ def test_write_nebs_audit_report_uses_csv_writer_for_multiline_fields(tmp_path: 
     assert rows[1][7] == "Primeira linha\nSegunda linha"
 
 
-def test_parse_nebs_pdf_merges_multiline_titles_and_keeps_structured_body_trusted(tmp_path: Path):
+def test_parse_nebs_pdf_merges_multiline_titles_and_keeps_structured_body_trusted(
+    tmp_path: Path,
+):
     pdf_path = tmp_path / "nebs_multiline_title.pdf"
     document = fitz.open()
     page = document.new_page()
@@ -152,7 +156,10 @@ def test_parse_nebs_pdf_merges_multiline_titles_and_keeps_structured_body_truste
 
     assert outcome.counts["trusted"] == 1
     assert outcome.counts["suspect"] == 0
-    assert outcome.entries[0].title == "Serviços especializados de apoio à construção e à montagem industrial"
+    assert (
+        outcome.entries[0].title
+        == "Serviços especializados de apoio à construção e à montagem industrial"
+    )
     assert "Apoio à montagem industrial." in outcome.entries[0].body_text
 
 
