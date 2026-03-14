@@ -43,6 +43,11 @@ def test_process_ignores_single_letters_and_stopwords():
     assert p.process("a b c de") == "de"
 
 
+def test_process_filters_stopwords_and_single_letters_before_stemming():
+    p = NeshTextProcessor(stopwords=["de"])
+    assert p.process("de a motores x") == "motor"
+
+
 def test_process_query_for_fts_appends_wildcards():
     p = NeshTextProcessor(stopwords=["de"])
     assert p.process_query_for_fts("Motores de arranque") == "motor* arranque*"
@@ -51,6 +56,11 @@ def test_process_query_for_fts_appends_wildcards():
 def test_process_query_exact_without_wildcards():
     p = NeshTextProcessor(stopwords=["de"])
     assert p.process_query_exact("Motores de arranque") == "motor arranque"
+
+
+def test_process_query_exact_preserves_order_and_single_letters_without_wildcards():
+    p = NeshTextProcessor(stopwords=["de", "e"])
+    assert p.process_query_exact("de a Motores e arranque") == "a motor arranque"
 
 
 def test_step_augmentative_is_noop():

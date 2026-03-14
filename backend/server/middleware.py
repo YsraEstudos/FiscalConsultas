@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 import jwt
 from backend.config.settings import settings
 from backend.infrastructure.db_engine import tenant_context
+from backend.utils.tenant_context import get_current_tenant as _get_current_tenant
 from jwt import PyJWKClient
 from starlette.responses import JSONResponse
 
@@ -936,4 +937,4 @@ def get_current_tenant() -> Optional[str]:
         from backend.server.middleware import get_current_tenant
         tenant_id = get_current_tenant()
     """
-    return tenant_context.get() or None
+    return _get_current_tenant()
