@@ -39,8 +39,5 @@ def verify_frontend_build(project_root: str) -> None:
                     "✅ Frontend build check: package.json is older than build."
                 )
 
-        # Removed detailed source walk to avoid startup delay (used to be os.walk)
-        # Assuming if package.json is old, user handles source changes.
-
     except Exception as e:
         logger.warning(f"Failed to verify frontend build freshness: {e}")

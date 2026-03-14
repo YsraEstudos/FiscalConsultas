@@ -97,15 +97,11 @@ class NeshTextProcessor:
         normalized = self.normalize(text)
         words = _RE_WORD.findall(normalized)
 
-        processed = []
-        for w in words:
-            if w in self.stopwords:
-                continue
-            if len(w) < 2:  # Ignora letras soltas
-                continue
-
-            stemmed = self.stemmer.stem(w)
-            processed.append(stemmed)
+        processed = [
+            self.stemmer.stem(w)
+            for w in words
+            if w not in self.stopwords and len(w) >= 2
+        ]
 
         return " ".join(processed)
 
@@ -114,13 +110,9 @@ class NeshTextProcessor:
         normalized = self.normalize(text)
         words = _RE_WORD.findall(normalized)
 
-        processed = []
-        for w in words:
-            if w in self.stopwords:
-                continue
-
-            stemmed = self.stemmer.stem(w)
-            processed.append(f"{stemmed}*")
+        processed = [
+            f"{self.stemmer.stem(w)}*" for w in words if w not in self.stopwords
+        ]
 
         return " ".join(processed)
 
@@ -129,12 +121,6 @@ class NeshTextProcessor:
         normalized = self.normalize(text)
         words = _RE_WORD.findall(normalized)
 
-        processed = []
-        for w in words:
-            if w in self.stopwords:
-                continue
-
-            stemmed = self.stemmer.stem(w)
-            processed.append(stemmed)
+        processed = [self.stemmer.stem(w) for w in words if w not in self.stopwords]
 
         return " ".join(processed)
