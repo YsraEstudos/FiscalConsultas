@@ -37,7 +37,9 @@ def clean_nbs_code(code: str) -> str:
 
 def build_nbs_code_variants(code: str) -> tuple[str, ...]:
     """Return canonical and alias forms used across NBS/NEBS sources."""
-    segments = [segment.strip() for segment in str(code or "").split(".") if segment.strip()]
+    segments = [
+        segment.strip() for segment in str(code or "").split(".") if segment.strip()
+    ]
     if not segments:
         return ()
 

@@ -325,6 +325,12 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({
         cleanup();
 
         // 1. Walk the tree and find text nodes matching our terms
+        // Pre-compile Regexes to avoid expensive string normalization on every node
+        const termRegexes = normalizedTerms.map(term => {
+            const pattern = buildAccentInsensitivePattern(term);
+            return new RegExp(pattern, 'i');
+        });
+
         const treeWalker = document.createTreeWalker(
             container,
             NodeFilter.SHOW_TEXT,
@@ -335,10 +341,11 @@ export const SearchHighlighter: React.FC<SearchHighlighterProps> = ({
                     if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE' || parent.dataset.shTerm !== undefined || parent.dataset.shWrapper !== undefined)) {
                         return NodeFilter.FILTER_REJECT;
                     }
-                    if (!node.nodeValue?.trim()) return NodeFilter.FILTER_REJECT;
 
-                    const lowerText = stripDiacritics(node.nodeValue.toLowerCase());
-                    if (normalizedTerms.some(term => lowerText.includes(term))) {
+                    const value = node.nodeValue;
+                    if (!value?.trim()) return NodeFilter.FILTER_REJECT;
+
+                    if (termRegexes.some(regex => regex.test(value))) {
                         return NodeFilter.FILTER_ACCEPT;
                     }
                     return NodeFilter.FILTER_REJECT;

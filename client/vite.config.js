@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const useE2eMockAuth = process.env.VITE_E2E_MOCK_AUTH === 'true';
+const useE2eMockAuth = typeof process !== 'undefined' && process.env.VITE_E2E_MOCK_AUTH === 'true';
 const clerkMockPath = fileURLToPath(
   new URL('./tests/playwright/mocks/clerk.tsx', import.meta.url)
 );
@@ -30,6 +30,14 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/setupTests.ts',
     css: true,
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/cypress/**',
+      '**/.{idea,git,cache,output,temp}/**',
+      '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build,eslint,prettier}.config.*',
+      'tests/playwright/**'
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'html'],

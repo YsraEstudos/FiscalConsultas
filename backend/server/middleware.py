@@ -21,7 +21,6 @@ from urllib.parse import urlparse
 import jwt
 from backend.config.settings import settings
 from backend.infrastructure.db_engine import tenant_context
-from backend.utils.tenant_context import get_current_tenant as _get_current_tenant
 from jwt import PyJWKClient
 from starlette.responses import JSONResponse
 
@@ -86,6 +85,10 @@ def _build_jwks_url(raw_domain: Optional[str]) -> Optional[str]:
     return f"https://{normalized_domain}/.well-known/jwks.json"
 
 
+def _token_fingerprint(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+
+
 def _decode_jwt_json_segment(segment: str) -> dict[str, Any]:
     try:
         padded_segment = segment + ("=" * (-len(segment) % 4))
@@ -118,6 +121,7 @@ def _token_observability_snapshot(token: str) -> dict[str, Any]:
     header = _safe_get_unverified_header(token)
     claims = _safe_get_unverified_claims(token)
     return {
+        "fingerprint": _token_fingerprint(token),
         "header": {k: header.get(k) for k in _JWT_DEBUG_HEADER_FIELDS},
         "claims": {k: claims.get(k) for k in _JWT_DEBUG_CLAIM_FIELDS},
     }
@@ -304,7 +308,7 @@ def _token_cache_key(token: str) -> str:
 
 
 def _get_cached_jwt_payload(
-    token_hash: str, leeway_seconds: int, now_monotonic: float
+    token_hash: str, token: str, leeway_seconds: int, now_monotonic: float
 ) -> tuple[bool, Optional[dict]]:
     cached = _jwt_decode_cache.get(token_hash)
     if not cached:
@@ -320,6 +324,7 @@ def _get_cached_jwt_payload(
         _log_jwt_failure(
             reason="expired_cache",
             token_snapshot={
+                "fingerprint": _token_fingerprint(token),
                 "header": {},
                 "claims": {k: payload.get(k) for k in _JWT_DEBUG_CLAIM_FIELDS},
             },
@@ -488,7 +493,7 @@ def _log_jwt_validation_success(
         "jwt_validation_ok %s",
         json.dumps(
             {
-                "header": token_snapshot.get("header", {}),
+                "fingerprint": token_snapshot["fingerprint"],
                 "claims": {k: payload.get(k) for k in _JWT_DEBUG_CLAIM_FIELDS},
             },
             ensure_ascii=False,
@@ -549,7 +554,7 @@ async def decode_clerk_jwt(token: str) -> Optional[dict]:
     token_hash = _token_cache_key(token)
     now_monotonic = time.monotonic()
     cache_handled, cached_payload = _get_cached_jwt_payload(
-        token_hash, leeway_seconds, now_monotonic
+        token_hash, token, leeway_seconds, now_monotonic
     )
     if cache_handled:
         return cached_payload
@@ -931,4 +936,4 @@ def get_current_tenant() -> Optional[str]:
         from backend.server.middleware import get_current_tenant
         tenant_id = get_current_tenant()
     """
-    return _get_current_tenant()
+    return tenant_context.get() or None

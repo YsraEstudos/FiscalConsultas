@@ -1,3 +1,5 @@
+import builtins
+
 import pytest
 from backend.utils.cache import cache_scope_key, weak_etag
 from starlette.requests import Request
@@ -26,12 +28,19 @@ def _request(headers: dict[str, str] | None = None) -> Request:
 
 
 def test_cache_scope_key_uses_current_tenant(monkeypatch):
-    monkeypatch.setattr("backend.utils.cache.get_current_tenant", lambda: "org_1")
+    monkeypatch.setattr("backend.server.middleware.get_current_tenant", lambda: "org_1")
     assert cache_scope_key(_request()) == "tenant:org_1"
 
 
-def test_cache_scope_key_fallbacks_without_current_tenant(monkeypatch):
-    monkeypatch.setattr("backend.utils.cache.get_current_tenant", lambda: None)
+def test_cache_scope_key_fallbacks_without_middleware_import(monkeypatch):
+    original_import = builtins.__import__
+
+    def _patched_import(name, *args, **kwargs):
+        if name == "backend.server.middleware":
+            raise ModuleNotFoundError(name)
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _patched_import)
     assert (
         cache_scope_key(_request(headers={"X-Tenant-Id": " tenant_a "}))
         == "tenant:tenant_a"
