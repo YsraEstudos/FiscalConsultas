@@ -19,10 +19,11 @@ from typing import Any, Coroutine, Dict, Optional
 from urllib.parse import urlparse
 
 import jwt
-from backend.config.settings import settings
-from backend.infrastructure.db_engine import tenant_context
 from jwt import PyJWKClient
 from starlette.responses import JSONResponse
+
+from backend.config.settings import settings
+from backend.infrastructure.db_engine import tenant_context
 
 logger = logging.getLogger("middleware.tenant")
 
@@ -83,6 +84,7 @@ def _build_jwks_url(raw_domain: Optional[str]) -> Optional[str]:
     if not normalized_domain:
         return None
     return f"https://{normalized_domain}/.well-known/jwks.json"
+
 
 def _decode_jwt_json_segment(segment: str) -> dict[str, Any]:
     try:
@@ -302,7 +304,7 @@ def _token_cache_key(token: str) -> str:
 
 
 def _get_cached_jwt_payload(
-    token_hash: str, token: str, leeway_seconds: int, now_monotonic: float
+    token_hash: str, leeway_seconds: int, now_monotonic: float
 ) -> tuple[bool, Optional[dict]]:
     cached = _jwt_decode_cache.get(token_hash)
     if not cached:
@@ -547,7 +549,7 @@ async def decode_clerk_jwt(token: str) -> Optional[dict]:
     token_hash = _token_cache_key(token)
     now_monotonic = time.monotonic()
     cache_handled, cached_payload = _get_cached_jwt_payload(
-        token_hash, token, leeway_seconds, now_monotonic
+        token_hash, leeway_seconds, now_monotonic
     )
     if cache_handled:
         return cached_payload
