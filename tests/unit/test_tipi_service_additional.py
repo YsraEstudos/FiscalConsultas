@@ -427,6 +427,55 @@ async def test_search_multiple_codes_deduplicates_positions_and_totals(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_search_multiple_codes_starts_part_searches_concurrently(monkeypatch):
+    service = TipiService()
+    parts = ["85", "8517"]
+    started_parts: list[str] = []
+    all_started = asyncio.Event()
+
+    async def _fake_search_by_code(query, view_mode="family"):
+        assert view_mode == "family"
+        started_parts.append(query)
+        if len(started_parts) == len(parts):
+            all_started.set()
+
+        await asyncio.wait_for(all_started.wait(), timeout=0.05)
+
+        return {
+            "success": True,
+            "type": "code",
+            "query": query,
+            "results": {
+                "85": {
+                    "capitulo": "85",
+                    "titulo": "Capitulo 85",
+                    "posicao_alvo": query if query != "85" else None,
+                    "posicoes": [{"ncm": query, "codigo": query}],
+                }
+            },
+            "resultados": {
+                "85": {
+                    "capitulo": "85",
+                    "titulo": "Capitulo 85",
+                    "posicao_alvo": query if query != "85" else None,
+                    "posicoes": [{"ncm": query, "codigo": query}],
+                }
+            },
+            "total": 1,
+            "total_capitulos": 1,
+        }
+
+    monkeypatch.setattr(service, "search_by_code", _fake_search_by_code)
+
+    payload = await service._search_multiple_codes("85,8517", "family", parts)
+
+    assert started_parts == parts
+    assert payload["total"] == 2
+    assert payload["resultados"]["85"]["posicao_alvo"] == "8517"
+    assert [item["ncm"] for item in payload["resultados"]["85"]["posicoes"]] == parts
+
+
+@pytest.mark.asyncio
 async def test_search_multiple_codes_prefers_more_specific_posicao_alvo(monkeypatch):
     service = TipiService()
 
