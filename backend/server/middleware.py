@@ -84,11 +84,6 @@ def _build_jwks_url(raw_domain: Optional[str]) -> Optional[str]:
         return None
     return f"https://{normalized_domain}/.well-known/jwks.json"
 
-
-def _token_fingerprint(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
-
-
 def _decode_jwt_json_segment(segment: str) -> dict[str, Any]:
     try:
         padded_segment = segment + ("=" * (-len(segment) % 4))
@@ -121,7 +116,6 @@ def _token_observability_snapshot(token: str) -> dict[str, Any]:
     header = _safe_get_unverified_header(token)
     claims = _safe_get_unverified_claims(token)
     return {
-        "fingerprint": _token_fingerprint(token),
         "header": {k: header.get(k) for k in _JWT_DEBUG_HEADER_FIELDS},
         "claims": {k: claims.get(k) for k in _JWT_DEBUG_CLAIM_FIELDS},
     }
@@ -324,7 +318,6 @@ def _get_cached_jwt_payload(
         _log_jwt_failure(
             reason="expired_cache",
             token_snapshot={
-                "fingerprint": _token_fingerprint(token),
                 "header": {},
                 "claims": {k: payload.get(k) for k in _JWT_DEBUG_CLAIM_FIELDS},
             },
@@ -493,7 +486,7 @@ def _log_jwt_validation_success(
         "jwt_validation_ok %s",
         json.dumps(
             {
-                "fingerprint": token_snapshot["fingerprint"],
+                "header": token_snapshot.get("header", {}),
                 "claims": {k: payload.get(k) for k in _JWT_DEBUG_CLAIM_FIELDS},
             },
             ensure_ascii=False,
