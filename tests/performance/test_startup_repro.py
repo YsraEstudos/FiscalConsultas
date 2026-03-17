@@ -1,7 +1,11 @@
 import time
 
+import pytest
+
 from backend.server.app import app
 from fastapi.testclient import TestClient
+
+pytestmark = pytest.mark.perf
 
 
 def test_startup_performance():

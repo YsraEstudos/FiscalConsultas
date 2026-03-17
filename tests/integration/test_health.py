@@ -1,3 +1,8 @@
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 def test_status_endpoint(client):
     """
     Verify the /api/status endpoint returns healthy status.

@@ -1,16 +1,12 @@
-import asyncio
-import os
-import sys
 import time
 
 import pytest
 
-# Ensure root is in path
-sys.path.insert(0, os.getcwd())
-
 from backend.config import CONFIG
 from backend.infrastructure.database import DatabaseAdapter
 from backend.services.nesh_service import NeshService
+
+pytestmark = pytest.mark.perf
 
 
 @pytest.mark.asyncio
@@ -48,6 +44,3 @@ async def test_complex_query_performance():
     if duration > 1.0:
         pytest.fail(f"Complex query took too long: {duration:.4f}s")
 
-
-if __name__ == "__main__":
-    asyncio.run(test_complex_query_performance())

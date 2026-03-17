@@ -4,7 +4,6 @@ from types import SimpleNamespace
 import pytest
 from backend.presentation.routes import comments
 from backend.server.app import app
-from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.integration
 
@@ -65,18 +64,6 @@ class _FakeCommentService:
         if tenant_id == "org_fallback":
             return ["auto-anchor-1"]
         return ["pos-84-07"]
-
-
-@pytest.fixture()
-def client():
-    """
-    Provide a TestClient instance configured for the FastAPI application for use in tests.
-
-    Yields:
-        test_client (TestClient): A TestClient connected to the app; the client is created and closed automatically.
-    """
-    with TestClient(app) as test_client:
-        yield test_client
 
 
 @pytest.fixture(autouse=True)
@@ -184,7 +171,6 @@ def test_create_comment_uses_org_id_claim_when_tenant_context_is_missing(
 
     assert response.status_code == 201
     assert response.json()["tenant_id"] == "org_fallback"
-
 
 def test_list_commented_anchors_uses_org_id_claim_when_tenant_context_is_missing(
     client, monkeypatch

@@ -3,6 +3,8 @@ import sqlite3
 import pytest
 from backend.infrastructure.database import DatabaseAdapter
 
+pytestmark = pytest.mark.integration
+
 
 def _create_legacy_db_without_anchor_id(path: str) -> None:
     conn = sqlite3.connect(path)

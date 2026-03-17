@@ -1,7 +1,6 @@
 import asyncio
 
 import pytest
-from fastapi.testclient import TestClient
 
 from backend.presentation.routes import search as search_route
 from backend.server.app import app
@@ -80,12 +79,6 @@ class _FakeTipiServiceText:
             "query": query,
             "results": [],
         }
-
-
-@pytest.fixture()
-def client():
-    with TestClient(app) as test_client:
-        yield test_client
 
 
 @pytest.fixture(autouse=True)

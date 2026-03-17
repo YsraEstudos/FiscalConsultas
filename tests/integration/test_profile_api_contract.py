@@ -12,7 +12,6 @@ from datetime import datetime, timezone
 import pytest
 from backend.presentation.routes import profile
 from backend.server.app import app
-from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.integration
 
@@ -75,12 +74,6 @@ class _FakeProfileService:
 
     async def delete_account(self, user_id: str, tenant_id: str):
         return None
-
-
-@pytest.fixture()
-def client():
-    with TestClient(app) as test_client:
-        yield test_client
 
 
 @pytest.fixture(autouse=True)
@@ -297,10 +290,7 @@ def test_get_profile_rejects_tenant_mismatch_between_context_and_jwt(
 
 
 def test_profile_openapi_documents_tenant_error_responses(client):
-    response = client.get("/openapi.json")
-
-    assert response.status_code == 200
-    paths = response.json()["paths"]
+    paths = app.openapi()["paths"]
     operations = [
         ("/api/profile/me", "get"),
         ("/api/profile/me", "patch"),

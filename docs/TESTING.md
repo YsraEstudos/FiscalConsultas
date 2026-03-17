@@ -33,7 +33,7 @@
 - Full E2E browser automation (Playwright): deferred to avoid extra CI flakiness now.
 - Real external auth/billing provider integration (Clerk/Asaas): mocked contracts only.
 - Performance assertions in default suite: kept as opt-in benchmarks.
-- Legacy backend suite in `backend/tests` and diagnostic scripts in `tests/scripts`: excluded from official run path.
+- Legacy diagnostic scripts should live outside collected pytest paths.
 
 ## Conventions
 - Naming: `test_<feature>_<expected_behavior>.py` and `<Feature>.test.tsx`.
@@ -49,9 +49,15 @@
 
 ## How To Run
 - Backend (default stable):
-  - `pytest -q`
+  - `uv run pytest -q`
+  - or `.\.venv\Scripts\python -m pytest -q`
 - Backend with coverage:
-  - `pytest -q --cov=backend --cov-report=term-missing`
+  - `uv run pytest -q --cov=backend --cov-report=term-missing`
+  - or `.\.venv\Scripts\python -m pytest -q --cov=backend --cov-report=term-missing`
+- Backend performance:
+  - `uv run pytest -m perf -q`
+- Backend snapshots:
+  - `uv run pytest -m snapshot -q`
 - Frontend (default stable):
   - `cd client && npm test`
 - Frontend all tests (including perf):

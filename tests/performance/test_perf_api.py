@@ -4,6 +4,8 @@ import time
 
 import pytest
 
+pytestmark = pytest.mark.perf
+
 
 def _percentile(values_ms: list[float], percentile: float) -> float:
     if not values_ms:

@@ -5,6 +5,8 @@ import pytest
 from backend.config.exceptions import DatabaseError
 from backend.infrastructure.database import DatabaseAdapter
 
+pytestmark = pytest.mark.integration
+
 
 async def _fts_table_exists(db_file: str) -> bool:
     async with aiosqlite.connect(db_file) as conn:

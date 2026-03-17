@@ -1,5 +1,9 @@
+import pytest
+
 from backend.presentation.renderer import HtmlRenderer
 from backend.presentation.tipi_renderer import TipiRenderer
+
+pytestmark = pytest.mark.integration
 
 
 class TestTipiApiIntegration:
