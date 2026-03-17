@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-pytestmark = [pytest.mark.integration, pytest.mark.snapshot]
+pytestmark = pytest.mark.snapshot
 
 # List of test cases to verify against snapshot
 # Ideally, we could extract these keys from the snapshot itself if we want full coverage,  # noqa: E501
