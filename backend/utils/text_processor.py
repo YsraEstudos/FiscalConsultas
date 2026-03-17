@@ -97,6 +97,9 @@ class NeshTextProcessor:
         normalized = self.normalize(text)
         words = _RE_WORD.findall(normalized)
 
+        # Performance: Early deduplication of stemming logic, maintaining original word order/frequency
+        stem_cache = {}
+
         processed = []
         for w in words:
             if w in self.stopwords:
@@ -104,8 +107,9 @@ class NeshTextProcessor:
             if len(w) < 2:  # Ignora letras soltas
                 continue
 
-            stemmed = self.stemmer.stem(w)
-            processed.append(stemmed)
+            if w not in stem_cache:
+                stem_cache[w] = self.stemmer.stem(w)
+            processed.append(stem_cache[w])
 
         return " ".join(processed)
 
@@ -114,13 +118,17 @@ class NeshTextProcessor:
         normalized = self.normalize(text)
         words = _RE_WORD.findall(normalized)
 
+        # Performance: Early deduplication of stemming logic, maintaining original word order/frequency
+        stem_cache = {}
+
         processed = []
         for w in words:
             if w in self.stopwords:
                 continue
 
-            stemmed = self.stemmer.stem(w)
-            processed.append(f"{stemmed}*")
+            if w not in stem_cache:
+                stem_cache[w] = self.stemmer.stem(w)
+            processed.append(f"{stem_cache[w]}*")
 
         return " ".join(processed)
 
@@ -129,12 +137,16 @@ class NeshTextProcessor:
         normalized = self.normalize(text)
         words = _RE_WORD.findall(normalized)
 
+        # Performance: Early deduplication of stemming logic, maintaining original word order/frequency
+        stem_cache = {}
+
         processed = []
         for w in words:
             if w in self.stopwords:
                 continue
 
-            stemmed = self.stemmer.stem(w)
-            processed.append(stemmed)
+            if w not in stem_cache:
+                stem_cache[w] = self.stemmer.stem(w)
+            processed.append(stem_cache[w])
 
         return " ".join(processed)

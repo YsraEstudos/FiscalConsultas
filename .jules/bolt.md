@@ -5,3 +5,7 @@
 ## 2026-03-13 - Optimize DOM Traversal Highlighting
 **Learning:** String normalization (like NFD and regex replace) inside tight DOM traversal loops (e.g., TreeWalker) is a massive performance bottleneck.
 **Action:** Use pre-compiled regex patterns before the loop to test values, eliminating the need to normalize every DOM node's text content.
+
+## 2024-05-20 - Early String Deduplication
+**Learning:** Performing `stemmer.stem()` (which does NFD normalization and multiple regex-like string replacements) on every word token individually is a bottleneck when processing text with many duplicate tokens.
+**Action:** Use `dict.fromkeys(words)` for early deduplication *before* looping to run transformations in a list comprehension. This reduces time complexity for duplicate-heavy inputs and adds negligible overhead for small strings.
