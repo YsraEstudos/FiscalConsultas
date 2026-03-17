@@ -172,6 +172,7 @@ def test_create_comment_uses_org_id_claim_when_tenant_context_is_missing(
     assert response.status_code == 201
     assert response.json()["tenant_id"] == "org_fallback"
 
+
 def test_list_commented_anchors_uses_org_id_claim_when_tenant_context_is_missing(
     client, monkeypatch
 ):

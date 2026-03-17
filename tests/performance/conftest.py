@@ -4,12 +4,13 @@ import sys
 import time
 
 import pytest
-from test_support import configure_sqlite_test_environment, reset_all_rate_limiters
+from test_support import reset_all_rate_limiters, sqlite_test_environment
 
 
 @pytest.fixture(scope="session", autouse=True)
 def _performance_environment():
-    configure_sqlite_test_environment()
+    with sqlite_test_environment() as environment:
+        yield environment
 
 
 @pytest.fixture()
@@ -32,7 +33,7 @@ def _cleanup_app_state():
 
 
 @pytest.fixture(autouse=True)
-def reset_rate_limiters():
+def _reset_rate_limiters():
     reset_all_rate_limiters()
     yield
     reset_all_rate_limiters()
@@ -62,13 +63,14 @@ def tipi_service():
 
 
 @pytest.fixture(scope="session")
-def cold_start_measure():
+def cold_start_measure(_performance_environment):
     """Mede cold start sem depender de HTTP (lê stdout do processo até 'Servidor ... iniciado')."""
 
     def _measure(timeout_s: float = 60.0) -> float:
         env = os.environ.copy()
         env["NESH_NO_BROWSER"] = "1"
         env["PYTHONUNBUFFERED"] = "1"
+        env.update(_performance_environment.env_overrides)
 
         start = time.perf_counter()
         proc = subprocess.Popen(

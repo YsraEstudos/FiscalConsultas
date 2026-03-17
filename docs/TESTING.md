@@ -58,6 +58,9 @@
   - `uv run pytest -m perf -q`
 - Backend snapshots:
   - `uv run pytest -m snapshot -q`
+  - Pré-requisito: `snapshots/baseline_v1.json` deve existir antes da execução.
+  - Para gerar/atualizar a baseline local de forma determinística:
+    - `uv run python scripts/generate_snapshot.py`
 - Frontend (default stable):
   - `cd client && npm test`
 - Frontend all tests (including perf):

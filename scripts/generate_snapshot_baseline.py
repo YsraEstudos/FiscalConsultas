@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from backend.server.app import app  # noqa: E402
+from test_support import sqlite_test_environment  # noqa: E402
 
 TEST_CASES = [
     "85",
@@ -26,35 +26,38 @@ TEST_CASES = [
 ]
 
 
-def main() -> None:
+def main(*, generated_from: str = "scripts/generate_snapshot_baseline.py") -> None:
     out_path = Path("snapshots") / "baseline_v1.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     cases: dict[str, dict[str, object]] = {}
 
-    with TestClient(app) as client:
-        for query in TEST_CASES:
-            response = client.get(f"/api/search?ncm={query}")
-            response.raise_for_status()
-            data = response.json()
+    with sqlite_test_environment():
+        from backend.server.app import app
 
-            content_str = json.dumps(data, sort_keys=True)
-            digest = hashlib.sha256(content_str.encode("utf-8")).hexdigest()
+        with TestClient(app) as client:
+            for query in TEST_CASES:
+                response = client.get(f"/api/search?ncm={query}")
+                response.raise_for_status()
+                data = response.json()
 
-            if data.get("type") == "code":
-                count = int(data.get("total_capitulos") or 0)
-            else:
-                count = len(data.get("results", []))
+                content_str = json.dumps(data, sort_keys=True)
+                digest = hashlib.sha256(content_str.encode("utf-8")).hexdigest()
 
-            cases[query] = {
-                "hash": digest,
-                "count": count,
-                "type": data.get("type"),
-            }
+                if data.get("type") == "code":
+                    count = int(data.get("total_capitulos") or 0)
+                else:
+                    count = len(data.get("results", []))
+
+                cases[query] = {
+                    "hash": digest,
+                    "count": count,
+                    "type": data.get("type"),
+                }
 
     payload = {
         "version": "v1",
-        "generated_from": "scripts/generate_snapshot_baseline.py",
+        "generated_from": generated_from,
         "cases": cases,
     }
 

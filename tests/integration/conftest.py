@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from test_support import configure_sqlite_test_environment, reset_all_rate_limiters
+from test_support import reset_all_rate_limiters, sqlite_test_environment
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SNAPSHOT_PATH = PROJECT_ROOT / "snapshots" / "baseline_v1.json"
@@ -11,7 +11,8 @@ SNAPSHOT_PATH = PROJECT_ROOT / "snapshots" / "baseline_v1.json"
 
 @pytest.fixture(scope="session", autouse=True)
 def _integration_environment():
-    configure_sqlite_test_environment()
+    with sqlite_test_environment() as environment:
+        yield environment
 
 
 @pytest.fixture()
@@ -34,7 +35,7 @@ def _cleanup_app_state():
 
 
 @pytest.fixture(autouse=True)
-def reset_rate_limiters():
+def _reset_rate_limiters():
     reset_all_rate_limiters()
     yield
     reset_all_rate_limiters()

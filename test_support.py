@@ -1,7 +1,12 @@
 import asyncio
 import logging
 import sqlite3
+from contextlib import contextmanager
+from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Iterator
 
 LOGGER = logging.getLogger(__name__)
 
@@ -10,6 +15,90 @@ _COUNT_QUERIES: dict[str, str] = {
     "search_index": "SELECT COUNT(*) FROM search_index",
     "tipi_positions": "SELECT COUNT(*) FROM tipi_positions",
 }
+
+
+@dataclass
+class SQLiteTestEnvironment:
+    temporary_directory: TemporaryDirectory[str]
+    nesh_db_path: Path
+    tipi_db_path: Path
+    original_engine: str
+    original_postgres_url: str | None
+    original_filename: str
+    original_tipi_filename: str
+    original_redis_enabled: bool
+
+    @property
+    def env_overrides(self) -> dict[str, str]:
+        return {
+            "DATABASE__ENGINE": "sqlite",
+            "DATABASE__FILENAME": str(self.nesh_db_path),
+            "DATABASE__TIPI_FILENAME": str(self.tipi_db_path),
+            "CACHE__ENABLE_REDIS": "false",
+        }
+
+    def apply(self) -> None:
+        from backend.config.settings import settings
+
+        _close_shared_db_engine()
+        settings.database.engine = "sqlite"
+        settings.database.postgres_url = None
+        settings.database.filename = str(self.nesh_db_path)
+        settings.database.tipi_filename = str(self.tipi_db_path)
+        settings.cache.enable_redis = False
+
+    def restore(self) -> None:
+        from backend.config.settings import settings
+
+        _close_shared_db_engine()
+        settings.database.engine = self.original_engine
+        settings.database.postgres_url = self.original_postgres_url
+        settings.database.filename = self.original_filename
+        settings.database.tipi_filename = self.original_tipi_filename
+        settings.cache.enable_redis = self.original_redis_enabled
+        _close_shared_db_engine()
+
+    def cleanup(self) -> None:
+        self.temporary_directory.cleanup()
+
+
+def _close_shared_db_engine() -> None:
+    try:
+        from backend.infrastructure.db_engine import close_db
+
+        asyncio.run(close_db())
+    except Exception as exc:
+        LOGGER.debug("Failed to close shared DB engine during test bootstrap: %s", exc)
+
+
+@lru_cache(maxsize=1)
+def _sqlite_supports_fts5() -> bool:
+    try:
+        conn = sqlite3.connect(":memory:")
+        try:
+            conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS fts5_probe USING fts5(x)")
+        finally:
+            conn.close()
+    except sqlite3.OperationalError:
+        return False
+    return True
+
+
+def _create_fts5_virtual_table(
+    conn: sqlite3.Connection, table_name: str, columns_sql: str
+) -> bool:
+    if not _sqlite_supports_fts5():
+        LOGGER.debug("Skipping FTS5 table %s: SQLite build lacks FTS5", table_name)
+        return False
+
+    try:
+        conn.execute(
+            f"CREATE VIRTUAL TABLE IF NOT EXISTS {table_name} USING fts5({columns_sql})"
+        )
+    except sqlite3.OperationalError as exc:
+        LOGGER.debug("Skipping FTS5 table %s: %s", table_name, exc)
+        return False
+    return True
 
 
 def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
@@ -39,12 +128,17 @@ def _is_nesh_db_ready(db_path: Path) -> bool:
     try:
         conn = sqlite3.connect(db_path)
         try:
-            required_tables = {"chapters", "positions", "chapter_notes", "search_index"}
+            required_tables = {"chapters", "positions", "chapter_notes"}
+            if _sqlite_supports_fts5():
+                required_tables.add("search_index")
             if not all(_table_exists(conn, table) for table in required_tables):
                 return False
             if _count_rows(conn, "chapters") < 97:
                 return False
-            if _count_rows(conn, "search_index") < 1:
+            if (
+                _table_exists(conn, "search_index")
+                and _count_rows(conn, "search_index") < 1
+            ):
                 return False
             positions_columns = {
                 row[1]
@@ -66,7 +160,9 @@ def _is_tipi_db_ready(db_path: Path) -> bool:
     try:
         conn = sqlite3.connect(db_path)
         try:
-            required_tables = {"tipi_chapters", "tipi_positions", "tipi_fts"}
+            required_tables = {"tipi_chapters", "tipi_positions"}
+            if _sqlite_supports_fts5():
+                required_tables.add("tipi_fts")
             if not all(_table_exists(conn, table) for table in required_tables):
                 return False
             if _count_rows(conn, "tipi_positions") < 6:
@@ -207,7 +303,8 @@ def _seed_nesh_db(db_path: Path) -> None:
             """
         )
         chapter_notes_columns = {
-            row[1] for row in conn.execute("PRAGMA table_info(chapter_notes)").fetchall()
+            row[1]
+            for row in conn.execute("PRAGMA table_info(chapter_notes)").fetchall()
         }
         if "parsed_notes_json" not in chapter_notes_columns:
             conn.execute("ALTER TABLE chapter_notes ADD COLUMN parsed_notes_json TEXT")
@@ -255,7 +352,9 @@ def _seed_nesh_db(db_path: Path) -> None:
             )
             """
         )
-        conn.execute("CREATE INDEX IF NOT EXISTS ix_users_tenant_id ON users(tenant_id)")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS ix_users_tenant_id ON users(tenant_id)"
+        )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS ix_subscriptions_tenant_id ON subscriptions(tenant_id)"
         )
@@ -275,21 +374,27 @@ def _seed_nesh_db(db_path: Path) -> None:
             "CREATE INDEX IF NOT EXISTS ix_subscriptions_status ON subscriptions(status)"
         )
 
-        if not _table_exists(conn, "search_index"):
-            conn.execute(
+        search_index_available = _table_exists(conn, "search_index")
+        if not search_index_available:
+            search_index_available = _create_fts5_virtual_table(
+                conn,
+                "search_index",
                 """
-                CREATE VIRTUAL TABLE search_index USING fts5(
-                    ncm,
-                    display_text,
-                    type,
-                    description,
-                    indexed_content
-                )
-                """
+                ncm,
+                display_text,
+                type,
+                description,
+                indexed_content
+                """,
             )
-        fts_columns = {
-            row[1] for row in conn.execute("PRAGMA table_info(search_index)").fetchall()
-        }
+        fts_columns = (
+            {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(search_index)").fetchall()
+            }
+            if search_index_available
+            else set()
+        )
         uses_indexed_content = "indexed_content" in fts_columns
 
         conn.executemany(
@@ -316,75 +421,83 @@ def _seed_nesh_db(db_path: Path) -> None:
             """
         )
 
-        for chapter_num, content in chapter_rows:
-            ncm = chapter_num
-            display_text = f"Capitulo {chapter_num}"
-            text_for_search = processor.process(content)
-            if uses_indexed_content:
-                conn.execute(
-                    """
-                    INSERT INTO search_index (ncm, display_text, type, description, indexed_content)
-                    SELECT ?, ?, ?, ?, ?
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM search_index WHERE ncm = ? AND type = ? LIMIT 1
+        if search_index_available:
+            for chapter_num, content in chapter_rows:
+                ncm = chapter_num
+                display_text = f"Capitulo {chapter_num}"
+                text_for_search = processor.process(content)
+                if uses_indexed_content:
+                    conn.execute(
+                        """
+                        INSERT INTO search_index (ncm, display_text, type, description, indexed_content)
+                        SELECT ?, ?, ?, ?, ?
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM search_index WHERE ncm = ? AND type = ? LIMIT 1
+                        )
+                        """,
+                        (
+                            ncm,
+                            display_text,
+                            "chapter",
+                            content[:200],
+                            text_for_search,
+                            ncm,
+                            "chapter",
+                        ),
                     )
-                    """,
-                    (
-                        ncm,
-                        display_text,
-                        "chapter",
-                        content[:200],
-                        text_for_search,
-                        ncm,
-                        "chapter",
-                    ),
-                )
-            else:
-                conn.execute(
-                    """
-                    INSERT INTO search_index (ncm, display_text, type, description)
-                    SELECT ?, ?, ?, ?
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM search_index WHERE ncm = ? AND type = ? LIMIT 1
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO search_index (ncm, display_text, type, description)
+                        SELECT ?, ?, ?, ?
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM search_index WHERE ncm = ? AND type = ? LIMIT 1
+                        )
+                        """,
+                        (ncm, display_text, "chapter", text_for_search, ncm, "chapter"),
                     )
-                    """,
-                    (ncm, display_text, "chapter", text_for_search, ncm, "chapter"),
-                )
 
-        for codigo, _chapter_num, descricao, _anchor_id in position_rows:
-            ncm = codigo
-            display_text = f"{codigo} - {descricao}"
-            text_for_search = processor.process(descricao)
-            if uses_indexed_content:
-                conn.execute(
-                    """
-                    INSERT INTO search_index (ncm, display_text, type, description, indexed_content)
-                    SELECT ?, ?, ?, ?, ?
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM search_index WHERE ncm = ? AND type = ? LIMIT 1
+            for codigo, _chapter_num, descricao, _anchor_id in position_rows:
+                ncm = codigo
+                display_text = f"{codigo} - {descricao}"
+                text_for_search = processor.process(descricao)
+                if uses_indexed_content:
+                    conn.execute(
+                        """
+                        INSERT INTO search_index (ncm, display_text, type, description, indexed_content)
+                        SELECT ?, ?, ?, ?, ?
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM search_index WHERE ncm = ? AND type = ? LIMIT 1
+                        )
+                        """,
+                        (
+                            ncm,
+                            display_text,
+                            "position",
+                            descricao,
+                            text_for_search,
+                            ncm,
+                            "position",
+                        ),
                     )
-                    """,
-                    (
-                        ncm,
-                        display_text,
-                        "position",
-                        descricao,
-                        text_for_search,
-                        ncm,
-                        "position",
-                    ),
-                )
-            else:
-                conn.execute(
-                    """
-                    INSERT INTO search_index (ncm, display_text, type, description)
-                    SELECT ?, ?, ?, ?
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM search_index WHERE ncm = ? AND type = ? LIMIT 1
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO search_index (ncm, display_text, type, description)
+                        SELECT ?, ?, ?, ?
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM search_index WHERE ncm = ? AND type = ? LIMIT 1
+                        )
+                        """,
+                        (
+                            ncm,
+                            display_text,
+                            "position",
+                            text_for_search,
+                            ncm,
+                            "position",
+                        ),
                     )
-                    """,
-                    (ncm, display_text, "position", text_for_search, ncm, "position"),
-                )
 
         conn.commit()
     finally:
@@ -424,7 +537,8 @@ def _seed_tipi_db(db_path: Path) -> None:
             """
         )
         tipi_columns = {
-            row[1] for row in conn.execute("PRAGMA table_info(tipi_positions)").fetchall()
+            row[1]
+            for row in conn.execute("PRAGMA table_info(tipi_positions)").fetchall()
         }
         if "parent_ncm" not in tipi_columns:
             conn.execute("ALTER TABLE tipi_positions ADD COLUMN parent_ncm TEXT")
@@ -438,16 +552,18 @@ def _seed_tipi_db(db_path: Path) -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_tipi_cap_sort ON tipi_positions(capitulo, ncm_sort)"
         )
-        conn.execute(
-            """
-            CREATE VIRTUAL TABLE IF NOT EXISTS tipi_fts USING fts5(
+        tipi_fts_available = _table_exists(conn, "tipi_fts")
+        if not tipi_fts_available:
+            tipi_fts_available = _create_fts5_virtual_table(
+                conn,
+                "tipi_fts",
+                """
                 ncm,
                 capitulo,
                 descricao,
                 aliquota
+                """,
             )
-            """
-        )
 
         chapter_rows = [
             ("01", "Animais vivos", "I"),
@@ -520,48 +636,65 @@ def _seed_tipi_db(db_path: Path) -> None:
             """
         )
 
-        for ncm, capitulo, descricao, aliquota, _, _, _ in position_rows:
-            conn.execute(
-                """
-                INSERT INTO tipi_fts (ncm, capitulo, descricao, aliquota)
-                SELECT ?, ?, ?, ?
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM tipi_fts WHERE ncm = ? LIMIT 1
+        if tipi_fts_available:
+            for ncm, capitulo, descricao, aliquota, _, _, _ in position_rows:
+                conn.execute(
+                    """
+                    INSERT INTO tipi_fts (ncm, capitulo, descricao, aliquota)
+                    SELECT ?, ?, ?, ?
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM tipi_fts WHERE ncm = ? LIMIT 1
+                    )
+                    """,
+                    (ncm, capitulo, descricao, aliquota, ncm),
                 )
-                """,
-                (ncm, capitulo, descricao, aliquota, ncm),
-            )
 
         conn.commit()
     finally:
         conn.close()
 
 
-def configure_sqlite_test_environment() -> None:
-    from backend.config import CONFIG
+def _build_sqlite_test_environment() -> SQLiteTestEnvironment:
     from backend.config.settings import settings
 
-    settings.database.engine = "sqlite"
-    settings.database.postgres_url = None
-    settings.database.filename = "database/nesh.db"
-    settings.database.tipi_filename = "database/tipi.db"
-    settings.cache.enable_redis = False
-
-    try:
-        from backend.infrastructure.db_engine import close_db
-
-        asyncio.run(close_db())
-    except Exception as exc:
-        LOGGER.debug("Failed to close shared DB engine during test bootstrap: %s", exc)
-
-    nesh_db_path = Path(CONFIG.db_path)
-    tipi_db_path = Path(settings.database.tipi_path)
+    temporary_directory = TemporaryDirectory(prefix="pytest-sqlite-")
+    temporary_root = Path(temporary_directory.name)
+    nesh_db_path = temporary_root / "nesh.db"
+    tipi_db_path = temporary_root / "tipi.db"
 
     if not _is_nesh_db_ready(nesh_db_path):
         _seed_nesh_db(nesh_db_path)
 
     if not _is_tipi_db_ready(tipi_db_path):
         _seed_tipi_db(tipi_db_path)
+
+    return SQLiteTestEnvironment(
+        temporary_directory=temporary_directory,
+        nesh_db_path=nesh_db_path,
+        tipi_db_path=tipi_db_path,
+        original_engine=settings.database.engine,
+        original_postgres_url=settings.database.postgres_url,
+        original_filename=settings.database.filename,
+        original_tipi_filename=settings.database.tipi_filename,
+        original_redis_enabled=settings.cache.enable_redis,
+    )
+
+
+@contextmanager
+def sqlite_test_environment() -> Iterator[SQLiteTestEnvironment]:
+    environment = _build_sqlite_test_environment()
+    environment.apply()
+    try:
+        yield environment
+    finally:
+        environment.restore()
+        environment.cleanup()
+
+
+def configure_sqlite_test_environment() -> SQLiteTestEnvironment:
+    environment = _build_sqlite_test_environment()
+    environment.apply()
+    return environment
 
 
 def reset_all_rate_limiters() -> None:

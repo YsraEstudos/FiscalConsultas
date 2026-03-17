@@ -20,6 +20,7 @@ import aiosqlite
 from ..config.constants import CacheConfig
 from ..config.exceptions import DatabaseError
 from ..config.logging_config import service_logger as logger
+from ..config.settings import settings
 from ..utils import ncm_utils
 from ..utils.id_utils import generate_anchor_id
 from ..utils.payload_cache_metrics import PayloadCacheMetrics
@@ -67,7 +68,7 @@ class TipiService:
 
     def __init__(
         self,
-        db_path: Path = TIPI_DB_PATH,
+        db_path: Path | None = None,
         *,
         repository: "_TipiRepo | None" = None,
         repository_factory=None,
@@ -80,7 +81,7 @@ class TipiService:
             repository: TipiRepository para novo padrão SQLModel
             repository_factory: Factory async context manager para criar repos sob demanda
         """
-        self.db_path = db_path
+        self.db_path = db_path or Path(settings.database.tipi_path)
         self._schema_columns_cache: Dict[str, set[str]] = {}
         self._repository = repository
         self._repository_factory = repository_factory

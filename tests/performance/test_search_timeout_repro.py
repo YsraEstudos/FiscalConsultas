@@ -63,4 +63,3 @@ async def test_search_performance_repro():
 
     finally:
         await db.close()
-

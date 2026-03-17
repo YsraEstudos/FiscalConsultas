@@ -176,15 +176,20 @@ Resposta esperada: JSON com `status`, `database` e `tipi`.
 
 | Ação | Comando |
 | :--- | :--- |
-| Backend tests (suite principal) | `.\.venv\Scripts\python -m pytest -q` |
-| Backend perf | `.\.venv\Scripts\python -m pytest -m perf -q` |
-| Backend snapshot | `.\.venv\Scripts\python -m pytest -m snapshot -q` |
+| Backend tests (suite principal) | `uv run pytest -q` |
+| Backend perf | `uv run pytest -m perf -q` |
+| Backend snapshot | `uv run pytest -m snapshot -q` |
 | Frontend lint | `cd client && npm run lint` |
 | Frontend tests | `cd client && npm run test` |
 | Frontend tests (todos, inclui perf) | `cd client && npm run test:all` |
 | Frontend cobertura | `cd client && npm run test:coverage` |
-| Backend cobertura | `.\.venv\Scripts\python -m pytest -q --cov=backend --cov-report=term-missing` |
+| Backend cobertura | `uv run pytest -q --cov=backend --cov-report=term-missing` |
 | Frontend build | `cd client && npm run build` |
+
+Observação para snapshots:
+
+- Antes de rodar `uv run pytest -m snapshot -q`, garanta que `snapshots/baseline_v1.json` existe.
+- Para gerar/atualizar a baseline local determinística, use `uv run python scripts/generate_snapshot.py`.
 
 Status observado em **2026-02-07**:
 

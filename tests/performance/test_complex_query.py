@@ -43,4 +43,3 @@ async def test_complex_query_performance():
 
     if duration > 1.0:
         pytest.fail(f"Complex query took too long: {duration:.4f}s")
-
