@@ -5,3 +5,7 @@
 ## 2026-03-13 - Optimize DOM Traversal Highlighting
 **Learning:** String normalization (like NFD and regex replace) inside tight DOM traversal loops (e.g., TreeWalker) is a massive performance bottleneck.
 **Action:** Use pre-compiled regex patterns before the loop to test values, eliminating the need to normalize every DOM node's text content.
+
+## 2024-05-18 - Global Memoization for Text Processing
+**Learning:** When applying expensive string manipulation operations (like stemming or normalization) to individual words in a sequence where the same word might appear repeatedly, processing each occurrence independently wastes CPU cycles. While local memoization (e.g. `stem_cache = {}` inside a loop) works, it's limited to the scope of that single query/document. Many queries and documents share the exact same vocabulary.
+**Action:** Apply a bounded `@functools.lru_cache(maxsize=10000)` directly to the expensive text processing method (e.g., `stem`). This shares the cache across multiple different documents and queries, yielding a much higher hit rate and better overall application performance than local looping caches, without leaking memory.
