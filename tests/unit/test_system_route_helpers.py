@@ -64,6 +64,26 @@ def test_normalize_tipi_status_handles_online_and_error_states():
     }
 
 
+def test_build_public_status_payload_strips_sensitive_fields():
+    payload = system._build_public_status_payload(
+        {
+            "status": "online",
+            "chapters": 10,
+            "positions": 20,
+            "latency_ms": 5.5,
+            "error": "hidden",
+        },
+        {"status": "error", "chapters": 3, "positions": 7, "error": "hidden"},
+        "error",
+    )
+
+    assert payload == {
+        "status": "error",
+        "database": {"status": "online", "latency_ms": 5.5},
+        "tipi": {"status": "error"},
+    }
+
+
 @pytest.mark.asyncio
 async def test_is_admin_request_accepts_valid_admin_token(monkeypatch):
     request = _build_request(headers={"X-Admin-Token": "token123"})

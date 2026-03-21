@@ -5,11 +5,19 @@ from typing import Annotated
 from backend.config.settings import is_valid_admin_token, reload_settings, settings
 from backend.server.dependencies import get_nesh_service
 from backend.server.middleware import decode_clerk_jwt
+from backend.server.rate_limit import status_rate_limiter
 from backend.services import NeshService
-from backend.utils.auth import extract_bearer_token, is_admin_payload
+from backend.utils.auth import extract_bearer_token, extract_client_ip, is_admin_payload
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 router = APIRouter()
+STATUS_RESPONSES = {
+    429: {"description": "Limite de requisições para status excedido."},
+}
+STATUS_DETAILS_RESPONSES = {
+    **STATUS_RESPONSES,
+    403: {"description": "Forbidden (admin-only endpoint)."},
+}
 
 
 async def _is_admin_request(request: Request) -> bool:
@@ -22,6 +30,24 @@ async def _is_admin_request(request: Request) -> bool:
         return False
     payload = await decode_clerk_jwt(token)
     return is_admin_payload(payload)
+
+
+def _status_limiter_key(request: Request) -> str:
+    return f"status:ip:{extract_client_ip(request)}"
+
+
+async def _apply_status_rate_limit(request: Request) -> None:
+    allowed, retry_after = await status_rate_limiter.consume(
+        key=_status_limiter_key(request),
+        limit=settings.security.status_requests_per_minute,
+    )
+    if allowed:
+        return
+    raise HTTPException(
+        status_code=429,
+        detail="Rate limit exceeded for status endpoint. Try again later.",
+        headers={"Retry-After": str(retry_after)},
+    )
 
 
 def _to_int(value, default: int = 0) -> int:
@@ -114,17 +140,7 @@ async def _collect_tipi_status(request: Request) -> dict:
         return {"status": "error", "error": str(tipi_err)}
 
 
-@router.get("/status")
-async def get_status(request: Request):
-    """
-    Healthcheck e Status do Sistema.
-
-    Verifica conectividade com:
-    - Banco de dados Principal (nesh.db)
-    - Banco de dados TIPI (tipi.db)
-
-    Retorna versão da API e estado atual dos serviços.
-    """
+async def _collect_status_payloads(request: Request) -> tuple[dict, dict, str]:
     db_stats, db_latency_ms = await _collect_db_status(request)
     tipi_stats = await _collect_tipi_status(request)
 
@@ -136,15 +152,77 @@ async def get_status(request: Request):
         and normalized_tipi.get("status") == "online"
         else "error"
     )
+    return normalized_db, normalized_tipi, overall_status
 
-    status = {
+
+def _build_public_status_payload(
+    normalized_db: dict,
+    normalized_tipi: dict,
+    overall_status: str,
+) -> dict:
+    return {
+        "status": overall_status,
+        "database": {
+            "status": normalized_db.get("status", "error"),
+            "latency_ms": normalized_db.get("latency_ms", 0),
+        },
+        "tipi": {
+            "status": normalized_tipi.get("status", "error"),
+        },
+    }
+
+
+def _build_detailed_status_payload(
+    request: Request,
+    normalized_db: dict,
+    normalized_tipi: dict,
+    overall_status: str,
+) -> dict:
+    return {
         "status": overall_status,
         "version": getattr(request.app, "version", "unknown"),
         "backend": "FastAPI",
         "database": normalized_db,
         "tipi": normalized_tipi,
     }
-    return status
+
+
+@router.get("/status", responses=STATUS_RESPONSES)
+async def get_status(request: Request):
+    """
+    Healthcheck e Status do Sistema.
+
+    Verifica conectividade com:
+    - Banco de dados Principal (nesh.db)
+    - Banco de dados TIPI (tipi.db)
+
+    Retorna apenas o mínimo necessário para readiness público.
+    """
+    await _apply_status_rate_limit(request)
+    normalized_db, normalized_tipi, overall_status = await _collect_status_payloads(
+        request
+    )
+    return _build_public_status_payload(normalized_db, normalized_tipi, overall_status)
+
+
+@router.get("/status/details", responses=STATUS_DETAILS_RESPONSES)
+async def get_status_details(request: Request):
+    """
+    Status detalhado do sistema para administradores.
+    """
+    await _apply_status_rate_limit(request)
+    if not await _is_admin_request(request):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    normalized_db, normalized_tipi, overall_status = await _collect_status_payloads(
+        request
+    )
+    return _build_detailed_status_payload(
+        request,
+        normalized_db,
+        normalized_tipi,
+        overall_status,
+    )
 
 
 @router.get(

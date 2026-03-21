@@ -44,15 +44,25 @@ def test_parse_datetime_returns_none_for_invalid_values():
 def test_is_valid_webhook_without_configured_token(monkeypatch):
     monkeypatch.setattr(settings.billing, "asaas_webhook_token", None)
     monkeypatch.setattr(settings.server, "env", "development")
-    request = _request_with_headers()
-    assert webhooks._is_valid_asaas_webhook(request) is True
-
-
-def test_is_valid_webhook_without_token_in_production(monkeypatch):
-    monkeypatch.setattr(settings.billing, "asaas_webhook_token", None)
-    monkeypatch.setattr(settings.server, "env", "production")
+    monkeypatch.setattr(webhooks, "_asaas_token_warning_logged", False)
     request = _request_with_headers()
     assert webhooks._is_valid_asaas_webhook(request) is False
+
+
+def test_is_valid_webhook_logs_missing_secret_only_once(monkeypatch):
+    monkeypatch.setattr(settings.billing, "asaas_webhook_token", None)
+    monkeypatch.setattr(webhooks, "_asaas_token_warning_logged", False)
+
+    error_messages: list[str] = []
+    monkeypatch.setattr(
+        webhooks.logger, "error", lambda message: error_messages.append(message)
+    )
+
+    request = _request_with_headers()
+
+    assert webhooks._is_valid_asaas_webhook(request) is False
+    assert webhooks._is_valid_asaas_webhook(request) is False
+    assert error_messages == ["Asaas webhook token is not configured"]
 
 
 def test_is_valid_webhook_with_required_token(monkeypatch):

@@ -115,6 +115,8 @@ class SecuritySettings(BaseModel):
     """Security and anti-abuse controls."""
 
     ai_chat_requests_per_minute: int = 5
+    public_search_requests_per_minute: int = 60
+    status_requests_per_minute: int = 30
     services_search_requests_per_minute: int = 30
     services_detail_requests_per_minute: int = 120
     ai_chat_max_message_chars: int = 4000

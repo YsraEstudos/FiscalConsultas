@@ -87,10 +87,11 @@ async def test_get_status_uses_app_state_services_when_available():
     payload = await system.get_status(request)
 
     assert payload["status"] == "online"
-    assert payload["version"] == "9.9.9"
     assert payload["database"]["status"] == "online"
-    assert payload["database"]["chapters"] == 5
+    assert payload["database"]["latency_ms"] >= 0
     assert payload["tipi"]["status"] == "online"
+    assert "version" not in payload
+    assert "chapters" not in payload["database"]
 
 
 @pytest.mark.asyncio
@@ -120,10 +121,8 @@ async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypat
     payload = await system.get_status(request)
 
     assert payload["database"]["status"] == "online"
-    assert payload["database"]["chapters"] == 12
-    assert payload["database"]["positions"] == 34
     assert payload["tipi"]["status"] == "error"
-    assert "TIPI service unavailable" in payload["tipi"]["error"]
+    assert "error" not in payload["tipi"]
 
 
 @pytest.mark.asyncio
@@ -149,9 +148,50 @@ async def test_get_status_handles_db_and_tipi_exceptions(monkeypatch):
 
     assert payload["status"] == "error"
     assert payload["database"]["status"] == "error"
-    assert "db down" in payload["database"]["error"]
     assert payload["tipi"]["status"] == "error"
-    assert "tipi down" in payload["tipi"]["error"]
+    assert "error" not in payload["database"]
+    assert "error" not in payload["tipi"]
+
+
+@pytest.mark.asyncio
+async def test_get_status_details_returns_sensitive_fields_for_admin(monkeypatch):
+    async def _mock_admin(_request):  # NOSONAR
+        return True
+
+    monkeypatch.setattr(system, "_is_admin_request", _mock_admin)
+    request = _build_request(
+        "/api/status/details",
+        state={
+            "db": _FakeDb({"status": "online", "chapters": "5", "positions": "9"}),
+            "tipi_service": _FakeTipiService(
+                {"ok": True, "chapters": "3", "positions": "4"}
+            ),
+        },
+        version="9.9.9",
+    )
+
+    payload = await system.get_status_details(request)
+
+    assert payload["status"] == "online"
+    assert payload["version"] == "9.9.9"
+    assert payload["backend"] == "FastAPI"
+    assert payload["database"]["chapters"] == 5
+    assert payload["database"]["positions"] == 9
+    assert payload["tipi"]["chapters"] == 3
+
+
+@pytest.mark.asyncio
+async def test_get_status_details_rejects_non_admin(monkeypatch):
+    async def _mock_admin(_request):  # NOSONAR
+        return False
+
+    monkeypatch.setattr(system, "_is_admin_request", _mock_admin)
+    request = _build_request("/api/status/details")
+
+    with pytest.raises(HTTPException) as exc:
+        await system.get_status_details(request)
+
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio
