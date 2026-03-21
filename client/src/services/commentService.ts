@@ -12,8 +12,6 @@ export interface CommentCreatePayload {
     selected_text: string;
     body: string;
     is_private: boolean;
-    user_name?: string;
-    user_image_url?: string;
 }
 
 export interface CommentOut {

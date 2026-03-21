@@ -156,6 +156,14 @@ class RedisBackedRateLimiter:
 
 
 ai_chat_rate_limiter = SlidingWindowRateLimiter(window_seconds=60)
+public_search_rate_limiter = RedisBackedRateLimiter(
+    window_seconds=60,
+    redis_prefix="rate:public-search",
+)
+status_rate_limiter = RedisBackedRateLimiter(
+    window_seconds=60,
+    redis_prefix="rate:status",
+)
 services_search_rate_limiter = RedisBackedRateLimiter(
     window_seconds=60,
     redis_prefix="rate:services-search",

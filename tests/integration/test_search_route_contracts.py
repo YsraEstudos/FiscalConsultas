@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.presentation.routes import search as search_route
+from backend.presentation.routes import tipi as tipi_route
 from backend.server.app import app
 from backend.server.dependencies import get_nesh_service, get_tipi_service
 
@@ -182,3 +183,47 @@ def test_tipi_text_response_sets_route_defaults(client):
     assert payload["normalized"] == "motor"
     assert payload["warning"] is None
     assert payload["match_type"] == "text"
+
+
+def test_search_returns_retry_after_when_rate_limited(client, monkeypatch):
+    async def _deny_consume(*_args, **_kwargs):  # NOSONAR
+        return False, 19
+
+    monkeypatch.setattr(search_route.public_search_rate_limiter, "consume", _deny_consume)
+
+    response = client.get("/api/search?ncm=8517")
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "19"
+    assert "Rate limit exceeded" in response.json()["detail"]
+
+
+def test_tipi_returns_retry_after_when_rate_limited(client, monkeypatch):
+    async def _deny_consume(*_args, **_kwargs):  # NOSONAR
+        return False, 11
+
+    monkeypatch.setattr(tipi_route.public_search_rate_limiter, "consume", _deny_consume)
+
+    response = client.get("/api/tipi/search?ncm=8517")
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "11"
+    assert "Rate limit exceeded" in response.json()["detail"]
+
+
+def test_search_public_rate_limit_blocks_burst_requests(client, monkeypatch):
+    monkeypatch.setattr(
+        search_route.settings.security,
+        "public_search_requests_per_minute",
+        2,
+        raising=False,
+    )
+
+    first = client.get("/api/search?ncm=8517")
+    second = client.get("/api/search?ncm=8517")
+    third = client.get("/api/search?ncm=8517")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert third.status_code == 429
+    assert int(third.headers["Retry-After"]) >= 1

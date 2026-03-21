@@ -28,6 +28,9 @@ class CommentService:
         data: CommentCreate,
         tenant_id: str,
         user_id: str,
+        *,
+        user_name: str | None = None,
+        user_image_url: str | None = None,
     ) -> Comment:
         """
         Cria um comentário.
@@ -42,8 +45,8 @@ class CommentService:
             selected_text=data.selected_text,
             body=data.body,
             status=status,
-            user_name=data.user_name,
-            user_image_url=data.user_image_url,
+            user_name=user_name,
+            user_image_url=user_image_url,
         )
         created = await self.repo.create(comment)
         logger.info(

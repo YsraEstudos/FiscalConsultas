@@ -15,6 +15,37 @@ def _make_service_with_repo(repo) -> CommentService:
 
 
 @pytest.mark.asyncio
+async def test_create_comment_uses_resolved_identity_instead_of_payload_identity():
+    created_comment = SimpleNamespace(id=7)
+    repo = SimpleNamespace(create=AsyncMock(return_value=created_comment))
+    service = _make_service_with_repo(repo)
+    payload = SimpleNamespace(
+        anchor_key="pos-84-13",
+        selected_text="texto selecionado",
+        body="comentario",
+        is_private=False,
+        user_name="Spoofed User",
+        user_image_url="https://attacker.example/avatar.png",
+    )
+
+    result = await service.create_comment(
+        payload,
+        "tenant-1",
+        "user-1",
+        user_name="JWT User",
+        user_image_url="https://issuer.example/avatar.png",
+    )
+
+    assert result is created_comment
+    repo.create.assert_awaited_once()
+    stored = repo.create.await_args.args[0]
+    assert stored.user_name == "JWT User"
+    assert stored.user_image_url == "https://issuer.example/avatar.png"
+    assert stored.user_name != payload.user_name
+    assert stored.user_image_url != payload.user_image_url
+
+
+@pytest.mark.asyncio
 async def test_list_for_anchor_returns_repository_result_unchanged():
     expected = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
     repo = SimpleNamespace(list_by_anchor=AsyncMock(return_value=expected))

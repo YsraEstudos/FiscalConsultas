@@ -1,3 +1,4 @@
+import asyncio
 import builtins
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -138,7 +139,33 @@ async def test_no_cache_html_sets_headers_for_html_paths_only():
         == "no-store, no-cache, must-revalidate, max-age=0"
     )
     assert root_response.headers["Pragma"] == "no-cache"
+    assert html_response.headers["X-Frame-Options"] == "DENY"
+    assert html_response.headers["X-Content-Type-Options"] == "nosniff"
+    assert "frame-ancestors 'none'" in html_response.headers["Content-Security-Policy"]
+    assert api_response.headers["X-Frame-Options"] == "DENY"
     assert "Cache-Control" not in api_response.headers
+
+
+@pytest.mark.asyncio
+async def test_no_cache_html_hides_api_docs_without_debug_mode(monkeypatch):
+    called = {"value": False}
+
+    async def _next(_request):
+        await asyncio.sleep(0)
+        called["value"] = True
+        return Response("ok")
+
+    monkeypatch.setattr(app_module.settings.server, "env", "development", raising=False)
+    monkeypatch.setattr(
+        app_module.settings.features, "debug_mode", False, raising=False
+    )
+
+    response = await app_module.no_cache_html(_request_for_path("/openapi.json"), _next)
+
+    assert response.status_code == 404
+    assert response.body == b'{"detail":"Not Found"}'
+    assert called["value"] is False
+    assert response.headers["X-Frame-Options"] == "DENY"
 
 
 @pytest.mark.asyncio
@@ -386,6 +413,45 @@ async def test_lifespan_postgres_import_error_still_enables_sqlmodel(
     async with app_module.lifespan(app):
         assert app.state.sqlmodel_enabled is True
         assert app.state.tipi_service.mode == "repo"
+
+
+def test_validate_dev_tenant_override_safety_allows_localhost(monkeypatch):
+    monkeypatch.setattr(app_module.settings.server, "env", "development", raising=False)
+    monkeypatch.setattr(app_module.settings.features, "debug_mode", True, raising=False)
+    monkeypatch.setattr(app_module.settings.server, "host", "127.0.0.1", raising=False)
+
+    app_module._validate_dev_tenant_override_safety()
+
+
+@pytest.mark.asyncio
+async def test_lifespan_rejects_non_local_debug_tenant_override(monkeypatch):
+    shutdown_called = {"value": False}
+
+    async def _shutdown(_app):
+        await asyncio.sleep(0)
+        shutdown_called["value"] = True
+
+    init_db_mock = AsyncMock()
+
+    monkeypatch.setattr(app_module.settings.server, "env", "development", raising=False)
+    monkeypatch.setattr(app_module.settings.features, "debug_mode", True, raising=False)
+    monkeypatch.setattr(
+        app_module.settings.server,
+        "host",
+        "debug-security.example.com",
+        raising=False,
+    )
+    monkeypatch.setattr(app_module, "_init_primary_database", init_db_mock)
+    monkeypatch.setattr(app_module, "_shutdown_resources", _shutdown)
+
+    app = _make_fake_fastapi()
+
+    with pytest.raises(RuntimeError, match="localhost-only host binding"):
+        async with app_module.lifespan(app):
+            pytest.fail("lifespan yielded unexpectedly")
+
+    init_db_mock.assert_not_awaited()
+    assert shutdown_called["value"] is True
 
 
 @pytest.mark.asyncio

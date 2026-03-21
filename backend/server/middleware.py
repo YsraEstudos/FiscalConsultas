@@ -11,6 +11,7 @@ Este middleware:
 import asyncio
 import base64
 import hashlib
+import ipaddress
 import json
 import logging
 import time
@@ -58,6 +59,7 @@ _jwt_failure_reason_ctx: ContextVar[Optional[str]] = ContextVar(
     "jwt_failure_reason", default=None
 )
 _DEV_MIN_CLOCK_SKEW_SECONDS = 120
+_LOCALHOST_HOSTS = {"localhost"}
 
 
 def _normalize_clerk_domain(raw_domain: Optional[str]) -> Optional[str]:
@@ -78,15 +80,31 @@ def _normalize_clerk_domain(raw_domain: Optional[str]) -> Optional[str]:
     return normalized or None
 
 
+def is_loopback_host(host: Optional[str]) -> bool:
+    if not host:
+        return False
+
+    normalized = str(host).strip().lower()
+    if not normalized:
+        return False
+
+    if normalized in _LOCALHOST_HOSTS:
+        return True
+
+    if "%" in normalized:
+        normalized = normalized.split("%", 1)[0]
+
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
 def _build_jwks_url(raw_domain: Optional[str]) -> Optional[str]:
     normalized_domain = _normalize_clerk_domain(raw_domain)
     if not normalized_domain:
         return None
     return f"https://{normalized_domain}/.well-known/jwks.json"
-
-
-def _token_fingerprint(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
 
 
 def _decode_jwt_json_segment(segment: str) -> dict[str, Any]:
@@ -121,7 +139,6 @@ def _token_observability_snapshot(token: str) -> dict[str, Any]:
     header = _safe_get_unverified_header(token)
     claims = _safe_get_unverified_claims(token)
     return {
-        "fingerprint": _token_fingerprint(token),
         "header": {k: header.get(k) for k in _JWT_DEBUG_HEADER_FIELDS},
         "claims": {k: claims.get(k) for k in _JWT_DEBUG_CLAIM_FIELDS},
     }
@@ -324,7 +341,6 @@ def _get_cached_jwt_payload(
         _log_jwt_failure(
             reason="expired_cache",
             token_snapshot={
-                "fingerprint": _token_fingerprint(token),
                 "header": {},
                 "claims": {k: payload.get(k) for k in _JWT_DEBUG_CLAIM_FIELDS},
             },
@@ -493,7 +509,7 @@ def _log_jwt_validation_success(
         "jwt_validation_ok %s",
         json.dumps(
             {
-                "fingerprint": token_snapshot["fingerprint"],
+                "header": token_snapshot.get("header", {}),
                 "claims": {k: payload.get(k) for k in _JWT_DEBUG_CLAIM_FIELDS},
             },
             ensure_ascii=False,
@@ -791,6 +807,7 @@ class TenantMiddleware:
     PUBLIC_EXACT_PATHS = {
         "/api/auth/me",
         "/api/status",
+        "/api/status/details",
         "/api/webhooks",
     }
     PUBLIC_PREFIX_PATHS = ("/api/webhooks/",)
@@ -816,8 +833,23 @@ class TenantMiddleware:
         return None
 
     @staticmethod
+    def _extract_client_host(scope: dict[str, Any]) -> Optional[str]:
+        client = scope.get("client")
+        if isinstance(client, tuple) and client:
+            host = client[0]
+            if isinstance(host, str):
+                return host
+        return None
+
+    @classmethod
+    def _allow_dev_tenant_override(cls, scope: dict[str, Any]) -> bool:
+        if settings.server.env != "development" or not settings.features.debug_mode:
+            return False
+        return is_loopback_host(cls._extract_client_host(scope))
+
+    @staticmethod
     def _extract_debug_tenant(scope: dict[str, Any]) -> Optional[str]:
-        if settings.server.env != "development":
+        if not TenantMiddleware._allow_dev_tenant_override(scope):
             return None
         query_string = scope.get("query_string", b"").decode("latin-1")
         for part in query_string.split("&"):
@@ -827,10 +859,12 @@ class TenantMiddleware:
         return None
 
     @staticmethod
-    def _resolve_dev_fallback_tenant(org_id: Optional[str]) -> Optional[str]:
+    def _resolve_dev_fallback_tenant(
+        org_id: Optional[str], *, allow_dev_fallback: bool
+    ) -> Optional[str]:
         if org_id:
             return org_id
-        if settings.server.env == "development" and settings.features.debug_mode:
+        if allow_dev_fallback:
             return "org_default"
         return None
 
@@ -855,16 +889,27 @@ class TenantMiddleware:
     async def _resolve_request_tenant(
         self, scope: dict[str, Any]
     ) -> tuple[Optional[str], Optional[dict[str, Any]]]:
+        allow_dev_tenant_override = self._allow_dev_tenant_override(scope)
         token = self._extract_bearer_token(scope)
         if not token:
             org_id = self._extract_debug_tenant(scope)
-            return self._resolve_dev_fallback_tenant(org_id), None
+            return (
+                self._resolve_dev_fallback_tenant(
+                    org_id, allow_dev_fallback=allow_dev_tenant_override
+                ),
+                None,
+            )
 
         jwt_payload = await decode_clerk_jwt(token)
         org_id = jwt_payload.get("org_id") if jwt_payload else None
         if not org_id:
             org_id = self._extract_debug_tenant(scope)
-        return self._resolve_dev_fallback_tenant(org_id), jwt_payload
+        return (
+            self._resolve_dev_fallback_tenant(
+                org_id, allow_dev_fallback=allow_dev_tenant_override
+            ),
+            jwt_payload,
+        )
 
     async def _call_with_optional_tenant_context(
         self,
