@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Iterator
+from typing import Iterator, Protocol
 
 LOGGER = logging.getLogger(__name__)
 
@@ -15,6 +15,10 @@ _COUNT_QUERIES: dict[str, str] = {
     "search_index": "SELECT COUNT(*) FROM search_index",
     "tipi_positions": "SELECT COUNT(*) FROM tipi_positions",
 }
+
+
+class _SqlExecutor(Protocol):
+    def execute(self, sql: str) -> object: ...
 
 
 @dataclass
@@ -92,7 +96,7 @@ def _sqlite_supports_fts5() -> bool:
 
 
 def _create_fts5_virtual_table(
-    conn: sqlite3.Connection, table_name: str, columns_sql: str
+    conn: _SqlExecutor, table_name: str, columns_sql: str
 ) -> bool:
     if not _sqlite_supports_fts5():
         LOGGER.debug("Skipping FTS5 table %s: SQLite build lacks FTS5", table_name)
@@ -186,16 +190,7 @@ def _is_tipi_db_ready(db_path: Path) -> bool:
         return False
 
 
-def _seed_nesh_db(db_path: Path) -> None:
-    from backend.config import CONFIG
-    from backend.utils.text_processor import NeshTextProcessor
-
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    if not db_path.exists():
-        db_path.touch()
-
-    processor = NeshTextProcessor(list(CONFIG.stopwords))
-
+def _build_nesh_seed_rows() -> tuple[list[tuple], list[tuple], list[tuple]]:
     chapter_templates = {
         "01": (
             "Capitulo 01 - Animais vivos.\n"
@@ -264,247 +259,282 @@ def _seed_nesh_db(db_path: Path) -> None:
             anchor_id = f"pos-{codigo.replace('.', '-')}"
             position_rows.append((codigo, chapter, descricao, anchor_id))
 
-    conn = sqlite3.connect(db_path)
-    try:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS chapters (
-                chapter_num TEXT PRIMARY KEY,
-                content TEXT NOT NULL,
-                raw_text TEXT,
-                tenant_id TEXT,
-                search_vector TEXT
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS positions (
-                codigo TEXT PRIMARY KEY,
-                chapter_num TEXT NOT NULL,
-                descricao TEXT,
-                anchor_id TEXT,
-                tenant_id TEXT,
-                search_vector TEXT
-            )
-            """
-        )
-        positions_columns = {
-            row[1] for row in conn.execute("PRAGMA table_info(positions)").fetchall()
-        }
-        if "anchor_id" not in positions_columns:
-            conn.execute("ALTER TABLE positions ADD COLUMN anchor_id TEXT")
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS chapter_notes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chapter_num TEXT UNIQUE NOT NULL,
-                notes_content TEXT,
-                titulo TEXT,
-                notas TEXT,
-                consideracoes TEXT,
-                definicoes TEXT,
-                parsed_notes_json TEXT,
-                tenant_id TEXT
-            )
-            """
-        )
-        chapter_notes_columns = {
-            row[1]
-            for row in conn.execute("PRAGMA table_info(chapter_notes)").fetchall()
-        }
-        if "parsed_notes_json" not in chapter_notes_columns:
-            conn.execute("ALTER TABLE chapter_notes ADD COLUMN parsed_notes_json TEXT")
+    return chapter_rows, note_rows, position_rows
 
-        conn.execute(
+
+def _ensure_column(
+    conn: sqlite3.Connection, table_name: str, column_name: str, ddl: str
+) -> None:
+    columns = {
+        row[1] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+    if column_name not in columns:
+        conn.execute(ddl)
+
+
+def _create_nesh_core_schema(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS chapters (
+            chapter_num TEXT PRIMARY KEY,
+            content TEXT NOT NULL,
+            raw_text TEXT,
+            tenant_id TEXT,
+            search_vector TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS positions (
+            codigo TEXT PRIMARY KEY,
+            chapter_num TEXT NOT NULL,
+            descricao TEXT,
+            anchor_id TEXT,
+            tenant_id TEXT,
+            search_vector TEXT
+        )
+        """
+    )
+    _ensure_column(
+        conn,
+        "positions",
+        "anchor_id",
+        "ALTER TABLE positions ADD COLUMN anchor_id TEXT",
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS chapter_notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chapter_num TEXT UNIQUE NOT NULL,
+            notes_content TEXT,
+            titulo TEXT,
+            notas TEXT,
+            consideracoes TEXT,
+            definicoes TEXT,
+            parsed_notes_json TEXT,
+            tenant_id TEXT
+        )
+        """
+    )
+    _ensure_column(
+        conn,
+        "chapter_notes",
+        "parsed_notes_json",
+        "ALTER TABLE chapter_notes ADD COLUMN parsed_notes_json TEXT",
+    )
+
+
+def _create_nesh_tenant_schema(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tenants (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            subscription_plan TEXT NOT NULL DEFAULT 'free'
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            full_name TEXT,
+            tenant_id TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id TEXT NOT NULL,
+            provider TEXT NOT NULL DEFAULT 'asaas',
+            provider_customer_id TEXT,
+            provider_subscription_id TEXT UNIQUE,
+            provider_payment_id TEXT,
+            plan_name TEXT NOT NULL DEFAULT 'pro',
+            status TEXT NOT NULL DEFAULT 'pending',
+            amount REAL,
+            billing_cycle TEXT,
+            next_due_date TEXT,
+            last_payment_date TEXT,
+            last_event TEXT,
+            raw_payload TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        )
+        """
+    )
+    for index_sql in (
+        "CREATE INDEX IF NOT EXISTS ix_users_tenant_id ON users(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS ix_subscriptions_tenant_id ON subscriptions(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS ix_subscriptions_provider ON subscriptions(provider)",
+        "CREATE INDEX IF NOT EXISTS ix_subscriptions_provider_customer_id ON subscriptions(provider_customer_id)",
+        "CREATE INDEX IF NOT EXISTS ix_subscriptions_provider_subscription_id ON subscriptions(provider_subscription_id)",
+        "CREATE INDEX IF NOT EXISTS ix_subscriptions_provider_payment_id ON subscriptions(provider_payment_id)",
+        "CREATE INDEX IF NOT EXISTS ix_subscriptions_status ON subscriptions(status)",
+    ):
+        conn.execute(index_sql)
+
+
+def _prepare_nesh_search_index(conn: sqlite3.Connection) -> tuple[bool, bool]:
+    search_index_available = _table_exists(conn, "search_index")
+    if not search_index_available:
+        search_index_available = _create_fts5_virtual_table(
+            conn,
+            "search_index",
             """
-            CREATE TABLE IF NOT EXISTS tenants (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                is_active INTEGER NOT NULL DEFAULT 1,
-                subscription_plan TEXT NOT NULL DEFAULT 'free'
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id TEXT PRIMARY KEY,
-                email TEXT UNIQUE NOT NULL,
-                full_name TEXT,
-                tenant_id TEXT NOT NULL,
-                is_active INTEGER NOT NULL DEFAULT 1
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS subscriptions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tenant_id TEXT NOT NULL,
-                provider TEXT NOT NULL DEFAULT 'asaas',
-                provider_customer_id TEXT,
-                provider_subscription_id TEXT UNIQUE,
-                provider_payment_id TEXT,
-                plan_name TEXT NOT NULL DEFAULT 'pro',
-                status TEXT NOT NULL DEFAULT 'pending',
-                amount REAL,
-                billing_cycle TEXT,
-                next_due_date TEXT,
-                last_payment_date TEXT,
-                last_event TEXT,
-                raw_payload TEXT,
-                created_at TEXT,
-                updated_at TEXT
-            )
-            """
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS ix_users_tenant_id ON users(tenant_id)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS ix_subscriptions_tenant_id ON subscriptions(tenant_id)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS ix_subscriptions_provider ON subscriptions(provider)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS ix_subscriptions_provider_customer_id ON subscriptions(provider_customer_id)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS ix_subscriptions_provider_subscription_id ON subscriptions(provider_subscription_id)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS ix_subscriptions_provider_payment_id ON subscriptions(provider_payment_id)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS ix_subscriptions_status ON subscriptions(status)"
+            ncm,
+            display_text,
+            type,
+            description,
+            indexed_content
+            """,
         )
 
-        search_index_available = _table_exists(conn, "search_index")
-        if not search_index_available:
-            search_index_available = _create_fts5_virtual_table(
-                conn,
-                "search_index",
-                """
+    if not search_index_available:
+        return False, False
+
+    fts_columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(search_index)").fetchall()
+    }
+    return True, "indexed_content" in fts_columns
+
+
+def _seed_nesh_base_rows(
+    conn: sqlite3.Connection,
+    chapter_rows: list[tuple],
+    note_rows: list[tuple],
+    position_rows: list[tuple],
+) -> None:
+    conn.executemany(
+        "INSERT OR IGNORE INTO chapters (chapter_num, content) VALUES (?, ?)",
+        chapter_rows,
+    )
+    conn.executemany(
+        """
+        INSERT OR IGNORE INTO chapter_notes
+            (chapter_num, notes_content, titulo, notas, consideracoes, definicoes)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        note_rows,
+    )
+    conn.executemany(
+        "INSERT OR IGNORE INTO positions (codigo, chapter_num, descricao, anchor_id) VALUES (?, ?, ?, ?)",
+        position_rows,
+    )
+    conn.execute(
+        """
+        UPDATE positions
+        SET anchor_id = 'pos-' || REPLACE(codigo, '.', '-')
+        WHERE anchor_id IS NULL OR anchor_id = ''
+        """
+    )
+
+
+def _insert_search_index_entry(
+    conn: sqlite3.Connection,
+    *,
+    ncm: str,
+    display_text: str,
+    entry_type: str,
+    description: str,
+    text_for_search: str,
+    uses_indexed_content: bool,
+) -> None:
+    if uses_indexed_content:
+        conn.execute(
+            """
+            INSERT INTO search_index (ncm, display_text, type, description, indexed_content)
+            SELECT ?, ?, ?, ?, ?
+            WHERE NOT EXISTS (
+                SELECT 1 FROM search_index WHERE ncm = ? AND type = ? LIMIT 1
+            )
+            """,
+            (
                 ncm,
                 display_text,
-                type,
+                entry_type,
                 description,
-                indexed_content
-                """,
-            )
-        fts_columns = (
-            {
-                row[1]
-                for row in conn.execute("PRAGMA table_info(search_index)").fetchall()
-            }
-            if search_index_available
-            else set()
+                text_for_search,
+                ncm,
+                entry_type,
+            ),
         )
-        uses_indexed_content = "indexed_content" in fts_columns
+        return
 
-        conn.executemany(
-            "INSERT OR IGNORE INTO chapters (chapter_num, content) VALUES (?, ?)",
-            chapter_rows,
+    conn.execute(
+        """
+        INSERT INTO search_index (ncm, display_text, type, description)
+        SELECT ?, ?, ?, ?
+        WHERE NOT EXISTS (
+            SELECT 1 FROM search_index WHERE ncm = ? AND type = ? LIMIT 1
         )
-        conn.executemany(
-            """
-            INSERT OR IGNORE INTO chapter_notes
-                (chapter_num, notes_content, titulo, notas, consideracoes, definicoes)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            note_rows,
-        )
-        conn.executemany(
-            "INSERT OR IGNORE INTO positions (codigo, chapter_num, descricao, anchor_id) VALUES (?, ?, ?, ?)",
-            position_rows,
-        )
-        conn.execute(
-            """
-            UPDATE positions
-            SET anchor_id = 'pos-' || REPLACE(codigo, '.', '-')
-            WHERE anchor_id IS NULL OR anchor_id = ''
-            """
+        """,
+        (ncm, display_text, entry_type, text_for_search, ncm, entry_type),
+    )
+
+
+def _seed_nesh_search_index(
+    conn: sqlite3.Connection,
+    processor,
+    chapter_rows: list[tuple],
+    position_rows: list[tuple],
+    *,
+    uses_indexed_content: bool,
+) -> None:
+    for chapter_num, content in chapter_rows:
+        _insert_search_index_entry(
+            conn,
+            ncm=chapter_num,
+            display_text=f"Capitulo {chapter_num}",
+            entry_type="chapter",
+            description=content[:200],
+            text_for_search=processor.process(content),
+            uses_indexed_content=uses_indexed_content,
         )
 
+    for codigo, _chapter_num, descricao, _anchor_id in position_rows:
+        _insert_search_index_entry(
+            conn,
+            ncm=codigo,
+            display_text=f"{codigo} - {descricao}",
+            entry_type="position",
+            description=descricao,
+            text_for_search=processor.process(descricao),
+            uses_indexed_content=uses_indexed_content,
+        )
+
+
+def _seed_nesh_db(db_path: Path) -> None:
+    from backend.config import CONFIG
+    from backend.utils.text_processor import NeshTextProcessor
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    if not db_path.exists():
+        db_path.touch()
+
+    processor = NeshTextProcessor(list(CONFIG.stopwords))
+    chapter_rows, note_rows, position_rows = _build_nesh_seed_rows()
+
+    conn = sqlite3.connect(db_path)
+    try:
+        _create_nesh_core_schema(conn)
+        _create_nesh_tenant_schema(conn)
+        search_index_available, uses_indexed_content = _prepare_nesh_search_index(conn)
+        _seed_nesh_base_rows(conn, chapter_rows, note_rows, position_rows)
         if search_index_available:
-            for chapter_num, content in chapter_rows:
-                ncm = chapter_num
-                display_text = f"Capitulo {chapter_num}"
-                text_for_search = processor.process(content)
-                if uses_indexed_content:
-                    conn.execute(
-                        """
-                        INSERT INTO search_index (ncm, display_text, type, description, indexed_content)
-                        SELECT ?, ?, ?, ?, ?
-                        WHERE NOT EXISTS (
-                            SELECT 1 FROM search_index WHERE ncm = ? AND type = ? LIMIT 1
-                        )
-                        """,
-                        (
-                            ncm,
-                            display_text,
-                            "chapter",
-                            content[:200],
-                            text_for_search,
-                            ncm,
-                            "chapter",
-                        ),
-                    )
-                else:
-                    conn.execute(
-                        """
-                        INSERT INTO search_index (ncm, display_text, type, description)
-                        SELECT ?, ?, ?, ?
-                        WHERE NOT EXISTS (
-                            SELECT 1 FROM search_index WHERE ncm = ? AND type = ? LIMIT 1
-                        )
-                        """,
-                        (ncm, display_text, "chapter", text_for_search, ncm, "chapter"),
-                    )
-
-            for codigo, _chapter_num, descricao, _anchor_id in position_rows:
-                ncm = codigo
-                display_text = f"{codigo} - {descricao}"
-                text_for_search = processor.process(descricao)
-                if uses_indexed_content:
-                    conn.execute(
-                        """
-                        INSERT INTO search_index (ncm, display_text, type, description, indexed_content)
-                        SELECT ?, ?, ?, ?, ?
-                        WHERE NOT EXISTS (
-                            SELECT 1 FROM search_index WHERE ncm = ? AND type = ? LIMIT 1
-                        )
-                        """,
-                        (
-                            ncm,
-                            display_text,
-                            "position",
-                            descricao,
-                            text_for_search,
-                            ncm,
-                            "position",
-                        ),
-                    )
-                else:
-                    conn.execute(
-                        """
-                        INSERT INTO search_index (ncm, display_text, type, description)
-                        SELECT ?, ?, ?, ?
-                        WHERE NOT EXISTS (
-                            SELECT 1 FROM search_index WHERE ncm = ? AND type = ? LIMIT 1
-                        )
-                        """,
-                        (
-                            ncm,
-                            display_text,
-                            "position",
-                            text_for_search,
-                            ncm,
-                            "position",
-                        ),
-                    )
+            _seed_nesh_search_index(
+                conn,
+                processor,
+                chapter_rows,
+                position_rows,
+                uses_indexed_content=uses_indexed_content,
+            )
 
         conn.commit()
     finally:
