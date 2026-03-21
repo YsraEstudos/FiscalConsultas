@@ -26,10 +26,12 @@ class SQLiteTestEnvironment:
     temporary_directory: TemporaryDirectory[str]
     nesh_db_path: Path
     tipi_db_path: Path
+    services_db_path: Path
     original_engine: str
     original_postgres_url: str | None
     original_filename: str
     original_tipi_filename: str
+    original_services_filename: str
     original_redis_enabled: bool
 
     @property
@@ -38,6 +40,7 @@ class SQLiteTestEnvironment:
             "DATABASE__ENGINE": "sqlite",
             "DATABASE__FILENAME": str(self.nesh_db_path),
             "DATABASE__TIPI_FILENAME": str(self.tipi_db_path),
+            "DATABASE__SERVICES_FILENAME": str(self.services_db_path),
             "CACHE__ENABLE_REDIS": "false",
         }
 
@@ -49,6 +52,7 @@ class SQLiteTestEnvironment:
         settings.database.postgres_url = None
         settings.database.filename = str(self.nesh_db_path)
         settings.database.tipi_filename = str(self.tipi_db_path)
+        settings.database.services_filename = str(self.services_db_path)
         settings.cache.enable_redis = False
 
     def restore(self) -> None:
@@ -59,6 +63,7 @@ class SQLiteTestEnvironment:
         settings.database.postgres_url = self.original_postgres_url
         settings.database.filename = self.original_filename
         settings.database.tipi_filename = self.original_tipi_filename
+        settings.database.services_filename = self.original_services_filename
         settings.cache.enable_redis = self.original_redis_enabled
         _close_shared_db_engine()
 
@@ -77,7 +82,10 @@ def _close_shared_db_engine() -> None:
     try:
         from backend.services.tipi_service import TipiService
 
-        asyncio.run(TipiService.close_all_pools())
+        try:
+            asyncio.run(TipiService.close_all_pools())
+        finally:
+            TipiService._pool_lock = None
     except Exception as exc:
         LOGGER.debug("Failed to close TIPI pools during test bootstrap: %s", exc)
 
@@ -184,6 +192,40 @@ def _is_tipi_db_ready(db_path: Path) -> bool:
                 for row in conn.execute("PRAGMA table_info(tipi_positions)").fetchall()
             }
             return {"ncm_sort", "parent_ncm", "nivel"}.issubset(columns)
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return False
+
+
+def _is_services_db_ready(db_path: Path) -> bool:
+    if not db_path.exists():
+        return False
+
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            required_tables = {"catalog_metadata", "nbs_items", "nebs_entries"}
+            if not all(_table_exists(conn, table) for table in required_tables):
+                return False
+
+            nbs_columns = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(nbs_items)").fetchall()
+            }
+            nebs_columns = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(nebs_entries)").fetchall()
+            }
+            if not {"code_clean", "description_normalized", "has_nebs"}.issubset(
+                nbs_columns
+            ):
+                return False
+            if not {"title_normalized", "body_normalized", "updated_at"}.issubset(
+                nebs_columns
+            ):
+                return False
+            return True
         finally:
             conn.close()
     except sqlite3.Error:
@@ -510,6 +552,104 @@ def _seed_nesh_search_index(
         )
 
 
+def _seed_services_db(db_path: Path) -> None:
+    from backend.config.services_db_schema import (
+        CATALOG_METADATA_CREATE_SQL,
+        NBS_ITEMS_CREATE_SQL,
+        NEBS_ENTRIES_CREATE_SQL,
+        NEBS_ENTRIES_FTS_CREATE_SQL,
+        SERVICES_INDEXES_SQL,
+    )
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    if not db_path.exists():
+        db_path.touch()
+
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(CATALOG_METADATA_CREATE_SQL)
+        conn.execute(NBS_ITEMS_CREATE_SQL)
+        conn.execute(NEBS_ENTRIES_CREATE_SQL)
+        for index_sql in SERVICES_INDEXES_SQL:
+            conn.execute(index_sql)
+
+        if _sqlite_supports_fts5():
+            try:
+                conn.execute(NEBS_ENTRIES_FTS_CREATE_SQL)
+            except sqlite3.OperationalError as exc:
+                LOGGER.debug("Skipping services FTS table: %s", exc)
+
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO catalog_metadata (key, value)
+            VALUES ('seeded_for_tests', 'true')
+            """
+        )
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO nbs_items
+                (code, code_clean, description, description_normalized, parent_code, level, source_order, sort_path, has_nebs)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "1.01",
+                "101",
+                "Servicos de construcao",
+                "servicos de construcao",
+                None,
+                1,
+                1,
+                "0001",
+                1,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO nebs_entries
+                (code, code_clean, title, title_normalized, body_text, body_markdown, body_normalized,
+                 section_title, page_start, page_end, parser_status, parse_warnings, source_hash, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "1.01",
+                "101",
+                "Servicos de construcao",
+                "servicos de construcao",
+                "Servico de referencia para testes.",
+                "Servico de referencia para testes.",
+                "servico de referencia para testes",
+                "SECAO I",
+                1,
+                1,
+                "trusted",
+                None,
+                "test-hash",
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+        if _table_exists(conn, "nebs_entries_fts"):
+            conn.execute(
+                """
+                INSERT INTO nebs_entries_fts (code, title, body_text, section_title)
+                SELECT ?, ?, ?, ?
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM nebs_entries_fts WHERE code = ? LIMIT 1
+                )
+                """,
+                (
+                    "1.01",
+                    "Servicos de construcao",
+                    "Servico de referencia para testes.",
+                    "SECAO I",
+                    "1.01",
+                ),
+            )
+
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _seed_nesh_db(db_path: Path) -> None:
     from backend.config import CONFIG
     from backend.utils.text_processor import NeshTextProcessor
@@ -698,6 +838,7 @@ def _build_sqlite_test_environment() -> SQLiteTestEnvironment:
     temporary_root = Path(temporary_directory.name)
     nesh_db_path = temporary_root / "nesh.db"
     tipi_db_path = temporary_root / "tipi.db"
+    services_db_path = temporary_root / "services.db"
 
     if not _is_nesh_db_ready(nesh_db_path):
         _seed_nesh_db(nesh_db_path)
@@ -705,14 +846,19 @@ def _build_sqlite_test_environment() -> SQLiteTestEnvironment:
     if not _is_tipi_db_ready(tipi_db_path):
         _seed_tipi_db(tipi_db_path)
 
+    if not _is_services_db_ready(services_db_path):
+        _seed_services_db(services_db_path)
+
     return SQLiteTestEnvironment(
         temporary_directory=temporary_directory,
         nesh_db_path=nesh_db_path,
         tipi_db_path=tipi_db_path,
+        services_db_path=services_db_path,
         original_engine=settings.database.engine,
         original_postgres_url=settings.database.postgres_url,
         original_filename=settings.database.filename,
         original_tipi_filename=settings.database.tipi_filename,
+        original_services_filename=settings.database.services_filename,
         original_redis_enabled=settings.cache.enable_redis,
     )
 
