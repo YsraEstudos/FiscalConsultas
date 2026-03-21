@@ -70,6 +70,13 @@ def _close_shared_db_engine() -> None:
     except Exception as exc:
         LOGGER.debug("Failed to close shared DB engine during test bootstrap: %s", exc)
 
+    try:
+        from backend.services.tipi_service import TipiService
+
+        asyncio.run(TipiService.close_all_pools())
+    except Exception as exc:
+        LOGGER.debug("Failed to close TIPI pools during test bootstrap: %s", exc)
+
 
 @lru_cache(maxsize=1)
 def _sqlite_supports_fts5() -> bool:

@@ -4,7 +4,12 @@ import sys
 import time
 
 import pytest
-from test_support import reset_all_rate_limiters, sqlite_test_environment
+from test_support import sqlite_test_environment
+from tests.shared_fixtures import (  # noqa: F401
+    _cleanup_app_state,
+    _reset_rate_limiters,
+    client,
+)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -13,34 +18,8 @@ def _performance_environment():
         yield environment
 
 
-@pytest.fixture()
-def client():
-    from fastapi.testclient import TestClient
-
-    from backend.server.app import app
-
-    with TestClient(app) as test_client:
-        yield test_client
-
-
-@pytest.fixture(autouse=True)
-def _cleanup_app_state():
-    from backend.server.app import app
-
-    app.dependency_overrides.clear()
-    yield
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture(autouse=True)
-def _reset_rate_limiters():
-    reset_all_rate_limiters()
-    yield
-    reset_all_rate_limiters()
-
-
 @pytest.fixture(scope="session")
-def nesh_service():
+def nesh_service(_performance_environment):
     """Instancia DatabaseAdapter/NeshService in-process (warm benchmarks)."""
     from backend.config import CONFIG
     from backend.data.glossary_manager import init_glossary
@@ -56,7 +35,7 @@ def nesh_service():
 
 
 @pytest.fixture(scope="session")
-def tipi_service():
+def tipi_service(_performance_environment):
     from backend.services.tipi_service import TipiService
 
     return TipiService()

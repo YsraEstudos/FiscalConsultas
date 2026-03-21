@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import backend.services.tipi_service as tipi_module
 import pytest
@@ -11,10 +12,10 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture(autouse=True)
 def _reset_pool_state():
-    TipiService._pool = []
+    TipiService._pool = {}
     TipiService._pool_lock = None
     yield
-    TipiService._pool = []
+    TipiService._pool = {}
     TipiService._pool_lock = None
 
 
@@ -150,12 +151,65 @@ async def test_release_connection_closes_when_pool_is_full_and_close_fails(monke
 async def test_close_handles_pool_connection_close_errors():
     service = TipiService()
     failing_conn = _FakeConn(close_error=RuntimeError("boom"))
-    TipiService._pool = [failing_conn]
+    TipiService._pool = {service.db_path: [failing_conn]}
 
     await service.close()
 
-    assert TipiService._pool == []
+    assert TipiService._pool == {}
     assert failing_conn.closed is True
+
+
+@pytest.mark.asyncio
+async def test_connection_pool_is_scoped_by_resolved_db_path(monkeypatch, tmp_path):
+    class _PooledConn(_FakeConn):
+        def __init__(self, path):
+            super().__init__()
+            self.path = Path(path)
+            self.row_factory = None
+
+    created_paths: list[Path] = []
+
+    async def _fake_connect(path):
+        resolved_path = Path(path).resolve()
+        created_paths.append(resolved_path)
+        return _PooledConn(resolved_path)
+
+    monkeypatch.setattr(tipi_module.aiosqlite, "connect", _fake_connect)
+
+    first_path = tmp_path / "nested" / ".." / "tipi-a.db"
+    second_path = tmp_path / "tipi-b.db"
+    first_service = TipiService(db_path=first_path)
+    second_service = TipiService(db_path=second_path)
+
+    assert first_service.db_path == first_path.resolve()
+    assert second_service.db_path == second_path.resolve()
+
+    first_conn = await first_service._get_connection()
+    await first_service._release_connection(first_conn)
+
+    second_conn = await second_service._get_connection()
+
+    assert second_conn is not first_conn
+    assert second_conn.path == second_path.resolve()
+    assert created_paths == [first_path.resolve(), second_path.resolve()]
+
+
+@pytest.mark.asyncio
+async def test_close_all_pools_closes_connections_across_paths(tmp_path):
+    first_service = TipiService(db_path=tmp_path / "tipi-a.db")
+    second_service = TipiService(db_path=tmp_path / "tipi-b.db")
+    first_conn = _FakeConn()
+    second_conn = _FakeConn()
+    TipiService._pool = {
+        first_service.db_path: [first_conn],
+        second_service.db_path: [second_conn],
+    }
+
+    await TipiService.close_all_pools()
+
+    assert TipiService._pool == {}
+    assert first_conn.closed is True
+    assert second_conn.closed is True
 
 
 @pytest.mark.asyncio
