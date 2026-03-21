@@ -2,7 +2,6 @@ import pytest
 from backend.presentation.routes import auth
 from backend.server.app import app
 from backend.server.dependencies import get_ai_service
-from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.integration
 
@@ -10,12 +9,6 @@ pytestmark = pytest.mark.integration
 class _FakeAiService:
     async def get_chat_response(self, message: str) -> str:  # NOSONAR
         return f"echo:{message}"
-
-
-@pytest.fixture()
-def client():
-    with TestClient(app) as test_client:
-        yield test_client
 
 
 @pytest.fixture(autouse=True)

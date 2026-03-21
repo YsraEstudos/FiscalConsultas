@@ -20,6 +20,7 @@ import aiosqlite
 from ..config.constants import CacheConfig
 from ..config.exceptions import DatabaseError
 from ..config.logging_config import service_logger as logger
+from ..config.settings import settings
 from ..utils import ncm_utils
 from ..utils.id_utils import generate_anchor_id
 from ..utils.payload_cache_metrics import PayloadCacheMetrics
@@ -60,14 +61,14 @@ class TipiService:
     - Connection pooling
     """
 
-    # Pool compartilhado (singleton)
-    _pool: List[aiosqlite.Connection] = []
+    # Pool compartilhado por caminho resolvido do banco.
+    _pool: Dict[Path, List[aiosqlite.Connection]] = {}
     _pool_lock: Optional[asyncio.Lock] = None
     _pool_max_size: int = 3
 
     def __init__(
         self,
-        db_path: Path = TIPI_DB_PATH,
+        db_path: Path | None = None,
         *,
         repository: "_TipiRepo | None" = None,
         repository_factory=None,
@@ -80,7 +81,7 @@ class TipiService:
             repository: TipiRepository para novo padrão SQLModel
             repository_factory: Factory async context manager para criar repos sob demanda
         """
-        self.db_path = db_path
+        self.db_path = (db_path or Path(settings.database.tipi_path)).resolve()
         self._schema_columns_cache: Dict[str, set[str]] = {}
         self._repository = repository
         self._repository_factory = repository_factory
@@ -154,8 +155,9 @@ class TipiService:
     async def _get_connection(self) -> aiosqlite.Connection:
         """Obtém conexão do pool ou cria nova."""
         async with self._get_pool_lock():
-            if self._pool:
-                conn = self._pool.pop()
+            pool = self._pool.setdefault(self.db_path, [])
+            if pool:
+                conn = pool.pop()
                 return conn
 
         try:
@@ -169,8 +171,9 @@ class TipiService:
     async def _release_connection(self, conn: aiosqlite.Connection) -> None:
         """Devolve conexão ao pool."""
         async with self._get_pool_lock():
-            if len(self._pool) < self._pool_max_size:
-                self._pool.append(conn)
+            pool = self._pool.setdefault(self.db_path, [])
+            if len(pool) < self._pool_max_size:
+                pool.append(conn)
             else:
                 try:
                     await conn.close()
@@ -197,6 +200,14 @@ class TipiService:
         return TIPI_SORT_WITH_NCM if "ncm_sort" in cols else TIPI_SORT_FALLBACK
 
     @staticmethod
+    async def _close_pool_connections(connections: List[aiosqlite.Connection]) -> None:
+        for conn in connections:
+            try:
+                await conn.close()
+            except Exception as e:
+                logger.warning(f"Error closing TIPI pool connection: {e}")
+
+    @staticmethod
     def _enforce_cache_limit(
         cache: OrderedDict[Any, Any],
         max_size: int,
@@ -211,12 +222,18 @@ class TipiService:
     async def close(self):
         """Fecha todas as conexões do pool."""
         async with self._get_pool_lock():
-            for conn in self._pool:
-                try:
-                    await conn.close()
-                except Exception as e:
-                    logger.warning(f"Error closing TIPI pool connection: {e}")
-            self._pool.clear()
+            pool = self._pool.pop(self.db_path, [])
+        await self._close_pool_connections(pool)
+
+    @classmethod
+    async def close_all_pools(cls):
+        """Fecha todas as conexões em todos os pools TIPI conhecidos."""
+        async with cls._get_pool_lock():
+            pools = list(cls._pool.values())
+            cls._pool = {}
+
+        for pool in pools:
+            await cls._close_pool_connections(pool)
 
     async def check_connection(self) -> Dict[str, Any]:
         """Verifica status do banco TIPI."""

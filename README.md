@@ -123,22 +123,20 @@ Checklist rápido Clerk (dev local):
 
 ```powershell
 python scripts/setup_tipi_database.py
-$env:PYTHONUTF8="1"; python scripts/setup_database.py
-$env:PYTHONUTF8="1"; python scripts/setup_fulltext.py
+uv run scripts/rebuild_index.py
 ```
 
 Observações:
 
-- `setup_database.py` cria `database/nesh.db` (capítulos/posições), mas **não** cria FTS.
-- `setup_fulltext.py` cria `search_index` (FTS) em `database/nesh.db`.
-- Em Windows com encoding CP1252, scripts com emoji podem falhar; `PYTHONUTF8=1` evita o erro.
+- `rebuild_index.py` (Fase 5) é o script consolidado: cria `database/nesh.db`, extrai seções e reconstrói o índice FTS com Stemming.
+- Em Windows com encoding CP1252, scripts com emoji podem falhar; usar `PYTHONUTF8=1` (o `uv run` geralmente lida bem com isso, mas o script `.bat` já automatiza essa configuração).
 
 ### 4) Subir aplicação
 
 Terminal 1 (backend):
 
 ```powershell
-python Nesh.py
+uv run Nesh.py
 ```
 
 Terminal 2 (frontend):
@@ -162,7 +160,7 @@ Para diagnóstico de autenticação Clerk no frontend:
 .\start_nesh_dev.bat --auth-debug
 ```
 
-O script faz preflight, executa `docker compose up -d` automaticamente, espera os serviços (`db`, `redis`, `pgadmin`) e bloqueia startup se faltarem variáveis obrigatórias de auth em `.env` (`AUTH__CLERK_DOMAIN`, `AUTH__CLERK_ISSUER`, `AUTH__CLERK_AUDIENCE`, `AUTH__CLERK_AUTHORIZED_PARTIES`, `AUTH__CLERK_CLOCK_SKEW_SECONDS`) ou em `client/.env.local` (`VITE_CLERK_PUBLISHABLE_KEY`, `VITE_CLERK_TOKEN_TEMPLATE`). Em caso de falha, exibe checklist com ações manuais.
+O script faz preflight, executa `docker compose up -d` automaticamente (essencial para Redis e infraestrutura mesmo em modo SQLite), espera os serviços (`db`, `redis`, `pgadmin`) e bloqueia startup se faltarem variáveis obrigatórias de auth em `.env` ou em `client/.env.local`. Em caso de falha, exibe checklist com ações manuais.
 
 Healthcheck backend:
 
@@ -178,17 +176,25 @@ Resposta esperada: JSON com `status`, `database` e `tipi`.
 
 | Ação | Comando |
 | :--- | :--- |
-| Backend tests (suite principal) | `.\.venv\Scripts\python -m pytest -q` |
+| Backend tests (suite principal) | `uv run pytest -q` |
+| Backend perf | `uv run pytest -m perf -q` |
+| Backend snapshot | `uv run pytest -m snapshot -q` |
 | Frontend lint | `cd client && npm run lint` |
 | Frontend tests | `cd client && npm run test` |
 | Frontend tests (todos, inclui perf) | `cd client && npm run test:all` |
 | Frontend cobertura | `cd client && npm run test:coverage` |
-| Backend cobertura | `.\.venv\Scripts\python -m pytest -q --cov=backend --cov-report=term-missing` |
+| Backend cobertura | `uv run pytest -q --cov=backend --cov-report=term-missing` |
 | Frontend build | `cd client && npm run build` |
+
+Observação para snapshots:
+
+- Antes de rodar `uv run pytest -m snapshot -q`, garanta que `snapshots/baseline_v1.json` existe.
+- Para gerar/atualizar a baseline local determinística, use `uv run python scripts/generate_snapshot.py`.
 
 Status observado em **2026-02-07**:
 
 - `pytest -q`: OK (suite padrão exclui `perf` e `snapshot`)
+- Fluxo oficial backend: rodar `pytest` a partir da raiz do repositório.
 - `cd client && npm run lint`: OK
 - `cd client && npm run test`: OK (suite estável, sem perf)
 - `cd client && npm run build`: OK

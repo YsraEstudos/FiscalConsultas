@@ -1,10 +1,11 @@
-import asyncio
 import time
 
 import pytest
 from backend.config import CONFIG
 from backend.infrastructure.database import DatabaseAdapter
 from backend.services.nesh_service import NeshService
+
+pytestmark = pytest.mark.perf
 
 
 @pytest.mark.asyncio
@@ -62,7 +63,3 @@ async def test_search_performance_repro():
 
     finally:
         await db.close()
-
-
-if __name__ == "__main__":
-    asyncio.run(test_search_performance_repro())

@@ -1,7 +1,6 @@
 import asyncio
 
 import pytest
-from fastapi.testclient import TestClient
 
 from backend.presentation.routes import search as search_route
 from backend.presentation.routes import tipi as tipi_route
@@ -81,12 +80,6 @@ class _FakeTipiServiceText:
             "query": query,
             "results": [],
         }
-
-
-@pytest.fixture()
-def client():
-    with TestClient(app) as test_client:
-        yield test_client
 
 
 @pytest.fixture(autouse=True)
@@ -189,7 +182,9 @@ def test_search_returns_retry_after_when_rate_limited(client, monkeypatch):
     async def _deny_consume(*_args, **_kwargs):  # NOSONAR
         return False, 19
 
-    monkeypatch.setattr(search_route.public_search_rate_limiter, "consume", _deny_consume)
+    monkeypatch.setattr(
+        search_route.public_search_rate_limiter, "consume", _deny_consume
+    )
 
     response = client.get("/api/search?ncm=8517")
 

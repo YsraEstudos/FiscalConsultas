@@ -4,6 +4,8 @@ import time
 
 import pytest
 
+pytestmark = pytest.mark.perf
+
 
 def _percentile(values_ms: list[float], percentile: float) -> float:
     if not values_ms:
@@ -33,7 +35,6 @@ WARM_P95_MS_TIPI = _env_float("NESH_PERF_WARM_TIPI_P95_MS", 30.0)
 COLD_START_P95_MS = _env_float("NESH_PERF_COLD_START_P95_MS", 6000.0)
 
 
-@pytest.mark.perf
 @pytest.mark.asyncio
 async def test_perf_warm_pipeline_code_p95(nesh_service):
     from backend.presentation.renderer import HtmlRenderer
@@ -60,7 +61,6 @@ async def test_perf_warm_pipeline_code_p95(nesh_service):
     assert p95 <= WARM_P95_MS_CODE, f"p95={p95:.1f}ms > {WARM_P95_MS_CODE:.0f}ms"
 
 
-@pytest.mark.perf
 @pytest.mark.asyncio
 async def test_perf_warm_service_fts_p95(nesh_service):
     # Warmup
@@ -81,7 +81,6 @@ async def test_perf_warm_service_fts_p95(nesh_service):
     assert p95 <= WARM_P95_MS_FTS, f"p95={p95:.1f}ms > {WARM_P95_MS_FTS:.0f}ms"
 
 
-@pytest.mark.perf
 @pytest.mark.asyncio
 async def test_perf_warm_tipi_code_render_p95(tipi_service):
     from backend.presentation.tipi_renderer import TipiRenderer
@@ -110,7 +109,6 @@ async def test_perf_warm_tipi_code_render_p95(tipi_service):
     assert p95 <= WARM_P95_MS_TIPI, f"p95={p95:.1f}ms > {WARM_P95_MS_TIPI:.0f}ms"
 
 
-@pytest.mark.perf
 def test_perf_cold_start_p95(benchmark, cold_start_measure):
     # This test is synchronous (subprocess), so we can keep using benchmark fixture
     def _timed_start() -> None:

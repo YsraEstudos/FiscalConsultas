@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi.testclient import TestClient
 
 import backend.presentation.routes.services as services_routes
 from backend.server.app import app
@@ -91,12 +90,6 @@ class _FakeServicesCatalog:
                 "page_end": 22,
             },
         }
-
-
-@pytest.fixture()
-def client():
-    with TestClient(app) as test_client:
-        yield test_client
 
 
 @pytest.fixture(autouse=True)

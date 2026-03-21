@@ -12,7 +12,6 @@ from datetime import datetime, timezone
 import pytest
 from backend.presentation.routes import profile
 from backend.server.app import app
-from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.integration
 
@@ -75,12 +74,6 @@ class _FakeProfileService:
 
     async def delete_account(self, user_id: str, tenant_id: str):
         return None
-
-
-@pytest.fixture()
-def client():
-    with TestClient(app) as test_client:
-        yield test_client
 
 
 @pytest.fixture(autouse=True)

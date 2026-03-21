@@ -4,6 +4,8 @@ import pytest
 
 from backend.presentation.renderer import HtmlRenderer, _get_fallback_anchor_pattern
 
+pytestmark = pytest.mark.perf
+
 
 def _build_renderer_fixture(
     num_codes: int = 80,

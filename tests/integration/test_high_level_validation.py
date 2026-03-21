@@ -1,7 +1,11 @@
 import os
 import sqlite3
 
+import pytest
+
 from backend.config import CONFIG
+
+pytestmark = pytest.mark.integration
 
 
 def test_database_integrity():

@@ -8,7 +8,11 @@ import re
 import sqlite3
 import unicodedata
 
+import pytest
+
 from backend.config.constants import DatabaseConfig
+
+pytestmark = pytest.mark.integration
 
 DB_PATH = DatabaseConfig.DEFAULT_DB_FILENAME
 

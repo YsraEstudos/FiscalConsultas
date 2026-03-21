@@ -1,6 +1,10 @@
 import uuid
 
+import pytest
+
 from backend.presentation.routes import system
+
+pytestmark = pytest.mark.integration
 
 
 def test_status_endpoint(client):

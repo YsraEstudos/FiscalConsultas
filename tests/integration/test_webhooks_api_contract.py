@@ -5,7 +5,6 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 from sqlmodel import col
 from starlette.requests import Request
@@ -14,17 +13,10 @@ from backend.config.settings import settings
 from backend.domain.sqlmodels import Subscription, Tenant
 from backend.infrastructure.db_engine import get_session
 from backend.presentation.routes import webhooks
-from backend.server.app import app
 
 pytestmark = pytest.mark.integration
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
-
-
-@pytest.fixture()
-def client():
-    with TestClient(app) as test_client:
-        yield test_client
 
 
 @pytest.fixture()

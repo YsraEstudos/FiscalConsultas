@@ -13,6 +13,8 @@ from pathlib import Path
 import pytest
 from backend.services.tipi_service import TipiService
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def test_db():
