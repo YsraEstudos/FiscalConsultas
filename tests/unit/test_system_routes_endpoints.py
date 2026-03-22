@@ -96,6 +96,9 @@ async def test_get_status_uses_app_state_services_when_available():
 
 @pytest.mark.asyncio
 async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypatch):
+    monkeypatch.setattr(system, "_pg_stats_cache", {})
+    monkeypatch.setattr(system, "_pg_stats_last_check_ts", 0.0)
+
     class _ScalarResult:
         def __init__(self, value):
             self._value = value
@@ -104,12 +107,15 @@ async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypat
             return self._value
 
     class _Session:
-        def __init__(self):
-            self.calls = 0
-
-        async def execute(self, _query):
-            self.calls += 1
-            return _ScalarResult(12 if self.calls == 1 else 34)
+        async def execute(self, query):
+            query_str = str(query)
+            if "SELECT 1" in query_str:
+                return _ScalarResult(1)
+            if "SELECT COUNT(*) FROM chapters" in query_str:
+                return _ScalarResult(12)
+            if "SELECT COUNT(*) FROM positions" in query_str:
+                return _ScalarResult(34)
+            return _ScalarResult(0)
 
     @asynccontextmanager
     async def _fake_get_session():  # NOSONAR
@@ -123,6 +129,56 @@ async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypat
     assert payload["database"]["status"] == "online"
     assert payload["tipi"]["status"] == "error"
     assert "error" not in payload["tipi"]
+
+
+@pytest.mark.asyncio
+async def test_get_status_fallback_uses_lightweight_check_and_caches_counts(
+    monkeypatch,
+):
+    monkeypatch.setattr(system, "_pg_stats_cache", {})
+    monkeypatch.setattr(system, "_pg_stats_last_check_ts", 0.0)
+
+    class _ScalarResult:
+        def __init__(self, value):
+            self._value = value
+
+        def scalar(self):
+            return self._value
+
+    executed_queries = []
+
+    class _Session:
+        async def execute(self, query):
+            query_str = str(query)
+            executed_queries.append(query_str)
+            if "SELECT 1" in query_str:
+                return _ScalarResult(1)
+            if "SELECT COUNT(*) FROM chapters" in query_str:
+                return _ScalarResult(12)
+            if "SELECT COUNT(*) FROM positions" in query_str:
+                return _ScalarResult(34)
+            return _ScalarResult(0)
+
+    @asynccontextmanager
+    async def _fake_get_session():  # NOSONAR
+        yield _Session()
+
+    time_points = iter([100.0, 120.0])
+    monkeypatch.setattr(db_engine, "get_session", _fake_get_session)
+    monkeypatch.setattr(system.time, "time", lambda: next(time_points))
+    request = _build_request("/api/status", state={"db": None, "tipi_service": None})
+
+    first = await system.get_status(request)
+    second = await system.get_status(request)
+
+    assert first["database"]["status"] == "online"
+    assert second["database"]["status"] == "online"
+    assert executed_queries == [
+        "SELECT 1",
+        "SELECT COUNT(*) FROM chapters",
+        "SELECT COUNT(*) FROM positions",
+        "SELECT 1",
+    ]
 
 
 @pytest.mark.asyncio

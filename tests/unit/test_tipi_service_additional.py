@@ -237,6 +237,39 @@ async def test_check_connection_returns_error_when_query_fails(tmp_path, monkeyp
 
 
 @pytest.mark.asyncio
+async def test_check_connection_uses_select_1_and_reuses_cached_stats(
+    tmp_path, monkeypatch
+):
+    db_file = tmp_path / "tipi.db"
+    db_file.write_text("x", encoding="utf-8")
+    service = TipiService(db_path=db_file)
+    conn = _FakeConn(scripted_rows=[[(1,)], [(7,)], [(11,)], [(1,)]])
+    time_points = iter([100.0, 130.0])
+
+    async def _fake_get_connection():
+        return conn
+
+    async def _fake_release(_conn):
+        return None
+
+    monkeypatch.setattr(service, "_get_connection", _fake_get_connection)
+    monkeypatch.setattr(service, "_release_connection", _fake_release)
+    monkeypatch.setattr(tipi_module.time, "time", lambda: next(time_points))
+
+    first = await service.check_connection()
+    second = await service.check_connection()
+
+    assert first == {"ok": True, "chapters": 7, "positions": 11}
+    assert second == first
+    assert [query for query, _params in conn.executed] == [
+        "SELECT 1",
+        "SELECT COUNT(*) FROM tipi_chapters",
+        "SELECT COUNT(*) FROM tipi_positions",
+        "SELECT 1",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_get_table_columns_uses_cache(monkeypatch):
     service = TipiService()
     conn = _FakeConn(scripted_rows=[[{"name": "ncm_sort"}, {"name": "ncm"}]])

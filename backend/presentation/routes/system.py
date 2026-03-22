@@ -97,7 +97,13 @@ def _normalize_tipi_status(raw_stats: dict | None) -> dict:
     return payload
 
 
+_pg_stats_cache = {}
+_pg_stats_last_check_ts = 0.0
+
+
 async def _collect_db_status(request: Request) -> tuple[dict, float]:
+    global _pg_stats_cache, _pg_stats_last_check_ts
+
     db = getattr(request.app.state, "db", None)
     start = time.perf_counter()
 
@@ -111,16 +117,25 @@ async def _collect_db_status(request: Request) -> tuple[dict, float]:
         from sqlalchemy import text
 
         async with get_session() as session:
-            chapters_count = await session.execute(
-                text("SELECT COUNT(*) FROM chapters")
-            )
-            positions_count = await session.execute(
-                text("SELECT COUNT(*) FROM positions")
-            )
+            await session.execute(text("SELECT 1"))
+
+            now = time.time()
+            if not _pg_stats_cache or (now - _pg_stats_last_check_ts) > 60:
+                chapters_count = await session.execute(
+                    text("SELECT COUNT(*) FROM chapters")
+                )
+                positions_count = await session.execute(
+                    text("SELECT COUNT(*) FROM positions")
+                )
+                _pg_stats_cache = {
+                    "chapters": int(chapters_count.scalar() or 0),
+                    "positions": int(positions_count.scalar() or 0),
+                }
+                _pg_stats_last_check_ts = now
         db_stats = {
             "status": "online",
-            "chapters": int(chapters_count.scalar() or 0),
-            "positions": int(positions_count.scalar() or 0),
+            "chapters": _pg_stats_cache["chapters"],
+            "positions": _pg_stats_cache["positions"],
         }
     except Exception as e:
         db_stats = {"status": "error", "error": str(e)}
