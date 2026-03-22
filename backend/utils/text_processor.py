@@ -84,6 +84,7 @@ class PortugueseStemmer:
 # Module-level instance for the cached stemmer
 _global_stemmer = PortugueseStemmer()
 
+
 # Bounded lru_cache on a module-level function to cache stemmed words
 # across multiple documents and queries, avoiding memory leaks and cache
 # misses that occur when lru_cache is applied to instance methods (because `self`
