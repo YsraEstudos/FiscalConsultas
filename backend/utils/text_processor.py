@@ -1,3 +1,4 @@
+import functools
 import re
 import unicodedata
 from typing import List
@@ -80,6 +81,18 @@ class PortugueseStemmer:
         return word
 
 
+# Module-level instance for the cached stemmer
+_global_stemmer = PortugueseStemmer()
+
+# Bounded lru_cache on a module-level function to cache stemmed words
+# across multiple documents and queries, avoiding memory leaks and cache
+# misses that occur when lru_cache is applied to instance methods (because `self`
+# becomes part of the cache key).
+@functools.lru_cache(maxsize=4096)
+def _cached_stem(word: str) -> str:
+    return _global_stemmer.stem(word)
+
+
 class NeshTextProcessor:
     """Fachada para processamento de texto no Nesh."""
 
@@ -104,7 +117,8 @@ class NeshTextProcessor:
             if len(w) < 2:  # Ignora letras soltas
                 continue
 
-            stemmed = self.stemmer.stem(w)
+            # Performance optimization: use module-level lru_cache to speed up stemming
+            stemmed = _cached_stem(w)
             processed.append(stemmed)
 
         return " ".join(processed)
@@ -119,7 +133,8 @@ class NeshTextProcessor:
             if w in self.stopwords:
                 continue
 
-            stemmed = self.stemmer.stem(w)
+            # Performance optimization: use module-level lru_cache to speed up stemming
+            stemmed = _cached_stem(w)
             processed.append(f"{stemmed}*")
 
         return " ".join(processed)
@@ -134,7 +149,8 @@ class NeshTextProcessor:
             if w in self.stopwords:
                 continue
 
-            stemmed = self.stemmer.stem(w)
+            # Performance optimization: use module-level lru_cache to speed up stemming
+            stemmed = _cached_stem(w)
             processed.append(stemmed)
 
         return " ".join(processed)

@@ -1,7 +1,7 @@
-## 2024-05-15 - SQLAlchemy Count Queries
-**Learning:** Using `select(func.count()).select_from(query.subquery())` generated an extra subquery which slows down execution significantly.
-**Action:** For simple filtered queries, prefer `query.with_only_columns(func.count(), maintain_column_froms=True).order_by(None)` to avoid extra sorting while preserving the original `FROM` clause. For `DISTINCT`, `GROUP BY`, or more complex join semantics, count rows from a subquery or use `count(distinct(...))` so the count matches the original result set.
+## 2024-03-22 - [Performance Optimization: Bounded LRU Cache for Stemmer]
+**Learning:** Using `@functools.lru_cache` on a module-level function is a safe and highly effective way to memoize text processing operations like stemming across multiple queries and documents. However, avoid applying it directly to an instance method (e.g., `self.stemmer.stem`) as the `self` reference becomes part of the cache key, drastically reducing the cache hit rate and potentially causing memory leaks by holding onto class instances.
+**Action:** When optimizing repeated function calls within classes, refactor the cached operation into a bounded `@functools.lru_cache` module-level function or a `@staticmethod` to ensure efficient, shared caching without unintended side effects.
 
-## 2026-03-13 - Optimize DOM Traversal Highlighting
-**Learning:** String normalization (like NFD and regex replace) inside tight DOM traversal loops (e.g., TreeWalker) is a massive performance bottleneck.
-**Action:** Use pre-compiled regex patterns before the loop to test values, eliminating the need to normalize every DOM node's text content.
+## 2024-03-22 - [Code Review Failure: Hallucinated Dependencies]
+**Learning:** Adding unrelated dependencies (e.g., `openpyxl`) to `pyproject.toml` and `uv.lock` to fix a local script execution error during testing is a violation of the boundaries and will cause a code review failure. Temporary benchmarking files must also be deleted before requesting a review or submitting a pull request.
+**Action:** Never modify dependencies without explicit permission, even if it seems necessary to run a test script locally. Always ensure the workspace is clean of scratchpad files before finalizing a PR.
