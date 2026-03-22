@@ -40,7 +40,7 @@ function makeApiComment(overrides: Partial<CommentOut> = {}): CommentOut {
     updated_at: '2026-03-01T10:00:00Z',
     moderated_by: null,
     moderated_at: null,
-    user_name: 'Usuário Teste',
+
     user_image_url: null,
     ...overrides,
   };
@@ -186,7 +186,7 @@ describe('useComments behavior', () => {
         id: 2,
         body: 'Novo comentário',
         status: 'private',
-        user_name: 'Alice',
+
       }));
       await addPromise;
     });
@@ -196,15 +196,16 @@ describe('useComments behavior', () => {
       selected_text: 'Motores elétricos',
       body: 'Novo comentário',
       is_private: true,
-      user_name: 'Alice',
-      user_image_url: undefined,
+
+
     });
     expect(result.current.comments).toEqual([
       expect.objectContaining({
         id: '2',
         body: 'Novo comentário',
         isPrivate: true,
-        userName: 'Alice',
+        userName: 'Usuário',
+        userId: 'user_test',
       }),
     ]);
     expect(refs.toastSuccessMock).toHaveBeenCalledWith('Comentário salvo');
