@@ -1,4 +1,5 @@
 import re
+from functools import lru_cache
 
 _RE_CHAPTER_HEADER = re.compile(r"^(?:\*\*)?Capítulo\s+\d+(?:\*\*)?$", re.IGNORECASE)
 _RE_POSITION_START = re.compile(r"^\*?\*?\d{2}\.\d{2}\s*[-–]")
@@ -8,15 +9,24 @@ _RE_DEF_ITEM = re.compile(r"^\d+\)")
 _RE_DEF_CONT_LOWER = re.compile(r"^[a-zà-ÿ]")
 _DEF_CONT_PREFIXES = ("-", "–", "—", "•", "(")
 
+_RE_MARKDOWN_BOLD = re.compile(r"\*\*(.+?)\*\*")
+_RE_MARKDOWN_ITALIC_STAR = re.compile(r"\*(.+?)\*")
+_RE_MARKDOWN_ITALIC_UNDERSCORE = re.compile(r"_(.+?)_")
+_RE_MARKDOWN_BOLD_EDGE = re.compile(r"(?:^\*\*)|(?:\*\*$)")
+_RE_MARKDOWN_ITALIC_EDGE = re.compile(r"(?:^\*)|(?:\*$)")
 
+
+# Performance: LRU cache for markdown cleaning
+# Avoids recompiling regexes and re-processing identical strings across chapter lines
+@lru_cache(maxsize=1024)
 def clean_markdown(text: str) -> str:
     """Remove formatação markdown (**, *, _) do texto."""
     cleaned = text
-    cleaned = re.sub(r"\*\*(.+?)\*\*", r"\1", cleaned)  # Remove **bold**
-    cleaned = re.sub(r"\*(.+?)\*", r"\1", cleaned)  # Remove *italic*
-    cleaned = re.sub(r"_(.+?)_", r"\1", cleaned)  # Remove _italic_
-    cleaned = re.sub(r"(?:^\*\*)|(?:\*\*$)", "", cleaned)  # Remove ** no início/fim
-    cleaned = re.sub(r"(?:^\*)|(?:\*$)", "", cleaned)  # Remove * solto
+    cleaned = _RE_MARKDOWN_BOLD.sub(r"\1", cleaned)  # Remove **bold**
+    cleaned = _RE_MARKDOWN_ITALIC_STAR.sub(r"\1", cleaned)  # Remove *italic*
+    cleaned = _RE_MARKDOWN_ITALIC_UNDERSCORE.sub(r"\1", cleaned)  # Remove _italic_
+    cleaned = _RE_MARKDOWN_BOLD_EDGE.sub("", cleaned)  # Remove ** no início/fim
+    cleaned = _RE_MARKDOWN_ITALIC_EDGE.sub("", cleaned)  # Remove * solto
     return cleaned.strip()
 
 
