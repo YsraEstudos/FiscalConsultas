@@ -12,8 +12,8 @@ _DEF_CONT_PREFIXES = ("-", "–", "—", "•", "(")
 _RE_MARKDOWN_BOLD = re.compile(r"\*\*(.+?)\*\*")
 _RE_MARKDOWN_ITALIC_STAR = re.compile(r"\*(.+?)\*")
 _RE_MARKDOWN_ITALIC_UNDERSCORE = re.compile(r"_(.+?)_")
-_RE_MARKDOWN_BOLD_EDGE = re.compile(r"(?:^\*\*)|(?:\*\*$)")
-_RE_MARKDOWN_ITALIC_EDGE = re.compile(r"(?:^\*)|(?:\*$)")
+_RE_MARKDOWN_BOLD_EDGE = re.compile(r"^\*\*|\*\*$")
+_RE_MARKDOWN_ITALIC_EDGE = re.compile(r"^\*|\*$")
 
 
 # Performance: LRU cache for markdown cleaning
