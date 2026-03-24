@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from functools import lru_cache
 from typing import List
 
 # Pre-compiled regex for word extraction (performance optimization)
@@ -80,10 +81,24 @@ class PortugueseStemmer:
         return word
 
 
+# Performance: Instantiate a module-level stemmer and bounded lru_cache to memoize stemming results.
+# This prevents recompiling/re-processing the same words across different NeshTextProcessor instances
+# and queries. Using a module-level cache avoids memory leaks that would occur if lru_cache were
+# applied to an instance method (where `self` would be part of the cache key).
+_GLOBAL_STEMMER = PortugueseStemmer()
+
+@lru_cache(maxsize=4096)
+def _cached_stem(word: str) -> str:
+    """Cache stemmed words globally to improve performance by avoiding redundant processing."""
+    return _GLOBAL_STEMMER.stem(word)
+
+
 class NeshTextProcessor:
     """Fachada para processamento de texto no Nesh."""
 
     def __init__(self, stopwords: List[str] = None):
+        # Manteve-se o stemmer como instância para compatibilidade (caso alguém acesse `.stemmer`),
+        # mas as funções internas usarão o `_cached_stem` que utiliza `_GLOBAL_STEMMER`.
         self.stemmer = PortugueseStemmer()
         self.stopwords = set(stopwords) if stopwords else set()
 
@@ -104,7 +119,7 @@ class NeshTextProcessor:
             if len(w) < 2:  # Ignora letras soltas
                 continue
 
-            stemmed = self.stemmer.stem(w)
+            stemmed = _cached_stem(w)
             processed.append(stemmed)
 
         return " ".join(processed)
@@ -119,7 +134,7 @@ class NeshTextProcessor:
             if w in self.stopwords:
                 continue
 
-            stemmed = self.stemmer.stem(w)
+            stemmed = _cached_stem(w)
             processed.append(f"{stemmed}*")
 
         return " ".join(processed)
@@ -134,7 +149,7 @@ class NeshTextProcessor:
             if w in self.stopwords:
                 continue
 
-            stemmed = self.stemmer.stem(w)
+            stemmed = _cached_stem(w)
             processed.append(stemmed)
 
         return " ".join(processed)
