@@ -87,6 +87,7 @@ class PortugueseStemmer:
 # applied to an instance method (where `self` would be part of the cache key).
 _GLOBAL_STEMMER = PortugueseStemmer()
 
+
 @lru_cache(maxsize=4096)
 def _cached_stem(word: str) -> str:
     """Cache stemmed words globally to improve performance by avoiding redundant processing."""
