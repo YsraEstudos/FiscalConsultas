@@ -76,6 +76,11 @@ def test_chapter_84():
     print("TESTE: Busca de 'bomba submersível' no Capítulo 84")
     print("=" * 60)
 
+    import os
+
+    if not os.path.exists(DB_PATH):
+        pytest.skip(f"{DB_PATH} not found")
+
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -155,6 +160,11 @@ def test_position_content():
     print("\n" + "=" * 60)
     print("BUSCA EM POSIÇÕES: Onde está 'bombas submersíveis'?")
     print("=" * 60)
+
+    import os
+
+    if not os.path.exists(DB_PATH):
+        pytest.skip(f"{DB_PATH} not found")
 
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
