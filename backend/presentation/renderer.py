@@ -1130,8 +1130,11 @@ class HtmlRenderer:
 
 
 # Pre-compile the class manipulation regexes to avoid compiling inside the function
-_CLASS_ATTR_RE = re.compile(r'(class=["\'])([^"\']*?)(["\'])')
+# Modified regexes to avoid catastrophic backtracking (SonarQube ReDoS rules)
+_CLASS_ATTR_RE = re.compile(r'(class=["\'])([^"\']*)(["\'])')
 _CLOSE_TAG_RE = re.compile(r"(\s*/?>)$")
+_HTML_ID_TAG_RE = re.compile(r'<[a-zA-Z][^>]*?\bid=["\']([^"\']+)["\'][^>]*?>')
+
 
 def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     """
@@ -1174,4 +1177,4 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
         return tag
 
     # Encontra qualquer tag que possua um atributo id válido
-    return re.sub(r'<[a-zA-Z][^>]*\bid=["\']([^"\']+)["\'][^>]*>', _add_class, html)
+    return _HTML_ID_TAG_RE.sub(_add_class, html)
