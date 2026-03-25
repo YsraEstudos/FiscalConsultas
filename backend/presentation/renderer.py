@@ -1129,13 +1129,18 @@ class HtmlRenderer:
         return full_html
 
 
+# Pre-compile the class manipulation regexes to avoid compiling inside the function
+_CLASS_ATTR_RE = re.compile(r'(class=["\'])([^"\']*?)(["\'])')
+_CLOSE_TAG_RE = re.compile(r"(\s*/?>)$")
+
 def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     """
     Injeta `<mark class="has-comment">` em volta dos elementos que possuem
     comentários aprovados, identificados pelo anchor_key (= valor do atributo id).
 
-    Estratégia: para cada anchor_key, encontramos o elemento que possui
-    `id="<anchor_key>"` e adicionamos a classe `has-comment` a ele.
+    Estratégia: fazemos uma única passagem no HTML procurando por atributos `id`.
+    Se o `id` estiver na lista de `commented_anchor_keys`, adicionamos a classe
+    `has-comment` a ele.
     Não envolve o texto em outro elemento para preservar a estrutura do DOM.
 
     Args:
@@ -1148,32 +1153,25 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     if not commented_anchor_keys or not html:
         return html
 
-    for key in commented_anchor_keys:
-        # Escapa o key para uso em regex seguro
-        safe_key = re.escape(key)
+    keys_set = set(commented_anchor_keys)
 
-        # Encontra a tag com id="{key}" e adiciona has-comment à sua classe
-        # Suporta: id="key", id='key', class="..." já existente
-        def _add_class(match: re.Match) -> str:
-            tag = match.group(0)
-            if "class=" in tag:
-                # Adiciona has-comment à class existente
-                tag = re.sub(
-                    r'(class=["\'])([^"\']*?)(["\'])',
-                    lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
-                    tag,
-                    count=1,
-                )
-            else:
-                # Insere class antes do fechamento da tag de abertura
-                tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
+    def _add_class(match: re.Match) -> str:
+        tag = match.group(0)
+        tag_id = match.group(1)
+        if tag_id not in keys_set:
             return tag
 
-        html = re.sub(
-            rf'<[a-zA-Z][^>]*\bid=["\']?{safe_key}["\']?[^>]*>',
-            _add_class,
-            html,
-            count=1,
-        )
+        if "class=" in tag:
+            # Adiciona has-comment à class existente
+            tag = _CLASS_ATTR_RE.sub(
+                lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
+                tag,
+                count=1,
+            )
+        else:
+            # Insere class antes do fechamento da tag de abertura
+            tag = _CLOSE_TAG_RE.sub(' class="has-comment"\\1', tag)
+        return tag
 
-    return html
+    # Encontra qualquer tag que possua um atributo id válido
+    return re.sub(r'<[a-zA-Z][^>]*\bid=["\']([^"\']+)["\'][^>]*>', _add_class, html)
