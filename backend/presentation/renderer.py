@@ -1133,7 +1133,9 @@ class HtmlRenderer:
 # Modified regexes to avoid catastrophic backtracking (SonarQube ReDoS rules)
 _CLASS_ATTR_RE = re.compile(r'(class=["\'])([^"\']*)(["\'])')
 _CLOSE_TAG_RE = re.compile(r"(\s*/?>)$")
-_HTML_ID_TAG_RE = re.compile(r'<[a-zA-Z][^>]*?\bid=["\']([^"\']+)["\'][^>]*?>')
+_HTML_ID_TAG_RE = re.compile(
+    r'<[a-zA-Z][^>]{0,256}\bid=["\']([^"\']+)["\'][^>]{0,256}>'
+)
 
 
 def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
