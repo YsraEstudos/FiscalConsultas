@@ -1133,9 +1133,8 @@ class HtmlRenderer:
 # Modified regexes to avoid catastrophic backtracking (SonarQube ReDoS rules)
 _CLASS_ATTR_RE = re.compile(r'(class=["\'])([^"\']*)(["\'])')
 _CLOSE_TAG_RE = re.compile(r"(\s*/?>)$")
-_HTML_ID_TAG_RE = re.compile(
-    r'<[a-zA-Z][^>]{0,256}\bid=["\']([^"\']+)["\'][^>]{0,256}>'
-)
+_ANY_TAG_RE = re.compile(r"<[a-zA-Z][^>]*>")
+_ID_ATTR_RE = re.compile(r'\bid=["\']([^"\']+)["\']')
 
 
 def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
@@ -1143,9 +1142,9 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     Injeta `<mark class="has-comment">` em volta dos elementos que possuem
     comentários aprovados, identificados pelo anchor_key (= valor do atributo id).
 
-    Estratégia: fazemos uma única passagem no HTML procurando por atributos `id`.
-    Se o `id` estiver na lista de `commented_anchor_keys`, adicionamos a classe
-    `has-comment` a ele.
+    Estratégia: fazemos uma única passagem no HTML procurando por tags válidas.
+    Dentro de cada tag, buscamos o atributo `id` e, se estiver na lista de
+    `commented_anchor_keys`, adicionamos a classe `has-comment`.
     Não envolve o texto em outro elemento para preservar a estrutura do DOM.
 
     Args:
@@ -1160,10 +1159,15 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
 
     keys_set = set(commented_anchor_keys)
 
-    def _add_class(match: re.Match) -> str:
+    def _process_tag(match: re.Match) -> str:
         tag = match.group(0)
-        tag_id = match.group(1)
-        if tag_id not in keys_set:
+
+        # Early return check to avoid running regex on tags without id
+        if "id=" not in tag:
+            return tag
+
+        id_match = _ID_ATTR_RE.search(tag)
+        if not id_match or id_match.group(1) not in keys_set:
             return tag
 
         if "class=" in tag:
@@ -1178,5 +1182,5 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
             tag = _CLOSE_TAG_RE.sub(' class="has-comment"\\1', tag)
         return tag
 
-    # Encontra qualquer tag que possua um atributo id válido
-    return _HTML_ID_TAG_RE.sub(_add_class, html)
+    # Encontra qualquer tag
+    return _ANY_TAG_RE.sub(_process_tag, html)
