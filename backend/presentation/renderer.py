@@ -1129,6 +1129,12 @@ class HtmlRenderer:
         return full_html
 
 
+# Compiled regex for O(1) matching of tags with an id attribute
+_RE_TAG_WITH_ID = re.compile(r'<[a-zA-Z][^>]*\bid=["\']?([^"\'\s>]+)["\']?[^>]*>')
+# Pre-compiled regexes for class insertion
+_RE_CLASS_ATTR = re.compile(r'(class=["\'])([^"\']*?)(["\'])')
+_RE_TAG_CLOSE = re.compile(r"(\s*/?>)$")
+
 def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     """
     Injeta `<mark class="has-comment">` em volta dos elementos que possuem
@@ -1137,6 +1143,10 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     Estratégia: para cada anchor_key, encontramos o elemento que possui
     `id="<anchor_key>"` e adicionamos a classe `has-comment` a ele.
     Não envolve o texto em outro elemento para preservar a estrutura do DOM.
+
+    Performance: Usamos uma busca regex única (single-pass) sobre o HTML
+    e validamos os IDs contra um O(1) set lookup, evitando complexidade O(N*M)
+    causada pelo varrimento completo da string para cada key de comentário.
 
     Args:
         html: HTML já renderizado pelo HtmlRenderer.
@@ -1148,32 +1158,26 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     if not commented_anchor_keys or not html:
         return html
 
-    for key in commented_anchor_keys:
-        # Escapa o key para uso em regex seguro
-        safe_key = re.escape(key)
+    # O(1) lookup set for fast validation
+    keys_set = set(commented_anchor_keys)
 
-        # Encontra a tag com id="{key}" e adiciona has-comment à sua classe
-        # Suporta: id="key", id='key', class="..." já existente
-        def _add_class(match: re.Match) -> str:
-            tag = match.group(0)
+    def _replacer(match: re.Match) -> str:
+        tag = match.group(0)
+        id_val = match.group(1)
+
+        # Só injeta se a key (id do elemento HTML) estiver na lista de comentários
+        if id_val in keys_set:
             if "class=" in tag:
                 # Adiciona has-comment à class existente
-                tag = re.sub(
-                    r'(class=["\'])([^"\']*?)(["\'])',
+                tag = _RE_CLASS_ATTR.sub(
                     lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
                     tag,
                     count=1,
                 )
             else:
                 # Insere class antes do fechamento da tag de abertura
-                tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
-            return tag
+                tag = _RE_TAG_CLOSE.sub(' class="has-comment"\\1', tag)
+        return tag
 
-        html = re.sub(
-            rf'<[a-zA-Z][^>]*\bid=["\']?{safe_key}["\']?[^>]*>',
-            _add_class,
-            html,
-            count=1,
-        )
-
-    return html
+    # Passagem única por toda a string HTML, em vez de N regexes por cada key individual.
+    return _RE_TAG_WITH_ID.sub(_replacer, html)
