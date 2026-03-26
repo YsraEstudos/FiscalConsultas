@@ -1135,6 +1135,7 @@ _RE_TAG_WITH_ID = re.compile(r'<[a-zA-Z][^>]*\bid=["\']?([^"\'\s>]+)["\']?[^>]*>
 _RE_CLASS_ATTR = re.compile(r'(class=["\'])([^"\']*?)(["\'])')
 _RE_TAG_CLOSE = re.compile(r"(\s*/?>)$")
 
+
 def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     """
     Injeta `<mark class="has-comment">` em volta dos elementos que possuem
