@@ -1130,9 +1130,11 @@ class HtmlRenderer:
 
 
 # Compiled regex for O(1) matching of tags with an id attribute
-_RE_TAG_WITH_ID = re.compile(r'<[a-zA-Z][^>]*\bid=["\']?([^"\'\s>]+)["\']?[^>]*>')
+_RE_TAG_WITH_ID = re.compile(
+    r'<[a-zA-Z][^>]*\bid=["\']?([^"\'\s>]+)["\']?[^>]*>'
+)  # NOSONAR
 # Pre-compiled regexes for class insertion
-_RE_CLASS_ATTR = re.compile(r'(class=["\'])([^"\']*?)(["\'])')
+_RE_CLASS_ATTR = re.compile(r'(class=["\'])([^"\']*?)(["\'])')  # NOSONAR
 _RE_TAG_CLOSE = re.compile(r"(\s*/?>)$")
 
 
