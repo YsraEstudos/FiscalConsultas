@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App from '../../src/App';
 
-type DocType = 'nesh' | 'tipi';
+type DocType = 'nesh' | 'tipi' | 'nbs' | 'nebs';
 
 type MockTab = {
   id: string;
@@ -102,6 +102,9 @@ vi.mock('../../src/components/Layout', () => ({
       <button data-testid="layout-open-comparator" onClick={onOpenComparator}>
         open-comparator
       </button>
+      <button data-testid="layout-set-doc-nbs" onClick={() => setDoc('nbs')}>
+        setdoc-nbs
+      </button>
       <button data-testid="layout-clear-history" onClick={onClearHistory}>
         clear-history
       </button>
@@ -168,6 +171,19 @@ vi.mock('../../src/components/ResultDisplay', () => ({
 
 vi.mock('../../src/components/ResultSkeleton', () => ({
   ResultSkeleton: () => <div data-testid="result-skeleton" />,
+}));
+
+vi.mock('../../src/components/ServicesTabContent', () => ({
+  ServicesTabContent: ({
+    doc,
+    onSwitchDoc,
+  }: any) => (
+    <div data-testid={`services-tab-content-${doc}`}>
+      <button data-testid={`services-switch-${doc}`} onClick={() => onSwitchDoc(doc === 'nbs' ? 'nebs' : 'nbs', '1.0101.11.00')}>
+        switch
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock('../../src/components/Tabs/TabPanel', () => ({
@@ -283,6 +299,8 @@ vi.mock('../../src/context/SettingsContext', () => ({
   }),
 }));
 
+
+
 function buildTab(overrides: Partial<MockTab> = {}): MockTab {
   return {
     id: 'tab-1',
@@ -296,7 +314,7 @@ function buildTab(overrides: Partial<MockTab> = {}): MockTab {
     isNewSearch: false,
     scrollTop: 0,
     isContentReady: true,
-    loadedChaptersByDoc: { nesh: [], tipi: [] },
+    loadedChaptersByDoc: { nesh: [], tipi: [], nbs: [], nebs: [] },
     latestTextQuery: undefined,
     ...overrides,
   };
@@ -310,6 +328,40 @@ function buildCodeResults(chapters: Record<string, any>, query = '8401') {
     normalized: null,
     results: chapters,
     total_capitulos: Object.keys(chapters).length,
+  };
+}
+
+function buildServiceResults(doc: 'nbs' | 'nebs', query = '1.0101.11.00') {
+  if (doc === 'nbs') {
+    return {
+      success: true,
+      query,
+      normalized: query,
+      total: 1,
+      results: [{
+        code: query,
+        code_clean: '101011100',
+        description: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
+        parent_code: '1.0101.1',
+        level: 3,
+        has_nebs: true,
+      }],
+    };
+  }
+
+  return {
+    success: true,
+    query,
+    normalized: query,
+    total: 1,
+    results: [{
+      code: query,
+      title: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
+      excerpt: 'Esta subposição inclui serviços de novas construções e reparo.',
+      page_start: 12,
+      page_end: 13,
+      section_title: 'SEÇÃO I - SERVIÇOS DE CONSTRUÇÃO',
+    }],
   };
 }
 
@@ -414,7 +466,7 @@ describe('App behavior', () => {
         error: null,
         ncm: '',
         isContentReady: false,
-        loadedChaptersByDoc: { nesh: [], tipi: [] },
+        loadedChaptersByDoc: { nesh: [], tipi: [], nbs: [], nebs: [] },
       }),
     );
     expect(mocks.createTabMock).not.toHaveBeenCalled();
@@ -434,6 +486,34 @@ describe('App behavior', () => {
     fireEvent.click(screen.getByTestId('layout-set-doc-tipi'));
     expect(mocks.createTabMock).toHaveBeenCalledWith('tipi');
     expect(mocks.updateTabMock).not.toHaveBeenCalled();
+  });
+
+  it('wires the restored services tab callbacks back into App state transitions', async () => {
+    setTabsState([
+      buildTab({
+        document: 'nbs',
+        results: buildServiceResults('nbs'),
+        ncm: '1.0101.11.00',
+        isContentReady: false,
+      }),
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('services-switch-nbs'));
+
+    expect(mocks.updateTabMock).toHaveBeenCalledWith(
+      'tab-1',
+      expect.objectContaining({
+        document: 'nebs',
+        results: null,
+        content: null,
+        error: null,
+        ncm: '',
+        isContentReady: false,
+      }),
+    );
+    expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('tab-1', 'nebs', '1.0101.11.00', false);
   });
 
   it('toggles modal states and handles openInDoc/openInNewTab actions', async () => {
@@ -480,7 +560,7 @@ describe('App behavior', () => {
         error: null,
         ncm: '',
         isContentReady: false,
-        loadedChaptersByDoc: { nesh: [], tipi: [] },
+        loadedChaptersByDoc: { nesh: [], tipi: [], nbs: [], nebs: [] },
       }),
     );
     expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('tab-1', 'tipi', '1234.56.78', false);

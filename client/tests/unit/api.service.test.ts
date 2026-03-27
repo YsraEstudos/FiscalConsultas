@@ -70,9 +70,24 @@ async function loadApiModule() {
   return import('../../src/services/api');
 }
 
+function swapLocation(url: string) {
+  const originalLocationDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'location');
+  Object.defineProperty(globalThis, 'location', {
+    configurable: true,
+    value: new URL(url),
+  });
+
+  return () => {
+    if (originalLocationDescriptor) {
+      Object.defineProperty(globalThis, 'location', originalLocationDescriptor);
+    }
+  };
+}
+
 describe('api service', () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.unstubAllEnvs();
   });
 
   it('creates axios instance and registers interceptors on import', async () => {
@@ -87,6 +102,23 @@ describe('api service', () => {
     );
     expect(mockAxios.instance.interceptors.request.use).toHaveBeenCalledTimes(1);
     expect(mockAxios.instance.interceptors.response.use).toHaveBeenCalledTimes(1);
+  });
+
+  it('prefers the Vite /api proxy for local backends during development', async () => {
+    vi.stubEnv('VITE_API_URL', 'http://127.0.0.1:8000');
+    const restoreLocation = swapLocation('http://127.0.0.1:5173/');
+
+    try {
+      await loadApiModule();
+
+      expect(mockAxios.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseURL: '/api',
+        }),
+      );
+    } finally {
+      restoreLocation();
+    }
   });
 
   it('injects auth token for protected routes and skips public routes', async () => {

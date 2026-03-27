@@ -14,9 +14,9 @@ interface LayoutProps {
     onOpenTutorial: () => void;
     onOpenStats: () => void;
     onOpenComparator: () => void;
-    onOpenServices: () => void;
     onOpenModerate: () => void;
     onOpenProfile: () => void;
+    servicesUnavailableReason?: string | null;
     history: HistoryItem[];
     onClearHistory: () => void;
     onRemoveHistory: (term: string) => void;
@@ -34,9 +34,9 @@ export function Layout({
     onOpenTutorial,
     onOpenStats,
     onOpenComparator,
-    onOpenServices,
     onOpenModerate,
     onOpenProfile,
+    servicesUnavailableReason,
     history,
     onClearHistory,
     onRemoveHistory,
@@ -54,9 +54,9 @@ export function Layout({
                 onOpenTutorial={onOpenTutorial}
                 onOpenStats={onOpenStats}
                 onOpenComparator={onOpenComparator}
-                onOpenServices={onOpenServices}
                 onOpenModerate={onOpenModerate}
                 onOpenProfile={onOpenProfile}
+                servicesUnavailableReason={servicesUnavailableReason}
                 history={history}
                 onClearHistory={onClearHistory}
                 onRemoveHistory={onRemoveHistory}

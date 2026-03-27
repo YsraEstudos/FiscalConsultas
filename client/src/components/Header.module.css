@@ -168,6 +168,14 @@
     color: var(--text-primary);
 }
 
+.menuContent .menuButtonDisabled,
+.menuContent .menuButtonDisabled:hover {
+    opacity: 0.55;
+    cursor: not-allowed;
+    background: transparent;
+    color: var(--text-muted);
+}
+
 .menuDivider {
     border: none;
     height: 1px;

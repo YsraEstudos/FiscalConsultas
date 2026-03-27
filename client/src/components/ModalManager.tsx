@@ -9,7 +9,6 @@ const TutorialModal = lazy(() => import('./TutorialModal').then(module => ({ def
 const StatsModal = lazy(() => import('./StatsModal').then(module => ({ default: module.StatsModal })));
 const AIChat = lazy(() => import('./AIChat').then(module => ({ default: module.AIChat })));
 const ComparatorModal = lazy(() => import('./ComparatorModal').then(module => ({ default: module.ComparatorModal })));
-const ServicesModal = lazy(() => import('./ServicesModal').then(module => ({ default: module.ServicesModal })));
 const CrossNavContextMenu = lazy(() => import('./CrossNavContextMenu').then(module => ({ default: module.CrossNavContextMenu })));
 const AdminCommentModal = lazy(() => import('./AdminCommentModal').then(module => ({ default: module.AdminCommentModal })));
 
@@ -21,7 +20,6 @@ interface ModalManagerProps {
         tutorial: boolean;
         stats: boolean;
         comparator: boolean;
-        services: boolean;
         moderate: boolean;
     };
     onClose: {
@@ -29,7 +27,6 @@ interface ModalManagerProps {
         tutorial: () => void;
         stats: () => void;
         comparator: () => void;
-        services: () => void;
         moderate: () => void;
     };
     currentDoc: DocType;
@@ -59,13 +56,6 @@ export const ModalManager: React.FC<ModalManagerProps> = ({
                     isOpen
                     onClose={onClose.comparator}
                     defaultDoc={currentDoc}
-                />
-            )}
-
-            {modals.services && (
-                <ServicesModal
-                    isOpen
-                    onClose={onClose.services}
                 />
             )}
 

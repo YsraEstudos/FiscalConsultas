@@ -18,6 +18,7 @@ import type {
 const refs = vi.hoisted(() => ({
   getNbsServiceDetailMock: vi.fn(),
   getNebsEntryDetailMock: vi.fn(),
+  toastErrorMock: vi.fn(),
 }));
 
 vi.mock('../../src/services/api', () => ({
@@ -33,7 +34,7 @@ vi.mock('../../src/context/SettingsContext', () => ({
 
 vi.mock('react-hot-toast', () => ({
   toast: {
-    error: vi.fn(),
+    error: refs.toastErrorMock,
   },
 }));
 
@@ -56,9 +57,13 @@ function makeTab(id: string, doc: ServiceDocType, query: string): HarnessTab {
 function ServicesTabsHarness({
   initialDoc = 'nbs',
   initialQuery = '1.0101.11.00',
+  onContentReady,
+  onOpenDocInNewTab,
 }: Readonly<{
   initialDoc?: ServiceDocType;
   initialQuery?: string;
+  onContentReady?: () => void;
+  onOpenDocInNewTab?: (doc: ServiceDocType, query?: string) => void;
 }>) {
   const [tabs, setTabs] = useState<HarnessTab[]>([makeTab('tab-1', initialDoc, initialQuery)]);
   const [activeTabId, setActiveTabId] = useState('tab-1');
@@ -97,6 +102,8 @@ function ServicesTabsHarness({
         doc={activeTab.doc}
         data={activeTab.data}
         onSwitchDoc={(doc, query) => updateActiveTab(doc, query || '')}
+        onContentReady={onContentReady}
+        onOpenDocInNewTab={onOpenDocInNewTab}
       />
     </div>
   );
@@ -106,8 +113,28 @@ describe('services tabs flow', () => {
   beforeEach(() => {
     refs.getNbsServiceDetailMock.mockReset();
     refs.getNebsEntryDetailMock.mockReset();
+    refs.toastErrorMock.mockReset();
     refs.getNbsServiceDetailMock.mockResolvedValue(makeNbsDetail());
     refs.getNebsEntryDetailMock.mockResolvedValue(makeNebsDetail());
+  });
+
+  it('loads the first detail automatically and signals when the workspace is ready', async () => {
+    const onContentReady = vi.fn();
+
+    render(
+      <ServicesTabsHarness
+        initialDoc="nbs"
+        initialQuery="1.0101.11.00"
+        onContentReady={onContentReady}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(refs.getNbsServiceDetailMock).toHaveBeenCalledWith('1.0101.11.00');
+    });
+
+    expect(await screen.findByText('Status NEBS')).toBeInTheDocument();
+    expect(onContentReady).toHaveBeenCalledTimes(1);
   });
 
   it('switches from NBS results to NEBS results in the same tab', async () => {
@@ -153,5 +180,44 @@ describe('services tabs flow', () => {
     await waitFor(() => {
       expect(screen.getByTestId('active-tab-meta')).toHaveTextContent('nbs:1.0101.11.00');
     });
+  });
+
+  it('opens the related service in a new tab when the action is available', async () => {
+    const onOpenDocInNewTab = vi.fn();
+
+    render(
+      <ServicesTabsHarness
+        initialDoc="nebs"
+        initialQuery="1.0101.11.00"
+        onOpenDocInNewTab={onOpenDocInNewTab}
+      />,
+    );
+
+    await screen.findByRole('button', { name: 'Abrir NBS em nova aba' });
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir NBS em nova aba' }));
+
+    expect(onOpenDocInNewTab).toHaveBeenCalledWith('nbs', '1.0101.11.00');
+  });
+
+  it('maps detail failures with the shared catalog copy instead of a generic toast', async () => {
+    refs.getNbsServiceDetailMock.mockRejectedValueOnce({
+      isAxiosError: true,
+      response: { status: 503 },
+    });
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      render(<ServicesTabsHarness initialDoc="nbs" initialQuery="1.0101.11.00" />);
+
+      await waitFor(() => {
+        expect(refs.toastErrorMock).toHaveBeenCalledWith(
+          'Catálogo de serviços indisponível no momento. Tente novamente em instantes.',
+        );
+      });
+
+      expect(screen.getByText('Selecione um servico')).toBeInTheDocument();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 });

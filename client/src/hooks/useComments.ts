@@ -16,22 +16,11 @@ import type { CommentOut, CommentCreatePayload } from '../services/commentServic
 import type { LocalComment, PendingCommentEntry } from '../components/CommentPanel';
 import toast from 'react-hot-toast';
 import axios from 'axios';
+import { getApiErrorDetail, isLanHostInDev } from '../utils/apiError';
 
 const COMMENTED_ANCHORS_TTL_MS = 60_000;
 let commentedAnchorsCache: { value: string[]; expiresAt: number } | null = null;
 let commentedAnchorsInFlightPromise: Promise<string[]> | null = null;
-
-function getApiErrorDetail(error: unknown): string | null {
-    if (!axios.isAxiosError(error)) return null;
-    const detail = (error.response?.data as { detail?: unknown } | undefined)?.detail;
-    return typeof detail === 'string' ? detail : null;
-}
-
-function isLanHostInDev(): boolean {
-    if (!import.meta.env.DEV || typeof window === 'undefined') return false;
-    const host = window.location.hostname;
-    return host !== 'localhost' && host !== '127.0.0.1';
-}
 
 /** Converte CommentOut (snake_case, ISO strings) → LocalComment (camelCase, Date). */
 function apiToLocal(c: CommentOut, fallbackAnchorTop: number): LocalComment {

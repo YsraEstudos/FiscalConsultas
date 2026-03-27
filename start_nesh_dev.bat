@@ -2,6 +2,8 @@
 setlocal EnableExtensions EnableDelayedExpansion
 chcp 65001 >nul
 cd /d "%~dp0"
+set "PYTHONUTF8=1"
+set "PYTHONIOENCODING=utf-8"
 
 set "ENABLE_REBUILD=0"
 set "ENABLE_AUTH_DEBUG=0"
@@ -162,6 +164,44 @@ if errorlevel 1 (
     goto fail
 )
 
+echo.
+echo [5.0/9] Liberando o banco SQLite local...
+call :stop_listener_port 8000 backend
+
+echo.
+echo [5.1/9] Validando base NESH local...
+call uv run python scripts\setup_database.py
+if errorlevel 1 (
+    set "FAIL_REASON=Falha ao validar/reconstruir database\\nesh.db a partir da fonte oficial."
+    goto fail
+)
+
+echo.
+echo [5.2/9] Aplicando migracoes Alembic...
+call uv run alembic upgrade head
+if errorlevel 1 (
+    set "FAIL_REASON=Falha ao aplicar alembic upgrade head."
+    goto fail
+)
+
+echo.
+echo [5.3/9] Verificando necessidade de sincronizar catalogos fiscais...
+call uv run python scripts\migrate_to_postgres.py --check-needed
+set "CATALOG_SYNC_EXIT=!errorlevel!"
+if "!CATALOG_SYNC_EXIT!"=="10" (
+    echo [INFO] Alteracoes detectadas nas fontes. Sincronizando catalogos no PostgreSQL...
+    call uv run python scripts\migrate_to_postgres.py
+    if errorlevel 1 (
+        set "FAIL_REASON=Falha ao sincronizar NESH, TIPI, NBS e NEBS no PostgreSQL."
+        goto fail
+    )
+) else if "!CATALOG_SYNC_EXIT!"=="0" (
+    echo [INFO] Fontes inalteradas e catalogos ja carregados. Pulando sincronizacao.
+) else (
+    set "FAIL_REASON=Falha ao verificar necessidade de sincronizacao dos catalogos (exit !CATALOG_SYNC_EXIT!)."
+    goto fail
+)
+
 if "!ENABLE_REBUILD!"=="1" (
     echo.
     echo [5.5/9] Recriando bancos de dados...
@@ -179,6 +219,7 @@ if "!ENABLE_REBUILD!"=="1" (
 
 echo.
 echo [6/9] Iniciando Backend...
+call :stop_listener_port 8000 backend
 start "Nesh Backend Server" cmd /k "uv run Nesh.py"
 
 echo.
@@ -205,6 +246,7 @@ if "!NEED_INSTALL!"=="1" (
 
 echo.
 echo [8/9] Iniciando Frontend com Hot Reload...
+call :stop_listener_port 5173 frontend
 start "Nesh Client (Dev)" cmd /k "cd /d "%~dp0client" && !FRONTEND_BOOT_CMD!"
 cd ..
 
@@ -213,7 +255,7 @@ echo [9/9] Validando se os servicos subiram...
 call :wait_http_ready "http://127.0.0.1:8000/api/status" 35
 if errorlevel 1 (
     set "CHK_BACKEND_HEALTH=FALHA"
-    set "FAIL_REASON=Backend nao respondeu em /api/status."
+    set "FAIL_REASON=Backend nao ficou pronto com todos os catalogos online em /api/status."
     goto fail
 )
 set "CHK_BACKEND_HEALTH=OK"
@@ -279,7 +321,7 @@ set "TARGET_URL=%~1"
 set /a MAX_ATTEMPTS=%~2
 if "%MAX_ATTEMPTS%"=="" set /a MAX_ATTEMPTS=30
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$url='%TARGET_URL%'; $max=%MAX_ATTEMPTS%; $ok=$false; for($i=0; $i -lt $max; $i++){ try { $resp=Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 2; if($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500){ $ok=$true; break } } catch {}; Start-Sleep -Milliseconds 900 }; if($ok){ exit 0 } else { exit 1 }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$url='%TARGET_URL%'; $max=%MAX_ATTEMPTS%; $ok=$false; for($i=0; $i -lt $max; $i++){ try { $resp=Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 2; if($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500){ $json=$null; try { $json = $resp.Content | ConvertFrom-Json } catch {}; if($null -eq $json){ $ok=$true; break }; if($json.status -eq 'online'){ $ok=$true; break } } } catch {}; Start-Sleep -Milliseconds 900 }; if($ok){ exit 0 } else { exit 1 }"
 if errorlevel 1 exit /b 1
 exit /b 0
 
@@ -290,6 +332,13 @@ if "%MAX_ATTEMPTS%"=="" set /a MAX_ATTEMPTS=40
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$port=%TARGET_PORT%; $max=%MAX_ATTEMPTS%; $ok=$false; for($i=0; $i -lt $max; $i++){ try { $client=New-Object System.Net.Sockets.TcpClient; $iar=$client.BeginConnect('127.0.0.1',$port,$null,$null); if($iar.AsyncWaitHandle.WaitOne(700,$false) -and $client.Connected){ $client.EndConnect($iar); $client.Close(); $ok=$true; break } $client.Close() } catch {}; Start-Sleep -Milliseconds 700 }; if($ok){ exit 0 } else { exit 1 }"
 if errorlevel 1 exit /b 1
+exit /b 0
+
+:stop_listener_port
+set "TARGET_PORT=%~1"
+set "TARGET_LABEL=%~2"
+if "%TARGET_PORT%"=="" exit /b 0
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$port=%TARGET_PORT%; $label='%TARGET_LABEL%'; $procIds = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; if ($procIds) { Write-Host ('[INFO] Encerrando listener existente na porta ' + $port + ' (' + $label + ')...'); foreach ($procId in $procIds) { try { Stop-Process -Id $procId -Force -ErrorAction Stop } catch {} } Start-Sleep -Milliseconds 600 }"
 exit /b 0
 
 :print_checklist

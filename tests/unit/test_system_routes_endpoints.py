@@ -55,6 +55,17 @@ class _FakeTipiService:
         return {"cache": "tipi"}
 
 
+class _FakeNbsService:
+    def __init__(self, payload=None, error: Exception | None = None):
+        self.payload = payload or {}
+        self.error = error
+
+    async def check_connection(self):  # NOSONAR
+        if self.error:
+            raise self.error
+        return self.payload
+
+
 class _FakeNeshService:
     def __init__(self, response):
         self.response = response
@@ -80,6 +91,13 @@ async def test_get_status_uses_app_state_services_when_available():
             "tipi_service": _FakeTipiService(
                 {"ok": True, "chapters": "3", "positions": "4"}
             ),
+            "nbs_service": _FakeNbsService(
+                {
+                    "status": "online",
+                    "nbs_items": "6",
+                    "nebs_entries": "2",
+                }
+            ),
         },
         version="9.9.9",
     )
@@ -90,6 +108,9 @@ async def test_get_status_uses_app_state_services_when_available():
     assert payload["database"]["status"] == "online"
     assert payload["database"]["latency_ms"] >= 0
     assert payload["tipi"]["status"] == "online"
+    assert payload["nbs"]["status"] == "online"
+    assert payload["nebs"]["status"] == "online"
+    assert payload["catalogs"]["nesh"]["status"] == "online"
     assert "version" not in payload
     assert "chapters" not in payload["database"]
 
@@ -116,13 +137,24 @@ async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypat
         yield _Session()
 
     monkeypatch.setattr(db_engine, "get_session", _fake_get_session)
-    request = _build_request("/api/status", state={"db": None, "tipi_service": None})
+    request = _build_request(
+        "/api/status",
+        state={
+            "db": None,
+            "tipi_service": _FakeTipiService({"ok": True, "chapters": "2", "positions": "7"}),
+            "nbs_service": _FakeNbsService(
+                {"status": "online", "nbs_items": "10", "nebs_entries": "3"}
+            ),
+        },
+    )
 
     payload = await system.get_status(request)
 
+    assert payload["status"] == "online"
     assert payload["database"]["status"] == "online"
-    assert payload["tipi"]["status"] == "error"
-    assert "error" not in payload["tipi"]
+    assert payload["tipi"]["status"] == "online"
+    assert payload["nbs"]["status"] == "online"
+    assert payload["nebs"]["status"] == "online"
 
 
 @pytest.mark.asyncio
@@ -141,6 +173,7 @@ async def test_get_status_handles_db_and_tipi_exceptions(monkeypatch):
         state={
             "db": None,
             "tipi_service": _FakeTipiService(error=RuntimeError("tipi down")),
+            "nbs_service": _FakeNbsService(error=RuntimeError("nbs down")),
         },
     )
 
@@ -149,6 +182,8 @@ async def test_get_status_handles_db_and_tipi_exceptions(monkeypatch):
     assert payload["status"] == "error"
     assert payload["database"]["status"] == "error"
     assert payload["tipi"]["status"] == "error"
+    assert payload["nbs"]["status"] == "error"
+    assert payload["nebs"]["status"] == "error"
     assert "error" not in payload["database"]
     assert "error" not in payload["tipi"]
 
@@ -164,7 +199,23 @@ async def test_get_status_details_returns_sensitive_fields_for_admin(monkeypatch
         state={
             "db": _FakeDb({"status": "online", "chapters": "5", "positions": "9"}),
             "tipi_service": _FakeTipiService(
-                {"ok": True, "chapters": "3", "positions": "4"}
+                {
+                    "ok": True,
+                    "chapters": "3",
+                    "positions": "4",
+                    "metadata": {"tipi_updated_at": "2026-03-25T10:00:00+00:00"},
+                }
+            ),
+            "nbs_service": _FakeNbsService(
+                {
+                    "status": "online",
+                    "nbs_items": "6",
+                    "nebs_entries": "2",
+                    "metadata": {
+                        "nbs_updated_at": "2026-03-25T10:00:00+00:00",
+                        "nebs_updated_at": "2026-03-25T10:05:00+00:00",
+                    },
+                }
             ),
         },
         version="9.9.9",
@@ -178,6 +229,10 @@ async def test_get_status_details_returns_sensitive_fields_for_admin(monkeypatch
     assert payload["database"]["chapters"] == 5
     assert payload["database"]["positions"] == 9
     assert payload["tipi"]["chapters"] == 3
+    assert payload["nbs"]["items"] == 6
+    assert payload["nebs"]["entries"] == 2
+    assert payload["catalogs"]["nbs"]["status"] == "online"
+    assert payload["catalogs"]["nebs"]["metadata"]["updated_at"] == "2026-03-25T10:05:00+00:00"
 
 
 @pytest.mark.asyncio

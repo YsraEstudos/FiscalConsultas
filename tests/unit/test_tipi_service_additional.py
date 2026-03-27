@@ -78,6 +78,34 @@ class _FakeRepo:
         return [{"codigo": "85", "titulo": "Capítulo 85", "secao": "XVI"}]
 
 
+class _FakeScalarResult:
+    def __init__(self, scalar_value=None, rows=None):
+        self._scalar_value = scalar_value
+        self._rows = rows or []
+
+    def scalar(self):
+        return self._scalar_value
+
+    def __iter__(self):
+        return iter(self._rows)
+
+
+class _FakeHealthRepo:
+    def __init__(self):
+        self.session = self
+        self._calls = 0
+
+    async def execute(self, _query):
+        self._calls += 1
+        if self._calls == 1:
+            return _FakeScalarResult(12)
+        if self._calls == 2:
+            return _FakeScalarResult(345)
+        return _FakeScalarResult(
+            rows=[type("Row", (), {"key": "tipi_updated_at", "value": "2026-03-25T10:00:00+00:00"})()]
+        )
+
+
 @pytest.mark.asyncio
 async def test_create_with_repository_raises_when_repo_unavailable(monkeypatch):
     monkeypatch.setattr(tipi_module, "_REPO_AVAILABLE", False)
@@ -234,6 +262,18 @@ async def test_check_connection_returns_error_when_query_fails(tmp_path, monkeyp
 
     assert payload["ok"] is False
     assert "db broken" in payload["error"]
+
+
+@pytest.mark.asyncio
+async def test_check_connection_repository_mode_returns_counts_and_metadata():
+    service = TipiService(repository=_FakeHealthRepo())
+
+    payload = await service.check_connection()
+
+    assert payload["status"] == "online"
+    assert payload["chapters"] == 12
+    assert payload["positions"] == 345
+    assert payload["metadata"]["tipi_updated_at"] == "2026-03-25T10:00:00+00:00"
 
 
 @pytest.mark.asyncio

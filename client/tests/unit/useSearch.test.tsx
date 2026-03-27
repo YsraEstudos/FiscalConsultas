@@ -8,7 +8,9 @@ import { searchNCM, searchTipi } from '../../src/services/api';
 
 vi.mock('../../src/services/api', () => ({
     searchNCM: vi.fn(),
-    searchTipi: vi.fn()
+    searchTipi: vi.fn(),
+    searchNbsServices: vi.fn(),
+    searchNebsEntries: vi.fn(),
 }));
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (

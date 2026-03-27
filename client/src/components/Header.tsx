@@ -28,9 +28,9 @@ interface HeaderProps {
     onOpenTutorial: () => void;
     onOpenStats: () => void;
     onOpenComparator: () => void;
-    onOpenServices: () => void;
     onOpenModerate: () => void;
     onOpenProfile: () => void;
+    servicesUnavailableReason?: string | null;
     history: HistoryItem[];
     onClearHistory: () => void;
     onRemoveHistory: (term: string) => void;
@@ -47,9 +47,9 @@ export function Header({
     onOpenTutorial,
     onOpenStats,
     onOpenComparator,
-    onOpenServices,
     onOpenModerate,
     onOpenProfile,
+    servicesUnavailableReason = null,
     history,
     onClearHistory,
     onRemoveHistory,
@@ -174,9 +174,18 @@ export function Header({
                         <button onClick={() => { setIsMenuOpen(false); onOpenComparator(); }}>
                             <span>⚖️</span> Comparar NCMs
                         </button>
-                        <button onClick={() => { setIsMenuOpen(false); onOpenServices(); }}>
-                            <span>🧭</span> Serviços (NBS)
-                        </button>
+                        {!isServiceDoc && (
+                            <>
+                                <button 
+                                    onClick={() => { setIsMenuOpen(false); setDoc('nbs'); }}
+                                    disabled={Boolean(servicesUnavailableReason)}
+                                    className={servicesUnavailableReason ? styles.menuButtonDisabled : ''}
+                                    title={servicesUnavailableReason ?? undefined}
+                                >
+                                    <span>🧭</span> {servicesUnavailableReason ? 'Serviços (NBS) indisponível' : 'Serviços (NBS)'}
+                                </button>
+                            </>
+                        )}
                         <div className={styles.menuDivider}></div>
                         <button onClick={() => { setIsMenuOpen(false); onOpenSettings(); }}>
                             <span>⚙️</span> Configurações

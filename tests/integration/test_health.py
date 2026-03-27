@@ -23,6 +23,8 @@ def test_status_endpoint(client):
         "online"
         if data.get("database", {}).get("status") == "online"
         and data.get("tipi", {}).get("status") == "online"
+        and data.get("nbs", {}).get("status") == "online"
+        and data.get("nebs", {}).get("status") == "online"
         else "error"
     )
     assert data.get("status") == expected_global, (
@@ -36,6 +38,10 @@ def test_status_endpoint(client):
     assert "error" not in data["database"]
     assert "ok" not in data.get("tipi", {})
     assert "error" not in data.get("tipi", {})
+    assert "items" not in data.get("nbs", {})
+    assert "entries" not in data.get("nebs", {})
+    assert "catalogs" in data
+    assert set(data["catalogs"].keys()) == {"nesh", "tipi", "nbs", "nebs"}
 
 
 def test_status_details_requires_admin(client):
@@ -56,6 +62,9 @@ def test_status_details_returns_internal_data_for_admin(client, monkeypatch):
     assert data["backend"] == "FastAPI"
     assert "chapters" in data["database"]
     assert "positions" in data["database"]
+    assert "items" in data["nbs"]
+    assert "entries" in data["nebs"]
+    assert "catalogs" in data
 
 
 def test_status_endpoint_returns_retry_after_when_rate_limited(client, monkeypatch):

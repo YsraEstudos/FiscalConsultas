@@ -9,14 +9,16 @@ import type { Tab } from '../../src/hooks/useTabs';
 const refs = vi.hoisted(() => ({
   searchNCMMock: vi.fn(),
   searchTipiMock: vi.fn(),
+  searchNbsServicesMock: vi.fn(),
+  searchNebsEntriesMock: vi.fn(),
   toastErrorMock: vi.fn(),
 }));
 
 vi.mock('../../src/services/api', () => ({
   searchNCM: refs.searchNCMMock,
   searchTipi: refs.searchTipiMock,
-  searchNbsServices: vi.fn(),
-  searchNebsEntries: vi.fn(),
+  searchNbsServices: refs.searchNbsServicesMock,
+  searchNebsEntries: refs.searchNebsEntriesMock,
 }));
 
 vi.mock('react-hot-toast', () => ({
@@ -56,6 +58,8 @@ describe('useSearch behavior', () => {
   beforeEach(() => {
     refs.searchNCMMock.mockReset();
     refs.searchTipiMock.mockReset();
+    refs.searchNbsServicesMock.mockReset();
+    refs.searchNebsEntriesMock.mockReset();
     refs.toastErrorMock.mockReset();
     localStorage.clear();
   });
@@ -186,6 +190,45 @@ describe('useSearch behavior', () => {
 
       await act(async () => {
         await result.current.executeSearchForTab('tab-1', 'nesh', '8517', true);
+      });
+
+      expect(refs.toastErrorMock).toHaveBeenCalledWith(message);
+      expect(updateTab).toHaveBeenNthCalledWith(2, 'tab-1', {
+        error: message,
+        loading: false,
+      });
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  it.each([
+    ['nbs', 'Token ausente', 'Faça login para acessar o catálogo de serviços.'],
+    ['nebs', 'Token inválido ou expirado', 'Sua sessão expirou. Faça login novamente para acessar o catálogo de serviços.'],
+  ])('uses the shared catalog error mapper for %s tabs', async (doc, detail, message) => {
+    const updateTab = vi.fn();
+    const addToHistory = vi.fn();
+    const tabsById = new Map([[
+      'tab-1',
+      createTab({ document: doc as Tab['document'] }),
+    ]]);
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = {
+      isAxiosError: true,
+      response: { status: 401, data: { detail } },
+    };
+
+    if (doc === 'nbs') {
+      refs.searchNbsServicesMock.mockRejectedValue(error);
+    } else {
+      refs.searchNebsEntriesMock.mockRejectedValue(error);
+    }
+
+    try {
+      const { result } = renderHook(() => useSearch(tabsById, updateTab, addToHistory), { wrapper });
+
+      await act(async () => {
+        await result.current.executeSearchForTab('tab-1', doc as Tab['document'], '1.0101.11.00', true);
       });
 
       expect(refs.toastErrorMock).toHaveBeenCalledWith(message);

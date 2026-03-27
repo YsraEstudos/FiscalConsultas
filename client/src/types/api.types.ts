@@ -188,17 +188,13 @@ export interface NebsEntry {
     code: string;
     code_clean: string;
     title: string;
-    title_normalized: string;
     body_text: string;
     body_markdown: string | null;
+    title_normalized: string;
     body_normalized: string;
     section_title: string | null;
     page_start: number;
     page_end: number;
-    parser_status: 'trusted' | 'suspect' | 'rejected';
-    parse_warnings: string | null;
-    source_hash: string;
-    updated_at: string;
 }
 
 export interface NebsSearchItem {
@@ -274,16 +270,32 @@ export interface DatabaseStatus {
     chapters?: number;
     positions?: number;
     latency_ms?: number;
+    items?: number;
+    entries?: number;
+    metadata?: Record<string, string>;
     error?: string;
+}
+
+export interface SystemCatalogStatus {
+    status: 'online' | 'error';
+    latency_ms?: number;
 }
 
 /** Status do sistema */
 export interface SystemStatusResponse {
     status: 'online' | 'error';
-    version: string;
-    backend: string;
+    version?: string;
+    backend?: string;
     database: DatabaseStatus;
     tipi: DatabaseStatus;
+    nbs?: DatabaseStatus;
+    nebs?: DatabaseStatus;
+    catalogs?: {
+        nesh: SystemCatalogStatus;
+        tipi: SystemCatalogStatus;
+        nbs: SystemCatalogStatus;
+        nebs: SystemCatalogStatus;
+    };
 }
 
 /** Login response */

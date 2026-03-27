@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Tuple, cast
 
 import aiosqlite
+from sqlalchemy import text
 
 from ..config.constants import CacheConfig
 from ..config.exceptions import DatabaseError
@@ -237,6 +238,42 @@ class TipiService:
 
     async def check_connection(self) -> Dict[str, Any]:
         """Verifica status do banco TIPI."""
+        if self._use_repository:
+            try:
+                async with self._get_repo() as repo:
+                    if repo is None:
+                        raise RuntimeError("TIPI repository unavailable")
+
+                    chapters_result = await repo.session.execute(
+                        text("SELECT COUNT(DISTINCT chapter_num) FROM tipi_positions")
+                    )
+                    positions_result = await repo.session.execute(
+                        text("SELECT COUNT(*) FROM tipi_positions")
+                    )
+                    metadata_result = await repo.session.execute(
+                        text(
+                            """
+                            SELECT key, value
+                            FROM catalog_metadata
+                            WHERE key LIKE 'tipi_%'
+                            ORDER BY key
+                            """
+                        )
+                    )
+
+                chapters = int(chapters_result.scalar() or 0)
+                positions = int(positions_result.scalar() or 0)
+                metadata = {row.key: row.value for row in metadata_result}
+                return {
+                    "status": "online" if chapters > 0 and positions > 0 else "error",
+                    "chapters": chapters,
+                    "positions": positions,
+                    "metadata": metadata,
+                }
+            except Exception as e:
+                logger.error(f"TIPI repository healthcheck failed: {e}")
+                return {"status": "error", "error": str(e)}
+
         if not self.db_path.exists():
             # We return a status dict here because often this is used for diagnostic
             # but raising DatabaseError is also fine if caught by the status endpoint.

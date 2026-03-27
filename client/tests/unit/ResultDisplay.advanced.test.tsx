@@ -449,6 +449,65 @@ describe('ResultDisplay advanced behavior', () => {
     expect(onConsumeNewSearch).toHaveBeenCalledTimes(1);
   });
 
+  it('waits for the target anchor before enabling robust auto-scroll on chunked renders', async () => {
+    const pendingIdleCallbacks: Array<(deadline: { didTimeout: boolean; timeRemaining: () => number }) => void> = [];
+    const longChunk = 'x'.repeat(51000);
+    requestIdleCallbackMock.mockImplementation((cb: any) => {
+      pendingIdleCallbacks.push(cb);
+      return pendingIdleCallbacks.length;
+    });
+
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '840810',
+          markdown: `<p>${longChunk}</p><hr><h3 id="pos-84-08">84.08 - Bombas</h3>`,
+          resultados: {
+            '84': {
+              capitulo: '84',
+              posicao_alvo: '84.08',
+              posicoes: [{ codigo: '84.08', anchor_id: 'pos-84-08', descricao: 'Bombas' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-autoscroll-chunked"
+        isNewSearch={true}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(hoisted.robustCallsRef.value.length).toBeGreaterThan(0);
+    });
+
+    expect(pendingIdleCallbacks.length).toBeGreaterThan(0);
+    expect(
+      hoisted.robustCallsRef.value.some((call) => call.shouldScroll === true),
+    ).toBe(false);
+
+    await act(async () => {
+      pendingIdleCallbacks.forEach((callback) => {
+        callback({ didTimeout: false, timeRemaining: () => 20 });
+      });
+    });
+
+    await waitFor(() => {
+      expect(document.getElementById('pos-84-08')).not.toBeNull();
+      expect(
+        hoisted.robustCallsRef.value.some(
+          (call) => call.shouldScroll === true
+            && (Array.isArray(call.targetId)
+              ? call.targetId.includes('pos-84-08')
+              : call.targetId === 'pos-84-08'),
+        ),
+      ).toBe(true);
+    });
+  });
+
   it('keeps robust auto-scroll enabled as a fallback when a text query also activates SearchHighlighter', async () => {
     render(
       <ResultDisplay

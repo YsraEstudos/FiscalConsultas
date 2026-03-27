@@ -190,6 +190,55 @@ jobs:
 
 *Tirar tudo do localhost e colocar na nuvem.*
 
+### Guia para Iniciantes: o que o script start_nesh_dev.bat faz (e o que nao faz)
+
+- O script de desenvolvimento ajuda a validar o ambiente local, subir Docker, iniciar backend/frontend e checar se os servicos responderam.
+- Isso e excelente para desenvolvimento e testes na sua maquina.
+- Isso nao substitui deploy de producao para usuarios reais.
+
+Em resumo:
+
+- Ambiente local (dev): start_nesh_dev.bat.
+- Ambiente publico (producao): plataforma de deploy + dominio + HTTPS + variaveis seguras + monitoramento.
+
+### Checklist de Publicacao (passo a passo simples)
+
+- [ ] **[Infra] Separar ambiente de Producao do ambiente local**
+  - Criar variaveis de ambiente de producao (sem debug, sem valores de teste).
+  - Garantir que nenhuma chave fique hardcoded no repositorio.
+- [ ] **[Backend] Build e execucao de Producao**
+  - Rodar o backend por Dockerfile ou processo gerenciado (nao usar servidor de desenvolvimento).
+  - Configurar restart automatico e logs persistentes.
+- [ ] **[Frontend] Build estatico de Producao**
+  - Gerar build com Vite e publicar artefatos estaticos em plataforma de frontend.
+  - Configurar URL do backend via variavel de ambiente do frontend.
+- [ ] **[Infra] Banco PostgreSQL gerenciado + backup**
+  - Usar banco gerenciado (Neon, Railway, Render, etc.) com backup automatico.
+  - Aplicar migracoes Alembic no ambiente de producao.
+- [ ] **[Seguranca] Dominio + HTTPS + CORS correto**
+  - Apontar dominio do frontend e backend.
+  - Ativar TLS/HTTPS obrigatorio.
+  - Restringir CORS para os dominios oficiais da aplicacao.
+- [ ] **[Ops] Healthcheck e observabilidade minima**
+  - Manter endpoint de status ativo.
+  - Centralizar logs e acompanhar erros de inicializacao/rotas criticas.
+- [ ] **[QA] Teste final antes de abrir para usuarios**
+  - Validar login, fluxo principal de busca, webhook Asaas e erros comuns.
+  - Confirmar tempo de resposta aceitavel em cenarios reais.
+
+### Rota recomendada (mais facil para iniciantes)
+
+- Frontend: Vercel ou Netlify.
+- Backend: Render, Railway ou Fly.io.
+- Banco: PostgreSQL gerenciado.
+
+Sequencia sugerida:
+
+- Publicar backend e validar endpoint de status.
+- Publicar frontend apontando para a URL publica do backend.
+- Configurar dominio e HTTPS.
+- Executar checklist de QA e liberar para usuarios.
+
 - [ ] **[Backend] Criar `Dockerfile` otimizado**
 - [ ] **[Infra] Setup do Banco PostgreSQL gerenciado (Neon/Railway)**
 - [ ] **[Infra] Deploy do Backend (Railway/Render)**

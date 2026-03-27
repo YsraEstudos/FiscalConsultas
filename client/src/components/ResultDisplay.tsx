@@ -347,8 +347,6 @@ interface ResultDisplayProps {
     onContentReady?: (tabId: string) => void;
 }
 
-type TargetState = string | string[] | null;
-
 type MarkupRenderRefs = {
     contentRef: React.RefObject<HTMLDivElement | null>;
     renderedMarkupKeyRef: React.MutableRefObject<string | null>;
@@ -390,10 +388,6 @@ function appendMarkupChunk(container: HTMLElement, htmlChunk: string) {
 
 function normalizeDigits(value: string): string {
     return value.replace(/\D/g, '');
-}
-
-function areStringArraysEqual(left: string[], right: string[]): boolean {
-    return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function buildAnchorCandidatesFromDigits(digits: string): string[] {
@@ -670,12 +664,52 @@ function resolveAutoScrollCandidates(
     return Array.from(new Set(candidates));
 }
 
-function getNextTargetState(prev: TargetState, nextCandidates: string[]): TargetState {
-    const prevArray = Array.isArray(prev) ? prev : (prev ? [prev] : []);
-    if (areStringArraysEqual(prevArray, nextCandidates)) {
-        return prev;
+function findExistingTargetElement(container: HTMLElement, targets: string[]): HTMLElement | null {
+    for (const id of targets) {
+        const element = container.querySelector(`#${CSS.escape(id)}`) as HTMLElement | null;
+        if (element) return element;
     }
-    return nextCandidates;
+    return null;
+}
+
+function buildDataNcmTargetValues(candidateNcm: string): string[] {
+    const normalized = normalizeDigits(candidateNcm);
+    if (!normalized) return [];
+
+    const values = new Set<string>([normalized]);
+    if (normalized.length >= 6) {
+        values.add(`${normalized.slice(0, 4)}.${normalized.slice(4, 6)}`);
+    }
+    if (normalized.length >= 8) {
+        values.add(`${normalized.slice(0, 4)}.${normalized.slice(4, 6)}.${normalized.slice(6, 8)}`);
+    }
+    if (normalized.length >= 4) {
+        const positionDigits = normalized.slice(0, 4);
+        values.add(positionDigits);
+        values.add(`${positionDigits.slice(0, 2)}.${positionDigits.slice(2, 4)}`);
+    }
+
+    return Array.from(values);
+}
+
+function ensureTargetAnchorFromDataNcm(
+    container: HTMLElement,
+    candidateNcm: string | null | undefined,
+): HTMLElement | null {
+    for (const value of buildDataNcmTargetValues(candidateNcm || '')) {
+        const element = container.querySelector(`[data-ncm="${value}"]`) as HTMLElement | null;
+        if (!element) continue;
+
+        const anchorCode = value.includes('.')
+            ? value
+            : (value.length === 4 ? `${value.slice(0, 2)}.${value.slice(2, 4)}` : value);
+        if (!element.id) {
+            element.id = generateAnchorId(anchorCode);
+        }
+        return element;
+    }
+
+    return null;
 }
 
 function getNextVisibleAnchorId(entries: IntersectionObserverEntry[]): string | null {
@@ -721,11 +755,11 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     const { userName, userImageUrl, isSignedIn, isLoading: isAuthLoading, userId, userEmail } = useAuth();
     const containerRef = useRef<HTMLDivElement>(null);
     const canUseRestrictedUi = canAccessRestrictedUi(userEmail);
-    const [targetId, setTargetId] = useState<string | string[] | null>(null);
     const latestScrollTopRef = useRef(0);
     const lastPersistedScrollRef = useRef<number | null>(null);
     const [isContentReady, setIsContentReady] = useState(false);
     const [isFullyRendered, setIsFullyRendered] = useState(false);
+    const [isTargetReady, setIsTargetReady] = useState(false);
     const [activeTerm, setActiveTerm] = useState('');
     const [activeAnchorId, setActiveAnchorId] = useState<string | null>(null);
     const containerId = `results-content-${tabId}`;
@@ -1032,23 +1066,53 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         }
     }, []); // Empty dependency array as it only uses refs or DOM APIs
 
-    // Calculate Target ID for Auto-Scroll
-    useEffect(() => {
-        if (!data) return;
+    const targetCandidates = useMemo(() => {
+        if (!data) return null;
 
         const ncmToScroll = resolveNcmToScroll(data);
-        if (ncmToScroll) {
-            const candidates = resolveAutoScrollCandidates(
-                ncmToScroll,
-                codeResults,
-                findAnchorIdForQuery,
-                getPosicaoAlvoFromResultados,
-            );
-            setTargetId(prev => getNextTargetState(prev, candidates));
-        } else {
-            setTargetId(prev => prev ? null : prev);
-        }
+        if (!ncmToScroll) return null;
+
+        return resolveAutoScrollCandidates(
+            ncmToScroll,
+            codeResults,
+            findAnchorIdForQuery,
+            getPosicaoAlvoFromResultados,
+        );
     }, [codeResults, data, findAnchorIdForQuery, getPosicaoAlvoFromResultados]);
+
+    const resolveAutoScrollTargetReadiness = useCallback((container: HTMLElement) => {
+        if (codeResults) {
+            ensureSectionAnchors(codeResults, container);
+        }
+
+        if (!targetCandidates || targetCandidates.length === 0) {
+            return false;
+        }
+
+        if (findExistingTargetElement(container, targetCandidates)) {
+            return true;
+        }
+
+        const posicaoAlvo = codeResults ? getPosicaoAlvoFromResultados(codeResults) : null;
+        const candidateNcm = posicaoAlvo || (data?.ncm || data?.query || '');
+        if (!candidateNcm) {
+            return false;
+        }
+
+        const fallback = ensureTargetAnchorFromDataNcm(container, candidateNcm);
+        if (!fallback) {
+            return false;
+        }
+
+        return !!findExistingTargetElement(container, targetCandidates);
+    }, [
+        codeResults,
+        data?.ncm,
+        data?.query,
+        ensureSectionAnchors,
+        getPosicaoAlvoFromResultados,
+        targetCandidates,
+    ]);
 
     // Stabilize onConsumeNewSearch callback to prevent AutoScroll effect loop
     const onConsumeNewSearchRef = useRef(onConsumeNewSearch);
@@ -1110,14 +1174,20 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         consumeNewSearchScroll(scrollTop);
     }, [consumeNewSearchScroll, isActive, isNewSearch]);
 
-    // Hook handles the heavy lifting (MutationObserver, retries, etc)
+    // `isContentReady` means the tab can render, but auto-scroll only starts
+    // once at least one candidate anchor is actually present in the DOM.
     // Only auto-scroll when:
     // 1. Tab is active
     // 2. This is a NEW search (not returning to existing tab)
     // 3. Let SearchHighlighter take precedence for text-result tabs, but keep anchor scroll as fallback elsewhere
-    const shouldAutoScroll = !!targetId && isActive && isNewSearch && isContentReady && !searchHighlighterOwnsScroll;
+    const shouldAutoScroll = !!targetCandidates?.length
+        && isActive
+        && isNewSearch
+        && isContentReady
+        && !searchHighlighterOwnsScroll
+        && isTargetReady;
     useRobustScroll({
-        targetId,
+        targetId: targetCandidates,
         shouldScroll: shouldAutoScroll,
         containerRef,
         onComplete: handleAutoScrollComplete,
@@ -1228,32 +1298,53 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         }
     }, [codeResults, data?.type, data?.markdown, isActive]);
 
-    // Ensure target anchor exists by using data-ncm as fallback
     useEffect(() => {
-        if (!isContentReady || !containerRef.current || !targetId) return;
-
-        const targets = Array.isArray(targetId) ? targetId : [targetId];
-        const existing = targets.some(id => containerRef.current?.querySelector(`#${CSS.escape(id)}`));
-        if (existing) return;
-
-        const posicaoAlvo = codeResults ? getPosicaoAlvoFromResultados(codeResults) : null;
-        const candidateNcm = posicaoAlvo || (data?.ncm || data?.query || '');
-        if (!candidateNcm) return;
-
-        const normalizedPos = candidateNcm.replace(/\D/g, '');
-        const formattedPos = normalizedPos.length >= 4
-            ? `${normalizedPos.slice(0, 2)}.${normalizedPos.slice(2, 4)}`
-            : candidateNcm;
-
-        const byDataNcm = containerRef.current.querySelector(`[data-ncm="${formattedPos}"]`) as HTMLElement | null;
-        if (byDataNcm) {
-            const id = generateAnchorId(formattedPos);
-            if (!byDataNcm.id) {
-                byDataNcm.id = id;
-            }
-            setTargetId(id);
+        if (!isContentReady || !containerRef.current || !targetCandidates?.length) {
+            setIsTargetReady(false);
+            return;
         }
-    }, [codeResults, data?.ncm, data?.query, getPosicaoAlvoFromResultados, isContentReady, targetId]);
+
+        let cancelled = false;
+        let observer: MutationObserver | null = null;
+        const container = containerRef.current;
+
+        const syncReadiness = () => {
+            const ready = resolveAutoScrollTargetReadiness(container);
+            if (!cancelled) {
+                setIsTargetReady(ready);
+            }
+            return ready;
+        };
+
+        if (syncReadiness()) {
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        if (!isFullyRendered) {
+            observer = new MutationObserver(() => {
+                if (syncReadiness()) {
+                    observer?.disconnect();
+                    observer = null;
+                }
+            });
+            observer.observe(container, {
+                childList: true,
+                subtree: true,
+            });
+        }
+
+        return () => {
+            cancelled = true;
+            observer?.disconnect();
+        };
+    }, [
+        isContentReady,
+        isFullyRendered,
+        resolveAutoScrollTargetReadiness,
+        targetCandidates,
+    ]);
 
     // Ensure structured section anchors exist for sidebar navigation/highlight syncing.
     useEffect(() => {

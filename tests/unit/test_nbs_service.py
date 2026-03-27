@@ -168,6 +168,62 @@ def _seed_services_db(db_path: Path) -> None:
     conn.close()
 
 
+class _FakeNbsRepo:
+    async def get_catalog_counts(self):
+        return {"nbs_items": 12, "nebs_entries": 4}
+
+    async def get_catalog_metadata(self):
+        return {
+            "nbs_updated_at": "2026-03-25T10:00:00+00:00",
+            "nebs_updated_at": "2026-03-25T10:05:00+00:00",
+        }
+
+    async def search(self, _query: str, limit: int = 50):
+        del limit
+        return [
+            {
+                "code": "1.01",
+                "code_clean": "101",
+                "description": "Serviços de construção",
+                "parent_code": None,
+                "level": 0,
+                "has_nebs": True,
+            }
+        ]
+
+    async def get_item_details(self, _code: str):
+        return {
+            "success": True,
+            "item": {"code": "1.01"},
+            "ancestors": [],
+            "children": [],
+            "chapter_root": {"code": "1.01"},
+            "chapter_items": [{"code": "1.01"}],
+            "nebs": None,
+        }
+
+    async def search_nebs(self, _query: str, limit: int = 50):
+        del limit
+        return [
+            {
+                "code": "1.01",
+                "title": "Serviços de construção",
+                "excerpt": "Trecho público",
+                "page_start": 1,
+                "page_end": 2,
+                "section_title": "SEÇÃO I",
+            }
+        ]
+
+    async def get_nebs_details(self, _code: str):
+        return {
+            "success": True,
+            "item": {"code": "1.01"},
+            "ancestors": [],
+            "entry": {"code": "1.01", "body_text": "Trecho público"},
+        }
+
+
 def _seed_services_db_with_custom_root(
     db_path: Path, root_code: str, root_description: str
 ) -> None:
@@ -450,3 +506,27 @@ async def test_async_context_manager_closes_pool_on_exit(tmp_path: Path):
         assert len(service._pool) > 0
 
     assert service._pool == []
+
+
+@pytest.mark.asyncio
+async def test_repository_mode_wraps_search_payload():
+    service = NbsService(repository=_FakeNbsRepo())
+
+    payload = await service.search("1.01")
+
+    assert payload["success"] is True
+    assert payload["normalized"] == "1.01"
+    assert payload["results"][0]["code"] == "1.01"
+    assert payload["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_repository_mode_check_connection_exposes_counts_and_metadata():
+    service = NbsService(repository=_FakeNbsRepo())
+
+    payload = await service.check_connection()
+
+    assert payload["status"] == "online"
+    assert payload["nbs_items"] == 12
+    assert payload["nebs_entries"] == 4
+    assert payload["metadata"]["nbs_updated_at"] == "2026-03-25T10:00:00+00:00"

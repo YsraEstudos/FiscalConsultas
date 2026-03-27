@@ -7,12 +7,14 @@ import styles from '../../src/components/Header.module.css';
 
 const {
   signOutMock,
+  openSignInMock,
   isSignedInRef,
   userNameRef,
   userEmailRef,
   isAdminRef,
 } = vi.hoisted(() => ({
   signOutMock: vi.fn(),
+  openSignInMock: vi.fn(),
   isSignedInRef: { value: true },
   userNameRef: { value: 'Usuário Teste' as string | null },
   userEmailRef: { value: 'teste@demo.com' as string | null },
@@ -23,7 +25,7 @@ vi.mock('@clerk/react', () => ({
   UserButton: () => <div data-testid="user-button" />,
   OrganizationSwitcher: () => <div data-testid="org-switcher" />,
   SignInButton: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  useClerk: () => ({ signOut: signOutMock }),
+  useClerk: () => ({ signOut: signOutMock, openSignIn: openSignInMock }),
 }));
 
 vi.mock('../../src/components/SearchBar', () => ({
@@ -57,7 +59,6 @@ function renderHeader() {
       onOpenTutorial={vi.fn()}
       onOpenStats={vi.fn()}
       onOpenComparator={vi.fn()}
-      onOpenServices={vi.fn()}
       onOpenModerate={vi.fn()}
       onOpenProfile={vi.fn()}
       history={[]}
@@ -83,6 +84,7 @@ describe('Header', () => {
 
   beforeEach(() => {
     signOutMock.mockReset();
+    openSignInMock.mockReset();
     isSignedInRef.value = true;
     userNameRef.value = 'Usuário Teste';
     userEmailRef.value = 'teste@demo.com';
@@ -103,7 +105,6 @@ describe('Header', () => {
         onOpenTutorial={vi.fn()}
         onOpenStats={vi.fn()}
         onOpenComparator={vi.fn()}
-        onOpenServices={vi.fn()}
         onOpenModerate={vi.fn()}
         onOpenProfile={vi.fn()}
         history={[]}
@@ -136,7 +137,6 @@ describe('Header', () => {
         onOpenTutorial={vi.fn()}
         onOpenStats={vi.fn()}
         onOpenComparator={vi.fn()}
-        onOpenServices={vi.fn()}
         onOpenModerate={vi.fn()}
         onOpenProfile={vi.fn()}
         history={[]}
@@ -153,23 +153,22 @@ describe('Header', () => {
   });
 
   it('opens menu, calls actions and closes when clicking outside', async () => {
+    const setDoc = vi.fn();
     const onOpenSettings = vi.fn();
     const onOpenTutorial = vi.fn();
     const onOpenStats = vi.fn();
     const onOpenComparator = vi.fn();
-    const onOpenServices = vi.fn();
 
     render(
       <Header
         onSearch={vi.fn()}
         doc="tipi"
-        setDoc={vi.fn()}
+        setDoc={setDoc}
         searchKey="search-1"
         onOpenSettings={onOpenSettings}
         onOpenTutorial={onOpenTutorial}
         onOpenStats={onOpenStats}
         onOpenComparator={onOpenComparator}
-        onOpenServices={onOpenServices}
         onOpenModerate={vi.fn()}
         onOpenProfile={vi.fn()}
         history={[]}
@@ -184,7 +183,7 @@ describe('Header', () => {
 
     fireEvent.click(screen.getByText('Comparar NCMs').closest('button') as HTMLButtonElement);
     fireEvent.click(menuButton);
-    fireEvent.click(screen.getByText('Serviços (NBS)').closest('button') as HTMLButtonElement);
+    fireEvent.click(screen.getByRole('button', { name: /Serviços \(NBS\)/ }));
     fireEvent.click(menuButton);
     fireEvent.click(screen.getByText('Configurações').closest('button') as HTMLButtonElement);
     fireEvent.click(menuButton);
@@ -193,7 +192,7 @@ describe('Header', () => {
     fireEvent.click(screen.getByText('Estatísticas').closest('button') as HTMLButtonElement);
 
     expect(onOpenComparator).toHaveBeenCalledTimes(1);
-    expect(onOpenServices).toHaveBeenCalledTimes(1);
+    expect(setDoc).toHaveBeenCalledWith('nbs');
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
     expect(onOpenTutorial).toHaveBeenCalledTimes(1);
     expect(onOpenStats).toHaveBeenCalledTimes(1);
@@ -223,7 +222,6 @@ describe('Header', () => {
         onOpenTutorial={vi.fn()}
         onOpenStats={vi.fn()}
         onOpenComparator={vi.fn()}
-        onOpenServices={vi.fn()}
         onOpenModerate={vi.fn()}
         onOpenProfile={vi.fn()}
         history={[]}
@@ -296,5 +294,39 @@ describe('Header', () => {
     });
 
     expect(screen.queryByText('Confirmar saída')).not.toBeInTheDocument();
+  });
+
+  it('disables the services action when the catalog is offline', () => {
+    const setDoc = vi.fn();
+
+    render(
+      <Header
+        onSearch={vi.fn()}
+        doc="tipi"
+        setDoc={setDoc}
+        searchKey="search-1"
+        onOpenSettings={vi.fn()}
+        onOpenTutorial={vi.fn()}
+        onOpenStats={vi.fn()}
+        onOpenComparator={vi.fn()}
+        onOpenModerate={vi.fn()}
+        onOpenProfile={vi.fn()}
+        servicesUnavailableReason="Catálogo NBS/NEBS indisponível no momento."
+        history={[]}
+        onClearHistory={vi.fn()}
+        onRemoveHistory={vi.fn()}
+        onMenuOpen={vi.fn()}
+      />,
+    );
+
+    openMenu();
+    expect(screen.getByText(/Serviços \(NBS\) indisponível/)).toBeInTheDocument();
+
+    const nbsButton = screen.getByRole('button', { name: /Serviços \(NBS\) indisponível/i });
+
+    expect(nbsButton).toBeDisabled();
+
+    fireEvent.click(nbsButton);
+    expect(setDoc).not.toHaveBeenCalled();
   });
 });

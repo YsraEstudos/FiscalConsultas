@@ -123,7 +123,7 @@ export function useRobustScroll({
           `[RobustScroll] WINNER: ${bestMatch.tagName}#${bestMatch.id}`,
         );
       } else {
-        debug.warn(`[RobustScroll] NO TARGET for: ${targets.join(", ")}`);
+        debug.log(`[RobustScroll] Waiting for target: ${targets.join(", ")}`);
       }
       return bestMatch;
     };
@@ -206,8 +206,6 @@ export function useRobustScroll({
     observer.observe(root, {
       childList: true,
       subtree: true,
-      attributes: true,
-      attributeFilter: ["id", "class"],
     });
 
     // 3. Fallback timeout to stop observing

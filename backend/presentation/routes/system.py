@@ -70,13 +70,18 @@ def _normalize_db_status(raw_stats: dict | None, latency_ms: float) -> dict:
             "error": "Database unavailable",
         }
 
+    chapters = _to_int(raw_stats.get("chapters"))
+    positions = _to_int(raw_stats.get("positions"))
     has_error = raw_stats.get("status") == "error"
     payload = {
-        "status": "error" if has_error else "online",
-        "chapters": _to_int(raw_stats.get("chapters")),
-        "positions": _to_int(raw_stats.get("positions")),
+        "status": "online" if not has_error and chapters > 0 and positions > 0 else "error",
+        "chapters": chapters,
+        "positions": positions,
         "latency_ms": latency_ms,
     }
+    metadata = _extract_prefixed_metadata(raw_stats, "nesh")
+    if metadata:
+        payload["metadata"] = metadata
     if raw_stats.get("error"):
         payload["error"] = str(raw_stats.get("error"))
     return payload
@@ -85,13 +90,60 @@ def _normalize_db_status(raw_stats: dict | None, latency_ms: float) -> dict:
 def _normalize_tipi_status(raw_stats: dict | None) -> dict:
     """Normaliza payload de status da TIPI para o mesmo contrato do banco principal."""
     raw_stats = raw_stats or {}
-    is_online = bool(raw_stats.get("ok") is True or raw_stats.get("status") == "online")
+    chapters = _to_int(raw_stats.get("chapters"))
+    positions = _to_int(raw_stats.get("positions"))
+    is_online = bool(
+        (raw_stats.get("ok") is True or raw_stats.get("status") == "online")
+        and chapters > 0
+        and positions > 0
+    )
 
     payload = {
         "status": "online" if is_online else "error",
-        "chapters": _to_int(raw_stats.get("chapters")),
-        "positions": _to_int(raw_stats.get("positions")),
+        "chapters": chapters,
+        "positions": positions,
     }
+    metadata = _extract_prefixed_metadata(raw_stats, "tipi")
+    if metadata:
+        payload["metadata"] = metadata
+    if raw_stats.get("error"):
+        payload["error"] = str(raw_stats.get("error"))
+    return payload
+
+
+def _extract_prefixed_metadata(raw_stats: dict | None, prefix: str) -> dict[str, str]:
+    metadata = (raw_stats or {}).get("metadata")
+    if not isinstance(metadata, dict):
+        return {}
+
+    prefix_token = f"{prefix}_"
+    return {
+        key.removeprefix(prefix_token): str(value)
+        for key, value in metadata.items()
+        if key.startswith(prefix_token)
+    }
+
+
+def _normalize_count_catalog_status(
+    raw_stats: dict | None,
+    *,
+    count_field: str,
+    metadata_prefix: str,
+    public_count_field: str,
+) -> dict:
+    raw_stats = raw_stats or {}
+    total = _to_int(raw_stats.get(count_field))
+    payload = {
+        "status": (
+            "online"
+            if raw_stats.get("status") != "error" and total > 0
+            else "error"
+        ),
+        public_count_field: total,
+    }
+    metadata = _extract_prefixed_metadata(raw_stats, metadata_prefix)
+    if metadata:
+        payload["metadata"] = metadata
     if raw_stats.get("error"):
         payload["error"] = str(raw_stats.get("error"))
     return payload
@@ -117,10 +169,27 @@ async def _collect_db_status(request: Request) -> tuple[dict, float]:
             positions_count = await session.execute(
                 text("SELECT COUNT(*) FROM positions")
             )
+            metadata: dict[str, str] = {}
+            if settings.database.is_postgres:
+                try:
+                    metadata_result = await session.execute(
+                        text(
+                            """
+                            SELECT key, value
+                            FROM catalog_metadata
+                            WHERE key LIKE 'nesh_%'
+                            ORDER BY key
+                            """
+                        )
+                    )
+                    metadata = {row.key: row.value for row in metadata_result}
+                except Exception:
+                    metadata = {}
         db_stats = {
             "status": "online",
             "chapters": int(chapters_count.scalar() or 0),
             "positions": int(positions_count.scalar() or 0),
+            "metadata": metadata,
         }
     except Exception as e:
         db_stats = {"status": "error", "error": str(e)}
@@ -140,26 +209,63 @@ async def _collect_tipi_status(request: Request) -> dict:
         return {"status": "error", "error": str(tipi_err)}
 
 
-async def _collect_status_payloads(request: Request) -> tuple[dict, dict, str]:
+async def _collect_nbs_status(request: Request) -> dict:
+    nbs_service = getattr(request.app.state, "nbs_service", None)
+    if nbs_service is None:
+        return {"status": "error", "error": "NBS service unavailable"}
+
+    try:
+        return await nbs_service.check_connection()
+    except Exception as nbs_err:
+        return {"status": "error", "error": str(nbs_err)}
+
+
+async def _collect_status_payloads(request: Request) -> tuple[dict, dict, dict, dict, str]:
     db_stats, db_latency_ms = await _collect_db_status(request)
     tipi_stats = await _collect_tipi_status(request)
+    nbs_stats = await _collect_nbs_status(request)
 
     normalized_db = _normalize_db_status(db_stats, db_latency_ms)
     normalized_tipi = _normalize_tipi_status(tipi_stats)
+    normalized_nbs = _normalize_count_catalog_status(
+        nbs_stats,
+        count_field="nbs_items",
+        metadata_prefix="nbs",
+        public_count_field="items",
+    )
+    normalized_nebs = _normalize_count_catalog_status(
+        nbs_stats,
+        count_field="nebs_entries",
+        metadata_prefix="nebs",
+        public_count_field="entries",
+    )
     overall_status = (
         "online"
         if normalized_db.get("status") == "online"
         and normalized_tipi.get("status") == "online"
+        and normalized_nbs.get("status") == "online"
+        and normalized_nebs.get("status") == "online"
         else "error"
     )
-    return normalized_db, normalized_tipi, overall_status
+    return normalized_db, normalized_tipi, normalized_nbs, normalized_nebs, overall_status
 
 
 def _build_public_status_payload(
     normalized_db: dict,
     normalized_tipi: dict,
+    normalized_nbs: dict,
+    normalized_nebs: dict,
     overall_status: str,
 ) -> dict:
+    catalogs = {
+        "nesh": {
+            "status": normalized_db.get("status", "error"),
+            "latency_ms": normalized_db.get("latency_ms", 0),
+        },
+        "tipi": {"status": normalized_tipi.get("status", "error")},
+        "nbs": {"status": normalized_nbs.get("status", "error")},
+        "nebs": {"status": normalized_nebs.get("status", "error")},
+    }
     return {
         "status": overall_status,
         "database": {
@@ -169,6 +275,13 @@ def _build_public_status_payload(
         "tipi": {
             "status": normalized_tipi.get("status", "error"),
         },
+        "nbs": {
+            "status": normalized_nbs.get("status", "error"),
+        },
+        "nebs": {
+            "status": normalized_nebs.get("status", "error"),
+        },
+        "catalogs": catalogs,
     }
 
 
@@ -176,14 +289,25 @@ def _build_detailed_status_payload(
     request: Request,
     normalized_db: dict,
     normalized_tipi: dict,
+    normalized_nbs: dict,
+    normalized_nebs: dict,
     overall_status: str,
 ) -> dict:
+    catalogs = {
+        "nesh": normalized_db,
+        "tipi": normalized_tipi,
+        "nbs": normalized_nbs,
+        "nebs": normalized_nebs,
+    }
     return {
         "status": overall_status,
         "version": getattr(request.app, "version", "unknown"),
         "backend": "FastAPI",
         "database": normalized_db,
         "tipi": normalized_tipi,
+        "nbs": normalized_nbs,
+        "nebs": normalized_nebs,
+        "catalogs": catalogs,
     }
 
 
@@ -193,16 +317,30 @@ async def get_status(request: Request):
     Healthcheck e Status do Sistema.
 
     Verifica conectividade com:
-    - Banco de dados Principal (nesh.db)
-    - Banco de dados TIPI (tipi.db)
+    - Catálogo principal NESH
+    - TIPI
+    - NBS
+    - NEBS
 
     Retorna apenas o mínimo necessário para readiness público.
     """
     await _apply_status_rate_limit(request)
-    normalized_db, normalized_tipi, overall_status = await _collect_status_payloads(
+    (
+        normalized_db,
+        normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
+        overall_status,
+    ) = await _collect_status_payloads(
         request
     )
-    return _build_public_status_payload(normalized_db, normalized_tipi, overall_status)
+    return _build_public_status_payload(
+        normalized_db,
+        normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
+        overall_status,
+    )
 
 
 @router.get("/status/details", responses=STATUS_DETAILS_RESPONSES)
@@ -214,13 +352,21 @@ async def get_status_details(request: Request):
     if not await _is_admin_request(request):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    normalized_db, normalized_tipi, overall_status = await _collect_status_payloads(
+    (
+        normalized_db,
+        normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
+        overall_status,
+    ) = await _collect_status_payloads(
         request
     )
     return _build_detailed_status_payload(
         request,
         normalized_db,
         normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
         overall_status,
     )
 

@@ -15,7 +15,6 @@ const modalManagerProps = {
         tutorial: false,
         stats: false,
         comparator: false,
-        services: false,
         moderate: false,
     },
     onClose: {
@@ -23,7 +22,6 @@ const modalManagerProps = {
         tutorial: vi.fn(),
         stats: vi.fn(),
         comparator: vi.fn(),
-        services: vi.fn(),
         moderate: vi.fn(),
     },
     currentDoc: 'nesh' as const,
@@ -63,12 +61,6 @@ vi.mock('../../src/components/StatsModal', () => ({
 vi.mock('../../src/components/ComparatorModal', () => ({
     ComparatorModal: ({ isOpen, defaultDoc }: { isOpen: boolean; defaultDoc: string }) => (
         <div data-testid="comparator-modal" data-open={String(isOpen)} data-doc={defaultDoc} />
-    )
-}));
-
-vi.mock('../../src/components/ServicesModal', () => ({
-    ServicesModal: ({ isOpen }: { isOpen: boolean }) => (
-        <div data-testid="services-modal" data-open={String(isOpen)} />
     )
 }));
 
@@ -149,7 +141,6 @@ describe('ModalManager', () => {
                     tutorial: true,
                     stats: true,
                     comparator: true,
-                    services: true,
                 }}
                 currentDoc="tipi"
             />
@@ -160,7 +151,6 @@ describe('ModalManager', () => {
         expect(await screen.findByTestId('stats-modal')).toHaveAttribute('data-open', 'true');
         expect(await screen.findByTestId('comparator-modal')).toHaveAttribute('data-open', 'true');
         expect(await screen.findByTestId('comparator-modal')).toHaveAttribute('data-doc', 'tipi');
-        expect(await screen.findByTestId('services-modal')).toHaveAttribute('data-open', 'true');
         expect(await screen.findByTestId('cross-nav-context')).toHaveAttribute('data-doc', 'tipi');
     });
 });

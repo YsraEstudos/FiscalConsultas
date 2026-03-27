@@ -4,7 +4,30 @@ const mockAuthState = {
   isSignedIn: true,
   getToken: async () => 'e2e-token',
   signOut: async () => undefined,
+  openSignInCalls: 0,
+  openSignIn: async () => {
+    mockAuthState.openSignInCalls += 1;
+  },
 };
+
+const mockWindow = globalThis as typeof globalThis & {
+  __clerkMockInitialSignedIn?: boolean;
+  __setMockClerkSignedIn?: (value: boolean) => void;
+  __getMockClerkState?: () => { isSignedIn: boolean; openSignInCalls: number };
+};
+
+if (typeof mockWindow.__clerkMockInitialSignedIn === 'boolean') {
+  mockAuthState.isSignedIn = mockWindow.__clerkMockInitialSignedIn;
+}
+
+mockWindow.__setMockClerkSignedIn = (value: boolean) => {
+  mockAuthState.isSignedIn = value;
+};
+
+mockWindow.__getMockClerkState = () => ({
+  isSignedIn: mockAuthState.isSignedIn,
+  openSignInCalls: mockAuthState.openSignInCalls,
+});
 
 const mockUser = {
   id: 'user_e2e',
@@ -57,6 +80,7 @@ export function OrganizationProfile() {
 export function useClerk() {
   return {
     signOut: mockAuthState.signOut,
+    openSignIn: mockAuthState.openSignIn,
   };
 }
 

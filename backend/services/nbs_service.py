@@ -1,11 +1,16 @@
-"""Async service for the NBS catalog stored in services.db."""
+"""Async service for the NBS / NEBS catalog.
+
+Supports the legacy SQLite ``services.db`` mode and the PostgreSQL repository
+mode used by the production/runtime path.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import re
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, AsyncIterator, cast
 
 import aiosqlite
 
@@ -21,6 +26,21 @@ from backend.utils.nbs_parser import (
     clean_nbs_code,
     normalize_nbs_text,
 )
+
+get_session = None
+try:
+    from backend.infrastructure.db_engine import get_session
+    from backend.infrastructure.repositories.nbs_repository import NbsRepository
+
+    _REPO_AVAILABLE = True
+except ImportError:
+    _REPO_AVAILABLE = False
+    NbsRepository = None
+
+if TYPE_CHECKING:
+    from backend.infrastructure.repositories.nbs_repository import (
+        NbsRepository as _NbsRepository,
+    )
 
 NBS_ALLOWED_TABLES = {"nbs_items", "nebs_entries", "catalog_metadata"}
 MAX_ANCESTOR_DEPTH = 64
@@ -41,18 +61,57 @@ NEBS_PUBLIC_FIELDS = (
 class NbsService:
     """Query helper for the NBS/NEBS catalog database."""
 
-    def __init__(self, db_path: str | Path | None = None):
+    def __init__(
+        self,
+        db_path: str | Path | None = None,
+        *,
+        repository: "_NbsRepository | None" = None,
+        repository_factory=None,
+    ):
         self.db_path = Path(db_path or settings.database.services_path)
         self._schema_columns_cache: dict[str, set[str]] = {}
         self._pool: list[aiosqlite.Connection] = []
         self._pool_lock = asyncio.Lock()
         self._pool_max_size = 2
+        self._repository = repository
+        self._repository_factory = repository_factory
+        self._use_repository = repository is not None or repository_factory is not None
+
+        mode = "Repository" if self._use_repository else "aiosqlite"
+        logger.info("NbsService inicializado (modo: %s)", mode)
 
     async def __aenter__(self) -> NbsService:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
         await self.close()
+
+    @classmethod
+    async def create_with_repository(cls) -> "NbsService":
+        """Factory assíncrono para criar o serviço via repository/AsyncSession."""
+        if not _REPO_AVAILABLE:
+            raise RuntimeError("Repository não disponível. Instale sqlmodel.")
+        if get_session is None:
+            raise RuntimeError("Session factory não disponível.")
+        repository_cls = cast("type[_NbsRepository]", NbsRepository)
+
+        @asynccontextmanager
+        async def repo_factory() -> AsyncIterator["_NbsRepository"]:
+            async with get_session() as session:
+                yield repository_cls(session)
+
+        return cls(repository_factory=repo_factory)
+
+    @asynccontextmanager
+    async def _get_repo(self) -> AsyncIterator["_NbsRepository | None"]:
+        if self._repository is not None:
+            yield self._repository
+            return
+        if self._repository_factory is not None:
+            async with self._repository_factory() as repo:
+                yield repo
+            return
+        yield None
 
     async def _get_connection(self) -> aiosqlite.Connection:
         if not self.db_path.exists():
@@ -85,6 +144,68 @@ class NbsService:
                     await conn.close()
                 except Exception as exc:
                     logger.warning("Error closing NBS pool connection: %s", exc)
+
+    async def check_connection(self) -> dict[str, Any]:
+        """Return readiness, counts and metadata for the services catalog."""
+        if self._use_repository:
+            try:
+                async with self._get_repo() as repo:
+                    if repo is None:
+                        raise RuntimeError("NBS repository unavailable")
+                    counts = await repo.get_catalog_counts()
+                    metadata = await repo.get_catalog_metadata()
+                nbs_items = int(counts.get("nbs_items", 0))
+                nebs_entries = int(counts.get("nebs_entries", 0))
+                return {
+                    "status": (
+                        "online"
+                        if nbs_items > 0 and nebs_entries > 0
+                        else "error"
+                    ),
+                    "nbs_items": nbs_items,
+                    "nebs_entries": nebs_entries,
+                    "metadata": metadata,
+                }
+            except Exception as exc:
+                logger.error("NBS repository healthcheck failed: %s", exc)
+                return {"status": "error", "error": str(exc)}
+
+        if not self.db_path.exists():
+            return {"status": "error", "error": f"Banco NBS não encontrado: {self.db_path}"}
+
+        conn = await self._get_connection()
+        try:
+            nbs_count = 0
+            nebs_count = 0
+            metadata: dict[str, str] = {}
+
+            if await self._table_exists(conn, "nbs_items"):
+                cursor = await conn.execute("SELECT COUNT(*) FROM nbs_items")
+                row = await cursor.fetchone()
+                nbs_count = int(row[0] if row else 0)
+
+            if await self._table_exists(conn, "nebs_entries"):
+                cursor = await conn.execute(
+                    "SELECT COUNT(*) FROM nebs_entries WHERE parser_status = 'trusted'"
+                )
+                row = await cursor.fetchone()
+                nebs_count = int(row[0] if row else 0)
+
+            if await self._table_exists(conn, "catalog_metadata"):
+                cursor = await conn.execute("SELECT key, value FROM catalog_metadata")
+                metadata = {row["key"]: row["value"] for row in await cursor.fetchall()}
+
+            return {
+                "status": "online" if nbs_count > 0 and nebs_count > 0 else "error",
+                "nbs_items": nbs_count,
+                "nebs_entries": nebs_count,
+                "metadata": metadata,
+            }
+        except Exception as exc:
+            logger.error("NBS SQLite healthcheck failed: %s", exc)
+            return {"status": "error", "error": str(exc)}
+        finally:
+            await self._release_connection(conn)
 
     async def _get_table_columns(
         self, conn: aiosqlite.Connection, table: str
@@ -281,6 +402,19 @@ class NbsService:
         normalized_query = normalize_nbs_text(raw_query)
         clean_query = clean_nbs_code(raw_query)
 
+        if self._use_repository:
+            async with self._get_repo() as repo:
+                if repo is None:
+                    raise RuntimeError("NBS repository unavailable")
+                results = await repo.search(raw_query, limit=limit)
+            return {
+                "success": True,
+                "query": raw_query,
+                "normalized": normalized_query,
+                "results": results,
+                "total": len(results),
+            }
+
         conn = await self._get_connection()
         try:
             await self._get_table_columns(conn, "nbs_items")
@@ -355,6 +489,12 @@ class NbsService:
             await self._release_connection(conn)
 
     async def get_item_details(self, code: str) -> dict[str, Any]:
+        if self._use_repository:
+            async with self._get_repo() as repo:
+                if repo is None:
+                    raise RuntimeError("NBS repository unavailable")
+                return await repo.get_item_details(code)
+
         conn = await self._get_connection()
         try:
             item = await self._fetch_item_by_code(conn, code)
@@ -424,6 +564,20 @@ class NbsService:
         normalized_query = normalize_nbs_text(raw_query)
         clean_query = clean_nbs_code(raw_query)
         fts_query = self._build_nebs_fts_query(normalized_query)
+
+        if self._use_repository:
+            async with self._get_repo() as repo:
+                if repo is None:
+                    raise RuntimeError("NBS repository unavailable")
+                results = await repo.search_nebs(raw_query, limit=limit)
+            return {
+                "success": True,
+                "query": raw_query,
+                "normalized": normalized_query,
+                "results": results,
+                "total": len(results),
+            }
+
         conn = await self._get_connection()
         try:
             await self._get_table_columns(conn, "nebs_entries")
@@ -569,6 +723,12 @@ class NbsService:
             await self._release_connection(conn)
 
     async def get_nebs_details(self, code: str) -> dict[str, Any]:
+        if self._use_repository:
+            async with self._get_repo() as repo:
+                if repo is None:
+                    raise RuntimeError("NBS repository unavailable")
+                return await repo.get_nebs_details(code)
+
         conn = await self._get_connection()
         try:
             item = await self._fetch_item_by_code(conn, code)

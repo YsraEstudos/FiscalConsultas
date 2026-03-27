@@ -8,6 +8,10 @@ import { useSettings } from '../context/SettingsContext';
 import { extractChapter, isSameChapter } from '../utils/chapterDetection';
 import type { SearchResponse } from '../types/api.types';
 import { isCodeSearchResponse } from '../types/api.types';
+import {
+    getServiceCatalogErrorMessage,
+    isServiceCatalogDoc,
+} from '../utils/servicesCatalog';
 
 const buildLoadedChaptersByDoc = (value?: Record<DocType, string[]>): Record<DocType, string[]> => ({
     nesh: value?.nesh ?? [],
@@ -129,7 +133,9 @@ export function useSearch(
             console.error(err);
             let message = 'Erro ao buscar dados. Verifique a API.';
 
-            if (axios.isAxiosError(err)) {
+            if (isServiceCatalogDoc(doc)) {
+                message = getServiceCatalogErrorMessage(err, doc);
+            } else if (axios.isAxiosError(err)) {
                 const status = err.response?.status;
                 if (status === 404) {
                     message = 'Endpoint não encontrado (404). Verifique se o backend está rodando e se a base URL está correta.';

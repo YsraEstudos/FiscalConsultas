@@ -20,8 +20,11 @@ const isLocalHost = (host: string) => host === 'localhost' || host === '127.0.0.
 const isExplicitLocalApi =
     !!explicitBaseUrl &&
     /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$)/i.test(explicitBaseUrl);
+const shouldUseDevProxyApi =
+    import.meta.env.DEV && isExplicitLocalApi;
 const shouldUseProxyApi =
-    typeof window !== 'undefined' && isExplicitLocalApi && !isLocalHost(window.location.hostname);
+    shouldUseDevProxyApi
+    || (typeof window !== 'undefined' && isExplicitLocalApi && !isLocalHost(window.location.hostname));
 
 const rawBaseUrl = shouldUseProxyApi ? '/api' : (explicitBaseUrl || '/api');
 
@@ -340,6 +343,7 @@ const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 const CACHE_MAX_ENTRIES = 30;
 const CACHE_EVICT_BATCH_SIZE = 10;
 const MEMORY_CACHE_MAX = 50;
+const PERSISTENT_CODE_CACHE_PREFIXES = ['nesh:', 'tipi:'] as const;
 
 interface CacheEntry<T> {
     data: T;
@@ -353,6 +357,30 @@ interface CacheIndex {
 // In-memory cache (fastest - survives within session)
 const memoryCache = new Map<string, CacheEntry<any>>();
 const inFlightRequests = new Map<string, Promise<any>>();
+
+function shouldUsePersistentCache(key: string): boolean {
+    return !PERSISTENT_CODE_CACHE_PREFIXES.some(prefix => key.startsWith(prefix));
+}
+
+function clearLegacyPersistentCodeCache(): void {
+    try {
+        const index = getCacheIndex();
+        let changed = false;
+
+        for (const key of Object.keys(index)) {
+            if (PERSISTENT_CODE_CACHE_PREFIXES.some(prefix => key.startsWith(prefix))) {
+                removeLocalStorageCacheEntry(key, index);
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            saveCacheIndex(index);
+        }
+    } catch {
+        // Ignore localStorage errors on startup cleanup.
+    }
+}
 
 function getCacheIndex(): CacheIndex {
     try {
@@ -439,6 +467,10 @@ function getCached<T>(key: string): T | null {
     }
     if (memEntry) memoryCache.delete(key);
 
+    if (!shouldUsePersistentCache(key)) {
+        return null;
+    }
+
     // 2. Check localStorage (survives page reloads)
     try {
         const index = getCacheIndex();
@@ -472,6 +504,10 @@ function setCache<T>(key: string, data: T): void {
 
     // Memory cache
     setMemoryCacheEntry(key, entry);
+
+    if (!shouldUsePersistentCache(key)) {
+        return;
+    }
 
     // localStorage (with eviction)
     try {
@@ -517,6 +553,17 @@ function withInFlightDedup<T>(key: string, factory: () => Promise<T>): Promise<T
     return request;
 }
 
+clearLegacyPersistentCodeCache();
+
+function withDevCacheBust(path: string): string {
+    if (!import.meta.env.DEV) {
+        return path;
+    }
+
+    const separator = path.includes('?') ? '&' : '?';
+    return `${path}${separator}_dev_bust=${Date.now()}`;
+}
+
 export const searchNCM = async (query: string): Promise<any> => {
     // Performance: Check cache for code queries (chapter data is static)
     const cacheKey = `nesh:${query}`;
@@ -524,7 +571,7 @@ export const searchNCM = async (query: string): Promise<any> => {
     if (cached) return cached;
 
     return withInFlightDedup(`ncm:${query}`, async () => {
-        const response = await api.get(`/search?ncm=${encodeURIComponent(query)}`);
+        const response = await api.get(withDevCacheBust(`/search?ncm=${encodeURIComponent(query)}`));
         const data = normalizeCodeResponseAliases(response.data);
 
         // Cache code search results (chapter data). Text search is not cached.
@@ -545,7 +592,9 @@ export const searchTipi = async (
     if (cached) return cached;
 
     return withInFlightDedup(`tipi:${query}:${viewMode}`, async () => {
-        const response = await api.get(`/tipi/search?ncm=${encodeURIComponent(query)}&view_mode=${viewMode}`);
+        const response = await api.get(
+            withDevCacheBust(`/tipi/search?ncm=${encodeURIComponent(query)}&view_mode=${viewMode}`),
+        );
         const data = normalizeCodeResponseAliases(response.data);
 
         // Cache code search results
@@ -557,37 +606,37 @@ export const searchTipi = async (
 };
 
 export const getGlossaryTerm = async (term: string): Promise<any> => {
-    const response = await api.get(`/glossary?term=${encodeURIComponent(term)}`);
+    const response = await api.get(withDevCacheBust(`/glossary?term=${encodeURIComponent(term)}`));
     return response.data;
 };
 
 export const getSystemStatus = async (): Promise<SystemStatusResponse> => {
-    const response = await api.get('/status');
+    const response = await api.get(withDevCacheBust('/status'));
     return response.data;
 };
 
 export const searchNbsServices = async (query: string): Promise<NbsSearchResponse> => {
-    const response = await api.get(`/services/nbs/search?q=${encodeURIComponent(query)}`);
+    const response = await api.get(withDevCacheBust(`/services/nbs/search?q=${encodeURIComponent(query)}`));
     return response.data;
 };
 
 export const getNbsServiceDetail = async (code: string): Promise<NbsDetailResponse> => {
-    const response = await api.get(`/services/nbs/${encodeURIComponent(code)}`);
+    const response = await api.get(withDevCacheBust(`/services/nbs/${encodeURIComponent(code)}`));
     return response.data;
 };
 
 export const searchNebsEntries = async (query: string): Promise<NebsSearchResponse> => {
-    const response = await api.get(`/services/nebs/search?q=${encodeURIComponent(query)}`);
+    const response = await api.get(withDevCacheBust(`/services/nebs/search?q=${encodeURIComponent(query)}`));
     return response.data;
 };
 
 export const getNebsEntryDetail = async (code: string): Promise<NebsDetailResponse> => {
-    const response = await api.get(`/services/nebs/${encodeURIComponent(code)}`);
+    const response = await api.get(withDevCacheBust(`/services/nebs/${encodeURIComponent(code)}`));
     return response.data;
 };
 
 export const getAuthSession = async (): Promise<{ authenticated: boolean }> => {
-    const response = await api.get('/auth/me');
+    const response = await api.get(withDevCacheBust('/auth/me'));
     return response.data;
 };
 
@@ -601,7 +650,7 @@ export const fetchChapterNotes = async (chapter: string): Promise<{
     notas_parseadas: Record<string, string>;
     notas_gerais: string | null;
 }> => {
-    const response = await api.get(`/nesh/chapter/${encodeURIComponent(chapter)}/notes`);
+    const response = await api.get(withDevCacheBust(`/nesh/chapter/${encodeURIComponent(chapter)}/notes`));
     return response.data;
 };
 
@@ -610,7 +659,7 @@ export const fetchChapterNotes = async (chapter: string): Promise<{
 // ============================================================
 
 export const getMyProfile = async (): Promise<any> => {
-    const response = await api.get('/profile/me');
+    const response = await api.get(withDevCacheBust('/profile/me'));
     return response.data;
 };
 
@@ -625,12 +674,16 @@ export const getMyContributions = async (params: {
     search?: string;
     status?: string;
 }): Promise<any> => {
-    const response = await api.get('/profile/me/contributions', { params });
+    const response = await api.get('/profile/me/contributions', {
+        params: import.meta.env.DEV
+            ? { ...params, _dev_bust: Date.now() }
+            : params,
+    });
     return response.data;
 };
 
 export const getUserCard = async (userId: string): Promise<any> => {
-    const response = await api.get(`/profile/${encodeURIComponent(userId)}/card`);
+    const response = await api.get(withDevCacheBust(`/profile/${encodeURIComponent(userId)}/card`));
     return response.data;
 };
 

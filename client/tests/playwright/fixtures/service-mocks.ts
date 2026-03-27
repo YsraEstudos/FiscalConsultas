@@ -20,6 +20,7 @@ type MockResponseQueue = MockResponseEntry[];
 export type ServicesMockOptions = {
   nebsSearchResponses?: MockResponseEntry[];
   nbsSearchResponses?: MockResponseEntry[];
+  statusResponses?: MockResponseEntry[];
   unmatchedApiStrategy?: 'abort' | 'continue';
 };
 
@@ -30,6 +31,22 @@ function makeEmptySearchResponse(query = '') {
     normalized: query,
     results: [],
     total: 0,
+  };
+}
+
+function makeOnlineStatusResponse() {
+  return {
+    status: 'online',
+    database: { status: 'online', latency_ms: 1 },
+    tipi: { status: 'online' },
+    nbs: { status: 'online' },
+    nebs: { status: 'online' },
+    catalogs: {
+      nesh: { status: 'online', latency_ms: 1 },
+      tipi: { status: 'online' },
+      nbs: { status: 'online' },
+      nebs: { status: 'online' },
+    },
   };
 }
 
@@ -206,11 +223,27 @@ function getDetailCode(path: string, doc: 'nbs' | 'nebs'): string | null {
 export async function installServicesMock(page: Page, options: ServicesMockOptions = {}) {
   const nbsQueue = [...(options.nbsSearchResponses ?? [])];
   const nebsQueue = [...(options.nebsSearchResponses ?? [])];
+  const statusQueue = [...(options.statusResponses ?? [])];
 
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
     const query = url.searchParams.get('q') ?? '';
+
+    if (path.endsWith('/status')) {
+      const next = statusQueue.shift();
+      if (next?.abort) {
+        await route.abort('failed');
+        return;
+      }
+
+      await route.fulfill({
+        status: next?.status ?? 200,
+        contentType: 'application/json',
+        body: JSON.stringify(next?.body ?? makeOnlineStatusResponse()),
+      });
+      return;
+    }
 
     if (path.endsWith('/services/nbs/search')) {
       await handleNbsSearch(route, query, nbsQueue);

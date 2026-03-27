@@ -52,7 +52,6 @@ function App() {
     const [isStatsOpen, setIsStatsOpen] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [isComparatorOpen, setIsComparatorOpen] = useState(false);
-    const [isServicesOpen, setIsServicesOpen] = useState(false);
     const [isModerateOpen, setIsModerateOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [noteModal, setNoteModal] = useState<{
@@ -406,7 +405,6 @@ function App() {
                         tutorial: isTutorialOpen,
                         stats: isStatsOpen,
                         comparator: isComparatorOpen,
-                        services: isServicesOpen,
                         moderate: isModerateOpen,
                     }}
                     onClose={{
@@ -414,7 +412,6 @@ function App() {
                         tutorial: () => setIsTutorialOpen(false),
                         stats: () => setIsStatsOpen(false),
                         comparator: () => setIsComparatorOpen(false),
-                        services: () => setIsServicesOpen(false),
                         moderate: () => setIsModerateOpen(false),
                     }}
                     currentDoc={(activeTab?.document || 'nesh') === 'tipi' ? 'tipi' : 'nesh'}
@@ -441,9 +438,6 @@ function App() {
                 onOpenTutorial={() => setIsTutorialOpen(true)}
                 onOpenStats={() => setIsStatsOpen(true)}
                 onOpenComparator={() => setIsComparatorOpen(true)}
-                onOpenServices={() => {
-                    setIsServicesOpen(true);
-                }}
                 onOpenModerate={() => setIsModerateOpen(true)}
                 onOpenProfile={() => setIsProfileOpen(true)}
                 history={history}

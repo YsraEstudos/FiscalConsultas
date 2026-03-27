@@ -1,135 +1,116 @@
-# Autoscroll e Sincronizacao de Navegacao (estado real 2026-02-17)
+# Autoscroll e Sincronizacao de Navegacao
 
-Este documento descreve como o autoscroll funciona hoje no frontend e onde estao os riscos reais.
+Documento vivo do comportamento atual do autoscroll no frontend.
 
-## 1) Componentes envolvidos
+## Componentes envolvidos
 
-- `client/src/hooks/useRobustScroll.ts`
 - `client/src/components/ResultDisplay.tsx`
-- `client/src/hooks/useSearch.ts`
+- `client/src/hooks/useRobustScroll.ts`
 - `client/src/components/Sidebar.tsx`
+- `client/src/hooks/useSearch.ts`
 - `client/src/App.tsx`
 
-## 2) Fluxo atual de auto-scroll
+## Fluxo atual
 
-1. Busca termina em `useSearch` e marca `isNewSearch=true` na aba.
-   - no caso "mesmo capitulo", `useSearch` pode pular fetch e atualizar so `results.query`.
-2. `ResultDisplay` renderiza/inyecta markup no container.
-3. Quando `isContentReady=true`, calcula candidatos de `targetId`.
-4. `useRobustScroll` roda se:
-   - aba ativa
-   - `isNewSearch=true`
-   - `isContentReady=true`
-   - resposta de `type!="text"`
-5. Em sucesso, callback deve consumir `isNewSearch` e persistir scroll final.
+1. `useSearch` conclui uma busca e marca a aba como `isNewSearch=true`.
+2. `ResultDisplay` renderiza o markup do resultado.
+3. Durante a renderizacao, `ResultDisplay` separa tres estados diferentes:
+   - `isContentReady`: o conteudo ja pode ser exibido na aba.
+   - `isFullyRendered`: todos os chunks ja foram anexados ao DOM.
+   - `isTargetReady`: pelo menos um candidato real de anchor ja existe no container.
+4. `useRobustScroll` so e ativado quando:
+   - a aba esta ativa
+   - a busca ainda e nova
+   - o resultado nao esta sob scroll prioritario do `SearchHighlighter`
+   - `isTargetReady=true`
+5. Em sucesso, `onComplete(true)` consome `isNewSearch` uma unica vez e persiste o `scrollTop` final.
 
-## 3) Como `useRobustScroll` funciona hoje
+## Papel do `ResultDisplay`
 
-### 3.1 Localizacao do alvo
+### Candidatos de anchor
 
-- aceita `targetId` string ou lista de candidatos.
-- busca elementos por `#id` dentro do container.
-- escolhe melhor candidato por prioridade de tag.
+`ResultDisplay` deriva candidatos estaveis com `useMemo` a partir de:
 
-Prioridade atual no codigo:
+- `anchor_id` vindo de `resultados`
+- `posicao_alvo`
+- variacoes derivadas do NCM consultado
 
-- `H6` (130), `H5` (120), `H4` (110), `H3` (100), `H2` (90), `H1` (80), `ARTICLE` (70), `SECTION` (60), `DIV` (50).
+O componente nao depende mais apenas de `isContentReady` para liberar o scroll.
 
-### 3.2 Estrategia de scroll
+### Preparacao de anchors
 
-- `scrollIntoView({ behavior: 'auto', block: 'start' })`
-- retries adicionais:
-  - `requestAnimationFrame`
-  - `setTimeout` 100ms
-  - `setTimeout` 400ms
-  - `setTimeout` 700ms
-- fallback com `MutationObserver` (ate 5s).
+Antes de tentar autoscroll, `ResultDisplay` prepara o DOM:
 
-### 3.3 Observacao de DOM
+- garante anchors de secoes estruturadas (`chapter-<capitulo>-<secao>`)
+- tenta resolver fallback por `data-ncm` no mesmo fluxo
+- aceita `data-ncm` em formatos digit-only e com pontos quando necessario
 
-Observer monitora:
+Esse preparo acontece no mesmo passo que calcula `isTargetReady`.
 
-- `childList`
-- `subtree`
-- `attributes` (`id`, `class`)
-
-## 4) Papel de `ResultDisplay` no autoscroll
-
-### 4.1 Calculo de alvo
-
-- tenta `anchor_id` vindo de `results/resultados`.
-- tenta `posicao_alvo`.
-- gera variacoes de ID por heuristica de digitos.
-- possui fallback que injeta `id` via elemento `data-ncm` se nenhum alvo for encontrado.
-
-### 4.2 Persistencia/restauracao
-
-- persiste `scrollTop` quando aba fica inativa.
-- restaura `initialScrollTop` quando aba volta ativa e `isNewSearch=false`.
-- ignora restauracao durante nova busca para priorizar autoscroll.
-- click em aba nao deve disparar nenhum scroll vertical extra; a barra de abas so pode ajustar seu proprio eixo horizontal.
-
-### 4.3 Render chunked
+### Render chunked
 
 Para payloads grandes:
 
-- divide por `<hr>`.
-- renderiza primeiro chunk imediatamente.
-- chunks restantes via `requestIdleCallback`/`setTimeout`.
-- `isContentReady` sobe apos primeiro chunk.
-- se aba estiver inativa, o markup pode ser limpo e re-renderizado ao voltar ativa.
+- o primeiro chunk sobe `isContentReady=true`
+- os chunks restantes entram via `requestIdleCallback` ou fallback equivalente
+- `isTargetReady` continua `false` enquanto o anchor ainda nao existe
+- quando o chunk com o alvo entra no DOM, o observer local do `ResultDisplay` atualiza `isTargetReady=true`
 
-## 5) Sidebar e scroll spy
+Resultado: a UI pode aparecer cedo, mas o autoscroll nao dispara antes do anchor real existir.
 
-- `ResultDisplay` usa `IntersectionObserver` para calcular `activeAnchorId`.
-- `Sidebar` recebe `activeAnchorId` e destaca item correspondente.
-- sidebar tambem faz autoscroll proprio por query usando `react-virtuoso`.
+## Papel do `useRobustScroll`
 
-## 6) Problemas conhecidos (importante)
+### Contrato
 
-### 6.1 Bug de callback entre `ResultDisplay` e `App`
+- recebe `targetId` como string ou lista de candidatos
+- procura o melhor match por prioridade de tag
+- executa `scrollIntoView`
+- aplica highlight temporario
+- chama `onComplete(true)` apenas quando o scroll foi concluido com sucesso
 
-- contrato esperado em `ResultDisplay`: `onConsumeNewSearch(tabId, finalScrollTop?)`.
-- implementacao em `App` trata callback como se recebesse apenas `_finalScroll`.
+### Logging
 
-Impacto:
+Miss inicial de alvo agora e tratado como estado transitorio:
 
-- consumo de `isNewSearch` e persistencia de scroll podem ficar incorretos.
+- loga em `debug.log`
+- nao emite warning nesse momento
 
-### 6.2 Estrategia agressiva de retries/timers
+Warning ficou reservado para falha real:
 
-- multiplos `setTimeout` e observer com `attributes` podem causar ruido em cenarios de DOM pesado.
+- se nenhum alvo aparecer ate o timeout do observer, emite `debug.warn("[RobustScroll] Timed out waiting for target.")`
 
-### 6.3 Fallback de injecao de `id` no DOM
+### Observer
 
-- manipula DOM apos render para forcar target.
-- aumenta complexidade e pode mascarar problema de contrato de IDs na origem.
+O `MutationObserver` do hook agora observa apenas:
 
-### 6.4 Prioridade de tags invertida vs expectedTags
+- `childList`
+- `subtree`
 
-- `TAG_PRIORITY` favorece `H6 > H5 > ... > H1`.
-- `expectedTags` passados por `ResultDisplay` favorecem heading alto nivel (`H1-H4`).
-- combinacao atual pode selecionar alvo menos intuitivo quando existem IDs duplicados.
+Nao observamos mais `attributes`, porque isso so adicionava ruido e nao ajudava no caso real do `84.08`.
 
-## 7) Contrato que nao pode quebrar
+## Invariantes que continuam valendo
 
-1. IDs de anchor precisam permanecer estaveis (`pos-...`).
-2. `isNewSearch` deve ser consumido apenas apos scroll bem-sucedido.
-3. restauracao de scroll nao pode competir com auto-scroll da mesma busca.
-4. classe `.smart-link` e atributos `data-ncm`/`data-note` devem continuar consistentes.
-5. ativacao da aba no `TabsBar` nao pode usar `scrollIntoView` no elemento da aba, para nao interferir no scroll restaurado do conteudo.
+1. `isNewSearch` so pode ser consumido apos scroll automatico bem-sucedido.
+2. Restauracao de `scrollTop` de abas antigas nao pode competir com scroll de busca nova.
+3. Clique manual na `Sidebar` continua funcionando independentemente do autoscroll de busca.
+4. `activeAnchorId` continua sendo alimentado por scroll spy e usado para highlight na navegacao.
+5. O fallback por `data-ncm` continua existindo, mas fica concentrado em `ResultDisplay`, nao espalhado pelo hook.
 
-## 8) Testes relacionados
+## Testes relevantes
 
 - `client/tests/unit/useRobustScroll.test.tsx`
-- `client/tests/unit/ResultDisplay.test.tsx`
+  - nao avisa no miss inicial transitorio
+  - avisa apenas no timeout real
+- `client/tests/unit/ResultDisplay.advanced.test.tsx`
+  - so habilita autoscroll quando o alvo existe
+  - cobre fallback por `data-ncm`
+  - cobre render chunked com alvo em chunk posterior
 - `client/tests/integration/NcmScroll.test.tsx`
-- `client/tests/integration/TabScrollPersistence.test.tsx`
-- `client/tests/integration/SameChapterNavigation.test.tsx`
+  - cobre o comportamento real de scroll para NCMs e headings validos
 
-## 9) Refatoracao recomendada (ordem)
+## Resumo operacional
 
-1. corrigir assinatura de `onConsumeNewSearch` no `App.tsx`.
-2. simplificar `useRobustScroll` para uma estrategia unica de posicionamento + confirmacao curta.
-3. mover fallback `data-ncm` para contrato de render/anchor (evitar mutacao tardia).
-4. separar highlight temporario de busca e highlight de anchor ativa na `Sidebar`.
+- `isContentReady` significa "o conteudo apareceu"
+- `isTargetReady` significa "o anchor certo existe e o autoscroll pode rodar"
+- `useRobustScroll` continua sendo o executor do scroll e do timeout final
+- o warning residual de "NO TARGET" no caso feliz nao faz mais parte do comportamento esperado
