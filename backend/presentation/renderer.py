@@ -1129,14 +1129,19 @@ class HtmlRenderer:
         return full_html
 
 
+# Compiled regex for comment mark injection performance
+_RE_TAG_WITH_ID = re.compile(r'<[a-zA-Z][^>]*\bid=["\']?([^"\' >]+)["\']?[^>]*>')
+_RE_CLASS_INJECT = re.compile(r'(class=["\'])([^"\']*?)(["\'])')
+_RE_TAG_END = re.compile(r'(\s*/?>)$')
+
 def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     """
     Injeta `<mark class="has-comment">` em volta dos elementos que possuem
     comentários aprovados, identificados pelo anchor_key (= valor do atributo id).
 
-    Estratégia: para cada anchor_key, encontramos o elemento que possui
-    `id="<anchor_key>"` e adicionamos a classe `has-comment` a ele.
-    Não envolve o texto em outro elemento para preservar a estrutura do DOM.
+    Estratégia: otimizada para buscar tags em uma única passagem (O(N)),
+    validando o ID capturado contra um set O(1), evitando complexidade O(N*M)
+    causada por um loop em chaves com regex sobre toda a string.
 
     Args:
         html: HTML já renderizado pelo HtmlRenderer.
@@ -1148,32 +1153,25 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     if not commented_anchor_keys or not html:
         return html
 
-    for key in commented_anchor_keys:
-        # Escapa o key para uso em regex seguro
-        safe_key = re.escape(key)
+    commented_keys_set = frozenset(commented_anchor_keys)
+    seen_keys = set()
 
-        # Encontra a tag com id="{key}" e adiciona has-comment à sua classe
-        # Suporta: id="key", id='key', class="..." já existente
-        def _add_class(match: re.Match) -> str:
-            tag = match.group(0)
-            if "class=" in tag:
-                # Adiciona has-comment à class existente
-                tag = re.sub(
-                    r'(class=["\'])([^"\']*?)(["\'])',
-                    lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
-                    tag,
-                    count=1,
-                )
-            else:
-                # Insere class antes do fechamento da tag de abertura
-                tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
+    def _add_class(match: re.Match) -> str:
+        tag = match.group(0)
+        anchor_id = match.group(1)
+
+        if anchor_id not in commented_keys_set or anchor_id in seen_keys:
             return tag
 
-        html = re.sub(
-            rf'<[a-zA-Z][^>]*\bid=["\']?{safe_key}["\']?[^>]*>',
-            _add_class,
-            html,
-            count=1,
-        )
+        seen_keys.add(anchor_id)
 
-    return html
+        if "class=" in tag:
+            return _RE_CLASS_INJECT.sub(
+                lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
+                tag,
+                count=1,
+            )
+        else:
+            return _RE_TAG_END.sub(r' class="has-comment"\1', tag)
+
+    return _RE_TAG_WITH_ID.sub(_add_class, html)

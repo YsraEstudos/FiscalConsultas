@@ -5,3 +5,7 @@
 ## 2026-03-13 - Optimize DOM Traversal Highlighting
 **Learning:** String normalization (like NFD and regex replace) inside tight DOM traversal loops (e.g., TreeWalker) is a massive performance bottleneck.
 **Action:** Use pre-compiled regex patterns before the loop to test values, eliminating the need to normalize every DOM node's text content.
+
+## 2025-02-28 - Optimize HTML Injection Loops
+**Learning:** Performing `re.sub` over an entire large HTML string for every element in an array (O(N*M)) is extremely slow.
+**Action:** Use a single-pass `re.sub` over the entire string, matching any candidate tag. Inside the replacer function, perform an O(1) set lookup on the captured group to decide whether to modify the tag. Pre-compile all regexes at the module level.
