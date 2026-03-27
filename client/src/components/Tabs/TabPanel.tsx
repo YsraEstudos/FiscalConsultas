@@ -35,7 +35,7 @@ export const TabPanel: React.FC<TabPanelProps> = ({ id, activeTabId, children, c
             aria-labelledby={`tab-${id}`}
             className={className}
             style={{
-                display: isActive ? 'block' : 'none',
+                display: isActive ? undefined : 'none',
                 height: '100%',
                 width: '100%'
             }}
