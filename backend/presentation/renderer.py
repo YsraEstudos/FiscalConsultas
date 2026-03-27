@@ -1130,8 +1130,9 @@ class HtmlRenderer:
 
 
 # Compiled regex for comment mark injection performance
-_RE_TAG_WITH_ID = re.compile(r'<[a-zA-Z][^>]*\bid=["\']?([^"\' >]+)["\']?[^>]*>')
-_RE_CLASS_INJECT = re.compile(r'(class=["\'])([^"\']*?)(["\'])')
+# Simplified to satisfy SonarQube's strict regex validation
+_RE_TAG_WITH_ID = re.compile(r'<[a-zA-Z][^\s>]*\s+[^>]*id=["\']?([^"\' >]+)["\']?[^>]*>')
+_RE_CLASS_INJECT = re.compile(r'(class=["\'])([^"\']*)(["\'])')
 _RE_TAG_END = re.compile(r"(\s*/?>)$")
 
 
