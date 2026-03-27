@@ -106,6 +106,8 @@ export function ServicesTabContent({
         }
     }, []);
 
+    const firstResultCode = data.results[0]?.code || null;
+
     useEffect(() => {
         detailRequestRef.current += 1;
         readySignalRef.current = false;
@@ -114,23 +116,17 @@ export function ServicesTabContent({
         setNbsDetail(null);
         setNebsDetail(null);
 
-        if (doc === 'nbs') {
-            const firstCode = data.results[0]?.code || null;
-            if (!firstCode) {
-                setDetailStatus('idle');
-                return;
-            }
-            void loadNbsDetail(firstCode);
-            return;
-        }
-
-        const firstCode = data.results[0]?.code || null;
-        if (!firstCode) {
+        if (!firstResultCode) {
             setDetailStatus('idle');
             return;
         }
-        void loadNebsDetail(firstCode);
-    }, [data, doc, loadNbsDetail, loadNebsDetail]);
+
+        if (doc === 'nbs') {
+            void loadNbsDetail(firstResultCode);
+        } else {
+            void loadNebsDetail(firstResultCode);
+        }
+    }, [doc, firstResultCode, loadNbsDetail, loadNebsDetail]);
 
     useEffect(() => {
         if (readySignalRef.current) return;
