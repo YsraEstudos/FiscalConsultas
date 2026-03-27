@@ -1132,7 +1132,8 @@ class HtmlRenderer:
 # Compiled regex for comment mark injection performance
 _RE_TAG_WITH_ID = re.compile(r'<[a-zA-Z][^>]*\bid=["\']?([^"\' >]+)["\']?[^>]*>')
 _RE_CLASS_INJECT = re.compile(r'(class=["\'])([^"\']*?)(["\'])')
-_RE_TAG_END = re.compile(r'(\s*/?>)$')
+_RE_TAG_END = re.compile(r"(\s*/?>)$")
+
 
 def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     """
