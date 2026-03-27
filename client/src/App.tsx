@@ -496,6 +496,11 @@ function App() {
                                             'switchTabDocument (services)'
                                         );
                                     }}
+                                    onContentReady={() => {
+                                        if (!tab.isContentReady) {
+                                            updateTab(tab.id, { isContentReady: true });
+                                        }
+                                    }}
                                 />
                             )}
 
