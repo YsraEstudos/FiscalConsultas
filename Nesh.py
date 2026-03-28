@@ -44,8 +44,8 @@ def main():
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
     # Configurações do servidor (pode vir do config.py se necessário)
-    HOST = "127.0.0.1"
-    PORT = 8000
+    HOST = os.getenv("SERVER__HOST", "127.0.0.1")
+    PORT = int(os.getenv("PORT", os.getenv("SERVER__PORT", 8000)))
     project_root = os.path.dirname(os.path.abspath(__file__))
     backend_dir = os.path.join(project_root, "backend")
 

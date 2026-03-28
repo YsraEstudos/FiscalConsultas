@@ -1,0 +1,26 @@
+# Ignorar arquivos locais de ambiente e cache
+.env
+.env.*
+!.env.example
+__pycache__/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.benchmarks/
+
+# Ignorar o diretório do frontend (será servido pelo Cloudflare)
+client/node_modules/
+client/dist/
+
+# Ignorar dados sensíveis/locais
+database/*.db
+database/*.sqlite
+data/
+raw_data/
+snapshots/
+reports/
+megalinter-reports/
+
+# Ignorar arquivos do git
+.git/
+.github/
