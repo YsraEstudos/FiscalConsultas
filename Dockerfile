@@ -17,7 +17,7 @@ COPY Nesh.py .
 COPY alembic.ini .
 COPY migrations/ ./migrations/
 COPY scripts/ ./scripts/
-COPY database/ ./database/
+RUN mkdir -p database/
 COPY README.md .
 
 # Configurações de ambiente para o container
