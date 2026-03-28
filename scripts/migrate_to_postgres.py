@@ -42,7 +42,10 @@ from backend.domain.sqlmodels import (  # noqa: E402
 from backend.infrastructure.db_engine import get_session  # noqa: E402
 from backend.utils.hash_util import calculate_file_sha256  # noqa: E402
 from backend.utils.nbs_parser import build_nbs_items, iter_nbs_rows  # noqa: E402
-from backend.utils.nebs_parser import parse_nebs_pdf, write_nebs_audit_report  # noqa: E402
+from backend.utils.nebs_parser import (  # noqa: E402
+    parse_nebs_pdf,
+    write_nebs_audit_report,
+)
 
 DATA_DIR = PROJECT_ROOT / "data"
 REPORTS_DIR = PROJECT_ROOT / "reports" / "nebs"
