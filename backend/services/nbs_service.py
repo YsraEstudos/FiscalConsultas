@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator, cast
 
 import aiosqlite
-
 from backend.config.exceptions import (
     DatabaseError,
     DatabaseNotFoundError,

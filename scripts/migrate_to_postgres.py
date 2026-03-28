@@ -149,15 +149,11 @@ async def _reset_runtime_catalog(pg_session: AsyncSession) -> None:
 
 
 async def _load_runtime_metadata(pg_session: AsyncSession) -> dict[str, str]:
-    result = await pg_session.execute(
-        text(
-            """
+    result = await pg_session.execute(text("""
             SELECT key, value
             FROM catalog_metadata
             WHERE tenant_id IS NULL
-            """
-        )
-    )
+            """))
     return {row.key: row.value for row in result}
 
 
@@ -686,41 +682,23 @@ async def update_search_vectors(pg_session: AsyncSession) -> None:
     """Refresh PostgreSQL tsvector columns after bulk loads."""
     print("\nAtualizando search_vectors...")
 
-    await pg_session.execute(
-        text(
-            """
+    await pg_session.execute(text("""
             UPDATE chapters
             SET search_vector = to_tsvector('portuguese', COALESCE(content, ''))
-            """
-        )
-    )
-    await pg_session.execute(
-        text(
-            """
+            """))
+    await pg_session.execute(text("""
             UPDATE positions
             SET search_vector = to_tsvector('portuguese', COALESCE(descricao, ''))
-            """
-        )
-    )
-    await pg_session.execute(
-        text(
-            """
+            """))
+    await pg_session.execute(text("""
             UPDATE tipi_positions
             SET search_vector = to_tsvector('portuguese', COALESCE(descricao, ''))
-            """
-        )
-    )
-    await pg_session.execute(
-        text(
-            """
+            """))
+    await pg_session.execute(text("""
             UPDATE nbs_items
             SET search_vector = to_tsvector('portuguese', COALESCE(description, ''))
-            """
-        )
-    )
-    await pg_session.execute(
-        text(
-            """
+            """))
+    await pg_session.execute(text("""
             UPDATE nebs_entries
             SET search_vector = to_tsvector(
                 'portuguese',
@@ -730,9 +708,7 @@ async def update_search_vectors(pg_session: AsyncSession) -> None:
                     COALESCE(body_text, '')
                 )
             )
-            """
-        )
-    )
+            """))
 
     print("  OK search vectors atualizados")
 
