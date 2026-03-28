@@ -1,0 +1,3 @@
+## 2024-05-24 - [LRU Cache on Stemming Methods]
+**Learning:** Applying `@functools.lru_cache` to word processing functions (like NLP stemming) is highly effective because stemming the same word repeatedly is redundant. However, it must only be applied to `@staticmethod`s or module-level functions. Applying it to an instance method caches the `self` parameter, which results in cache misses across different instances and potential memory leaks.
+**Action:** Always refactor string manipulation/word processing logic that is deterministic and repeated into `@staticmethod`s or module-level functions before applying `lru_cache`. Ensure that `self` or any other non-deterministic variables are not part of the cache key.
