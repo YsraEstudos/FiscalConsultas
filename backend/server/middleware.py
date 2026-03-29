@@ -20,10 +20,11 @@ from typing import Any, Coroutine, Dict, Optional
 from urllib.parse import urlparse
 
 import jwt
-from backend.config.settings import settings
-from backend.infrastructure.db_engine import tenant_context
 from jwt import PyJWKClient
 from starlette.responses import JSONResponse
+
+from backend.config.settings import settings
+from backend.infrastructure.db_engine import tenant_context
 
 logger = logging.getLogger("middleware.tenant")
 

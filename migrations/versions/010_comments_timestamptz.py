@@ -5,8 +5,8 @@ Revises: 009_create_comments_table
 Create Date: 2026-02-26
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "010_comments_timestamptz"
 down_revision = "009_create_comments_table"

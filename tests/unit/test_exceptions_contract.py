@@ -1,4 +1,5 @@
 import pytest
+
 from backend.config.exceptions import (
     ChapterNotFoundError,
     ConfigurationError,

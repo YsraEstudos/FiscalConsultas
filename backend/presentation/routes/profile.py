@@ -8,6 +8,9 @@ autenticação via decode_clerk_jwt.
 import logging
 from typing import Annotated
 
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from backend.config.settings import settings
 from backend.infrastructure.db_engine import get_db
 from backend.presentation.schemas.profile_schemas import (
@@ -24,8 +27,6 @@ from backend.server.middleware import (
 )
 from backend.services.profile_service import ProfileService
 from backend.utils.auth import extract_bearer_token
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("routes.profile")
 

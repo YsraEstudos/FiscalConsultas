@@ -29,30 +29,24 @@ def upgrade() -> None:
     )
 
     # 2) Guarantee referential consistency before adding FK constraints
-    op.execute(
-        """
+    op.execute("""
         UPDATE chapters c
         SET tenant_id = NULL
         WHERE tenant_id IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM tenants t WHERE t.id = c.tenant_id)
-    """
-    )
-    op.execute(
-        """
+    """)
+    op.execute("""
         UPDATE positions p
         SET tenant_id = NULL
         WHERE tenant_id IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM tenants t WHERE t.id = p.tenant_id)
-    """
-    )
-    op.execute(
-        """
+    """)
+    op.execute("""
         UPDATE chapter_notes n
         SET tenant_id = NULL
         WHERE tenant_id IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM tenants t WHERE t.id = n.tenant_id)
-    """
-    )
+    """)
 
     # 3) Add missing FK constraints for catalog tables
     op.create_foreign_key(

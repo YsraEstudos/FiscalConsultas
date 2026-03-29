@@ -25,14 +25,12 @@ def _load_setup_nbs_database():
 
 
 def _create_catalog_metadata_table(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE catalog_metadata (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         )
-        """
-    )
+        """)
 
 
 def test_write_metadata_generates_string_timestamp_independent_of_entries():

@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+
 from backend.services.tipi_service import TipiService
 
 pytestmark = pytest.mark.integration
@@ -206,14 +207,14 @@ class TestTipiHierarchy:
         ncms = [p["ncm"] for p in cap.get("posicoes", [])]
 
         # Deve incluir o item buscado
-        assert any("3924.90.00" in n or "39249000" in n for n in ncms), (
-            f"Item buscado não encontrado. NCMs retornados: {ncms}"
-        )
+        assert any(
+            "3924.90.00" in n or "39249000" in n for n in ncms
+        ), f"Item buscado não encontrado. NCMs retornados: {ncms}"
 
         # Deve incluir ancestral posição (4 dígitos)
-        assert any("39.24" in n or n == "3924" for n in ncms), (
-            f"Ancestral posição (39.24) não encontrado. NCMs: {ncms}"
-        )
+        assert any(
+            "39.24" in n or n == "3924" for n in ncms
+        ), f"Ancestral posição (39.24) não encontrado. NCMs: {ncms}"
 
     @pytest.mark.asyncio
     async def test_family_mode_with_6_digit_query(self, service):
@@ -226,9 +227,9 @@ class TestTipiHierarchy:
         ncms = [p["ncm"] for p in cap.get("posicoes", [])]
 
         # Ancestral de 4 dígitos
-        assert any("39.24" in n or n == "3924" for n in ncms), (
-            f"Ancestral (39.24) não encontrado. NCMs: {ncms}"
-        )
+        assert any(
+            "39.24" in n or n == "3924" for n in ncms
+        ), f"Ancestral (39.24) não encontrado. NCMs: {ncms}"
 
     @pytest.mark.asyncio
     async def test_chapter_mode_returns_full_chapter(self, service):
@@ -239,9 +240,9 @@ class TestTipiHierarchy:
         assert cap is not None
 
         # Deve ter todas as posições do capítulo
-        assert len(cap.get("posicoes", [])) >= 3, (
-            "Modo chapter deve retornar todas as posições do capítulo"
-        )
+        assert (
+            len(cap.get("posicoes", [])) >= 3
+        ), "Modo chapter deve retornar todas as posições do capítulo"
 
     @pytest.mark.asyncio
     async def test_family_mode_filters_unrelated_positions(self, service):
@@ -257,6 +258,6 @@ class TestTipiHierarchy:
         # Não deve incluir posições de outras famílias (ex: 85.17)
         for ncm in ncms:
             clean = ncm.replace(".", "")
-            assert clean.startswith("8413") or clean == "8413", (
-                f"NCM {ncm} não pertence à família 8413"
-            )
+            assert (
+                clean.startswith("8413") or clean == "8413"
+            ), f"NCM {ncm} não pertence à família 8413"

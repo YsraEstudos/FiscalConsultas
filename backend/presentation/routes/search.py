@@ -4,6 +4,9 @@ from collections import OrderedDict
 from typing import Annotated, Any, Mapping, cast
 
 import orjson as _orjson  # pyright: ignore[reportMissingImports]
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from starlette.responses import Response
+
 from backend.config.constants import SearchConfig
 from backend.config.exceptions import ValidationError
 from backend.config.logging_config import server_logger as logger
@@ -13,12 +16,10 @@ from backend.presentation.renderer import HtmlRenderer
 from backend.server.dependencies import get_nesh_service
 from backend.server.rate_limit import public_search_rate_limiter
 from backend.services import NeshService
-from backend.utils.auth import extract_client_ip
 from backend.utils import ncm_utils
+from backend.utils.auth import extract_client_ip
 from backend.utils.cache import cache_scope_key, weak_etag
 from backend.utils.payload_cache_metrics import search_payload_cache_metrics
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from starlette.responses import Response
 
 JSON_MEDIA_TYPE = "application/json"
 

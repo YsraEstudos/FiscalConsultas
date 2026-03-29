@@ -82,13 +82,11 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
 
 
 def _load_valid_nbs_items(conn: sqlite3.Connection) -> dict[str, str]:
-    cursor = conn.execute(
-        """
+    cursor = conn.execute("""
         SELECT code, description
         FROM nbs_items
         ORDER BY source_order ASC
-        """
-    )
+        """)
     rows = cursor.fetchall()
     if not rows:
         raise RuntimeError("nbs_items está vazio. Execute setup_nbs_database.py antes.")

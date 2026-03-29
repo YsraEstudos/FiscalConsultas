@@ -1,9 +1,10 @@
 from datetime import datetime
 
 import pytest
+from starlette.requests import Request
+
 from backend.config.settings import settings
 from backend.presentation.routes import webhooks
-from starlette.requests import Request
 
 pytestmark = pytest.mark.unit
 

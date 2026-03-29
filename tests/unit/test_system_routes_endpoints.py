@@ -1,11 +1,12 @@
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
-import backend.infrastructure.db_engine as db_engine
 import pytest
-from backend.presentation.routes import system
 from fastapi import HTTPException
 from starlette.requests import Request
+
+import backend.infrastructure.db_engine as db_engine
+from backend.presentation.routes import system
 
 pytestmark = pytest.mark.unit
 

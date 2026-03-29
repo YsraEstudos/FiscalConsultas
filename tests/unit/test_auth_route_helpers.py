@@ -1,6 +1,7 @@
 import pytest
-from backend.presentation.routes import auth
 from starlette.requests import Request
+
+from backend.presentation.routes import auth
 
 pytestmark = pytest.mark.unit
 

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
+
 from backend.presentation.routes import comments
 from backend.server.app import app
 

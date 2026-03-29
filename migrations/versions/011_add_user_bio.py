@@ -5,8 +5,8 @@ Revises: 010_comments_timestamptz
 Create Date: 2026-02-27
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "011_add_user_bio"
 down_revision = "010_comments_timestamptz"

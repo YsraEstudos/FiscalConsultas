@@ -1,4 +1,5 @@
 import pytest
+
 from backend.presentation.routes import auth
 from backend.server.app import app
 from backend.server.dependencies import get_ai_service

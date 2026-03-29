@@ -8,8 +8,9 @@ para facilitar testes e troca de banco de dados.
 import logging
 from datetime import datetime, timezone
 from typing import Optional
-from sqlmodel import select
+
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from backend.domain.comment_models import Comment
 

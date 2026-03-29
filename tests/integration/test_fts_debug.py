@@ -2,6 +2,7 @@ import os
 
 import aiosqlite
 import pytest
+
 from backend.config.exceptions import DatabaseError
 from backend.infrastructure.database import DatabaseAdapter
 

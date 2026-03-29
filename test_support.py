@@ -315,8 +315,7 @@ def _ensure_column(
 
 
 def _create_nesh_core_schema(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS chapters (
             chapter_num TEXT PRIMARY KEY,
             content TEXT NOT NULL,
@@ -324,10 +323,8 @@ def _create_nesh_core_schema(conn: sqlite3.Connection) -> None:
             tenant_id TEXT,
             search_vector TEXT
         )
-        """
-    )
-    conn.execute(
-        """
+        """)
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS positions (
             codigo TEXT PRIMARY KEY,
             chapter_num TEXT NOT NULL,
@@ -336,16 +333,14 @@ def _create_nesh_core_schema(conn: sqlite3.Connection) -> None:
             tenant_id TEXT,
             search_vector TEXT
         )
-        """
-    )
+        """)
     _ensure_column(
         conn,
         "positions",
         "anchor_id",
         "ALTER TABLE positions ADD COLUMN anchor_id TEXT",
     )
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS chapter_notes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             chapter_num TEXT UNIQUE NOT NULL,
@@ -357,8 +352,7 @@ def _create_nesh_core_schema(conn: sqlite3.Connection) -> None:
             parsed_notes_json TEXT,
             tenant_id TEXT
         )
-        """
-    )
+        """)
     _ensure_column(
         conn,
         "chapter_notes",
@@ -368,18 +362,15 @@ def _create_nesh_core_schema(conn: sqlite3.Connection) -> None:
 
 
 def _create_nesh_tenant_schema(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS tenants (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             is_active INTEGER NOT NULL DEFAULT 1,
             subscription_plan TEXT NOT NULL DEFAULT 'free'
         )
-        """
-    )
-    conn.execute(
-        """
+        """)
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
             email TEXT UNIQUE NOT NULL,
@@ -387,10 +378,8 @@ def _create_nesh_tenant_schema(conn: sqlite3.Connection) -> None:
             tenant_id TEXT NOT NULL,
             is_active INTEGER NOT NULL DEFAULT 1
         )
-        """
-    )
-    conn.execute(
-        """
+        """)
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS subscriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tenant_id TEXT NOT NULL,
@@ -409,8 +398,7 @@ def _create_nesh_tenant_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT,
             updated_at TEXT
         )
-        """
-    )
+        """)
     for index_sql in (
         "CREATE INDEX IF NOT EXISTS ix_users_tenant_id ON users(tenant_id)",
         "CREATE INDEX IF NOT EXISTS ix_subscriptions_tenant_id ON subscriptions(tenant_id)",
@@ -469,13 +457,11 @@ def _seed_nesh_base_rows(
         "INSERT OR IGNORE INTO positions (codigo, chapter_num, descricao, anchor_id) VALUES (?, ?, ?, ?)",
         position_rows,
     )
-    conn.execute(
-        """
+    conn.execute("""
         UPDATE positions
         SET anchor_id = 'pos-' || REPLACE(codigo, '.', '-')
         WHERE anchor_id IS NULL OR anchor_id = ''
-        """
-    )
+        """)
 
 
 def _insert_search_index_entry(
@@ -579,12 +565,10 @@ def _seed_services_db(db_path: Path) -> None:
             except sqlite3.OperationalError as exc:
                 LOGGER.debug("Skipping services FTS table: %s", exc)
 
-        conn.execute(
-            """
+        conn.execute("""
             INSERT OR REPLACE INTO catalog_metadata (key, value)
             VALUES ('seeded_for_tests', 'true')
-            """
-        )
+            """)
         conn.execute(
             """
             INSERT OR IGNORE INTO nbs_items
@@ -691,17 +675,14 @@ def _seed_tipi_db(db_path: Path) -> None:
 
     conn = sqlite3.connect(db_path)
     try:
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS tipi_chapters (
                 codigo TEXT PRIMARY KEY,
                 titulo TEXT NOT NULL,
                 secao TEXT
             )
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS tipi_positions (
                 ncm TEXT PRIMARY KEY,
                 capitulo TEXT NOT NULL,
@@ -711,8 +692,7 @@ def _seed_tipi_db(db_path: Path) -> None:
                 parent_ncm TEXT,
                 ncm_sort TEXT NOT NULL
             )
-            """
-        )
+            """)
         tipi_columns = {
             row[1]
             for row in conn.execute("PRAGMA table_info(tipi_positions)").fetchall()
@@ -805,13 +785,11 @@ def _seed_tipi_db(db_path: Path) -> None:
             position_rows,
         )
 
-        conn.execute(
-            """
+        conn.execute("""
             UPDATE tipi_positions
             SET ncm_sort = substr(REPLACE(ncm, '.', '') || '000000000000', 1, 12)
             WHERE ncm_sort IS NULL OR ncm_sort = ''
-            """
-        )
+            """)
 
         if tipi_fts_available:
             for ncm, capitulo, descricao, aliquota, _, _, _ in position_rows:
