@@ -4,9 +4,7 @@ from pathlib import Path
 import pytest
 
 from test_support import sqlite_test_environment
-from tests.shared_fixtures import (
-    _cleanup_app_state,  # noqa: F401
-    )
+from tests.shared_fixtures import _cleanup_app_state, client  # noqa: F401
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SNAPSHOT_PATH = PROJECT_ROOT / "snapshots" / "baseline_v1.json"

@@ -174,12 +174,14 @@ async def _collect_db_status(request: Request) -> tuple[dict, float]:
             metadata: dict[str, str] = {}
             if settings.database.is_postgres:
                 try:
-                    metadata_result = await session.execute(text("""
+                    metadata_result = await session.execute(
+                        text("""
                             SELECT key, value
                             FROM catalog_metadata
                             WHERE key LIKE 'nesh_%'
                             ORDER BY key
-                            """))
+                            """)
+                    )
                     metadata = {row.key: row.value for row in metadata_result}
                 except Exception:
                     metadata = {}

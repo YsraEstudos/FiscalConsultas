@@ -206,7 +206,11 @@ def test_tipi_returns_retry_after_when_rate_limited(client, monkeypatch):
     assert "Rate limit exceeded" in response.json()["detail"]
 
 
+from test_support import reset_all_rate_limiters
+
+
 def test_search_public_rate_limit_blocks_burst_requests(client, monkeypatch):
+    reset_all_rate_limiters()
     monkeypatch.setattr(
         search_route.settings.security,
         "public_search_requests_per_minute",

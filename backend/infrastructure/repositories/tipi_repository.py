@@ -128,9 +128,7 @@ class TipiRepository:
             """  # nosec B608
             stmt = text(sql)
             params_tuple = tuple(params_list)
-            result = await self.session.execute(
-                stmt, params_tuple
-            )  # pyright: ignore[reportCallIssue,reportArgumentType]
+            result = await self.session.execute(stmt, params_tuple)  # pyright: ignore[reportCallIssue,reportArgumentType]
 
         return [
             {

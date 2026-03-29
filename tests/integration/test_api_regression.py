@@ -79,7 +79,9 @@ def test_search_regression(client, snapshot_data, query):
         # (Though sometimes results count matches too, total_capitulos is the source of truth for chapters found)  # noqa: E501
         assert (  # nosec B101
             data.get("total_capitulos") == expected_count
-        ), f"Count mismatch for '{query}' (code). Expected {expected_count}, got {data.get('total_capitulos')}"  # noqa: E501  # noqa: E501
+        ), (
+            f"Count mismatch for '{query}' (code). Expected {expected_count}, got {data.get('total_capitulos')}"
+        )  # noqa: E501  # noqa: E501
     else:
         # For FTS (text), we count the items in 'results' list
         # Note: 'total_capitulos' is 0 for FTS queries in nesh_service.py, so we must ignore it.  # noqa: E501
@@ -89,9 +91,7 @@ def test_search_regression(client, snapshot_data, query):
         current_len = len(data.get("results", []))
         # If snapshot had 22 and we have 20 (limit), that's acceptable.
         if expected_count > 0:
-            assert (
-                current_len > 0
-            ), f"Expected results for '{query}' but got 0"  # nosec B101
+            assert current_len > 0, f"Expected results for '{query}' but got 0"  # nosec B101
 
         # If we want strict count check (assuming snapshot was same limit):
         # assert current_len == expected_count

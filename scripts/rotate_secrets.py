@@ -47,9 +47,7 @@ def rotate_secrets(env_path=".env"):
             content = _set_env_value(content, key, previous_value)
             print(f"✅ {key} atualizado com valor anterior.")
         else:
-            print(
-                f"⚠️ Valor anterior de {key.replace('_PREVIOUS', '')} não encontrado."
-            )  # noqa: E501
+            print(f"⚠️ Valor anterior de {key.replace('_PREVIOUS', '')} não encontrado.")  # noqa: E501
 
     # Substituir no arquivo
     for key, new_value in new_secrets.items():

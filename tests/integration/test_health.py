@@ -27,9 +27,9 @@ def test_status_endpoint(client):
         and data.get("nebs", {}).get("status") == "online"
         else "error"
     )
-    assert (
-        data.get("status") == expected_global
-    ), f"Inconsistent global status. Got: {data}"
+    assert data.get("status") == expected_global, (
+        f"Inconsistent global status. Got: {data}"
+    )
     assert "latency_ms" in data["database"]
     assert "version" not in data
     assert "backend" not in data
