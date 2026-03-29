@@ -11,10 +11,13 @@ import unicodedata
 import pytest
 
 from backend.config.constants import DatabaseConfig
+import os
 
 pytestmark = pytest.mark.integration
 
 DB_PATH = DatabaseConfig.DEFAULT_DB_FILENAME
+if not os.path.exists(DB_PATH):
+    pytestmark = pytest.mark.skip(reason=f"Banco de dados '{DB_PATH}' não encontrado")
 
 
 def normalize_text(text):
