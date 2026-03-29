@@ -1,7 +1,8 @@
 import re
 
-import backend.data.glossary_manager as glossary_module
 import pytest
+
+import backend.data.glossary_manager as glossary_module
 from backend.presentation import renderer
 from backend.presentation.renderer import HtmlRenderer, _MultiTransformParser
 

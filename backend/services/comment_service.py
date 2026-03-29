@@ -6,13 +6,14 @@ entre routers e repositories, responsável por validações e lógica de domíni
 """
 
 import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.domain.comment_models import Comment
 from backend.infrastructure.repositories.comment_repository import CommentRepository
 from backend.presentation.schemas.comment_schemas import (
-    CommentCreate,
     CommentApproveIn,
+    CommentCreate,
     CommentUpdate,
 )
 

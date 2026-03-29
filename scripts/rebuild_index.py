@@ -148,17 +148,14 @@ def create_database(chapters: dict):
     cursor = conn.cursor()
 
     # 1. Tabelas Estruturais
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE chapters (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             chapter_num TEXT UNIQUE NOT NULL,
             content TEXT NOT NULL
         )
-    """
-    )
-    cursor.execute(
-        """
+    """)
+    cursor.execute("""
         CREATE TABLE positions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             chapter_num TEXT NOT NULL,
@@ -166,8 +163,7 @@ def create_database(chapters: dict):
             descricao TEXT,
             FOREIGN KEY (chapter_num) REFERENCES chapters(chapter_num)
         )
-    """
-    )
+    """)
     cursor.execute(CHAPTER_NOTES_CREATE_SQL)
 
     # 2. Tabela FTS (Busca Textual)
@@ -176,8 +172,7 @@ def create_database(chapters: dict):
     # item_type: 'chapter' ou 'position'
     # description: para busca
     # search_index: coluna mágica onde inserimos o texto processado (stemmed)
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE VIRTUAL TABLE search_index USING fts5(
             ncm, 
             display_text, 
@@ -185,8 +180,7 @@ def create_database(chapters: dict):
             description,
             indexed_content
         )
-    """
-    )
+    """)
 
     # Índices Relacionais
     cursor.execute("CREATE INDEX idx_chapter_num ON chapters(chapter_num)")

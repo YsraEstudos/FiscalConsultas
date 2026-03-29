@@ -1,6 +1,7 @@
 import pytest
-from backend.presentation.routes import system
 from starlette.requests import Request
+
+from backend.presentation.routes import system
 
 pytestmark = pytest.mark.unit
 
@@ -74,6 +75,8 @@ def test_build_public_status_payload_strips_sensitive_fields():
             "error": "hidden",
         },
         {"status": "error", "chapters": 3, "positions": 7, "error": "hidden"},
+        {"status": "online", "items": 10, "error": "hidden"},
+        {"status": "online", "entries": 5, "error": "hidden"},
         "error",
     )
 
@@ -81,6 +84,14 @@ def test_build_public_status_payload_strips_sensitive_fields():
         "status": "error",
         "database": {"status": "online", "latency_ms": 5.5},
         "tipi": {"status": "error"},
+        "nbs": {"status": "online"},
+        "nebs": {"status": "online"},
+        "catalogs": {
+            "nesh": {"status": "online", "latency_ms": 5.5},
+            "tipi": {"status": "error"},
+            "nbs": {"status": "online"},
+            "nebs": {"status": "online"},
+        },
     }
 
 

@@ -2,13 +2,14 @@ import re
 import time
 from typing import Annotated
 
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+
 from backend.config.settings import is_valid_admin_token, reload_settings, settings
 from backend.server.dependencies import get_nesh_service
 from backend.server.middleware import decode_clerk_jwt
 from backend.server.rate_limit import status_rate_limiter
 from backend.services import NeshService
 from backend.utils.auth import extract_bearer_token, extract_client_ip, is_admin_payload
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 router = APIRouter()
 STATUS_RESPONSES = {
@@ -74,7 +75,9 @@ def _normalize_db_status(raw_stats: dict | None, latency_ms: float) -> dict:
     positions = _to_int(raw_stats.get("positions"))
     has_error = raw_stats.get("status") == "error"
     payload = {
-        "status": "online" if not has_error and chapters > 0 and positions > 0 else "error",
+        "status": (
+            "online" if not has_error and chapters > 0 and positions > 0 else "error"
+        ),
         "chapters": chapters,
         "positions": positions,
         "latency_ms": latency_ms,
@@ -135,9 +138,7 @@ def _normalize_count_catalog_status(
     total = _to_int(raw_stats.get(count_field))
     payload = {
         "status": (
-            "online"
-            if raw_stats.get("status") != "error" and total > 0
-            else "error"
+            "online" if raw_stats.get("status") != "error" and total > 0 else "error"
         ),
         public_count_field: total,
     }
@@ -159,8 +160,9 @@ async def _collect_db_status(request: Request) -> tuple[dict, float]:
         return db_stats, latency_ms
 
     try:
-        from backend.infrastructure.db_engine import get_session
         from sqlalchemy import text
+
+        from backend.infrastructure.db_engine import get_session
 
         async with get_session() as session:
             chapters_count = await session.execute(
@@ -173,14 +175,12 @@ async def _collect_db_status(request: Request) -> tuple[dict, float]:
             if settings.database.is_postgres:
                 try:
                     metadata_result = await session.execute(
-                        text(
-                            """
+                        text("""
                             SELECT key, value
                             FROM catalog_metadata
                             WHERE key LIKE 'nesh_%'
                             ORDER BY key
-                            """
-                        )
+                            """)
                     )
                     metadata = {row.key: row.value for row in metadata_result}
                 except Exception:
@@ -220,7 +220,9 @@ async def _collect_nbs_status(request: Request) -> dict:
         return {"status": "error", "error": str(nbs_err)}
 
 
-async def _collect_status_payloads(request: Request) -> tuple[dict, dict, dict, dict, str]:
+async def _collect_status_payloads(
+    request: Request,
+) -> tuple[dict, dict, dict, dict, str]:
     db_stats, db_latency_ms = await _collect_db_status(request)
     tipi_stats = await _collect_tipi_status(request)
     nbs_stats = await _collect_nbs_status(request)
@@ -247,7 +249,13 @@ async def _collect_status_payloads(request: Request) -> tuple[dict, dict, dict, 
         and normalized_nebs.get("status") == "online"
         else "error"
     )
-    return normalized_db, normalized_tipi, normalized_nbs, normalized_nebs, overall_status
+    return (
+        normalized_db,
+        normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
+        overall_status,
+    )
 
 
 def _build_public_status_payload(
@@ -331,9 +339,7 @@ async def get_status(request: Request):
         normalized_nbs,
         normalized_nebs,
         overall_status,
-    ) = await _collect_status_payloads(
-        request
-    )
+    ) = await _collect_status_payloads(request)
     return _build_public_status_payload(
         normalized_db,
         normalized_tipi,
@@ -358,9 +364,7 @@ async def get_status_details(request: Request):
         normalized_nbs,
         normalized_nebs,
         overall_status,
-    ) = await _collect_status_payloads(
-        request
-    )
+    ) = await _collect_status_payloads(request)
     return _build_detailed_status_payload(
         request,
         normalized_db,

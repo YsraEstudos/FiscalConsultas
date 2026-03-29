@@ -5,11 +5,12 @@ import secrets
 from datetime import date, datetime, timezone
 from typing import Any, Dict, Optional, cast
 
+from fastapi import APIRouter, HTTPException, Request
+from sqlalchemy import select
+
 from backend.config.settings import settings
 from backend.domain.sqlmodels import Subscription, Tenant
 from backend.infrastructure.db_engine import get_session
-from fastapi import APIRouter, HTTPException, Request
-from sqlalchemy import select
 
 router = APIRouter()
 logger = logging.getLogger("routes.webhooks")

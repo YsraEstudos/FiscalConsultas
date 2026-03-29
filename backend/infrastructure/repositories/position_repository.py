@@ -146,8 +146,7 @@ class PositionRepository:
         """FTS usando tsvector do PostgreSQL."""
         tsquery = build_postgres_tsquery(query)
         if self.tenant_id:
-            stmt = text(
-                f"""
+            stmt = text(f"""
                 SELECT
                     codigo as ncm,
                     descricao as display_text,
@@ -159,12 +158,10 @@ class PositionRepository:
                   AND (tenant_id = :tenant_id OR tenant_id IS NULL)
                 ORDER BY score DESC
                 LIMIT :limit
-                """
-            )
+                """)
             params = {**tsquery.params, "limit": limit, "tenant_id": self.tenant_id}
         else:
-            stmt = text(
-                f"""
+            stmt = text(f"""
                 SELECT
                     codigo as ncm,
                     descricao as display_text,
@@ -175,8 +172,7 @@ class PositionRepository:
                 WHERE search_vector @@ {tsquery.sql}
                 ORDER BY score DESC
                 LIMIT :limit
-                """
-            )
+                """)
             params = {**tsquery.params, "limit": limit}
         result = await self.session.execute(stmt, params)
         return [
@@ -193,8 +189,7 @@ class PositionRepository:
 
     async def _fts_sqlite(self, query: str, limit: int) -> List[SearchResultItem]:
         """FTS usando índice FTS5 existente do SQLite."""
-        stmt = text(
-            """
+        stmt = text("""
             SELECT
                 ncm,
                 display_text,
@@ -206,8 +201,7 @@ class PositionRepository:
               AND type = 'position'
             ORDER BY rank
             LIMIT :limit
-        """
-        )
+        """)
         result = await self.session.execute(stmt, {"query": query, "limit": limit})
         return [
             SearchResultItem(

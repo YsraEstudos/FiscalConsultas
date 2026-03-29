@@ -35,14 +35,12 @@ def test_chapter_84_sorting_invariant(db_connection):
     Verifica se a query ordenada por ncm_sort retorna a ordem topológica correta.
     """
     cursor = db_connection.cursor()
-    cursor.execute(
-        """
+    cursor.execute("""
         SELECT ncm, ncm_sort 
         FROM tipi_positions 
         WHERE capitulo = '84' 
         ORDER BY ncm_sort
-    """
-    )
+    """)
     rows = cursor.fetchall()
 
     ncms = [r["ncm"] for r in rows]

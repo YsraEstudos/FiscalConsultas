@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 import httpx
 import pytest
+
 from backend.config import CONFIG
 from backend.config.settings import settings
 

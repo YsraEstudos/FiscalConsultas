@@ -6,6 +6,7 @@ from backend.presentation.routes import search as search_route
 from backend.presentation.routes import tipi as tipi_route
 from backend.server.app import app
 from backend.server.dependencies import get_nesh_service, get_tipi_service
+from test_support import reset_all_rate_limiters
 
 pytestmark = pytest.mark.integration
 
@@ -207,6 +208,7 @@ def test_tipi_returns_retry_after_when_rate_limited(client, monkeypatch):
 
 
 def test_search_public_rate_limit_blocks_burst_requests(client, monkeypatch):
+    reset_all_rate_limiters()
     monkeypatch.setattr(
         search_route.settings.security,
         "public_search_requests_per_minute",

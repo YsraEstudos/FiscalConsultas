@@ -1,11 +1,12 @@
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
-import backend.infrastructure.db_engine as db_engine
 import pytest
-from backend.presentation.routes import system
 from fastapi import HTTPException
 from starlette.requests import Request
+
+import backend.infrastructure.db_engine as db_engine
+from backend.presentation.routes import system
 
 pytestmark = pytest.mark.unit
 
@@ -141,7 +142,9 @@ async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypat
         "/api/status",
         state={
             "db": None,
-            "tipi_service": _FakeTipiService({"ok": True, "chapters": "2", "positions": "7"}),
+            "tipi_service": _FakeTipiService(
+                {"ok": True, "chapters": "2", "positions": "7"}
+            ),
             "nbs_service": _FakeNbsService(
                 {"status": "online", "nbs_items": "10", "nebs_entries": "3"}
             ),
@@ -232,7 +235,10 @@ async def test_get_status_details_returns_sensitive_fields_for_admin(monkeypatch
     assert payload["nbs"]["items"] == 6
     assert payload["nebs"]["entries"] == 2
     assert payload["catalogs"]["nbs"]["status"] == "online"
-    assert payload["catalogs"]["nebs"]["metadata"]["updated_at"] == "2026-03-25T10:05:00+00:00"
+    assert (
+        payload["catalogs"]["nebs"]["metadata"]["updated_at"]
+        == "2026-03-25T10:05:00+00:00"
+    )
 
 
 @pytest.mark.asyncio

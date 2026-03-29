@@ -16,9 +16,9 @@ from pathlib import Path
 try:
     from backend.config.services_db_schema import (
         CATALOG_METADATA_CREATE_SQL,
+        NBS_ITEMS_CREATE_SQL,
         NEBS_ENTRIES_CREATE_SQL,
         NEBS_ENTRIES_FTS_CREATE_SQL,
-        NBS_ITEMS_CREATE_SQL,
         SERVICES_INDEXES_SQL,
     )
     from backend.config.settings import settings
@@ -28,9 +28,9 @@ except ModuleNotFoundError:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
     from backend.config.services_db_schema import (
         CATALOG_METADATA_CREATE_SQL,
+        NBS_ITEMS_CREATE_SQL,
         NEBS_ENTRIES_CREATE_SQL,
         NEBS_ENTRIES_FTS_CREATE_SQL,
-        NBS_ITEMS_CREATE_SQL,
         SERVICES_INDEXES_SQL,
     )
     from backend.config.settings import settings

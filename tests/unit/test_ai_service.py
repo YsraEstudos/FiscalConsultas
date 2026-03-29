@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+
 from backend.config.exceptions import ServiceError
 from backend.services import ai_service as ai_mod
 

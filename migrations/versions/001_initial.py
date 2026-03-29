@@ -137,8 +137,7 @@ def upgrade() -> None:
         # ===== Triggers para atualização automática de search_vector =====
 
         # Trigger função para chapters
-        op.execute(
-            """
+        op.execute("""
             CREATE OR REPLACE FUNCTION update_chapter_search_vector()
             RETURNS trigger AS $$
             BEGIN
@@ -146,20 +145,16 @@ def upgrade() -> None:
                 RETURN NEW;
             END
             $$ LANGUAGE plpgsql;
-        """
-        )
+        """)
 
-        op.execute(
-            """
+        op.execute("""
             CREATE TRIGGER chapters_search_update
             BEFORE INSERT OR UPDATE ON chapters
             FOR EACH ROW EXECUTE FUNCTION update_chapter_search_vector();
-        """
-        )
+        """)
 
         # Trigger função para positions
-        op.execute(
-            """
+        op.execute("""
             CREATE OR REPLACE FUNCTION update_position_search_vector()
             RETURNS trigger AS $$
             BEGIN
@@ -167,25 +162,20 @@ def upgrade() -> None:
                 RETURN NEW;
             END
             $$ LANGUAGE plpgsql;
-        """
-        )
+        """)
 
-        op.execute(
-            """
+        op.execute("""
             CREATE TRIGGER positions_search_update
             BEFORE INSERT OR UPDATE ON positions
             FOR EACH ROW EXECUTE FUNCTION update_position_search_vector();
-        """
-        )
+        """)
 
         # Trigger para tipi_positions
-        op.execute(
-            """
+        op.execute("""
             CREATE TRIGGER tipi_positions_search_update
             BEFORE INSERT OR UPDATE ON tipi_positions
             FOR EACH ROW EXECUTE FUNCTION update_position_search_vector();
-        """
-        )
+        """)
 
 
 def downgrade() -> None:

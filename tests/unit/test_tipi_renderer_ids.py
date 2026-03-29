@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+
 from backend.presentation.tipi_renderer import TipiRenderer
 from backend.services.tipi_service import TipiService
 

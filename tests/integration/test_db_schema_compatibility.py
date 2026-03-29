@@ -1,6 +1,7 @@
 import sqlite3
 
 import pytest
+
 from backend.infrastructure.database import DatabaseAdapter
 
 pytestmark = pytest.mark.integration
@@ -9,31 +10,25 @@ pytestmark = pytest.mark.integration
 def _create_legacy_db_without_anchor_id(path: str) -> None:
     conn = sqlite3.connect(path)
     try:
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE chapters (
                 chapter_num TEXT PRIMARY KEY,
                 content TEXT NOT NULL
             )
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             CREATE TABLE positions (
                 codigo TEXT PRIMARY KEY,
                 chapter_num TEXT NOT NULL,
                 descricao TEXT
             )
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             CREATE TABLE chapter_notes (
                 chapter_num TEXT UNIQUE NOT NULL,
                 notes_content TEXT
             )
-            """
-        )
+            """)
 
         conn.execute(
             "INSERT INTO chapters (chapter_num, content) VALUES (?, ?)",

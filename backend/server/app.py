@@ -3,6 +3,12 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+
 from backend.config import CONFIG, setup_logging
 from backend.config.exceptions import NeshError
 from backend.config.settings import settings
@@ -30,11 +36,6 @@ from backend.services.ai_service import AiService
 from backend.services.nbs_service import NbsService
 from backend.services.tipi_service import TipiService
 from backend.utils.frontend_check import verify_frontend_build
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 """
 Módulo do Servidor (API Handler).
@@ -192,8 +193,9 @@ async def _init_cache_warmup(app: FastAPI) -> None:
 
 async def _postgres_tipi_has_data() -> bool:
     try:
-        from backend.infrastructure.db_engine import get_session
         from sqlalchemy import text
+
+        from backend.infrastructure.db_engine import get_session
 
         async with get_session() as session:
             result = await session.execute(

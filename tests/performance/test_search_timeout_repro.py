@@ -1,6 +1,7 @@
 import time
 
 import pytest
+
 from backend.config import CONFIG
 from backend.infrastructure.database import DatabaseAdapter
 from backend.services.nesh_service import NeshService

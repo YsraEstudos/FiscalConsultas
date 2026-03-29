@@ -20,9 +20,10 @@ settings.database.postgres_url = None
 settings.cache.enable_redis = False
 
 import orjson  # noqa: E402
+from starlette.testclient import TestClient  # noqa: E402
+
 from backend.config import CONFIG  # noqa: E402
 from backend.server.app import app  # noqa: E402
-from starlette.testclient import TestClient  # noqa: E402
 
 
 def measure(label, fn, rounds=50):

@@ -5,8 +5,8 @@ Revises: 007_tipi_hierarchy_columns
 Create Date: 2025-07-11
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "008_add_comment_profile_fields"
 down_revision = "007_tipi_hierarchy_columns"

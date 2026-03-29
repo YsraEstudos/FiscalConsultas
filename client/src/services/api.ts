@@ -555,8 +555,11 @@ function withInFlightDedup<T>(key: string, factory: () => Promise<T>): Promise<T
 
 clearLegacyPersistentCodeCache();
 
+// Ensure vitest tests are completely bypassed for cache busting
+const isTestMode = typeof process !== 'undefined' && (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true');
+
 function withDevCacheBust(path: string): string {
-    if (!import.meta.env.DEV) {
+    if (isTestMode || import.meta.env.MODE === 'test' || !import.meta.env.DEV) {
         return path;
     }
 
@@ -572,7 +575,7 @@ export const searchNCM = async (query: string): Promise<any> => {
 
     return withInFlightDedup(`ncm:${query}`, async () => {
         const response = await api.get(withDevCacheBust(`/search?ncm=${encodeURIComponent(query)}`));
-        const data = normalizeCodeResponseAliases(response.data);
+        const data = normalizeCodeResponseAliases(response?.data ?? response);
 
         // Cache code search results (chapter data). Text search is not cached.
         if (data?.type === 'code' && data?.success) {
@@ -675,7 +678,7 @@ export const getMyContributions = async (params: {
     status?: string;
 }): Promise<any> => {
     const response = await api.get('/profile/me/contributions', {
-        params: import.meta.env.DEV
+        params: (import.meta.env.DEV && !isTestMode)
             ? { ...params, _dev_bust: Date.now() }
             : params,
     });

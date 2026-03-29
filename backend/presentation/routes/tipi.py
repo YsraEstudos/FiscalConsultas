@@ -4,6 +4,9 @@ from collections import OrderedDict
 from typing import Annotated, Any, Mapping
 
 import orjson as _orjson  # pyright: ignore[reportMissingImports]
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from starlette.responses import Response
+
 from backend.config.constants import SearchConfig, ViewMode
 from backend.config.exceptions import ValidationError
 from backend.config.logging_config import server_logger as logger
@@ -15,8 +18,6 @@ from backend.services.tipi_service import TipiService
 from backend.utils.auth import extract_client_ip
 from backend.utils.cache import cache_scope_key, weak_etag
 from backend.utils.payload_cache_metrics import tipi_payload_cache_metrics
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from starlette.responses import Response
 
 JSON_MEDIA_TYPE = "application/json"
 _TIPI_CODE_PAYLOAD_CACHE_MAX = 16

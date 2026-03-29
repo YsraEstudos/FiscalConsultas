@@ -251,14 +251,12 @@ class TipiService:
                         text("SELECT COUNT(*) FROM tipi_positions")
                     )
                     metadata_result = await repo.session.execute(
-                        text(
-                            """
+                        text("""
                             SELECT key, value
                             FROM catalog_metadata
                             WHERE key LIKE 'tipi_%'
                             ORDER BY key
-                            """
-                        )
+                            """)
                     )
 
                 chapters = int(chapters_result.scalar() or 0)

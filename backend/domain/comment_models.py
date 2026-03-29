@@ -6,10 +6,10 @@ com suporte a multi-tenancy via tenant_id.
 """
 
 from datetime import datetime, timezone
-from typing import Optional, Literal
-from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, Text
+from typing import Literal, Optional
 
+from sqlalchemy import Column, Text
+from sqlmodel import Field, SQLModel
 
 CommentStatus = Literal["pending", "approved", "rejected", "private"]
 

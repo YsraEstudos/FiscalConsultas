@@ -147,8 +147,7 @@ class ChapterRepository:
         """FTS usando tsvector/tsquery do PostgreSQL."""
         tsquery = build_postgres_tsquery(query)
         if self.tenant_id:
-            stmt = text(
-                f"""
+            stmt = text(f"""
                 SELECT
                     p.codigo as ncm,
                     p.descricao as display_text,
@@ -160,12 +159,10 @@ class ChapterRepository:
                   AND (p.tenant_id = :tenant_id OR p.tenant_id IS NULL)
                 ORDER BY score DESC
                 LIMIT :limit
-                """
-            )
+                """)
             params = {**tsquery.params, "limit": limit, "tenant_id": self.tenant_id}
         else:
-            stmt = text(
-                f"""
+            stmt = text(f"""
                 SELECT
                     p.codigo as ncm,
                     p.descricao as display_text,
@@ -176,8 +173,7 @@ class ChapterRepository:
                 WHERE p.search_vector @@ {tsquery.sql}
                 ORDER BY score DESC
                 LIMIT :limit
-                """
-            )
+                """)
             params = {**tsquery.params, "limit": limit}
 
         result = await self.session.execute(stmt, params)
@@ -195,8 +191,7 @@ class ChapterRepository:
 
     async def _fts_sqlite(self, query: str, limit: int) -> List[SearchResultItem]:
         """FTS usando FTS5 do SQLite (compatibilidade)."""
-        stmt = text(
-            """
+        stmt = text("""
             SELECT
                 ncm,
                 display_text,
@@ -207,8 +202,7 @@ class ChapterRepository:
             WHERE indexed_content MATCH :query
             ORDER BY rank
             LIMIT :limit
-        """
-        )
+        """)
         result = await self.session.execute(stmt, {"query": query, "limit": limit})
         return [
             SearchResultItem(

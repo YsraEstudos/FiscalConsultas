@@ -6,10 +6,11 @@ Segue o padrão de test_comments_api_contract.py:
 - Override de _get_service com _FakeProfileService
 """
 
-from types import SimpleNamespace
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
+
 from backend.presentation.routes import profile
 from backend.server.app import app
 

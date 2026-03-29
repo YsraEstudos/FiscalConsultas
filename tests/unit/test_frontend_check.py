@@ -1,4 +1,5 @@
 import pytest
+
 from backend.utils import frontend_check
 
 pytestmark = pytest.mark.unit

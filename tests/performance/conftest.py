@@ -4,12 +4,9 @@ import sys
 import time
 
 import pytest
+
 from test_support import sqlite_test_environment
-from tests.shared_fixtures import (  # noqa: F401
-    _cleanup_app_state,
-    _reset_rate_limiters,
-    client,
-)
+from tests.shared_fixtures import _cleanup_app_state  # noqa: F401
 
 STARTUP_READY_MARKERS = (
     "Application startup complete",
