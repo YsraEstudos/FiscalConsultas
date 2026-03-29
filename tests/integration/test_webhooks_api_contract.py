@@ -13,7 +13,6 @@ from backend.config.settings import settings
 from backend.domain.sqlmodels import Subscription, Tenant
 from backend.infrastructure.db_engine import get_session
 from backend.presentation.routes import webhooks
-from tests.shared_fixtures import client  # noqa: F401
 
 pytestmark = pytest.mark.integration
 
