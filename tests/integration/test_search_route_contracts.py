@@ -6,6 +6,7 @@ from backend.presentation.routes import search as search_route
 from backend.presentation.routes import tipi as tipi_route
 from backend.server.app import app
 from backend.server.dependencies import get_nesh_service, get_tipi_service
+from test_support import reset_all_rate_limiters
 
 pytestmark = pytest.mark.integration
 
@@ -204,9 +205,6 @@ def test_tipi_returns_retry_after_when_rate_limited(client, monkeypatch):
     assert response.status_code == 429
     assert response.headers["Retry-After"] == "11"
     assert "Rate limit exceeded" in response.json()["detail"]
-
-
-from test_support import reset_all_rate_limiters
 
 
 def test_search_public_rate_limit_blocks_burst_requests(client, monkeypatch):
