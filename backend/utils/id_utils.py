@@ -1,3 +1,9 @@
+import re
+
+# Pre-compiled regex for stripping unsafe characters in anchor IDs (performance optimization)
+_RE_UNSAFE_ANCHOR_CHARS = re.compile(r"[^a-zA-Z0-9\.\-]")
+
+
 def generate_anchor_id(ncm_code: str) -> str:
     """
     Gera um ID único e seguro para âncoras HTML de posições NCM.
@@ -18,14 +24,12 @@ def generate_anchor_id(ncm_code: str) -> str:
     Returns:
         String formatada para uso em id="" e href="#..."
     """
-    import re
-
     if not ncm_code:
         return ""
 
     # Security: Remove any character that is not alphanumeric, dot, or dash
     # This prevents HTML injection vulnerabilities via ID attributes
-    safe_chars = re.sub(r"[^a-zA-Z0-9\.\-]", "", ncm_code)
+    safe_chars = _RE_UNSAFE_ANCHOR_CHARS.sub("", ncm_code)
 
     clean_code = safe_chars.strip().replace(".", "-")
     return f"pos-{clean_code}"
