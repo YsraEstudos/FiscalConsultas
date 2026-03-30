@@ -19,7 +19,7 @@ const explicitBaseUrl = import.meta.env.VITE_API_FILTER_URL || import.meta.env.V
 const isLocalHost = (host: string) => host === 'localhost' || host === '127.0.0.1';
 const isExplicitLocalApi =
     !!explicitBaseUrl &&
-    /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$)/i.test(explicitBaseUrl);
+    /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::[0-9]{1,5})?(?:\/|$)/i.test(explicitBaseUrl);
 const shouldUseDevProxyApi =
     import.meta.env.DEV && isExplicitLocalApi;
 const shouldUseProxyApi =
