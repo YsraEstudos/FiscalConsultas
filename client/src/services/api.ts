@@ -17,9 +17,15 @@ import type {
 
 const explicitBaseUrl = import.meta.env.VITE_API_FILTER_URL || import.meta.env.VITE_API_URL;
 const isLocalHost = (host: string) => host === 'localhost' || host === '127.0.0.1';
-const isExplicitLocalApi =
-    !!explicitBaseUrl &&
-    /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::[0-9]{1,5})?(?:\/|$)/i.test(explicitBaseUrl);
+let isExplicitLocalApi = false;
+try {
+    if (explicitBaseUrl) {
+        const url = new URL(explicitBaseUrl);
+        isExplicitLocalApi = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+    }
+} catch {
+    isExplicitLocalApi = false;
+}
 const shouldUseDevProxyApi =
     import.meta.env.DEV && isExplicitLocalApi;
 const shouldUseProxyApi =

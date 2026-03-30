@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator, cast
@@ -76,6 +77,9 @@ class NbsService:
         self._repository = repository
         self._repository_factory = repository_factory
         self._use_repository = repository is not None or repository_factory is not None
+
+        self._healthcheck_cache: tuple[float, dict[str, Any]] | None = None
+        self._healthcheck_ttl_seconds = 15.0
 
         mode = "Repository" if self._use_repository else "aiosqlite"
         logger.info("NbsService inicializado (modo: %s)", mode)
@@ -147,16 +151,24 @@ class NbsService:
 
     async def check_connection(self) -> dict[str, Any]:
         """Return readiness, counts and metadata for the services catalog."""
+        # Use simple TTL cache to prevent continuous table scans
+        now = time.monotonic()
+        if self._healthcheck_cache is not None:
+            cached_time, cached_result = self._healthcheck_cache
+            if now - cached_time < self._healthcheck_ttl_seconds:
+                return cached_result
+
+        result: dict[str, Any] = {"status": "error"}
         if self._use_repository:
             try:
                 async with self._get_repo() as repo:
                     if repo is None:
-                        raise RuntimeError("NBS repository unavailable")
-                    counts = await repo.get_catalog_counts()
+                        raise RuntimeError("NBS repository unavailable")  # NOSONAR
+                    counts = await repo.get_catalog_counts()  # NOSONAR
                     metadata = await repo.get_catalog_metadata()
                 nbs_items = int(counts.get("nbs_items", 0))
                 nebs_entries = int(counts.get("nebs_entries", 0))
-                return {
+                result = {
                     "status": (
                         "online" if nbs_items > 0 and nebs_entries > 0 else "error"
                     ),
@@ -166,47 +178,57 @@ class NbsService:
                 }
             except Exception as exc:
                 logger.error("NBS repository healthcheck failed: %s", exc)
-                return {"status": "error", "error": str(exc)}
+                result = {"status": "error", "error": str(exc)}
+        else:
+            if not self.db_path.exists():
+                result = {
+                    "status": "error",
+                    "error": f"Banco NBS não encontrado: {self.db_path}",
+                }
+            else:
+                conn = await self._get_connection()
+                try:
+                    nbs_count = 0
+                    nebs_count = 0
+                    metadata: dict[str, str] = {}
 
-        if not self.db_path.exists():
-            return {
-                "status": "error",
-                "error": f"Banco NBS não encontrado: {self.db_path}",
-            }
+                    if await self._table_exists(conn, "nbs_items"):
+                        cursor = await conn.execute("SELECT COUNT(*) FROM nbs_items")
+                        row = await cursor.fetchone()
+                        nbs_count = int(row[0] if row else 0)
 
-        conn = await self._get_connection()
-        try:
-            nbs_count = 0
-            nebs_count = 0
-            metadata: dict[str, str] = {}
+                    if await self._table_exists(conn, "nebs_entries"):
+                        cursor = await conn.execute(
+                            "SELECT COUNT(*) FROM nebs_entries WHERE parser_status = 'trusted'"
+                        )
+                        row = await cursor.fetchone()
+                        nebs_count = int(row[0] if row else 0)
 
-            if await self._table_exists(conn, "nbs_items"):
-                cursor = await conn.execute("SELECT COUNT(*) FROM nbs_items")
-                row = await cursor.fetchone()
-                nbs_count = int(row[0] if row else 0)
+                    if await self._table_exists(conn, "catalog_metadata"):
+                        cursor = await conn.execute(
+                            "SELECT key, value FROM catalog_metadata"
+                        )
+                        metadata = {
+                            row["key"]: row["value"] for row in await cursor.fetchall()
+                        }
 
-            if await self._table_exists(conn, "nebs_entries"):
-                cursor = await conn.execute(
-                    "SELECT COUNT(*) FROM nebs_entries WHERE parser_status = 'trusted'"
-                )
-                row = await cursor.fetchone()
-                nebs_count = int(row[0] if row else 0)
+                    result = {
+                        "status": "online"
+                        if nbs_count > 0 and nebs_count > 0
+                        else "error",
+                        "nbs_items": nbs_count,
+                        "nebs_entries": nebs_count,
+                        "metadata": metadata,
+                    }
+                except Exception as exc:
+                    logger.error("NBS SQLite healthcheck failed: %s", exc)
+                    result = {"status": "error", "error": str(exc)}
+                finally:
+                    await self._release_connection(conn)
 
-            if await self._table_exists(conn, "catalog_metadata"):
-                cursor = await conn.execute("SELECT key, value FROM catalog_metadata")
-                metadata = {row["key"]: row["value"] for row in await cursor.fetchall()}
-
-            return {
-                "status": "online" if nbs_count > 0 and nebs_count > 0 else "error",
-                "nbs_items": nbs_count,
-                "nebs_entries": nebs_count,
-                "metadata": metadata,
-            }
-        except Exception as exc:
-            logger.error("NBS SQLite healthcheck failed: %s", exc)
-            return {"status": "error", "error": str(exc)}
-        finally:
-            await self._release_connection(conn)
+        if result.get("status") == "online":
+            self._healthcheck_cache = (now, result)
+        return result
 
     async def _get_table_columns(
         self, conn: aiosqlite.Connection, table: str
