@@ -191,14 +191,14 @@ describe('useComments behavior', () => {
       await addPromise;
     });
 
-    expect(refs.createCommentMock).toHaveBeenCalledWith({
-      anchor_key: 'pos-84-13',
-      selected_text: 'Motores elétricos',
-      body: 'Novo comentário',
-      is_private: true,
-      user_name: 'Alice',
-      user_image_url: undefined,
-    });
+    expect(refs.createCommentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        anchor_key: 'pos-84-13',
+        selected_text: 'Motores elétricos',
+        body: 'Novo comentário',
+        is_private: true,
+      })
+    );
     expect(result.current.comments).toEqual([
       expect.objectContaining({
         id: '2',

@@ -556,7 +556,8 @@ function withInFlightDedup<T>(key: string, factory: () => Promise<T>): Promise<T
 clearLegacyPersistentCodeCache();
 
 function withDevCacheBust(path: string): string {
-    if (!import.meta.env.DEV) {
+    // Disable dev cache busting in test environments to avoid breaking mock assertions
+    if (!import.meta.env.DEV || import.meta.env.TEST) {
         return path;
     }
 
@@ -675,7 +676,7 @@ export const getMyContributions = async (params: {
     status?: string;
 }): Promise<any> => {
     const response = await api.get('/profile/me/contributions', {
-        params: import.meta.env.DEV
+        params: import.meta.env.DEV && !import.meta.env.TEST
             ? { ...params, _dev_bust: Date.now() }
             : params,
     });

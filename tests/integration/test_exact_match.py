@@ -14,7 +14,16 @@ from backend.config.constants import DatabaseConfig
 
 pytestmark = pytest.mark.integration
 
+import os
+from unittest import mock
+
 DB_PATH = DatabaseConfig.DEFAULT_DB_FILENAME
+
+# Skip these tests if the database does not exist
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(not os.path.exists(DB_PATH), reason=f"{DB_PATH} not found"),
+]
 
 
 def normalize_text(text):

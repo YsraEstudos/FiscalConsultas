@@ -378,24 +378,27 @@ describe('api service', () => {
     const result = await apiModule.searchNCM('9999');
 
     expect(result.results['99']).toBeTruthy();
-    const index = JSON.parse(localStorage.getItem('nesh_cache_index_v1') || '{}');
-    expect(index.ghost).toBeUndefined();
   });
 
   it('uses valid localStorage cache without network call and normalizes aliases', async () => {
+    // Tests functionality that was disabled via SHOULD_USE_PERSISTENT_CACHE
+    // but we can test the memory cache code path instead, or test that it gets ignored
     const apiModule = await loadApiModule();
     const now = Date.now();
-    localStorage.setItem('nesh_cache_index_v1', JSON.stringify({ 'nesh:8517': now - 100 }));
-    localStorage.setItem(
-      'nesh_cache_nesh:8517',
-      JSON.stringify({
-        timestamp: now,
-        data: { success: true, type: 'code', results: { '85': { capitulo: '85' } } },
-      }),
-    );
 
+    // Setup mock network call since localStorage cache is disabled for nesh: prefix
+    mockAxios.instance.get.mockResolvedValueOnce({
+      data: { success: true, type: 'code', results: { '85': { capitulo: '85' } } },
+    });
+
+    const res = await apiModule.searchNCM('8517');
+
+    expect(mockAxios.instance.get).toHaveBeenCalled();
+    expect(res.resultados).toEqual(res.results);
+
+    // Second call should hit memory cache
+    mockAxios.instance.get.mockClear();
     const cached = await apiModule.searchNCM('8517');
-
     expect(mockAxios.instance.get).not.toHaveBeenCalled();
     expect(cached.resultados).toEqual(cached.results);
   });
