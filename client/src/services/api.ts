@@ -52,6 +52,7 @@ export const api = axios.create({
     // Clerk auth is forwarded via Authorization header; avoid leaking ambient cookies cross-origin.
     withCredentials: false,
 });
+export const SYSTEM_STATUS_TIMEOUT_MS = 4000;
 
 // ============================================================
 // AUTH INTERCEPTOR - Injeta o JWT do Clerk em cada request
@@ -611,7 +612,9 @@ export const getGlossaryTerm = async (term: string): Promise<any> => {
 };
 
 export const getSystemStatus = async (): Promise<SystemStatusResponse> => {
-    const response = await api.get(withDevCacheBust('/status'));
+    const response = await api.get(withDevCacheBust('/status'), {
+        timeout: SYSTEM_STATUS_TIMEOUT_MS,
+    });
     return response.data;
 };
 

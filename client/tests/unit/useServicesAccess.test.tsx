@@ -115,4 +115,43 @@ describe('useServicesAccess', () => {
       warnSpy.mockRestore();
     }
   });
+
+  it('fails fast for service searches when the offline snapshot is still fresh', async () => {
+    refs.getSystemStatusMock.mockResolvedValue({
+      nbs: { status: 'error' },
+      nebs: { status: 'error' },
+    });
+
+    const { result } = renderHook(() => useServicesAccess());
+
+    await waitFor(() => {
+      expect(result.current.servicesUnavailableReason).toBe('Catálogo NBS/NEBS indisponível no momento.');
+    });
+
+    refs.getSystemStatusMock.mockClear();
+
+    await act(async () => {
+      await expect(result.current.ensureServicesSearchAccess()).resolves.toBe(false);
+    });
+
+    expect(refs.getSystemStatusMock).not.toHaveBeenCalled();
+    expect(refs.toastErrorMock).toHaveBeenCalledWith('Catálogo NBS/NEBS indisponível no momento.');
+  });
+
+  it('allows service search to proceed while status is still unknown', async () => {
+    refs.getSystemStatusMock.mockReturnValue(new Promise(() => undefined));
+
+    const { result } = renderHook(() => useServicesAccess());
+
+    await act(async () => {
+      await expect(
+        Promise.race([
+          result.current.ensureServicesSearchAccess(),
+          Promise.resolve<'pending'>('pending'),
+        ]),
+      ).resolves.toBe(true);
+    });
+
+    expect(refs.toastErrorMock).not.toHaveBeenCalled();
+  });
 });

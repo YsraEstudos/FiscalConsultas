@@ -70,6 +70,16 @@ async function loadApiModule() {
   return import('../../src/services/api');
 }
 
+function escapeForRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function expectDevCacheBustedPath(path: string) {
+  return expect.stringMatching(
+    new RegExp(`^${escapeForRegex(path)}(?:[?&]_dev_bust=\\d+)?$`),
+  );
+}
+
 function swapLocation(url: string) {
   const originalLocationDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'location');
   Object.defineProperty(globalThis, 'location', {
@@ -360,7 +370,7 @@ describe('api service', () => {
     expect(mockAxios.instance.get).toHaveBeenCalledTimes(2);
   });
 
-  it('cleans invalid localStorage index and handles stale cache entries', async () => {
+  it('ignores stale legacy persistent code cache entries and fetches fresh data', async () => {
     const apiModule = await loadApiModule();
     const staleTimestamp = Date.now() - (2 * 60 * 60 * 1000);
     localStorage.setItem('nesh_cache_index_v1', JSON.stringify({ ghost: staleTimestamp, 'nesh:9999': staleTimestamp }));
@@ -378,11 +388,10 @@ describe('api service', () => {
     const result = await apiModule.searchNCM('9999');
 
     expect(result.results['99']).toBeTruthy();
-    const index = JSON.parse(localStorage.getItem('nesh_cache_index_v1') || '{}');
-    expect(index.ghost).toBeUndefined();
+    expect(mockAxios.instance.get).toHaveBeenCalledTimes(1);
   });
 
-  it('uses valid localStorage cache without network call and normalizes aliases', async () => {
+  it('ignores legacy localStorage code cache for NCM queries and normalizes fresh responses', async () => {
     const apiModule = await loadApiModule();
     const now = Date.now();
     localStorage.setItem('nesh_cache_index_v1', JSON.stringify({ 'nesh:8517': now - 100 }));
@@ -394,9 +403,13 @@ describe('api service', () => {
       }),
     );
 
+    mockAxios.instance.get.mockResolvedValueOnce({
+      data: { success: true, type: 'code', results: { '85': { capitulo: '85' } } },
+    });
+
     const cached = await apiModule.searchNCM('8517');
 
-    expect(mockAxios.instance.get).not.toHaveBeenCalled();
+    expect(mockAxios.instance.get).toHaveBeenCalledTimes(1);
     expect(cached.resultados).toEqual(cached.results);
   });
 
@@ -435,8 +448,8 @@ describe('api service', () => {
     await apiModule.searchTipi('8517', 'chapter');
 
     expect(mockAxios.instance.get).toHaveBeenCalledTimes(2);
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(1, '/tipi/search?ncm=8517&view_mode=family');
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(2, '/tipi/search?ncm=8517&view_mode=chapter');
+    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(1, expectDevCacheBustedPath('/tipi/search?ncm=8517&view_mode=family'));
+    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(2, expectDevCacheBustedPath('/tipi/search?ncm=8517&view_mode=chapter'));
   });
 
   it('delegates glossary/status/auth/chapter-notes endpoints', async () => {
@@ -459,10 +472,10 @@ describe('api service', () => {
       notas_gerais: 'g',
     });
 
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(1, '/glossary?term=a%C3%A7o%20inox');
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(2, '/status');
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(3, '/auth/me');
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(4, '/nesh/chapter/85/notes');
+    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(1, expectDevCacheBustedPath('/glossary?term=a%C3%A7o%20inox'));
+    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(2, expectDevCacheBustedPath('/status'), { timeout: 4000 });
+    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(3, expectDevCacheBustedPath('/auth/me'));
+    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(4, expectDevCacheBustedPath('/nesh/chapter/85/notes'));
   });
 
   it('delegates the profile endpoints', async () => {
@@ -480,12 +493,12 @@ describe('api service', () => {
     await expect(apiModule.getUserCard('user/42')).resolves.toEqual({ id: 'user-card' });
     await expect(apiModule.deleteMyAccount()).resolves.toEqual({ success: true });
 
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(1, '/profile/me');
+    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(1, expectDevCacheBustedPath('/profile/me'));
     expect(mockAxios.instance.patch).toHaveBeenCalledWith('/profile/me', { bio: 'Atualizada' });
     expect(mockAxios.instance.get).toHaveBeenNthCalledWith(2, '/profile/me/contributions', {
-      params: { page: 2, page_size: 5, search: 'ncm' },
+      params: expect.objectContaining({ page: 2, page_size: 5, search: 'ncm' }),
     });
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(3, '/profile/user%2F42/card');
+    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(3, expectDevCacheBustedPath('/profile/user%2F42/card'));
     expect(mockAxios.instance.delete).toHaveBeenCalledWith('/profile/me');
   });
 });

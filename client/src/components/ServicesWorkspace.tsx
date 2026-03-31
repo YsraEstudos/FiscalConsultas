@@ -113,7 +113,7 @@ export function ServicesWorkspace({
                             </div>
 
                             <div className={styles.breadcrumbs} aria-label="Hierarquia NBS">
-                                {nbsState.detail.ancestors.map((ancestor, index) => (
+                                {nbsState.detail.ancestors.map((ancestor) => (
                                     <React.Fragment key={ancestor.code}>
                                         <button
                                             type="button"
