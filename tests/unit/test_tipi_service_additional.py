@@ -102,7 +102,13 @@ class _FakeHealthRepo:
         if self._calls == 2:
             return _FakeScalarResult(345)
         return _FakeScalarResult(
-            rows=[type("Row", (), {"key": "tipi_updated_at", "value": "2026-03-25T10:00:00+00:00"})()]
+            rows=[
+                type(
+                    "Row",
+                    (),
+                    {"key": "tipi_updated_at", "value": "2026-03-25T10:00:00+00:00"},
+                )()
+            ]
         )
 
 
