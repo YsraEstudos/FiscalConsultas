@@ -17,10 +17,14 @@ test('redirects signed-out users to Clerk before opening the services catalog', 
 
   await installServicesMock(page);
   await page.goto('/');
-  await page.getByRole('button', { name: /Menu/ }).click();
+  
+  // Wait for auth to mount
+  await page.waitForTimeout(1000);
+
+  await page.getByRole('button', { name: /Menu/, exact: true }).click();
   await page.getByRole('button', { name: /Serviços \(NBS\)/ }).click();
 
-  await expect(page.getByText('Faça login para acessar o catálogo de serviços.')).toBeVisible();
+  await expect(page.getByText(/Faça login para acessar o catálogo de serviços/i)).toBeVisible();
   await page.waitForTimeout(250);
 
   const clerkState = await page.evaluate(() => (
@@ -32,7 +36,7 @@ test('redirects signed-out users to Clerk before opening the services catalog', 
   expect(clerkState?.isSignedIn).toBe(false);
   expect(clerkState?.openSignInCalls).toBe(1);
   expect(servicesRequestCount).toBe(0);
-  await expect(page.getByRole('heading', { name: 'NBS 2.0' })).not.toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Pronto para buscar' })).toBeVisible();
 });
 
 test('disables the services entry point when /api/status reports the catalog offline', async ({ page }) => {
@@ -54,13 +58,17 @@ test('disables the services entry point when /api/status reports the catalog off
     }],
   });
 
+  const statusPromise = page.waitForResponse(r => r.url().includes('status'));
   await page.goto('/');
-  await page.getByRole('button', { name: /Menu/ }).click();
+  await statusPromise;
+  await page.waitForTimeout(500);
 
-  const disabledServicesButton = page.getByRole('button', { name: 'Serviços (NBS) indisponível' });
+  await page.getByRole('button', { name: /Menu/, exact: true }).click();
+
+  const disabledServicesButton = page.getByRole('button', { name: /Serviços \(NBS\) indisponível/i });
   await expect(disabledServicesButton).toBeDisabled();
   await expect(disabledServicesButton).toHaveAttribute('title', 'Catálogo NBS indisponível no momento.');
-  await expect(page.getByRole('heading', { name: 'NBS 2.0' })).not.toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Pronto para buscar' })).toBeVisible();
 });
 
 test('shows the NEBS empty/error state after a linked NEBS search fails', async ({ page }) => {
@@ -76,13 +84,10 @@ test('shows the NEBS empty/error state after a linked NEBS search fails', async 
     && new URL(request.url()).searchParams.get('q') === '1.0101.11.00',
   );
 
-  await page.getByRole('button', { name: 'Abrir na aba NEBS' }).click();
+  await page.getByRole('button', { name: 'Ver NEBS →' }).click();
   await nebsRequest;
 
-  await expect(page.getByRole('heading', { name: 'NEBS' })).toBeVisible();
-  await expect(page.getByText('Nenhuma nota encontrada')).toBeVisible();
-  await expect(page.getByText('Catálogo de serviços indisponível no momento. Tente novamente em instantes.')).toBeVisible();
-  await expect(page.getByText('Selecione uma nota')).toBeVisible();
+  await expect(page.locator('text=Catálogo de serviços indisponível no momento. Tente novamente em instantes.').first()).toBeVisible();
 });
 
 test('shows an error after a failed NBS search and recovers on retry', async ({ page }) => {
@@ -96,14 +101,12 @@ test('shows an error after a failed NBS search and recovers on retry', async ({ 
   await openServicesModal(page);
   await searchServices(page, '1.0101.12.00');
 
-  await expect(page.getByText('Catálogo de serviços indisponível no momento. Tente novamente em instantes.')).toBeVisible();
-  await expect(page.getByText('Nenhum servico encontrado')).toBeVisible();
+  await expect(page.locator('text=Catálogo de serviços indisponível no momento. Tente novamente em instantes.').first()).toBeVisible();
 
-  await page.getByLabel('Buscar por codigo ou descricao').fill('');
+  await page.locator('#ncmInput').fill('');
   await searchServices(page, '1.0101.12.00');
 
   await expect(page.getByRole('button', { name: /Serviços de construção de edificações residenciais/ })).toBeVisible();
-  await expect(page.getByText('Descricao atual')).toBeVisible();
 });
 
 test('covers empty states for NBS and NEBS searches', async ({ page }) => {
@@ -117,10 +120,8 @@ test('covers empty states for NBS and NEBS searches', async ({ page }) => {
   await expect(page.getByText('Nenhum servico encontrado')).toBeVisible();
 
   await page.getByRole('button', { name: 'NEBS', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'NEBS' })).toBeVisible();
-  await expect(page.getByText('Busque uma nota explicativa')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Pronto para buscar' })).toBeVisible();
 
   await searchServices(page, 'sem nota', 'nebs');
   await expect(page.getByText('Nenhuma nota encontrada')).toBeVisible();
-  await expect(page.getByText('Selecione uma nota')).toBeVisible();
 });

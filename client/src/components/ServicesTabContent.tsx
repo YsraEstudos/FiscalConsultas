@@ -166,9 +166,6 @@ export function ServicesTabContent({
     ), [data.results, detailStatus, doc, nebsDetail, selectedCode]);
 
     const title = doc === 'nbs' ? 'Resultados NBS' : 'Resultados NEBS';
-    const subtitle = doc === 'nbs'
-        ? 'Hierarquia, detalhe publicado e atalhos para navegar entre serviço e nota no mesmo workspace.'
-        : 'Notas publicadas, vínculo com o serviço NBS e navegação cruzada sem sair da aba atual.';
     const countLabel = `${data.total} ${doc === 'nbs' ? 'itens' : 'notas'}`;
     const queryLabel = data.query.trim() || 'catalogo raiz';
     const shellClassName = `${styles.shell} ${isWorkspaceReady ? styles.shellVisible : styles.shellHidden}`;
@@ -179,7 +176,6 @@ export function ServicesTabContent({
                 <div className={styles.copy}>
                     <span className={styles.kicker}>Catalogo de servicos</span>
                     <h3 className={styles.title}>{title}</h3>
-                    <p className={styles.subtitle}>{subtitle}</p>
                 </div>
 
                 <div className={styles.actions}>

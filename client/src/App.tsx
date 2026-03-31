@@ -14,6 +14,7 @@ import { extractChapter } from './utils/chapterDetection';
 import { isCodeSearchResponse } from './types/api.types';
 import type { NbsSearchResponse, NebsSearchResponse } from './types/api.types';
 import { useSettings } from './context/SettingsContext';
+import { useServicesAccess } from './hooks/useServicesAccess';
 import { NotePanel } from './components/NotePanel';
 import { UserProfilePage } from './components/UserProfilePage';
 import styles from './App.module.css';
@@ -65,6 +66,7 @@ function App() {
 
     // Hooks customizados
     const { history, addToHistory, removeFromHistory, clearHistory } = useHistory();
+    const { ensureServicesAccess, servicesUnavailableReason } = useServicesAccess();
     const { executeSearchForTab } = useSearch(tabsById, updateTab, addToHistory);
     const activeTabRef = useRef(activeTab);
     const handleSearchRef = useRef<(query: string) => void>(() => { });
@@ -321,8 +323,14 @@ function App() {
     }, [activeTabId, executeSearchForTab, openInDocNewTab, resetLoadedChaptersForDoc, updateTab]);
 
     // Define o documento na aba ativa (ou abre nova se ja houver conteudo)
-    const setDoc = useCallback((doc: string) => {
+    const setDoc = useCallback(async (doc: string) => {
         const nextDoc = doc as DocType;
+
+        if (nextDoc === 'nbs' || nextDoc === 'nebs') {
+            const hasAccess = await ensureServicesAccess();
+            if (!hasAccess) return;
+        }
+
         const currentTab = activeTabRef.current;
         const shouldOpenNewTab = Boolean(
             currentTab?.loading ||
@@ -349,9 +357,14 @@ function App() {
             isContentReady: false,
             loadedChaptersByDoc: resetLoadedChaptersForDoc(nextDoc)
         });
-    }, [activeTabId, createTab, resetLoadedChaptersForDoc, updateTab]);
+    }, [activeTabId, createTab, resetLoadedChaptersForDoc, updateTab, ensureServicesAccess]);
 
     const switchTabDocument = useCallback(async (tabId: string, doc: DocType, query?: string) => {
+        if (doc === 'nbs' || doc === 'nebs') {
+            const hasAccess = await ensureServicesAccess();
+            if (!hasAccess) return;
+        }
+
         updateTab(tabId, {
             document: doc,
             results: null,
@@ -369,7 +382,7 @@ function App() {
         if (query?.trim()) {
             await executeSearchForTab(tabId, doc, query.trim(), false);
         }
-    }, [executeSearchForTab, resetLoadedChaptersForDoc, updateTab]);
+    }, [executeSearchForTab, resetLoadedChaptersForDoc, updateTab, ensureServicesAccess]);
 
     // Ponte legado + ponte de configuracoes
     useEffect(() => {
@@ -434,6 +447,7 @@ function App() {
                 setDoc={setDoc}
                 searchKey={`${activeTabId}-${activeTab?.document || 'nesh'}`}
                 onMenuOpen={() => setMobileMenuOpen(true)}
+                servicesUnavailableReason={servicesUnavailableReason}
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 onOpenTutorial={() => setIsTutorialOpen(true)}
                 onOpenStats={() => setIsStatsOpen(true)}

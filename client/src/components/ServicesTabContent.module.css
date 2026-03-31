@@ -4,13 +4,9 @@
     min-height: 0;
     flex-direction: column;
     border: 1px solid var(--border-color);
-    border-radius: 18px;
+    border-radius: 12px;
     overflow: hidden;
-    background:
-        radial-gradient(circle at top left, rgb(99 102 241 / 10%), transparent 24%),
-        radial-gradient(circle at top right, rgb(34 211 238 / 10%), transparent 20%),
-        linear-gradient(180deg, rgb(255 255 255 / 2%), transparent 18%),
-        var(--bg-secondary);
+    background: var(--bg-secondary);
 }
 
 .shellHidden {
@@ -30,9 +26,7 @@
     gap: 1.5rem;
     padding: 1.25rem 1.5rem;
     border-bottom: 1px solid var(--border-color);
-    background:
-        linear-gradient(135deg, rgb(255 255 255 / 4%), rgb(255 255 255 / 1%)),
-        var(--bg-tertiary);
+    background: var(--bg-tertiary);
 }
 
 .copy {
@@ -82,14 +76,15 @@
 }
 
 .queryPill {
-    border: 1px solid rgb(99 102 241 / 18%);
+    border: 1px solid var(--border-color);
     color: var(--text-secondary);
-    background: rgb(99 102 241 / 8%);
+    background: var(--bg-primary);
 }
 
 .countPill {
     color: white;
-    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    background: var(--accent-gradient);
+    border: 1px solid transparent;
 }
 
 .switchButton {
@@ -97,7 +92,7 @@
     border-radius: 999px;
     padding: 0.72rem 1rem;
     color: var(--text-primary);
-    background: var(--bg-secondary);
+    background: var(--bg-primary);
     font-weight: 700;
     cursor: pointer;
     transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
@@ -127,7 +122,7 @@
 
 @media (width <= 720px) {
     .shell {
-        border-radius: 14px;
+        border-radius: 12px;
     }
 
     .shellHeader {

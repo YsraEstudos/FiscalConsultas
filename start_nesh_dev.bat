@@ -8,9 +8,6 @@ set "PYTHONIOENCODING=utf-8"
 set "ENABLE_REBUILD=0"
 set "ENABLE_AUTH_DEBUG=0"
 
-set "CHK_DOCKER_CLI=PENDENTE"
-set "CHK_DOCKER_ENGINE=PENDENTE"
-set "CHK_DOCKER_STACK=PENDENTE"
 set "CHK_AUTH_ENV=PENDENTE"
 set "CHK_UV=PENDENTE"
 set "CHK_NODE=PENDENTE"
@@ -22,7 +19,6 @@ set "FAIL_REASON="
 set "FRONTEND_BOOT_CMD=npm run dev"
 set "CHECKLIST_FILE=%TEMP%\nesh_startup_checklist.txt"
 set "CHECKLIST_SHOWN=0"
-set "PG_MIGRATION_CMD=python scripts\migrate_postgres_cluster.py"
 
 :parse_args
 if "%~1"=="" goto args_done
@@ -36,22 +32,6 @@ if /I "%~1"=="--rebuild" (
 shift
 goto parse_args
 :args_done
-
-where docker >nul 2>&1
-if errorlevel 1 (
-    set "CHK_DOCKER_CLI=FALHA"
-    set "FAIL_REASON=Docker CLI nao encontrado no PATH."
-    goto fail
-)
-set "CHK_DOCKER_CLI=OK"
-
-docker info >nul 2>&1
-if errorlevel 1 (
-    set "CHK_DOCKER_ENGINE=FALHA"
-    set "FAIL_REASON=Docker Desktop nao esta ativo."
-    goto fail
-)
-set "CHK_DOCKER_ENGINE=OK"
 
 where uv >nul 2>&1
 if errorlevel 1 (
@@ -78,7 +58,7 @@ if errorlevel 1 (
 set "CHK_NPM=OK"
 
 echo.
-echo [2/8] Validando variaveis obrigatorias de Auth...
+echo [1/6] Validando variaveis obrigatorias de Auth...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\validate_auth_env.ps1"
 if errorlevel 1 (
     set "CHK_AUTH_ENV=FALHA"
@@ -93,70 +73,7 @@ if "!ENABLE_AUTH_DEBUG!"=="1" (
 )
 
 echo.
-echo [3/9] Verificando compatibilidade da migracao PostgreSQL...
-if exist ".\.venv\Scripts\python.exe" (
-    set "PG_MIGRATION_PYTHON=.\.venv\Scripts\python.exe"
-) else (
-    where python >nul 2>&1
-    if errorlevel 1 (
-        set "CHK_DOCKER_STACK=FALHA"
-        set "FAIL_REASON=Python nao encontrado para rodar o preflight de migracao PostgreSQL."
-        goto fail
-    )
-    set "PG_MIGRATION_PYTHON=python"
-)
-set "PG_MIGRATION_CMD=!PG_MIGRATION_PYTHON! scripts\migrate_postgres_cluster.py"
-call !PG_MIGRATION_CMD! --check-only
-set "PG_MIGRATION_EXIT=!errorlevel!"
-if "!PG_MIGRATION_EXIT!"=="10" (
-    set "CHK_DOCKER_STACK=FALHA"
-    set "FAIL_REASON=Volume PostgreSQL legado detectado. Rode: !PG_MIGRATION_CMD! --run"
-    goto fail
-)
-if "!PG_MIGRATION_EXIT!"=="11" (
-    set "CHK_DOCKER_STACK=FALHA"
-    set "FAIL_REASON=Compose PostgreSQL 18 incompativel. Corrija o compose e rode: !PG_MIGRATION_CMD! --run"
-    goto fail
-)
-if not "!PG_MIGRATION_EXIT!"=="0" (
-    set "CHK_DOCKER_STACK=FALHA"
-    set "FAIL_REASON=Falha no preflight de migracao PostgreSQL (exit !PG_MIGRATION_EXIT!)."
-    goto fail
-)
-
-echo.
-echo [4/9] Subindo infraestrutura Docker (docker compose up -d)...
-docker compose up -d
-if errorlevel 1 (
-    set "CHK_DOCKER_STACK=FALHA"
-    set "FAIL_REASON=Falha ao executar docker compose up -d."
-    goto fail
-)
-
-call :wait_compose_service db 30
-if errorlevel 1 (
-    set "CHK_DOCKER_STACK=FALHA"
-    set "FAIL_REASON=Servico Docker 'db' nao esta pronto."
-    goto fail
-)
-
-call :wait_compose_service redis 30
-if errorlevel 1 (
-    set "CHK_DOCKER_STACK=FALHA"
-    set "FAIL_REASON=Servico Docker 'redis' nao esta pronto."
-    goto fail
-)
-
-call :wait_compose_service pgadmin 30
-if errorlevel 1 (
-    set "CHK_DOCKER_STACK=FALHA"
-    set "FAIL_REASON=Servico Docker 'pgadmin' nao esta pronto."
-    goto fail
-)
-set "CHK_DOCKER_STACK=OK"
-
-echo.
-echo [5/9] Sincronizando ambiente Python com UV...
+echo [2/6] Sincronizando ambiente Python com UV...
 call uv sync
 if errorlevel 1 (
     set "CHK_UV=FALHA"
@@ -165,65 +82,13 @@ if errorlevel 1 (
 )
 
 echo.
-echo [5.0/9] Liberando o banco SQLite local...
-call :stop_listener_port 8000 backend
-
-echo.
-echo [5.1/9] Validando base NESH local...
-call uv run python scripts\setup_database.py
-if errorlevel 1 (
-    set "FAIL_REASON=Falha ao validar/reconstruir database\\nesh.db a partir da fonte oficial."
-    goto fail
-)
-
-echo.
-echo [5.2/9] Aplicando migracoes Alembic...
-call uv run alembic upgrade head
-if errorlevel 1 (
-    set "FAIL_REASON=Falha ao aplicar alembic upgrade head."
-    goto fail
-)
-
-echo.
-echo [5.3/9] Verificando necessidade de sincronizar catalogos fiscais...
-call uv run python scripts\migrate_to_postgres.py --check-needed
-set "CATALOG_SYNC_EXIT=!errorlevel!"
-if "!CATALOG_SYNC_EXIT!"=="10" (
-    echo [INFO] Alteracoes detectadas nas fontes. Sincronizando catalogos no PostgreSQL...
-    call uv run python scripts\migrate_to_postgres.py
-    if errorlevel 1 (
-        set "FAIL_REASON=Falha ao sincronizar NESH, TIPI, NBS e NEBS no PostgreSQL."
-        goto fail
-    )
-) else if "!CATALOG_SYNC_EXIT!"=="0" (
-    echo [INFO] Fontes inalteradas e catalogos ja carregados. Pulando sincronizacao.
-) else (
-    set "FAIL_REASON=Falha ao verificar necessidade de sincronizacao dos catalogos (exit !CATALOG_SYNC_EXIT!)."
-    goto fail
-)
-
-if "!ENABLE_REBUILD!"=="1" (
-    echo.
-    echo [5.5/9] Recriando bancos de dados...
-    call uv run scripts\rebuild_index.py
-    if errorlevel 1 (
-        set "FAIL_REASON=Falha no rebuild_index.py."
-        goto fail
-    )
-    call uv run scripts\setup_tipi_database.py
-    if errorlevel 1 (
-        set "FAIL_REASON=Falha no setup_tipi_database.py."
-        goto fail
-    )
-)
-
-echo.
-echo [6/9] Iniciando Backend...
+echo [3/6] Iniciando Backend Local (Opcional, com banco Neon)...
 call :stop_listener_port 8000 backend
 start "Nesh Backend Server" cmd /k "uv run Nesh.py"
+set "CHK_BACKEND_HEALTH=OK"
 
 echo.
-echo [7/9] Verificando dependencias Frontend...
+echo [4/6] Verificando dependencias Frontend...
 cd client
 set "NEED_INSTALL=0"
 if not exist "node_modules\" set "NEED_INSTALL=1"
@@ -245,21 +110,13 @@ if "!NEED_INSTALL!"=="1" (
 )
 
 echo.
-echo [8/9] Iniciando Frontend com Hot Reload...
+echo [5/6] Iniciando Frontend com Hot Reload...
 call :stop_listener_port 5173 frontend
 start "Nesh Client (Dev)" cmd /k "cd /d "%~dp0client" && !FRONTEND_BOOT_CMD!"
 cd ..
 
 echo.
-echo [9/9] Validando se os servicos subiram...
-call :wait_http_ready "http://127.0.0.1:8000/api/status" 35
-if errorlevel 1 (
-    set "CHK_BACKEND_HEALTH=FALHA"
-    set "FAIL_REASON=Backend nao ficou pronto com todos os catalogos online em /api/status."
-    goto fail
-)
-set "CHK_BACKEND_HEALTH=OK"
-
+echo [6/6] Validando se o Frontend subiu...
 call :wait_port_open 5173 50
 if errorlevel 1 (
     set "CHK_FRONTEND_PORT=FALHA"
@@ -277,9 +134,7 @@ call :write_checklist_file "SUCESSO"
 call :open_checklist_file
 echo.
 echo Links uteis:
-echo - Frontend: http://127.0.0.1:5173
-echo - Backend health: http://127.0.0.1:8000/api/status
-echo - pgAdmin: http://127.0.0.1:8080
+echo - Frontend Local: http://127.0.0.1:5173
 echo - Checklist: %CHECKLIST_FILE%
 pause
 exit /b 0
@@ -297,40 +152,12 @@ echo Checklist salvo em: %CHECKLIST_FILE%
 pause
 exit /b 1
 
-:wait_compose_service
-set "SERVICE_NAME=%~1"
-set /a MAX_ATTEMPTS=%~2
-if "%MAX_ATTEMPTS%"=="" set /a MAX_ATTEMPTS=30
-set /a ATTEMPT=0
-
-:wait_compose_service_loop
-set /a ATTEMPT+=1
-set "SVC_READY=0"
-for /f "tokens=1,2" %%A in ('docker compose ps --format "{{.Service}} {{if .Health}}{{.Health}}{{else}}none{{end}}" 2^>nul') do (
-    if /I "%%A"=="!SERVICE_NAME!" (
-        if /I "%%B"=="healthy" set "SVC_READY=1"
-    )
-)
-if "!SVC_READY!"=="1" exit /b 0
-if !ATTEMPT! GEQ !MAX_ATTEMPTS! exit /b 1
-timeout /t 2 >nul
-goto wait_compose_service_loop
-
-:wait_http_ready
-set "TARGET_URL=%~1"
-set /a MAX_ATTEMPTS=%~2
-if "%MAX_ATTEMPTS%"=="" set /a MAX_ATTEMPTS=30
-
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$url='%TARGET_URL%'; $max=%MAX_ATTEMPTS%; $ok=$false; for($i=0; $i -lt $max; $i++){ try { $resp=Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 2; if($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500){ $json=$null; try { $json = $resp.Content | ConvertFrom-Json } catch {}; if($null -eq $json){ $ok=$true; break }; if($json.status -eq 'online'){ $ok=$true; break } } } catch {}; Start-Sleep -Milliseconds 900 }; if($ok){ exit 0 } else { exit 1 }"
-if errorlevel 1 exit /b 1
-exit /b 0
-
 :wait_port_open
 set "TARGET_PORT=%~1"
 set /a MAX_ATTEMPTS=%~2
 if "%MAX_ATTEMPTS%"=="" set /a MAX_ATTEMPTS=40
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$port=%TARGET_PORT%; $max=%MAX_ATTEMPTS%; $ok=$false; for($i=0; $i -lt $max; $i++){ try { $client=New-Object System.Net.Sockets.TcpClient; $iar=$client.BeginConnect('127.0.0.1',$port,$null,$null); if($iar.AsyncWaitHandle.WaitOne(700,$false) -and $client.Connected){ $client.EndConnect($iar); $client.Close(); $ok=$true; break } $client.Close() } catch {}; Start-Sleep -Milliseconds 700 }; if($ok){ exit 0 } else { exit 1 }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "=%TARGET_PORT%; =%MAX_ATTEMPTS%; =False; for(=0;  -lt ; ++){ try { =New-Object System.Net.Sockets.TcpClient; =.BeginConnect('127.0.0.1',,,); if(.AsyncWaitHandle.WaitOne(700,False) -and .Connected){ .EndConnect(); .Close(); =True; break } .Close() } catch {}; Start-Sleep -Milliseconds 700 }; if(){ exit 0 } else { exit 1 }"
 if errorlevel 1 exit /b 1
 exit /b 0
 
@@ -338,20 +165,17 @@ exit /b 0
 set "TARGET_PORT=%~1"
 set "TARGET_LABEL=%~2"
 if "%TARGET_PORT%"=="" exit /b 0
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$port=%TARGET_PORT%; $label='%TARGET_LABEL%'; $procIds = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; if ($procIds) { Write-Host ('[INFO] Encerrando listener existente na porta ' + $port + ' (' + $label + ')...'); foreach ($procId in $procIds) { try { Stop-Process -Id $procId -Force -ErrorAction Stop } catch {} } Start-Sleep -Milliseconds 600 }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "=%TARGET_PORT%; ='%TARGET_LABEL%';  = Get-NetTCPConnection -LocalPort  -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; if () { Write-Host ('[INFO] Encerrando listener existente na porta ' +  + ' (' +  + ')...'); foreach ( in ) { try { Stop-Process -Id  -Force -ErrorAction Stop } catch {} } Start-Sleep -Milliseconds 600 }"
 exit /b 0
 
 :print_checklist
 echo.
 echo ================= CHECKLIST DE INICIALIZACAO =================
-call :print_check_item "Docker CLI disponivel" "!CHK_DOCKER_CLI!" "Instale o Docker Desktop."
-call :print_check_item "Docker Desktop ativo" "!CHK_DOCKER_ENGINE!" "Abra o Docker Desktop e aguarde o engine iniciar."
-call :print_check_item "Stack Docker db/redis/pgadmin ativa" "!CHK_DOCKER_STACK!" "Rode: docker compose up -d"
 call :print_check_item "Auth env configurado" "!CHK_AUTH_ENV!" "Preencha .env e client/.env.local - Clerk."
 call :print_check_item "UV disponivel e sincronizado" "!CHK_UV!" "Instale UV: pip install uv"
 call :print_check_item "Node disponivel" "!CHK_NODE!" "Instale Node.js 18+."
 call :print_check_item "NPM disponivel e dependencias ok" "!CHK_NPM!" "Verifique npm install em client/."
-call :print_check_item "Backend respondendo em /api/status" "!CHK_BACKEND_HEALTH!" "Verifique a janela Nesh Backend Server."
+call :print_check_item "Backend local rodando (Opcional)" "!CHK_BACKEND_HEALTH!" "Backend iniciado para testes de api."
 call :print_check_item "Frontend ativo na porta 5173" "!CHK_FRONTEND_PORT!" "Verifique a janela Nesh Client Dev."
 echo =================================================================
 exit /b 0
@@ -370,28 +194,7 @@ if /I "%ITEM_STATUS%"=="OK" (
 exit /b 0
 
 :offer_manual_actions
-if /I "!CHK_DOCKER_ENGINE!"=="FALHA" call :offer_open_docker_desktop
 if /I "!CHK_AUTH_ENV!"=="FALHA" call :offer_open_auth_files
-if /I not "!CHK_DOCKER_STACK!"=="OK" (
-    echo.
-    echo [DICA] Para diagnostico rapido da stack Docker:
-    echo        docker compose ps
-    echo        docker compose logs -f db redis pgadmin
-    echo        !PG_MIGRATION_CMD! --check-only
-    echo        !PG_MIGRATION_CMD! --run
-)
-exit /b 0
-
-:offer_open_docker_desktop
-echo.
-if exist "%ProgramFiles%\Docker\Docker\Docker Desktop.exe" (
-    choice /C SN /N /M "Abrir Docker Desktop agora? [S/N]: "
-    if errorlevel 2 exit /b 0
-    start "" "%ProgramFiles%\Docker\Docker\Docker Desktop.exe"
-) else (
-    echo [DICA] Nao encontrei Docker Desktop.exe no caminho padrao.
-    echo       Abra manualmente o Docker Desktop.
-)
 exit /b 0
 
 :offer_open_auth_files
@@ -408,16 +211,11 @@ exit /b 0
 set "CHECKLIST_MODE=%~1"
 (
 echo =============================================================
-echo NESH STARTUP CHECKLIST
+echo NESH STARTUP CHECKLIST (CLOUD DB MODE)
 echo =============================================================
 echo Data: %date% %time%
 echo Resultado: %CHECKLIST_MODE%
 if /I "%CHECKLIST_MODE%"=="FALHA" echo Motivo: !FAIL_REASON!
-echo.
-echo [Docker]
-echo - Docker CLI disponivel: !CHK_DOCKER_CLI!
-echo - Docker Desktop ativo: !CHK_DOCKER_ENGINE!
-echo - Stack db/redis/pgadmin ativa: !CHK_DOCKER_STACK!
 echo.
 echo [Auth]
 echo - Auth env configurado: !CHK_AUTH_ENV!
@@ -426,19 +224,11 @@ echo [Runtime]
 echo - UV disponivel e sincronizado: !CHK_UV!
 echo - Node disponivel: !CHK_NODE!
 echo - NPM disponivel e dependencias ok: !CHK_NPM!
-echo - Backend respondendo em /api/status: !CHK_BACKEND_HEALTH!
+echo - Backend local rodando (opcional): !CHK_BACKEND_HEALTH!
 echo - Frontend ativo na porta 5173: !CHK_FRONTEND_PORT!
 echo.
 echo [Links]
-echo - Frontend: http://127.0.0.1:5173
-echo - Backend health: http://127.0.0.1:8000/api/status
-echo - pgAdmin: http://127.0.0.1:8080
-echo.
-echo [Dicas]
-echo - docker compose ps
-echo - docker compose logs -f db redis pgadmin
-echo - !PG_MIGRATION_CMD! --check-only
-echo - !PG_MIGRATION_CMD! --run
+echo - Frontend Local: http://127.0.0.1:5173
 ) > "%CHECKLIST_FILE%"
 exit /b 0
 
@@ -450,5 +240,5 @@ if exist "%SystemRoot%\System32\notepad.exe" (
 ) else (
     start "" notepad "%CHECKLIST_FILE%"
 )
-start "Nesh Startup Checklist" cmd /k "echo NESH STARTUP CHECKLIST && echo. && type \"%CHECKLIST_FILE%\" && echo. && echo Feche esta janela quando terminar."
+start "Nesh Startup Checklist" cmd /k "echo NESH STARTUP CHECKLIST ^&^& echo. ^&^& type \"%CHECKLIST_FILE%\" ^&^& echo. ^&^& echo Feche esta janela quando terminar."
 exit /b 0

@@ -2,9 +2,9 @@ import { expect, type Page } from '@playwright/test';
 
 export async function openServicesModal(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: /Menu/ }).click();
+  await page.getByRole('button', { name: /Menu/, exact: true }).click();
   await page.getByRole('button', { name: /Serviços \(NBS\)/ }).click();
-  await expect(page.getByRole('heading', { name: 'NBS 2.0' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Pronto para buscar' })).toBeVisible();
 }
 
 export async function searchServices(
@@ -24,6 +24,7 @@ export async function searchServices(
     && new URL(candidate.url()).searchParams.get('q') === query,
   );
 
-  await page.getByLabel(label).fill(query);
+  await page.locator('#ncmInput').fill(query);
+  await page.locator('#ncmInput').press('Enter');
   await request;
 }
