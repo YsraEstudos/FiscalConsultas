@@ -1,9 +1,24 @@
 import re
+import functools
 import unicodedata
 from typing import List
 
 # Pre-compiled regex for word extraction (performance optimization)
 _RE_WORD = re.compile(r"\b\w+\b")
+
+
+@functools.lru_cache(maxsize=4096)
+def _stem_word(word: str) -> str:
+    """
+    Module-level memoized stem function.
+    Caching here prevents redundant stemming across the entire application lifespan.
+    """
+    stemmer = PortugueseStemmer()
+    word = word.lower()
+    word = stemmer._remove_accent(word)
+    word = stemmer.step_plural(word)
+    word = stemmer.step_feminine(word)
+    return word
 
 
 class PortugueseStemmer:
@@ -70,14 +85,8 @@ class PortugueseStemmer:
         return word
 
     def stem(self, word: str) -> str:
-        word = word.lower()
-        word = self._remove_accent(word)
-
-        # Ordem de aplicação
-        word = self.step_plural(word)
-        word = self.step_feminine(word)
-
-        return word
+        # Use module-level cache to avoid repeated computation
+        return _stem_word(word)
 
 
 class NeshTextProcessor:
