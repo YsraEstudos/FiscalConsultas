@@ -74,13 +74,26 @@ def test_build_public_status_payload_strips_sensitive_fields():
             "error": "hidden",
         },
         {"status": "error", "chapters": 3, "positions": 7, "error": "hidden"},
+        {"status": "online", "latency_ms": 1.2, "error": "hidden"},
+        {"status": "online", "latency_ms": 2.1, "error": "hidden"},
         "error",
     )
 
     assert payload == {
         "status": "error",
-        "database": {"status": "online", "latency_ms": 5.5},
+        "database": {
+            "status": "online",
+            "latency_ms": 5.5,
+        },
         "tipi": {"status": "error"},
+        "nbs": {"status": "online"},
+        "nebs": {"status": "online"},
+        "catalogs": {
+            "nesh": {"status": "online", "latency_ms": 5.5},
+            "tipi": {"status": "error"},
+            "nbs": {"status": "online"},
+            "nebs": {"status": "online"},
+        },
     }
 
 

@@ -12,9 +12,16 @@ import pytest
 
 from backend.config.constants import DatabaseConfig
 
+import os
+
 pytestmark = pytest.mark.integration
 
-DB_PATH = DatabaseConfig.DEFAULT_DB_FILENAME
+from backend.config.settings import settings
+DB_PATH = settings.database.path
+
+# Se o banco de dados sqlite3 não existir, pula os testes para o CI, pois lá test_fts_debug pula e usa postgres
+if not os.path.exists(DB_PATH):
+    pytestmark = [pytest.mark.integration, pytest.mark.skip(reason="nesh.db not found, probably running CI on Postgres")]
 
 
 def normalize_text(text):
