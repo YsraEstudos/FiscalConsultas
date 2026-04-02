@@ -1,5 +1,5 @@
-import re
 import functools
+import re
 import unicodedata
 from typing import List
 

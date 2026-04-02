@@ -4,24 +4,25 @@ Objetivo: Encontrar onde "bombas submersíveis" aparece no capítulo 84
 e entender por que a navegação não está funcionando.
 """
 
+import os
 import re
 import sqlite3
 import unicodedata
 
 import pytest
 
-from backend.config.constants import DatabaseConfig
-
-import os
+from backend.config.settings import settings
 
 pytestmark = pytest.mark.integration
 
-from backend.config.settings import settings
 DB_PATH = settings.database.path
 
 # Se o banco de dados sqlite3 não existir, pula os testes para o CI, pois lá test_fts_debug pula e usa postgres
 if not os.path.exists(DB_PATH):
-    pytestmark = [pytest.mark.integration, pytest.mark.skip(reason="nesh.db not found, probably running CI on Postgres")]
+    pytestmark = [
+        pytest.mark.integration,
+        pytest.mark.skip(reason="nesh.db not found, probably running CI on Postgres"),
+    ]
 
 
 def normalize_text(text):
@@ -168,14 +169,12 @@ def test_position_content():
     cursor = conn.cursor()
 
     # Buscar todas as posições do capítulo 84
-    cursor.execute(
-        """
+    cursor.execute("""
         SELECT codigo, descricao
         FROM positions 
         WHERE chapter_num = '84'
         ORDER BY codigo
-    """
-    )
+    """)
 
     pattern = r"bombas?\s+submersi"
 
@@ -202,15 +201,13 @@ def create_frontend_test_data():
     cursor = conn.cursor()
 
     # Buscar índice FTS para "bomba submersível"
-    cursor.execute(
-        """
+    cursor.execute("""
         SELECT ncm, display_text, type, description
         FROM search_index 
         WHERE indexed_content MATCH 'bomb* AND submersiv*'
         ORDER BY rank
         LIMIT 5
-    """
-    )
+    """)
 
     print("\nResultados FTS para 'bomb* AND submersiv*':")
     for row in cursor.fetchall():
@@ -229,8 +226,7 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("💡 SOLUÇÃO PROPOSTA:")
     print("=" * 60)
-    print(
-        """
+    print("""
 O problema é que o Mark.js marca TODAS as ocorrências de cada palavra,
 e o JavaScript tenta encontrar onde estão "juntas" depois.
 
@@ -241,5 +237,4 @@ SOLUÇÃO CORRETA:
 
 Ou seja: SCROLL PRIMEIRO, HIGHLIGHT DEPOIS.
 Não depender do Mark.js para encontrar a posição.
-"""
-    )
+""")
