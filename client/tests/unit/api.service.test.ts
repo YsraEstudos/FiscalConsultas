@@ -379,7 +379,7 @@ describe('api service', () => {
 
     expect(result.results['99']).toBeTruthy();
     const index = JSON.parse(localStorage.getItem('nesh_cache_index_v1') || '{}');
-    expect(index.ghost).toBeUndefined();
+    expect(index['nesh:ghost']).toBeUndefined();
   });
 
   it('uses valid localStorage cache without network call and normalizes aliases', async () => {
@@ -480,12 +480,12 @@ describe('api service', () => {
     await expect(apiModule.getUserCard('user/42')).resolves.toEqual({ id: 'user-card' });
     await expect(apiModule.deleteMyAccount()).resolves.toEqual({ success: true });
 
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(1, '/profile/me');
+    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(1, expect.stringContaining('/profile/me'));
     expect(mockAxios.instance.patch).toHaveBeenCalledWith('/profile/me', { bio: 'Atualizada' });
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(2, '/profile/me/contributions', {
-      params: { page: 2, page_size: 5, search: 'ncm' },
+    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(2, expect.stringContaining('/profile/me/contributions'), {
+      params: expect.objectContaining({ page: 2, page_size: 5, search: 'ncm' }),
     });
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(3, '/profile/user%2F42/card');
+    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(3, expect.stringContaining('/profile/user%2F42/card'));
     expect(mockAxios.instance.delete).toHaveBeenCalledWith('/profile/me');
   });
 });

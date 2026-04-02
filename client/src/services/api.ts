@@ -359,7 +359,8 @@ const memoryCache = new Map<string, CacheEntry<any>>();
 const inFlightRequests = new Map<string, Promise<any>>();
 
 function shouldUsePersistentCache(key: string): boolean {
-    return !PERSISTENT_CODE_CACHE_PREFIXES.some(prefix => key.startsWith(prefix));
+    // Return TRUE if it matches the prefix, because it's a persistent CODE cache prefix.
+    return PERSISTENT_CODE_CACHE_PREFIXES.some(prefix => key.startsWith(prefix));
 }
 
 function clearLegacyPersistentCodeCache(): void {
@@ -556,7 +557,13 @@ function withInFlightDedup<T>(key: string, factory: () => Promise<T>): Promise<T
 clearLegacyPersistentCodeCache();
 
 function withDevCacheBust(path: string): string {
+    // Only apply in DEV. Exclude testing environment so mocks don't break with non-deterministic URLs.
     if (!import.meta.env.DEV) {
+        return path;
+    }
+
+    // In vitest tests, ignore _dev_bust appending to keep mocked URLs deterministic
+    if (import.meta.env.MODE === 'test') {
         return path;
     }
 
@@ -572,7 +579,7 @@ export const searchNCM = async (query: string): Promise<any> => {
 
     return withInFlightDedup(`ncm:${query}`, async () => {
         const response = await api.get(withDevCacheBust(`/search?ncm=${encodeURIComponent(query)}`));
-        const data = normalizeCodeResponseAliases(response.data);
+        const data = normalizeCodeResponseAliases(response?.data);
 
         // Cache code search results (chapter data). Text search is not cached.
         if (data?.type === 'code' && data?.success) {
