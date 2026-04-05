@@ -90,7 +90,7 @@ def test_build_public_status_payload_strips_sensitive_fields():
             "tipi": {"status": "error"},
             "nbs": {"status": "online"},
             "nebs": {"status": "online"},
-        }
+        },
     }
 
 

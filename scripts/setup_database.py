@@ -146,7 +146,9 @@ def bootstrap_metadata_if_missing(content_hash: str) -> bool:
         conn.commit()
         conn.close()
 
-        print("ℹ️  Banco legado detectado sem metadata. Hash atual foi registrado para evitar rebuild desnecessário.")
+        print(
+            "ℹ️  Banco legado detectado sem metadata. Hash atual foi registrado para evitar rebuild desnecessário."
+        )
         return True
     except (sqlite3.OperationalError, sqlite3.DatabaseError) as exc:
         print(f"⚠️ Não foi possível registrar metadata no banco legado: {exc}")
