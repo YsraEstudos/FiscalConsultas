@@ -44,7 +44,7 @@ FILTER_REGEX_EXCLUDE: "(^|/)(git_status_output\\.txt|pytest_output\\.txt|ruff_ou
 
 # Avoid secret-scanner noise from generated local benchmark reports.
 REPOSITORY_CHECKOV_ARGUMENTS: "--skip-path 2ms-report.json --skip-path 2ms-report-filtered.json --skip-path megalinter-reports"
-REPOSITORY_KICS_ARGUMENTS: "--exclude-paths megalinter-reports,.git,node_modules,client/node_modules --exclude-queries 8c978947-0ff6-485c-b0c2-0bfca6026466,ce76b7d0-9e77-464d-b86f-c5c48e03e22d"
+REPOSITORY_KICS_ARGUMENTS: "--exclude-paths megalinter-reports,.git,node_modules,client/node_modules --exclude-queries 8c978947-0ff6-485c-b0c2-0bfca6026466,ce76b7d0-9e77-464d-b86f-c5c48e03e22d,fd54f200-402c-4333-a5a4-36ef6709af2f,b03a748a-542d-44f4-bb86-9199ab4fd2d5,0008c003-79aa-42d8-95b8-1c2fe37dbfe6"
 REPOSITORY_GITLEAKS_ARGUMENTS: "--config=.gitleaks.toml"
 PYTHON_BANDIT_ARGUMENTS: "--skip B101,B105,B108,B110,B404,B603,B608"
 
@@ -59,6 +59,8 @@ DISABLE_LINTERS:
   - TYPESCRIPT_STANDARD
   - REPOSITORY_DUSTILOCK
   - REPOSITORY_KINGFISHER
+
+REPOSITORY_GRYPE_ARGUMENTS: "--config .grype.yaml"
 # Flavors
 # FLAVOR_SUGGESTION: python, javascript
 

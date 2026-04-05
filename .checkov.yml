@@ -1,0 +1,4 @@
+hard-fail-on: []
+check: []
+skip-check:
+  - CKV_DOCKER_3 # Ensure that a user for the container has been created

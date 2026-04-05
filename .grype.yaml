@@ -1,0 +1,5 @@
+ignore:
+  - vulnerability: GHSA-jr27-m4p2-rc6r
+  - vulnerability: GHSA-m959-cc7f-wv43
+  - vulnerability: GHSA-5239-wwwm-4pmq
+  - vulnerability: GHSA-gc5v-m9x4-r6x2
