@@ -1,5 +1,11 @@
 import pytest
-from backend.utils.text_processor import NeshTextProcessor, PortugueseStemmer, _step_plural, _step_feminine, _replace_suffix
+from backend.utils.text_processor import (
+    NeshTextProcessor,
+    PortugueseStemmer,
+    _step_plural,
+    _step_feminine,
+    _replace_suffix,
+)
 
 pytestmark = pytest.mark.unit
 

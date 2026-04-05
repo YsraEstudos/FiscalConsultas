@@ -456,7 +456,7 @@ function normalizeCodeResponseAliases<T>(data: T): T {
     return data;
 }
 
-function getCached<T>(key: string): T | null {
+export function getCached<T>(key: string): T | null {
     // 1. Check memory cache first (fastest)
     const memEntry = memoryCache.get(key);
     if (memEntry && Date.now() - memEntry.timestamp < CACHE_TTL_MS) {
@@ -498,7 +498,7 @@ function getCached<T>(key: string): T | null {
     return null;
 }
 
-function setCache<T>(key: string, data: T): void {
+export function setCache<T>(key: string, data: T): void {
     const normalizedData = normalizeCodeResponseAliases(data);
     const entry: CacheEntry<T> = { data: normalizedData, timestamp: Date.now() };
 
@@ -556,7 +556,8 @@ function withInFlightDedup<T>(key: string, factory: () => Promise<T>): Promise<T
 clearLegacyPersistentCodeCache();
 
 function withDevCacheBust(path: string): string {
-    if (!import.meta.env.DEV) {
+    // Only cache bust in actual browser DEV environments, not in test mode
+    if (!import.meta.env.DEV || import.meta.env.MODE === 'test') {
         return path;
     }
 
@@ -572,6 +573,7 @@ export const searchNCM = async (query: string): Promise<any> => {
 
     return withInFlightDedup(`ncm:${query}`, async () => {
         const response = await api.get(withDevCacheBust(`/search?ncm=${encodeURIComponent(query)}`));
+        if (!response) return undefined;
         const data = normalizeCodeResponseAliases(response.data);
 
         // Cache code search results (chapter data). Text search is not cached.
@@ -675,7 +677,7 @@ export const getMyContributions = async (params: {
     status?: string;
 }): Promise<any> => {
     const response = await api.get('/profile/me/contributions', {
-        params: import.meta.env.DEV
+        params: import.meta.env.DEV && import.meta.env.MODE !== 'test'
             ? { ...params, _dev_bust: Date.now() }
             : params,
     });
