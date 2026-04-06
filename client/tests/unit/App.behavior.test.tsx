@@ -34,6 +34,9 @@ const mocks = vi.hoisted(() => {
     closeTabMock: vi.fn(),
     switchTabMock: vi.fn(),
     updateTabMock: vi.fn(),
+    ensureServicesAccessMock: vi.fn(),
+    ensureServicesSearchAccessMock: vi.fn(),
+    refreshServicesStatusMock: vi.fn(),
     executeSearchForTabMock: vi.fn(),
     addToHistoryMock: vi.fn(),
     removeFromHistoryMock: vi.fn(),
@@ -299,6 +302,16 @@ vi.mock('../../src/context/SettingsContext', () => ({
   }),
 }));
 
+vi.mock('../../src/hooks/useServicesAccess', () => ({
+  useServicesAccess: () => ({
+    ensureServicesAccess: mocks.ensureServicesAccessMock,
+    ensureServicesSearchAccess: mocks.ensureServicesSearchAccessMock,
+    refreshServicesStatus: mocks.refreshServicesStatusMock,
+    servicesAvailability: 'unknown',
+    servicesUnavailableReason: null,
+  }),
+}));
+
 
 
 function buildTab(overrides: Partial<MockTab> = {}): MockTab {
@@ -400,6 +413,9 @@ describe('App behavior', () => {
     vi.clearAllMocks();
     mocks.nextTabIdRef.value = 0;
     mocks.createTabMock.mockImplementation((doc: DocType = 'nesh') => `new-${doc}-${++mocks.nextTabIdRef.value}`);
+    mocks.ensureServicesAccessMock.mockResolvedValue(true);
+    mocks.ensureServicesSearchAccessMock.mockResolvedValue(true);
+    mocks.refreshServicesStatusMock.mockResolvedValue(undefined);
     mocks.executeSearchForTabMock.mockResolvedValue(undefined);
     mocks.fetchNotesMock.mockResolvedValue({});
     mocks.historyRef.value = [{ term: '8517', timestamp: 1 }];
@@ -488,6 +504,25 @@ describe('App behavior', () => {
     expect(mocks.updateTabMock).not.toHaveBeenCalled();
   });
 
+  it('opens NBS immediately and refreshes availability in background', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('layout-set-doc-nbs'));
+
+    expect(mocks.updateTabMock).toHaveBeenCalledWith(
+      'tab-1',
+      expect.objectContaining({
+        document: 'nbs',
+        results: null,
+        content: null,
+        error: null,
+        ncm: '',
+      }),
+    );
+    expect(mocks.refreshServicesStatusMock).toHaveBeenCalledWith(false);
+    expect(mocks.ensureServicesAccessMock).not.toHaveBeenCalled();
+  });
+
   it('wires the restored services tab callbacks back into App state transitions', async () => {
     setTabsState([
       buildTab({
@@ -513,7 +548,11 @@ describe('App behavior', () => {
         isContentReady: false,
       }),
     );
-    expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('tab-1', 'nebs', '1.0101.11.00', false);
+    expect(mocks.refreshServicesStatusMock).toHaveBeenCalledWith(false);
+    await waitFor(() => {
+      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('tab-1', 'nebs', '1.0101.11.00', false);
+    });
+    expect(mocks.ensureServicesAccessMock).not.toHaveBeenCalled();
   });
 
   it('toggles modal states and handles openInDoc/openInNewTab actions', async () => {

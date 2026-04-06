@@ -28,6 +28,9 @@ class RedisCache:
     enabled: bool
     chapter_ttl: int
     fts_ttl: int
+    services_search_ttl: int
+    services_detail_ttl: int
+    status_ttl: int
     _client: Any = field(default=None, repr=False)
 
     async def connect(self) -> None:
@@ -101,10 +104,47 @@ class RedisCache:
     async def set_fts(self, key: str, value: List[Any]) -> None:
         await self.set_json(f"nesh:fts:{key}", value, self.fts_ttl)
 
+    async def get_services_search(
+        self, namespace: str, scope: str, key: str
+    ) -> Optional[Dict[str, Any]]:
+        return await self.get_json(f"services:{namespace}:search:{scope}:{key}")
+
+    async def set_services_search(
+        self, namespace: str, scope: str, key: str, value: Dict[str, Any]
+    ) -> None:
+        await self.set_json(
+            f"services:{namespace}:search:{scope}:{key}",
+            value,
+            self.services_search_ttl,
+        )
+
+    async def get_services_detail(
+        self, namespace: str, scope: str, key: str
+    ) -> Optional[Dict[str, Any]]:
+        return await self.get_json(f"services:{namespace}:detail:{scope}:{key}")
+
+    async def set_services_detail(
+        self, namespace: str, scope: str, key: str, value: Dict[str, Any]
+    ) -> None:
+        await self.set_json(
+            f"services:{namespace}:detail:{scope}:{key}",
+            value,
+            self.services_detail_ttl,
+        )
+
+    async def get_status_snapshot(self, scope: str) -> Optional[Dict[str, Any]]:
+        return await self.get_json(f"system:status:{scope}")
+
+    async def set_status_snapshot(self, scope: str, value: Dict[str, Any]) -> None:
+        await self.set_json(f"system:status:{scope}", value, self.status_ttl)
+
 
 redis_cache = RedisCache(
     url=settings.cache.redis_url,
     enabled=settings.cache.enable_redis,
     chapter_ttl=settings.cache.chapter_cache_ttl,
     fts_ttl=settings.cache.fts_cache_ttl,
+    services_search_ttl=settings.cache.services_search_ttl,
+    services_detail_ttl=settings.cache.services_detail_ttl,
+    status_ttl=settings.cache.status_cache_ttl,
 )

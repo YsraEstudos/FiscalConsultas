@@ -1,3 +1,4 @@
+import React from 'react';
 import { useMemo } from 'react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
@@ -106,63 +107,37 @@ export function ServicesWorkspace({
                         <Loading label="Montando painel..." />
                     ) : nbsState.detail ? (
                         <>
-                            <div className={styles.detailHero}>
-                                <div className={styles.detailCode}>{nbsState.detail.item.code}</div>
+                            <div className={styles.detailHeroInline}>
+                                <div className={styles.detailCodeInline}>{nbsState.detail.item.code}</div>
                                 <h3>{nbsState.detail.item.description}</h3>
                             </div>
 
                             <div className={styles.breadcrumbs} aria-label="Hierarquia NBS">
                                 {nbsState.detail.ancestors.map((ancestor) => (
-                                    <button
-                                        key={ancestor.code}
-                                        type="button"
-                                        className={styles.crumb}
-                                        onClick={() => onSelectNbs(ancestor.code)}
-                                    >
-                                        {ancestor.code}
-                                    </button>
+                                    <React.Fragment key={ancestor.code}>
+                                        <button
+                                            type="button"
+                                            className={styles.crumbText}
+                                            onClick={() => onSelectNbs(ancestor.code)}
+                                        >
+                                            {ancestor.code}
+                                        </button>
+                                        <span className={styles.crumbSeparator}>/</span>
+                                    </React.Fragment>
                                 ))}
-                                <span className={styles.crumbCurrent}>{nbsState.detail.item.code}</span>
-                            </div>
-
-                            <div className={styles.detailGrid}>
-                                <section className={styles.card}>
-                                    <div className={styles.cardLabel}>Descricao atual</div>
-                                    <p>{nbsState.detail.item.description}</p>
-                                </section>
-
-                                <section className={styles.card}>
-                                    <div className={styles.cardLabel}>Status NEBS</div>
-                                    <p>
-                                        {nbsState.detail.nebs
-                                            ? 'Ja existe uma nota explicativa publicada para este codigo.'
-                                            : 'Ainda nao existe nota explicativa publicada para este codigo.'}
-                                    </p>
-                                </section>
+                                <span className={styles.crumbCurrentText}>{nbsState.detail.item.code}</span>
                             </div>
 
                             {nbsState.detail.nebs && (
-                                <section className={styles.card}>
-                                    <div className={styles.cardLabel}>Nota explicativa publicada</div>
-                                    <p>{nbsState.detail.nebs.title}</p>
-                                    <div className={styles.detailActions}>
-                                        <button
-                                            type="button"
-                                            className={styles.secondaryAction}
-                                            onClick={() => onSwitchDoc('nebs', nbsState.detail?.item.code)}
-                                        >
-                                            Abrir na aba NEBS
-                                        </button>
-                                        {onOpenDocInNewTab && (
-                                            <button
-                                                type="button"
-                                                className={styles.secondaryAction}
-                                                onClick={() => onOpenDocInNewTab('nebs', nbsState.detail?.item.code)}
-                                            >
-                                                Abrir NEBS em nova aba
-                                            </button>
-                                        )}
-                                    </div>
+                                <section className={styles.card} style={{ marginTop: "1rem" }}>
+                                    <div className={styles.cardLabel}>Nota Explicativa (NEBS)</div>
+                                    <div
+                                        className={styles.noteBody}
+                                        dangerouslySetInnerHTML={{
+                                            __html: nbsState.detail.nebs.body_text
+                                                || '<p>Sem conteudo detalhado.</p>'
+                                        }}
+                                    />
                                 </section>
                             )}
 

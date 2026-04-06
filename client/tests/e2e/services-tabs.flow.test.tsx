@@ -133,7 +133,7 @@ describe('services tabs flow', () => {
       expect(refs.getNbsServiceDetailMock).toHaveBeenCalledWith('1.0101.11.00');
     });
 
-    expect(await screen.findByText('Status NEBS')).toBeInTheDocument();
+    expect(await screen.findByText('Nota Explicativa (NEBS)')).toBeInTheDocument();
     expect(onContentReady).toHaveBeenCalledTimes(1);
   });
 

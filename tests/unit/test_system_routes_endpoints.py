@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
+import asyncio
 import backend.infrastructure.db_engine as db_engine
 import pytest
 from backend.presentation.routes import system
@@ -36,8 +37,10 @@ def _build_request(
 class _FakeDb:
     def __init__(self, payload):
         self.payload = payload
+        self.calls = 0
 
     async def check_connection(self):  # NOSONAR
+        self.calls += 1
         return self.payload
 
 
@@ -45,8 +48,10 @@ class _FakeTipiService:
     def __init__(self, payload=None, error: Exception | None = None):
         self.payload = payload or {}
         self.error = error
+        self.calls = 0
 
     async def check_connection(self):  # NOSONAR
+        self.calls += 1
         if self.error:
             raise self.error
         return self.payload
@@ -59,8 +64,10 @@ class _FakeNbsService:
     def __init__(self, payload=None, error: Exception | None = None):
         self.payload = payload or {}
         self.error = error
+        self.calls = 0
 
     async def check_connection(self):  # NOSONAR
+        self.calls += 1
         if self.error:
             raise self.error
         return self.payload
@@ -80,6 +87,13 @@ class _FakeNeshService:
 def test_to_int_returns_default_on_invalid_values():
     assert system._to_int("abc", default=7) == 7
     assert system._to_int(None, default=9) == 9
+
+
+@pytest.fixture(autouse=True)
+def _reset_status_cache():
+    system._reset_status_cache_for_tests()
+    yield
+    system._reset_status_cache_for_tests()
 
 
 @pytest.mark.asyncio
@@ -186,6 +200,78 @@ async def test_get_status_handles_db_and_tipi_exceptions(monkeypatch):
     assert payload["nebs"]["status"] == "error"
     assert "error" not in payload["database"]
     assert "error" not in payload["tipi"]
+
+
+@pytest.mark.asyncio
+async def test_get_status_reuses_cached_snapshot_within_ttl(monkeypatch):
+    async def _noop_rate_limit(_request):
+        return None
+
+    monkeypatch.setattr(system, "_apply_status_rate_limit", _noop_rate_limit)
+    monkeypatch.setattr(system.settings.cache, "status_cache_ttl", 30, raising=False)
+
+    db = _FakeDb({"status": "online", "chapters": "5", "positions": "9"})
+    tipi = _FakeTipiService({"ok": True, "chapters": "3", "positions": "4"})
+    nbs = _FakeNbsService({"status": "online", "nbs_items": "6", "nebs_entries": "2"})
+    request = _build_request(
+        "/api/status",
+        state={"db": db, "tipi_service": tipi, "nbs_service": nbs},
+    )
+
+    first = await system.get_status(request)
+    second = await system.get_status(request)
+
+    assert first == second
+    assert db.calls == 1
+    assert tipi.calls == 1
+    assert nbs.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_get_status_deduplicates_concurrent_refresh(monkeypatch):
+    class _SlowFakeDb(_FakeDb):
+        async def check_connection(self):  # NOSONAR
+            self.calls += 1
+            await asyncio.sleep(0.05)
+            return self.payload
+
+    class _SlowFakeTipiService(_FakeTipiService):
+        async def check_connection(self):  # NOSONAR
+            self.calls += 1
+            await asyncio.sleep(0.05)
+            return self.payload
+
+    class _SlowFakeNbsService(_FakeNbsService):
+        async def check_connection(self):  # NOSONAR
+            self.calls += 1
+            await asyncio.sleep(0.05)
+            return self.payload
+
+    async def _noop_rate_limit(_request):
+        return None
+
+    monkeypatch.setattr(system, "_apply_status_rate_limit", _noop_rate_limit)
+    monkeypatch.setattr(system.settings.cache, "status_cache_ttl", 30, raising=False)
+
+    db = _SlowFakeDb({"status": "online", "chapters": "5", "positions": "9"})
+    tipi = _SlowFakeTipiService({"ok": True, "chapters": "3", "positions": "4"})
+    nbs = _SlowFakeNbsService(
+        {"status": "online", "nbs_items": "6", "nebs_entries": "2"}
+    )
+    request = _build_request(
+        "/api/status",
+        state={"db": db, "tipi_service": tipi, "nbs_service": nbs},
+    )
+
+    first, second = await asyncio.gather(
+        system.get_status(request),
+        system.get_status(request),
+    )
+
+    assert first == second
+    assert db.calls == 1
+    assert tipi.calls == 1
+    assert nbs.calls == 1
 
 
 @pytest.mark.asyncio

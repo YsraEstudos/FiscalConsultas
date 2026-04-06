@@ -41,13 +41,22 @@ def _cache() -> redis_mod.RedisCache:
         enabled=True,
         chapter_ttl=120,
         fts_ttl=60,
+        services_search_ttl=300,
+        services_detail_ttl=900,
+        status_ttl=20,
     )
 
 
 @pytest.mark.asyncio
 async def test_connect_skips_when_disabled():
     cache = redis_mod.RedisCache(
-        "redis://localhost", enabled=False, chapter_ttl=1, fts_ttl=1
+        "redis://localhost",
+        enabled=False,
+        chapter_ttl=1,
+        fts_ttl=1,
+        services_search_ttl=1,
+        services_detail_ttl=1,
+        status_ttl=1,
     )
     await cache.connect()
     assert cache.available is False
@@ -180,3 +189,53 @@ async def test_chapter_and_fts_helpers_use_expected_keys(monkeypatch):
 
     await cache.set_fts("motor", [1, 2])
     assert seen["set"] == ("nesh:fts:motor", [1, 2], cache.fts_ttl)
+
+
+@pytest.mark.asyncio
+async def test_services_and_status_helpers_use_expected_keys(monkeypatch):
+    cache = _cache()
+
+    seen = {}
+
+    async def _fake_get(key):
+        seen["get"] = key
+        return {"ok": True}
+
+    async def _fake_set(key, value, ttl):
+        seen["set"] = (key, value, ttl)
+
+    monkeypatch.setattr(cache, "get_json", _fake_get)
+    monkeypatch.setattr(cache, "set_json", _fake_set)
+
+    got_search = await cache.get_services_search("nbs", "tenant-a", "search-key")
+    assert got_search == {"ok": True}
+    assert seen["get"] == "services:nbs:search:tenant-a:search-key"
+
+    await cache.set_services_search("nbs", "tenant-a", "search-key", {"items": 1})
+    assert seen["set"] == (
+        "services:nbs:search:tenant-a:search-key",
+        {"items": 1},
+        cache.services_search_ttl,
+    )
+
+    got_detail = await cache.get_services_detail("nebs", "tenant-b", "detail-key")
+    assert got_detail == {"ok": True}
+    assert seen["get"] == "services:nebs:detail:tenant-b:detail-key"
+
+    await cache.set_services_detail("nebs", "tenant-b", "detail-key", {"entry": 1})
+    assert seen["set"] == (
+        "services:nebs:detail:tenant-b:detail-key",
+        {"entry": 1},
+        cache.services_detail_ttl,
+    )
+
+    got_status = await cache.get_status_snapshot("public")
+    assert got_status == {"ok": True}
+    assert seen["get"] == "system:status:public"
+
+    await cache.set_status_snapshot("public", {"status": "online"})
+    assert seen["set"] == (
+        "system:status:public",
+        {"status": "online"},
+        cache.status_ttl,
+    )

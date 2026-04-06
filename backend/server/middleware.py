@@ -15,6 +15,7 @@ import ipaddress
 import json
 import logging
 import time
+import uuid
 from contextvars import ContextVar
 from typing import Any, Coroutine, Dict, Optional
 from urllib.parse import urlparse
@@ -58,6 +59,7 @@ _JWT_DEBUG_CLAIM_FIELDS = (
 _jwt_failure_reason_ctx: ContextVar[Optional[str]] = ContextVar(
     "jwt_failure_reason", default=None
 )
+_request_id_ctx: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
 _DEV_MIN_CLOCK_SKEW_SECONDS = 120
 _LOCALHOST_HOSTS = {"localhost"}
 
@@ -269,6 +271,7 @@ def _log_jwt_failure(
         "event": "jwt_validation_failed",
         "reason": reason,
         "error": str(error),
+        "request_id": _request_id_ctx.get(),
         "token": token_snapshot,
         "expected": {
             "issuer": _resolve_expected_issuer(),
@@ -509,6 +512,7 @@ def _log_jwt_validation_success(
         "jwt_validation_ok %s",
         json.dumps(
             {
+                "request_id": _request_id_ctx.get(),
                 "header": token_snapshot.get("header", {}),
                 "claims": {k: payload.get(k) for k in _JWT_DEBUG_CLAIM_FIELDS},
             },
@@ -841,6 +845,12 @@ class TenantMiddleware:
                 return host
         return None
 
+    @staticmethod
+    def _extract_request_id(scope: dict[str, Any]) -> str:
+        headers = dict(scope.get("headers", []))
+        request_id = headers.get(b"x-request-id", b"").decode("latin-1").strip()
+        return request_id or uuid.uuid4().hex
+
     @classmethod
     def _allow_dev_tenant_override(cls, scope: dict[str, Any]) -> bool:
         if settings.server.env != "development" or not settings.features.debug_mode:
@@ -878,13 +888,31 @@ class TenantMiddleware:
 
     @staticmethod
     def _log_tenant_resolution(
-        scope: dict[str, Any], path: str, org_id: Optional[str]
+        scope: dict[str, Any],
+        path: str,
+        request_id: str,
+        org_id: Optional[str],
+        jwt_payload: Optional[dict[str, Any]],
     ) -> None:
-        method = scope.get("method", "?")
-        if org_id:
-            logger.debug("Request %s %s - Tenant: %s", method, path, org_id)
+        if not settings.features.debug_mode:
             return
-        logger.debug("Request %s %s - No tenant (public)", method, path)
+
+        method = scope.get("method", "?")
+        logger.info(
+            "request_tenant_resolution %s",
+            json.dumps(
+                {
+                    "request_id": request_id,
+                    "method": method,
+                    "path": path,
+                    "tenant": org_id,
+                    "token_present": jwt_payload is not None,
+                    "jwt_failure_reason": get_last_jwt_failure_reason(),
+                },
+                ensure_ascii=False,
+                default=str,
+            ),
+        )
 
     async def _resolve_request_tenant(
         self, scope: dict[str, Any]
@@ -914,29 +942,73 @@ class TenantMiddleware:
     async def _call_with_optional_tenant_context(
         self,
         org_id: Optional[str],
+        request_id: str,
         scope: dict[str, Any],
         receive: Any,
         send: Any,
     ) -> None:
+        send_wrapper = self._wrap_send_with_request_id(send, request_id, scope, org_id)
         if not org_id:
-            await self.app(scope, receive, send)
+            await self.app(scope, receive, send_wrapper)
             return
 
         token_var = tenant_context.set(org_id)
         try:
-            await self.app(scope, receive, send)
+            await self.app(scope, receive, send_wrapper)
         finally:
             tenant_context.reset(token_var)
 
     @staticmethod
     async def _send_missing_tenant_response(
-        scope: dict[str, Any], receive: Any, send: Any
+        scope: dict[str, Any], receive: Any, send: Any, request_id: str
     ) -> None:
         response = JSONResponse(
             status_code=401,
             content={"success": False, "detail": "Tenant não identificado"},
         )
-        await response(scope, receive, send)
+        send_wrapper = TenantMiddleware._wrap_send_with_request_id(
+            send, request_id, scope, None
+        )
+        await response(scope, receive, send_wrapper)
+
+    @staticmethod
+    def _wrap_send_with_request_id(send: Any, request_id: str, scope: dict[str, Any], org_id: Optional[str]) -> Any:
+        async def send_wrapper(message: dict[str, Any]) -> None:
+            if message.get("type") == "http.response.start":
+                headers = list(message.get("headers", []))
+                header_key = b"x-request-id"
+                header_value = request_id.encode("latin-1", "ignore")
+                replaced = False
+                for idx, (name, _) in enumerate(headers):
+                    if isinstance(name, bytes) and name.lower() == header_key:
+                        headers[idx] = (name, header_value)
+                        replaced = True
+                        break
+                if not replaced:
+                    headers.append((header_key, header_value))
+
+                if settings.features.debug_mode:
+                    status = message.get("status")
+                    method = scope.get("method", "?")
+                    path = scope.get("path", "?")
+                    logger.info(
+                        "request_response %s",
+                        json.dumps(
+                            {
+                                "request_id": request_id,
+                                "method": method,
+                                "path": path,
+                                "status": status,
+                                "tenant": org_id,
+                            },
+                            ensure_ascii=False,
+                            default=str,
+                        ),
+                    )
+                message = {**message, "headers": headers}
+            await send(message)
+
+        return send_wrapper
 
     @staticmethod
     def _schedule_provisioning_if_needed(
@@ -951,26 +1023,67 @@ class TenantMiddleware:
             await self.app(scope, receive, send)
             return
 
+        request_id = self._extract_request_id(scope)
+        request_token = _request_id_ctx.set(request_id)
         path = scope.get("path", "")
 
-        # 0. Só processa APIs; arquivos estáticos/frontend não exigem tenant
-        if not path.startswith("/api"):
-            await self.app(scope, receive, send)
-            return
+        try:
+            # 0. Só processa APIs; arquivos estáticos/frontend não exigem tenant
+            if not path.startswith("/api"):
+                await self.app(scope, receive, send)
+                return
 
-        # 1. Ignorar rotas púbalicas
-        if self._is_public_path(path):
-            await self.app(scope, receive, send)
-            return
+            if settings.features.debug_mode:
+                logger.info(
+                    "request_received %s",
+                    json.dumps(
+                        {
+                            "request_id": request_id,
+                            "method": scope.get("method", "?"),
+                            "path": path,
+                            "auth_header_present": self._extract_bearer_token(scope)
+                            is not None,
+                        },
+                        ensure_ascii=False,
+                        default=str,
+                    ),
+                )
 
-        org_id, jwt_payload = await self._resolve_request_tenant(scope)
-        if self._requires_tenant_rejection(org_id):
-            await self._send_missing_tenant_response(scope, receive, send)
-            return
+            # 1. Ignorar rotas púbalicas
+            if self._is_public_path(path):
+                await self._call_with_optional_tenant_context(
+                    None, request_id, scope, receive, send
+                )
+                return
 
-        self._log_tenant_resolution(scope, path, org_id)
-        await self._call_with_optional_tenant_context(org_id, scope, receive, send)
-        self._schedule_provisioning_if_needed(jwt_payload, org_id)
+            org_id, jwt_payload = await self._resolve_request_tenant(scope)
+            if self._requires_tenant_rejection(org_id):
+                if settings.features.debug_mode:
+                    logger.warning(
+                        "request_missing_tenant %s",
+                        json.dumps(
+                            {
+                                "request_id": request_id,
+                                "method": scope.get("method", "?"),
+                                "path": path,
+                                "jwt_failure_reason": get_last_jwt_failure_reason(),
+                            },
+                            ensure_ascii=False,
+                            default=str,
+                        ),
+                    )
+                await self._send_missing_tenant_response(
+                    scope, receive, send, request_id
+                )
+                return
+
+            self._log_tenant_resolution(scope, path, request_id, org_id, jwt_payload)
+            await self._call_with_optional_tenant_context(
+                org_id, request_id, scope, receive, send
+            )
+            self._schedule_provisioning_if_needed(jwt_payload, org_id)
+        finally:
+            _request_id_ctx.reset(request_token)
 
 
 def get_current_tenant() -> Optional[str]:
@@ -982,3 +1095,10 @@ def get_current_tenant() -> Optional[str]:
         tenant_id = get_current_tenant()
     """
     return tenant_context.get() or None
+
+
+def get_current_request_id() -> Optional[str]:
+    """
+    Utility function para obter o request_id atual em qualquer lugar do código.
+    """
+    return _request_id_ctx.get() or None

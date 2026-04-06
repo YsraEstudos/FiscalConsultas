@@ -226,7 +226,17 @@ async def _init_tipi_service(app: FastAPI) -> None:
     )
 
 
-def _init_nbs_service(app: FastAPI) -> None:
+async def _init_nbs_service(app: FastAPI) -> None:
+    if settings.database.is_postgres:
+        try:
+            app.state.nbs_service = await NbsService.create_with_repository()
+            logger.info("NbsService initialized in Repository mode (Postgres)")
+            return
+        except Exception as e:
+            logger.warning(
+                "NbsService repository init failed, falling back to SQLite mode: %s",
+                e,
+            )
     app.state.nbs_service = NbsService()
     logger.info("NbsService initialized in SQLite mode (services.db)")
 
@@ -273,7 +283,7 @@ async def lifespan(app: FastAPI):
         await _init_nesh_service(app)
         await _init_cache_warmup(app)
         await _init_tipi_service(app)
-        _init_nbs_service(app)
+        await _init_nbs_service(app)
         app.state.ai_service = AiService()
 
         logger.info("Initializing Glossary...")
@@ -327,6 +337,7 @@ app.add_middleware(
     allow_headers=[
         "Authorization",
         "Content-Type",
+        "X-Request-Id",
         "X-Admin-Token",
         "X-Tenant-Id",
         "Accept-Encoding",

@@ -14,6 +14,8 @@ import { extractChapter } from './utils/chapterDetection';
 import { isCodeSearchResponse } from './types/api.types';
 import type { NbsSearchResponse, NebsSearchResponse } from './types/api.types';
 import { useSettings } from './context/SettingsContext';
+import { useServicesAccess } from './hooks/useServicesAccess';
+import { isServiceCatalogDoc } from './utils/servicesCatalog';
 import { NotePanel } from './components/NotePanel';
 import { UserProfilePage } from './components/UserProfilePage';
 import styles from './App.module.css';
@@ -65,6 +67,11 @@ function App() {
 
     // Hooks customizados
     const { history, addToHistory, removeFromHistory, clearHistory } = useHistory();
+    const {
+        ensureServicesSearchAccess,
+        refreshServicesStatus,
+        servicesUnavailableReason,
+    } = useServicesAccess();
     const { executeSearchForTab } = useSearch(tabsById, updateTab, addToHistory);
     const activeTabRef = useRef(activeTab);
     const handleSearchRef = useRef<(query: string) => void>(() => { });
@@ -83,6 +90,13 @@ function App() {
             console.error(`[App] ${context}:`, error);
         });
     }, []);
+    const refreshServicesStatusInBackground = useCallback((doc: DocType) => {
+        if (!isServiceCatalogDoc(doc)) return;
+        runNonBlockingTask(
+            refreshServicesStatus(false),
+            `refreshServicesStatus (${doc})`
+        );
+    }, [refreshServicesStatus, runNonBlockingTask]);
 
 
     // Atalhos globais de teclado
@@ -101,39 +115,40 @@ function App() {
 
     // Busca atua na aba ativa, mas suporta multiplos NCMs por virgula/espaco
     const handleSearch = useCallback((query: string) => {
-        const terms = splitSearchTerms(query);
-        if (terms.length === 0) return;
+        runNonBlockingTask((async () => {
+            const terms = splitSearchTerms(query);
+            if (terms.length === 0) return;
 
-        const currentTab = activeTabRef.current;
-        const doc = (currentTab?.document || 'nesh') as DocType;
+            const currentTab = activeTabRef.current;
+            const doc = (currentTab?.document || 'nesh') as DocType;
 
-        if (terms.length === 1) {
-            runNonBlockingTask(
-                executeSearchForTab(activeTabId, doc, terms[0], true),
-                'executeSearchForTab (single term)'
-            );
-            return;
-        }
+            if (isServiceCatalogDoc(doc)) {
+                const hasAccess = await ensureServicesSearchAccess();
+                if (!hasAccess) return;
+            }
 
-        const canReuseActiveTab = !currentTab?.loading && !currentTab?.results && !currentTab?.ncm;
-        let startIndex = 0;
+            if (terms.length === 1) {
+                await executeSearchForTab(activeTabId, doc, terms[0], true);
+                return;
+            }
 
-        if (canReuseActiveTab) {
-            runNonBlockingTask(
-                executeSearchForTab(activeTabId, doc, terms[0], true),
-                'executeSearchForTab (reuse active tab)'
-            );
-            startIndex = 1;
-        }
+            const canReuseActiveTab = !currentTab?.loading && !currentTab?.results && !currentTab?.ncm;
+            const searchTasks: Promise<unknown>[] = [];
+            let startIndex = 0;
 
-        for (let i = startIndex; i < terms.length; i += 1) {
-            const tabId = createTab(doc);
-            runNonBlockingTask(
-                executeSearchForTab(tabId, doc, terms[i], true),
-                'executeSearchForTab (new tab)'
-            );
-        }
-    }, [activeTabId, createTab, executeSearchForTab, runNonBlockingTask]);
+            if (canReuseActiveTab) {
+                searchTasks.push(executeSearchForTab(activeTabId, doc, terms[0], true));
+                startIndex = 1;
+            }
+
+            for (let i = startIndex; i < terms.length; i += 1) {
+                const tabId = createTab(doc);
+                searchTasks.push(executeSearchForTab(tabId, doc, terms[i], true));
+            }
+
+            await Promise.all(searchTasks);
+        })(), 'handleSearch');
+    }, [activeTabId, createTab, ensureServicesSearchAccess, executeSearchForTab, runNonBlockingTask]);
 
     const scrollToNotesSection = useCallback((chapter?: string) => {
         const container = document.getElementById(`results-content-${activeTabId}`);
@@ -323,6 +338,9 @@ function App() {
     // Define o documento na aba ativa (ou abre nova se ja houver conteudo)
     const setDoc = useCallback((doc: string) => {
         const nextDoc = doc as DocType;
+
+        refreshServicesStatusInBackground(nextDoc);
+
         const currentTab = activeTabRef.current;
         const shouldOpenNewTab = Boolean(
             currentTab?.loading ||
@@ -349,9 +367,11 @@ function App() {
             isContentReady: false,
             loadedChaptersByDoc: resetLoadedChaptersForDoc(nextDoc)
         });
-    }, [activeTabId, createTab, resetLoadedChaptersForDoc, updateTab]);
+    }, [activeTabId, createTab, refreshServicesStatusInBackground, resetLoadedChaptersForDoc, updateTab]);
 
     const switchTabDocument = useCallback(async (tabId: string, doc: DocType, query?: string) => {
+        refreshServicesStatusInBackground(doc);
+
         updateTab(tabId, {
             document: doc,
             results: null,
@@ -367,9 +387,19 @@ function App() {
         });
 
         if (query?.trim()) {
+            if (isServiceCatalogDoc(doc)) {
+                const hasAccess = await ensureServicesSearchAccess();
+                if (!hasAccess) return;
+            }
             await executeSearchForTab(tabId, doc, query.trim(), false);
         }
-    }, [executeSearchForTab, resetLoadedChaptersForDoc, updateTab]);
+    }, [
+        ensureServicesSearchAccess,
+        executeSearchForTab,
+        refreshServicesStatusInBackground,
+        resetLoadedChaptersForDoc,
+        updateTab
+    ]);
 
     // Ponte legado + ponte de configuracoes
     useEffect(() => {
@@ -434,6 +464,7 @@ function App() {
                 setDoc={setDoc}
                 searchKey={`${activeTabId}-${activeTab?.document || 'nesh'}`}
                 onMenuOpen={() => setMobileMenuOpen(true)}
+                servicesUnavailableReason={servicesUnavailableReason}
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 onOpenTutorial={() => setIsTutorialOpen(true)}
                 onOpenStats={() => setIsStatsOpen(true)}
@@ -478,7 +509,7 @@ function App() {
                                     <div className={styles.emptyStateIcon}>🔎</div>
                                     <h3 className={styles.emptyStateTitle}>Pronto para buscar</h3>
                                     <p>{tab.document === 'nbs' || tab.document === 'nebs'
-                                        ? 'Digite um codigo de servico ou termo textual acima'
+                                        ? (servicesUnavailableReason || 'Digite um codigo de servico ou termo textual acima')
                                         : 'Digite um NCM acima ou use o histórico'}</p>
                                     <p className={styles.emptyStateHint}>
                                         Dica: Pressione <kbd>/</kbd> para buscar

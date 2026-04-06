@@ -1,6 +1,6 @@
 # Nesh / Fiscal - AI_CONTEXT
 
-Atualizado em: 2026-03-13
+Atualizado em: 2026-03-31
 Base desta revisao: README, `start_nesh_dev.bat`, `client/package.json`, `docs/TESTING.md` e workflows atuais de CI/MegaLinter.
 
 ## 1) Proposito
@@ -183,8 +183,8 @@ Local:
 - Backend default: `uv run pytest -q` (sem `perf` e `snapshot` por padrao).
 - Frontend default: `cd client && npm run test`.
 - Frontend type-check: `cd client && npm run type-check`.
-- Full stack Windows: `.\start_nesh_dev.bat` (`--auth-debug` para diagnostico Clerk no frontend; `--rebuild` para recriar indices/bancos locais antes do boot).
-- Validacao dedicada de auth env: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate_auth_env.ps1`.
+- Bootstrap Windows (frontend): `.\start_nesh_dev.bat` (`--auth-debug` para diagnostico Clerk no frontend).
+- Validacao dedicada de auth env (backend): `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate_auth_env.ps1`.
 - Testes de performance existem, mas sao opt-in.
 - Existe cobertura de contratos de rota, renderer, middleware e hooks.
 - Snapshot observado em 2026-03-09:
@@ -218,7 +218,7 @@ CI adicional em `.github/workflows/megalinter.yml`:
 
 Status:
 
-1. README, `TESTING.md` e este contexto foram sincronizados em 2026-03-09 com o hardening recente do frontend.
+1. README, `TESTING.md` e este contexto foram sincronizados em 2026-03-31 com o fluxo cloud-first e bootstrap frontend-only.
 2. O ponto de atencao atual e manter a parte de UI restrita (`VITE_RESTRICTED_UI_EMAILS`) claramente documentada como gating de client, nao como auth backend.
 3. Outro ponto de atencao e manter este documento sincronizado quando o escopo do `PR Smart` ou das suites frontend mudar.
 
@@ -282,10 +282,9 @@ $env:PYTHONUTF8="1"; uv run scripts/setup_fulltext.py
 
 Notas:
 
-- o script faz `docker compose up -d`, valida `.env` e `client/.env.local`, espera `db`, `redis` e `pgadmin`, e bloqueia startup se o preflight de migracao PostgreSQL falhar.
+- o script atual e frontend-only: valida Node/npm e `client/.env.local`, prepara dependencias, sobe Vite na porta 5173 e abre o browser.
 - para diagnostico de auth do frontend, use `.\start_nesh_dev.bat --auth-debug`.
-- para rebuild local antes do boot, use `.\start_nesh_dev.bat --rebuild`.
-- se houver volume legado do PostgreSQL 15, verifique com `.\.venv\Scripts\python scripts\migrate_postgres_cluster.py --check-only` e migre com `.\.venv\Scripts\python scripts\migrate_postgres_cluster.py --run`.
+- para backend local, rode em terminal separado: `uv run Nesh.py`.
 
 ## 14) Regras para Mudancas por IA
 
@@ -316,5 +315,5 @@ Motivo simples: caixas com nome ajudam a achar as coisas rapido.
 
 ## 16) Unknown / Nao Consolidado
 
-- Padrao oficial unico de deploy (alem de `docker-compose` local + build frontend): nao consolidado em documento unico.
+- Backend cloud (Render + Neon) ja esta operacional; ainda falta consolidar um guia unico para publicacao do frontend.
 - Estrategia final de desativacao do alias `resultados` no contrato publico: ainda nao definida.

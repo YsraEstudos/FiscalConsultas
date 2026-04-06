@@ -103,12 +103,42 @@ export function useServicesAccess() {
 
         return true;
     }, [clerk, isLoading, isSignedIn, refreshServicesStatus]);
+    const ensureServicesSearchAccess = useCallback(async () => {
+        if (isLoading) {
+            toast.error('Aguarde a autenticação carregar e tente novamente.');
+            return false;
+        }
+
+        if (!isSignedIn) {
+            toast.error('Faça login para acessar o catálogo de serviços.');
+            try {
+                await clerk.openSignIn?.();
+            } catch (error) {
+                console.warn('[useServicesAccess] Failed to open Clerk sign-in:', error);
+            }
+            return false;
+        }
+
+        const current = snapshotRef.current;
+        const isOfflineAndFresh = current.availability === 'offline' && isSnapshotFresh(current);
+        if (isOfflineAndFresh) {
+            toast.error(current.message || 'Catálogo de serviços indisponível no momento.');
+            return false;
+        }
+
+        if (current.availability === 'unknown' || !isSnapshotFresh(current)) {
+            void refreshServicesStatus(false);
+        }
+
+        return true;
+    }, [clerk, isLoading, isSignedIn, refreshServicesStatus]);
 
     return {
         ensureServicesAccess,
+        ensureServicesSearchAccess,
         refreshServicesStatus,
         servicesAvailability: snapshot.availability,
-        servicesUnavailableReason: isSignedIn && snapshot.availability === 'offline'
+        servicesUnavailableReason: isSignedIn && snapshot.availability === 'offline' && isSnapshotFresh(snapshot)
             ? snapshot.message
             : null,
     };

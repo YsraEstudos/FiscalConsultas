@@ -52,6 +52,7 @@ export const api = axios.create({
     // Clerk auth is forwarded via Authorization header; avoid leaking ambient cookies cross-origin.
     withCredentials: false,
 });
+export const SYSTEM_STATUS_TIMEOUT_MS = 4000;
 
 // ============================================================
 // AUTH INTERCEPTOR - Injeta o JWT do Clerk em cada request
@@ -71,9 +72,10 @@ type ClerkTokenGetter = (options?: ClerkTokenGetterOptions) => Promise<string | 
 
 let clerkGetToken: ClerkTokenGetter | null = null;
 const PUBLIC_ROUTES = ['/status', '/glossary'];
-const AUTH_DEBUG_ENABLED = import.meta.env.DEV && String(import.meta.env.VITE_AUTH_DEBUG || '').toLowerCase() === 'true';
+const AUTH_DEBUG_ENABLED = String(import.meta.env.VITE_AUTH_DEBUG || '').toLowerCase() === 'true';
 const CLERK_TOKEN_TEMPLATE = (import.meta.env.VITE_CLERK_TOKEN_TEMPLATE || '').trim() || undefined;
 const AUTH_REFRESH_COOLDOWN_MS = 2500;
+const REQUEST_ID_HEADER = 'X-Request-Id';
 
 const JWT_DEBUG_FIELDS = ['iss', 'sub', 'sid', 'azp', 'aud', 'org_id', 'exp', 'iat', 'nbf'] as const;
 let inFlightForcedRefreshPromise: Promise<string | null> | null = null;
@@ -154,7 +156,7 @@ async function getForcedRefreshToken(path: string, reason: string): Promise<{
 
     const now = Date.now();
     if (lastForcedRefreshAtMs > 0 && (now - lastForcedRefreshAtMs) < AUTH_REFRESH_COOLDOWN_MS) {
-        if (import.meta.env.DEV) {
+        if (AUTH_DEBUG_ENABLED) {
             console.warn('[API] Forced token refresh skipped by cooldown', {
                 path,
                 reason,
@@ -206,7 +208,21 @@ function maskToken(token: string): string {
     return `${token.slice(0, 12)}...${token.slice(-12)}`;
 }
 
-function logJwtDebug(event: 'request' | 'retry', path: string, token: string, options: ClerkTokenGetterOptions) {
+function getOrCreateRequestId(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+
+    return `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function logJwtDebug(
+    event: 'request' | 'retry',
+    path: string,
+    requestId: string,
+    token: string,
+    options: ClerkTokenGetterOptions,
+) {
     if (!AUTH_DEBUG_ENABLED) return;
 
     const parsed = getJwtDebugPayload(token);
@@ -223,6 +239,7 @@ function logJwtDebug(event: 'request' | 'retry', path: string, token: string, op
     console.info('[AUTH DEBUG] JWT metadata', {
         event,
         path,
+        requestId,
         tokenPreview: maskToken(token),
         template: options.template || null,
         skipCache: !!options.skipCache,
@@ -247,6 +264,18 @@ api.interceptors.request.use(
         const path = getRequestPath(config.url);
         const normalizedPath = path.startsWith('/') ? path : `/${path}`;
         const isPublicRoute = PUBLIC_ROUTES.some(route => normalizedPath.startsWith(route));
+        const requestId = getOrCreateRequestId();
+
+        config.headers.set(REQUEST_ID_HEADER, requestId);
+
+        if (AUTH_DEBUG_ENABLED) {
+            console.info('[AUTH DEBUG] request prepared', {
+                requestId,
+                path: normalizedPath,
+                publicRoute: isPublicRoute,
+                authGetterRegistered: !!clerkGetToken,
+            });
+        }
 
         // Se temos um getter de token registrado, busca o token
         if (clerkGetToken && !isPublicRoute) {
@@ -261,9 +290,18 @@ api.interceptors.request.use(
                 }
                 if (token) {
                     config.headers.set('Authorization', `Bearer ${token}`);
-                    logJwtDebug('request', normalizedPath, token, usedOptions);
-                } else if (import.meta.env.DEV) {
-                    console.warn('[API] No Clerk token available for authenticated request:', normalizedPath);
+                    if (AUTH_DEBUG_ENABLED) {
+                        console.info('[AUTH DEBUG] authorization header attached', {
+                            requestId,
+                            path: normalizedPath,
+                            hasAuthorization: true,
+                        });
+                    }
+                    logJwtDebug('request', normalizedPath, requestId, token, usedOptions);
+                } else if (AUTH_DEBUG_ENABLED || import.meta.env.DEV) {
+                    console.warn('[API] No Clerk token available for authenticated request:', normalizedPath, {
+                        requestId,
+                    });
                 }
             } catch (error) {
                 // Falha silenciosa - request continua sem token
@@ -285,6 +323,8 @@ api.interceptors.response.use(
         const originalRequest = error.config as (InternalAxiosRequestConfig & { _retryAuth?: boolean }) | undefined;
         const detail = (error.response?.data as { detail?: unknown } | undefined)?.detail;
         const detailText = typeof detail === 'string' ? detail : undefined;
+        const requestIdHeader = originalRequest?.headers?.get?.(REQUEST_ID_HEADER) || originalRequest?.headers?.get?.('x-request-id');
+        const requestId = typeof requestIdHeader === 'string' ? requestIdHeader : undefined;
         let refreshAttempt: 'skipped' | 'attempted' = 'skipped';
         let refreshMode: 'fresh' | 'in_flight' | 'cooldown' | 'not_applicable' = 'not_applicable';
 
@@ -308,7 +348,7 @@ api.interceptors.response.use(
                     const freshToken = refresh.token;
                     if (freshToken) {
                         originalRequest.headers.set('Authorization', `Bearer ${freshToken}`);
-                        logJwtDebug('retry', normalizedPath, freshToken, refresh.options);
+                        logJwtDebug('retry', normalizedPath, requestId || 'unknown', freshToken, refresh.options);
                         return api.request(originalRequest);
                     }
                 } catch (refreshError) {
@@ -321,6 +361,7 @@ api.interceptors.response.use(
         if (status === 401) {
             console.warn('[API] 401 Unauthorized - Token missing, expired, or invalid', {
                 path: originalRequest?.url,
+                requestId,
                 detail: detailText,
                 refreshAttempt,
                 refreshMode,
@@ -611,7 +652,9 @@ export const getGlossaryTerm = async (term: string): Promise<any> => {
 };
 
 export const getSystemStatus = async (): Promise<SystemStatusResponse> => {
-    const response = await api.get(withDevCacheBust('/status'));
+    const response = await api.get(withDevCacheBust('/status'), {
+        timeout: SYSTEM_STATUS_TIMEOUT_MS,
+    });
     return response.data;
 };
 
