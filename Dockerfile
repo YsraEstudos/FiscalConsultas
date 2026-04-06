@@ -13,12 +13,10 @@ RUN uv sync --frozen --no-dev
 
 # Copiar o restante do código
 COPY backend/ ./backend/
-COPY Nesh.py .
-COPY alembic.ini .
 COPY migrations/ ./migrations/
 COPY scripts/ ./scripts/
+COPY Nesh.py alembic.ini README.md ./
 RUN mkdir -p database/
-COPY README.md .
 
 # Configurações de ambiente para o container
 ENV PYTHONUNBUFFERED=1
@@ -28,6 +26,12 @@ ENV SERVER__PORT=10000
 
 # Porta padrão exposta pelo Render
 EXPOSE 10000
+
+RUN useradd -m -s /bin/bash appuser && chown -R appuser:appuser /app
+USER appuser
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:10000/status || exit 1
 
 # Comando para iniciar o servidor via uv
 CMD ["uv", "run", "Nesh.py"]
