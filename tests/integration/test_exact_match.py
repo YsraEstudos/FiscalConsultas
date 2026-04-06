@@ -14,7 +14,9 @@ from backend.config.constants import DatabaseConfig
 
 pytestmark = pytest.mark.integration
 
-DB_PATH = DatabaseConfig.DEFAULT_DB_FILENAME
+import os
+from pathlib import Path
+DB_PATH = os.path.join(Path(__file__).parent.parent.parent, DatabaseConfig.DEFAULT_DB_FILENAME)
 
 
 def normalize_text(text):
@@ -71,6 +73,9 @@ def find_exact_matches(text, words):
 
 def test_chapter_84():
     """Testa busca no capítulo 84 por 'bombas submersíveis'."""
+
+    if not Path(DB_PATH).exists():
+        pytest.skip(f"{DB_PATH} não encontrado")
 
     print("=" * 60)
     print("TESTE: Busca de 'bomba submersível' no Capítulo 84")
@@ -151,6 +156,9 @@ def test_chapter_84():
 
 def test_position_content():
     """Verifica conteúdo das posições para encontrar onde está o texto exato."""
+
+    if not Path(DB_PATH).exists():
+        pytest.skip(f"{DB_PATH} não encontrado")
 
     print("\n" + "=" * 60)
     print("BUSCA EM POSIÇÕES: Onde está 'bombas submersíveis'?")
