@@ -4,9 +4,11 @@ Objetivo: Encontrar onde "bombas submersíveis" aparece no capítulo 84
 e entender por que a navegação não está funcionando.
 """
 
+import os
 import re
 import sqlite3
 import unicodedata
+from pathlib import Path
 
 import pytest
 
@@ -14,9 +16,9 @@ from backend.config.constants import DatabaseConfig
 
 pytestmark = pytest.mark.integration
 
-import os
-from pathlib import Path
-DB_PATH = os.path.join(Path(__file__).parent.parent.parent, DatabaseConfig.DEFAULT_DB_FILENAME)
+DB_PATH = os.path.join(
+    Path(__file__).parent.parent.parent, DatabaseConfig.DEFAULT_DB_FILENAME
+)
 
 
 def normalize_text(text):

@@ -76,7 +76,7 @@ def test_build_public_status_payload_strips_sensitive_fields():
         {"status": "error", "chapters": 3, "positions": 7, "error": "hidden"},
         {"status": "error"},
         {"status": "online"},
-        "error"
+        "error",
     )
 
     assert payload == {
@@ -90,7 +90,7 @@ def test_build_public_status_payload_strips_sensitive_fields():
             "tipi": {"status": "error"},
             "nbs": {"status": "error"},
             "nebs": {"status": "online"},
-        }
+        },
     }
 
 
