@@ -87,6 +87,9 @@ class CacheSettings(BaseModel):
     redis_url: str = "redis://localhost:6379/0"
     chapter_cache_ttl: int = 3600
     fts_cache_ttl: int = 600
+    services_search_ttl: int = 600
+    services_detail_ttl: int = 1800
+    status_cache_ttl: int = 20
 
 
 class AuthSettings(BaseModel):

@@ -18,7 +18,13 @@ O objetivo é tirar a aplicação do "localhost" e garantir alta disponibilidade
 - [ ] **HTTPS e SSL / Domínio**:
   - Redirecionar o domínio para o Frontend e a rota da API para o Backend.
   - Garantir certificados SSL (HTTPS) ativos para o funcionamento do Clerk, Webhooks do Asaas e segurança geral.
-  - Travar o CORS no backend apenas para os domínios oficiais.
+  - Configurar `SERVER__CORS_ALLOWED_ORIGINS` com lista JSON apenas dos domínios oficiais (sem curingas em produção).
+
+### Estado Atual em Produção (2026-03-31)
+
+- Backend FastAPI publicado no Render e respondendo healthcheck em produção.
+- Banco PostgreSQL gerenciado no Neon provisionado com migrações e carga inicial já aplicadas.
+- Frontend segue em modo local para desenvolvimento; publicação pública do frontend permanece como etapa pendente de go-live.
 
 ---
 

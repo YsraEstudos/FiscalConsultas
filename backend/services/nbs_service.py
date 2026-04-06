@@ -7,8 +7,11 @@ mode used by the production/runtime path.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import re
+from collections import OrderedDict
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator, cast
 
@@ -21,6 +24,7 @@ from backend.config.exceptions import (
 )
 from backend.config.logging_config import service_logger as logger
 from backend.config.settings import settings
+from backend.infrastructure.redis_client import redis_cache
 from backend.utils.nbs_parser import (
     build_nbs_code_variants,
     clean_nbs_code,
@@ -28,8 +32,9 @@ from backend.utils.nbs_parser import (
 )
 
 get_session = None
+tenant_context = None
 try:
-    from backend.infrastructure.db_engine import get_session
+    from backend.infrastructure.db_engine import get_session, tenant_context
     from backend.infrastructure.repositories.nbs_repository import NbsRepository
 
     _REPO_AVAILABLE = True
@@ -44,6 +49,8 @@ if TYPE_CHECKING:
 
 NBS_ALLOWED_TABLES = {"nbs_items", "nebs_entries", "catalog_metadata"}
 MAX_ANCESTOR_DEPTH = 64
+SERVICE_SEARCH_CACHE_SIZE = 64
+SERVICE_DETAIL_CACHE_SIZE = 64
 NEBS_PUBLIC_FIELDS = (
     "code",
     "code_clean",
@@ -76,6 +83,9 @@ class NbsService:
         self._repository = repository
         self._repository_factory = repository_factory
         self._use_repository = repository is not None or repository_factory is not None
+        self._search_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self._detail_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self._cache_lock: asyncio.Lock | None = None
 
         mode = "Repository" if self._use_repository else "aiosqlite"
         logger.info("NbsService inicializado (modo: %s)", mode)
@@ -113,6 +123,115 @@ class NbsService:
             return
         yield None
 
+    def _get_cache_lock(self) -> asyncio.Lock:
+        if self._cache_lock is None:
+            self._cache_lock = asyncio.Lock()
+        return self._cache_lock
+
+    @staticmethod
+    def _build_cache_key(*parts: Any) -> str:
+        serialized = "|".join(str(part) for part in parts)
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _resolve_cache_scope(repo: "_NbsRepository | None" = None) -> str:
+        tenant_id = getattr(repo, "tenant_id", None)
+        if not tenant_id and tenant_context is not None:
+            tenant_id = tenant_context.get() or None
+        return str(tenant_id or "public")
+
+    async def _get_l1_cached_payload(
+        self,
+        cache: OrderedDict[str, dict[str, Any]],
+        key: str,
+    ) -> dict[str, Any] | None:
+        async with self._get_cache_lock():
+            cached = cache.get(key)
+            if cached is None:
+                return None
+            cache.move_to_end(key)
+            return deepcopy(cached)
+
+    async def _store_l1_payload(
+        self,
+        cache: OrderedDict[str, dict[str, Any]],
+        key: str,
+        payload: dict[str, Any],
+        *,
+        max_size: int,
+    ) -> None:
+        async with self._get_cache_lock():
+            cache[key] = deepcopy(payload)
+            cache.move_to_end(key)
+            while len(cache) > max_size:
+                cache.popitem(last=False)
+
+    async def _get_cached_search_payload(
+        self, namespace: str, scope: str, key: str
+    ) -> dict[str, Any] | None:
+        cache_key = f"{namespace}:{scope}:{key}"
+        cached = await self._get_l1_cached_payload(self._search_cache, cache_key)
+        if cached is not None:
+            return cached
+        if not redis_cache.available:
+            return None
+        cached = await redis_cache.get_services_search(namespace, scope, key)
+        if cached is None:
+            return None
+        await self._store_l1_payload(
+            self._search_cache,
+            cache_key,
+            cached,
+            max_size=SERVICE_SEARCH_CACHE_SIZE,
+        )
+        return deepcopy(cached)
+
+    async def _store_search_payload(
+        self, namespace: str, scope: str, key: str, payload: dict[str, Any]
+    ) -> None:
+        cache_key = f"{namespace}:{scope}:{key}"
+        await self._store_l1_payload(
+            self._search_cache,
+            cache_key,
+            payload,
+            max_size=SERVICE_SEARCH_CACHE_SIZE,
+        )
+        if redis_cache.available:
+            await redis_cache.set_services_search(namespace, scope, key, payload)
+
+    async def _get_cached_detail_payload(
+        self, namespace: str, scope: str, key: str
+    ) -> dict[str, Any] | None:
+        cache_key = f"{namespace}:{scope}:{key}"
+        cached = await self._get_l1_cached_payload(self._detail_cache, cache_key)
+        if cached is not None:
+            return cached
+        if not redis_cache.available:
+            return None
+        cached = await redis_cache.get_services_detail(namespace, scope, key)
+        if cached is None:
+            return None
+        await self._store_l1_payload(
+            self._detail_cache,
+            cache_key,
+            cached,
+            max_size=SERVICE_DETAIL_CACHE_SIZE,
+        )
+        return deepcopy(cached)
+
+    async def _store_detail_payload(
+        self, namespace: str, scope: str, key: str, payload: dict[str, Any]
+    ) -> None:
+        cache_key = f"{namespace}:{scope}:{key}"
+        await self._store_l1_payload(
+            self._detail_cache,
+            cache_key,
+            payload,
+            max_size=SERVICE_DETAIL_CACHE_SIZE,
+        )
+        if redis_cache.available:
+            await redis_cache.set_services_detail(namespace, scope, key, payload)
+
     async def _get_connection(self) -> aiosqlite.Connection:
         if not self.db_path.exists():
             raise DatabaseNotFoundError(str(self.db_path))
@@ -144,6 +263,9 @@ class NbsService:
                     await conn.close()
                 except Exception as exc:
                     logger.warning("Error closing NBS pool connection: %s", exc)
+        async with self._get_cache_lock():
+            self._search_cache.clear()
+            self._detail_cache.clear()
 
     async def check_connection(self) -> dict[str, Any]:
         """Return readiness, counts and metadata for the services catalog."""
@@ -401,19 +523,34 @@ class NbsService:
         raw_query = (query or "").strip()
         normalized_query = normalize_nbs_text(raw_query)
         clean_query = clean_nbs_code(raw_query)
+        cache_key = self._build_cache_key("nbs", raw_query, normalized_query, limit)
+        scope = self._resolve_cache_scope(self._repository)
+        cached = await self._get_cached_search_payload("nbs", scope, cache_key)
+        if cached is not None:
+            return cached
 
         if self._use_repository:
             async with self._get_repo() as repo:
                 if repo is None:
                     raise RuntimeError("NBS repository unavailable")
+                scoped_key = self._resolve_cache_scope(repo)
+                if scoped_key != scope:
+                    cached = await self._get_cached_search_payload(
+                        "nbs", scoped_key, cache_key
+                    )
+                    if cached is not None:
+                        return cached
+                scope = scoped_key
                 results = await repo.search(raw_query, limit=limit)
-            return {
+            payload = {
                 "success": True,
                 "query": raw_query,
                 "normalized": normalized_query,
                 "results": results,
                 "total": len(results),
             }
+            await self._store_search_payload("nbs", scope, cache_key, payload)
+            return deepcopy(payload)
 
         conn = await self._get_connection()
         try:
@@ -478,26 +615,45 @@ class NbsService:
                 )
                 rows = await cursor.fetchall()
 
-            return {
+            payload = {
                 "success": True,
                 "query": raw_query,
                 "normalized": normalized_query,
                 "results": [self._row_to_item(row) for row in rows],
                 "total": len(rows),
             }
+            await self._store_search_payload("nbs", scope, cache_key, payload)
+            return deepcopy(payload)
         finally:
             await self._release_connection(conn)
 
     async def get_item_details(self, code: str) -> dict[str, Any]:
+        normalized_code = (code or "").strip()
+        cache_key = self._build_cache_key("nbs-detail", normalized_code)
+        scope = self._resolve_cache_scope(self._repository)
+        cached = await self._get_cached_detail_payload("nbs", scope, cache_key)
+        if cached is not None:
+            return cached
+
         if self._use_repository:
             async with self._get_repo() as repo:
                 if repo is None:
                     raise RuntimeError("NBS repository unavailable")
-                return await repo.get_item_details(code)
+                scoped_key = self._resolve_cache_scope(repo)
+                if scoped_key != scope:
+                    cached = await self._get_cached_detail_payload(
+                        "nbs", scoped_key, cache_key
+                    )
+                    if cached is not None:
+                        return cached
+                scope = scoped_key
+                payload = await repo.get_item_details(normalized_code)
+            await self._store_detail_payload("nbs", scope, cache_key, payload)
+            return deepcopy(payload)
 
         conn = await self._get_connection()
         try:
-            item = await self._fetch_item_by_code(conn, code)
+            item = await self._fetch_item_by_code(conn, normalized_code)
             ancestors = await self._fetch_ancestors(conn, item)
             chapter_root = self._resolve_hierarchy_root(item, ancestors)
 
@@ -547,7 +703,7 @@ class NbsService:
                 )
             )
 
-            return {
+            payload = {
                 "success": True,
                 "item": item,
                 "ancestors": ancestors,
@@ -556,6 +712,8 @@ class NbsService:
                 "chapter_items": chapter_items,
                 "nebs": nebs_payload,
             }
+            await self._store_detail_payload("nbs", scope, cache_key, payload)
+            return deepcopy(payload)
         finally:
             await self._release_connection(conn)
 
@@ -564,19 +722,34 @@ class NbsService:
         normalized_query = normalize_nbs_text(raw_query)
         clean_query = clean_nbs_code(raw_query)
         fts_query = self._build_nebs_fts_query(normalized_query)
+        cache_key = self._build_cache_key("nebs", raw_query, normalized_query, limit)
+        scope = self._resolve_cache_scope(self._repository)
+        cached = await self._get_cached_search_payload("nebs", scope, cache_key)
+        if cached is not None:
+            return cached
 
         if self._use_repository:
             async with self._get_repo() as repo:
                 if repo is None:
                     raise RuntimeError("NBS repository unavailable")
+                scoped_key = self._resolve_cache_scope(repo)
+                if scoped_key != scope:
+                    cached = await self._get_cached_search_payload(
+                        "nebs", scoped_key, cache_key
+                    )
+                    if cached is not None:
+                        return cached
+                scope = scoped_key
                 results = await repo.search_nebs(raw_query, limit=limit)
-            return {
+            payload = {
                 "success": True,
                 "query": raw_query,
                 "normalized": normalized_query,
                 "results": results,
                 "total": len(results),
             }
+            await self._store_search_payload("nebs", scope, cache_key, payload)
+            return deepcopy(payload)
 
         conn = await self._get_connection()
         try:
@@ -712,28 +885,47 @@ class NbsService:
                 }
                 for row in rows
             ]
-            return {
+            payload = {
                 "success": True,
                 "query": raw_query,
                 "normalized": normalized_query,
                 "results": results,
                 "total": len(results),
             }
+            await self._store_search_payload("nebs", scope, cache_key, payload)
+            return deepcopy(payload)
         finally:
             await self._release_connection(conn)
 
     async def get_nebs_details(self, code: str) -> dict[str, Any]:
+        normalized_code = (code or "").strip()
+        cache_key = self._build_cache_key("nebs-detail", normalized_code)
+        scope = self._resolve_cache_scope(self._repository)
+        cached = await self._get_cached_detail_payload("nebs", scope, cache_key)
+        if cached is not None:
+            return cached
+
         if self._use_repository:
             async with self._get_repo() as repo:
                 if repo is None:
                     raise RuntimeError("NBS repository unavailable")
-                return await repo.get_nebs_details(code)
+                scoped_key = self._resolve_cache_scope(repo)
+                if scoped_key != scope:
+                    cached = await self._get_cached_detail_payload(
+                        "nebs", scoped_key, cache_key
+                    )
+                    if cached is not None:
+                        return cached
+                scope = scoped_key
+                payload = await repo.get_nebs_details(normalized_code)
+            await self._store_detail_payload("nebs", scope, cache_key, payload)
+            return deepcopy(payload)
 
         conn = await self._get_connection()
         try:
-            item = await self._fetch_item_by_code(conn, code)
+            item = await self._fetch_item_by_code(conn, normalized_code)
             ancestors = await self._fetch_ancestors(conn, item)
-            aliases, clean_aliases = self._resolve_code_aliases(code)
+            aliases, clean_aliases = self._resolve_code_aliases(normalized_code)
             entry_where_clauses: list[str] = []
             entry_params: list[str] = []
             if aliases:
@@ -773,9 +965,9 @@ class NbsService:
             )
             entry_row = await entry_cursor.fetchone()
             if entry_row is None:
-                raise NotFoundError("Entrada NEBS", (code or "").strip())
+                raise NotFoundError("Entrada NEBS", normalized_code)
 
-            return {
+            payload = {
                 "success": True,
                 "item": item,
                 "ancestors": ancestors,
@@ -783,5 +975,7 @@ class NbsService:
                     self._row_to_nebs_entry_internal(entry_row)
                 ),
             }
+            await self._store_detail_payload("nebs", scope, cache_key, payload)
+            return deepcopy(payload)
         finally:
             await self._release_connection(conn)

@@ -70,9 +70,18 @@ class _FakeTipiService:
 class _FakeNbsService:
     def __init__(self):
         self.closed = False
+        self.mode = "sqlite"
+        self.created_repo = False
 
     async def close(self):
         self.closed = True
+
+    @classmethod
+    async def create_with_repository(cls):
+        obj = cls()
+        obj.mode = "repo"
+        obj.created_repo = True
+        return obj
 
 
 class _FakeAiService:
@@ -295,6 +304,8 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
         assert app.state.sqlmodel_enabled is True
         assert isinstance(app.state.service, _FailingPrewarmNeshService)
         assert app.state.tipi_service.mode == "repo"
+        assert app.state.nbs_service.mode == "repo"
+        assert app.state.nbs_service.created_repo is True
         assert isinstance(app.state.nbs_service, _FakeNbsService)
         assert core_mocks["redis_connected"] is True
 
@@ -328,6 +339,7 @@ async def test_lifespan_postgres_tipi_count_failure_falls_back_to_sqlite_mode(
         assert app.state.sqlmodel_enabled is True
         assert app.state.tipi_service.mode == "sqlite"
         assert app.state.tipi_service.created_repo is False
+        assert app.state.nbs_service.mode == "repo"
 
 
 @pytest.mark.asyncio

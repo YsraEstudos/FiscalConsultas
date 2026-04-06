@@ -12,6 +12,7 @@ from backend.data.glossary_manager import glossary_manager
 from backend.presentation.renderer import HtmlRenderer
 from backend.server.dependencies import get_nesh_service
 from backend.server.rate_limit import public_search_rate_limiter
+from backend.server.middleware import get_current_request_id, get_current_tenant
 from backend.services import NeshService
 from backend.utils.auth import extract_client_ip
 from backend.utils import ncm_utils
@@ -231,6 +232,15 @@ async def search(
     Raises:
         ValidationError: Se a query estiver vazia ou for muito longa.
     """
+    request_id = get_current_request_id() or request.headers.get("x-request-id") or "unknown"
+    logger.info(
+        "search_request_received request_id=%s path=%s tenant=%s ncm=%s",
+        request_id,
+        request.url.path,
+        get_current_tenant(),
+        ncm,
+    )
+
     await _apply_search_rate_limit(request)
 
     if not ncm:
@@ -266,6 +276,11 @@ async def search(
         cached_payload = _code_payload_cache_get(payload_key)
         cache_checked = True
         if cached_payload is not None:
+            logger.info(
+                "search_request_finished request_id=%s path=%s outcome=cache_hit type=code",
+                request_id,
+                request.url.path,
+            )
             return _build_payload_response(
                 request,
                 cached_payload,
@@ -277,7 +292,9 @@ async def search(
     result = await service.process_request(ncm)
     if not isinstance(result, dict):
         logger.error(
-            "process_request retornou tipo inválido para ncm=%s: %s",
+            "search_request_failed request_id=%s path=%s reason=invalid_service_response ncm=%s type=%s",
+            request_id,
+            request.url.path,
             safe_ncm,
             type(result).__name__,
         )
@@ -324,6 +341,12 @@ async def search(
             if payload_key is not None:
                 _code_payload_cache_set(payload_key, cached_payload)
 
+        logger.info(
+            "search_request_finished request_id=%s path=%s outcome=success type=code cache_status=%s",
+            request_id,
+            request.url.path,
+            cache_status,
+        )
         return _build_payload_response(
             request,
             cached_payload,
@@ -331,6 +354,11 @@ async def search(
             cache_status=cache_status,
         )
 
+    logger.info(
+        "search_request_finished request_id=%s path=%s outcome=success type=non_code",
+        request_id,
+        request.url.path,
+    )
     return _orjson_response(response_data, headers=headers)
 
 

@@ -1,7 +1,9 @@
+import asyncio
 import re
 import time
 from typing import Annotated
 
+from backend.infrastructure.redis_client import redis_cache
 from backend.config.settings import is_valid_admin_token, reload_settings, settings
 from backend.server.dependencies import get_nesh_service
 from backend.server.middleware import decode_clerk_jwt
@@ -11,6 +13,9 @@ from backend.utils.auth import extract_bearer_token, extract_client_ip, is_admin
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 router = APIRouter()
+_STATUS_CACHE: dict[str, object | None] = {"value": None, "expires_at": 0.0}
+_STATUS_CACHE_REFRESH_TASK: asyncio.Task | None = None
+_STATUS_CACHE_LOCK: asyncio.Lock | None = None
 STATUS_RESPONSES = {
     429: {"description": "Limite de requisições para status excedido."},
 }
@@ -18,6 +23,41 @@ STATUS_DETAILS_RESPONSES = {
     **STATUS_RESPONSES,
     403: {"description": "Forbidden (admin-only endpoint)."},
 }
+
+
+def _get_status_cache_lock() -> asyncio.Lock:
+    global _STATUS_CACHE_LOCK
+    if _STATUS_CACHE_LOCK is None:
+        _STATUS_CACHE_LOCK = asyncio.Lock()
+    return _STATUS_CACHE_LOCK
+
+
+def _status_cache_ttl_seconds() -> int:
+    return max(int(getattr(settings.cache, "status_cache_ttl", 0) or 0), 0)
+
+
+def _read_l1_status_snapshot(now: float | None = None) -> dict | None:
+    snapshot = _STATUS_CACHE.get("value")
+    if not isinstance(snapshot, dict):
+        return None
+    if now is None:
+        now = time.monotonic()
+    expires_at = float(_STATUS_CACHE.get("expires_at") or 0.0)
+    if expires_at > now:
+        return snapshot
+    return None
+
+
+def _read_stale_l1_status_snapshot() -> dict | None:
+    snapshot = _STATUS_CACHE.get("value")
+    return snapshot if isinstance(snapshot, dict) else None
+
+
+def _reset_status_cache_for_tests() -> None:
+    global _STATUS_CACHE_REFRESH_TASK
+    _STATUS_CACHE["value"] = None
+    _STATUS_CACHE["expires_at"] = 0.0
+    _STATUS_CACHE_REFRESH_TASK = None
 
 
 async def _is_admin_request(request: Request) -> bool:
@@ -220,7 +260,9 @@ async def _collect_nbs_status(request: Request) -> dict:
         return {"status": "error", "error": str(nbs_err)}
 
 
-async def _collect_status_payloads(request: Request) -> tuple[dict, dict, dict, dict, str]:
+async def _collect_status_payloads_uncached(
+    request: Request,
+) -> tuple[dict, dict, dict, dict, str]:
     db_stats, db_latency_ms = await _collect_db_status(request)
     tipi_stats = await _collect_tipi_status(request)
     nbs_stats = await _collect_nbs_status(request)
@@ -250,23 +292,123 @@ async def _collect_status_payloads(request: Request) -> tuple[dict, dict, dict, 
     return normalized_db, normalized_tipi, normalized_nbs, normalized_nebs, overall_status
 
 
-def _build_public_status_payload(
+def _build_status_snapshot(
     normalized_db: dict,
     normalized_tipi: dict,
     normalized_nbs: dict,
     normalized_nebs: dict,
     overall_status: str,
 ) -> dict:
+    return {
+        "normalized_db": normalized_db,
+        "normalized_tipi": normalized_tipi,
+        "normalized_nbs": normalized_nbs,
+        "normalized_nebs": normalized_nebs,
+        "overall_status": overall_status,
+    }
+
+
+def _unpack_status_snapshot(snapshot: dict) -> tuple[dict, dict, dict, dict, str]:
+    return (
+        dict(snapshot.get("normalized_db") or {}),
+        dict(snapshot.get("normalized_tipi") or {}),
+        dict(snapshot.get("normalized_nbs") or {}),
+        dict(snapshot.get("normalized_nebs") or {}),
+        str(snapshot.get("overall_status") or "error"),
+    )
+
+
+async def _refresh_status_snapshot(request: Request, ttl_seconds: int) -> dict:
+    snapshot = _build_status_snapshot(
+        *await _collect_status_payloads_uncached(request)
+    )
+    _STATUS_CACHE["value"] = snapshot
+    _STATUS_CACHE["expires_at"] = time.monotonic() + ttl_seconds
+    if redis_cache.available:
+        await redis_cache.set_status_snapshot("public", snapshot)
+    return snapshot
+
+
+async def _get_status_snapshot(request: Request) -> dict:
+    global _STATUS_CACHE_REFRESH_TASK
+
+    ttl_seconds = _status_cache_ttl_seconds()
+    if ttl_seconds <= 0:
+        return _build_status_snapshot(*await _collect_status_payloads_uncached(request))
+
+    now = time.monotonic()
+    cached = _read_l1_status_snapshot(now)
+    if cached is not None:
+        return cached
+
+    if redis_cache.available:
+        redis_cached = await redis_cache.get_status_snapshot("public")
+        if isinstance(redis_cached, dict):
+            _STATUS_CACHE["value"] = redis_cached
+            _STATUS_CACHE["expires_at"] = now + ttl_seconds
+            return redis_cached
+
+    task: asyncio.Task | None = None
+    lock = _get_status_cache_lock()
+    async with lock:
+        cached = _read_l1_status_snapshot()
+        if cached is not None:
+            return cached
+        task = _STATUS_CACHE_REFRESH_TASK
+        if task is None:
+            task = asyncio.create_task(_refresh_status_snapshot(request, ttl_seconds))
+            _STATUS_CACHE_REFRESH_TASK = task
+
+    try:
+        return await task
+    except Exception:
+        stale = _read_stale_l1_status_snapshot()
+        if stale is not None:
+            return stale
+        if redis_cache.available:
+            redis_cached = await redis_cache.get_status_snapshot("public")
+            if isinstance(redis_cached, dict):
+                _STATUS_CACHE["value"] = redis_cached
+                _STATUS_CACHE["expires_at"] = time.monotonic() + ttl_seconds
+                return redis_cached
+        raise
+    finally:
+        async with lock:
+            if _STATUS_CACHE_REFRESH_TASK is task:
+                _STATUS_CACHE_REFRESH_TASK = None
+
+
+async def _collect_status_payloads(request: Request) -> tuple[dict, dict, dict, dict, str]:
+    return _unpack_status_snapshot(await _get_status_snapshot(request))
+
+
+def _build_public_status_payload(
+    normalized_db: dict,
+    normalized_tipi: dict,
+    normalized_nbs: dict | str | None = None,
+    normalized_nebs: dict | None = None,
+    overall_status: str | None = None,
+) -> dict:
+    legacy_mode = False
+    if isinstance(normalized_nbs, str) and overall_status is None:
+        overall_status = normalized_nbs
+        normalized_nbs = None
+        normalized_nebs = None
+        legacy_mode = True
+
+    overall_status = overall_status or "error"
     catalogs = {
         "nesh": {
             "status": normalized_db.get("status", "error"),
             "latency_ms": normalized_db.get("latency_ms", 0),
         },
         "tipi": {"status": normalized_tipi.get("status", "error")},
-        "nbs": {"status": normalized_nbs.get("status", "error")},
-        "nebs": {"status": normalized_nebs.get("status", "error")},
     }
-    return {
+    if normalized_nbs is not None:
+        catalogs["nbs"] = {"status": normalized_nbs.get("status", "error")}
+    if normalized_nebs is not None:
+        catalogs["nebs"] = {"status": normalized_nebs.get("status", "error")}
+    payload = {
         "status": overall_status,
         "database": {
             "status": normalized_db.get("status", "error"),
@@ -275,14 +417,14 @@ def _build_public_status_payload(
         "tipi": {
             "status": normalized_tipi.get("status", "error"),
         },
-        "nbs": {
-            "status": normalized_nbs.get("status", "error"),
-        },
-        "nebs": {
-            "status": normalized_nebs.get("status", "error"),
-        },
-        "catalogs": catalogs,
     }
+    if not legacy_mode:
+        payload["catalogs"] = catalogs
+    if normalized_nbs is not None:
+        payload["nbs"] = {"status": normalized_nbs.get("status", "error")}
+    if normalized_nebs is not None:
+        payload["nebs"] = {"status": normalized_nebs.get("status", "error")}
+    return payload
 
 
 def _build_detailed_status_payload(

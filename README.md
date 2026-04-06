@@ -13,7 +13,7 @@ Sistema híbrido de consulta fiscal (NESH + TIPI) com backend FastAPI e frontend
 - Python 3.13+ (alinhado com `pyproject.toml`)
 - Node.js 22.12+ para o frontend (validado localmente com Node 22.17.0; CI usa Node 24)
 - npm (validado localmente com npm 10.9.2)
-- Opcional para modo PostgreSQL: Docker + Docker Compose
+- Opcional para modo PostgreSQL local: Docker + Docker Compose
 
 ## Quickstart
 
@@ -78,7 +78,41 @@ pip install pytest pytest-cov pytest-benchmark httpx
 Copy-Item .env.example .env
 ```
 
-Configuração mínima para desenvolvimento local com SQLite:
+Configuração recomendada (cloud-first: API no Render + PostgreSQL no Neon):
+
+Observação: quando o backend estiver no Render, configure esses valores no painel de Environment do provedor. O `.env` local é usado apenas quando você roda backend no seu computador.
+
+- em `.env` (backend), ajuste pelo menos:
+
+```env
+SERVER__ENV=production
+DATABASE__ENGINE=postgresql
+DATABASE__POSTGRES_URL=postgresql+asyncpg://<user>:<password_urlencoded>@<host>/<db>?sslmode=require
+
+AUTH__CLERK_DOMAIN=your-instance.clerk.accounts.dev
+AUTH__CLERK_ISSUER=https://your-instance.clerk.accounts.dev
+AUTH__CLERK_AUDIENCE=fiscal-api
+AUTH__CLERK_AUTHORIZED_PARTIES=["http://localhost:5173","http://127.0.0.1:5173","https://seu-frontend.com"]
+AUTH__CLERK_CLOCK_SKEW_SECONDS=120
+
+# Trave CORS para os domínios oficiais do frontend
+SERVER__CORS_ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","https://seu-frontend.com"]
+
+# Redis opcional (Upstash)
+CACHE__ENABLE_REDIS=true
+CACHE__REDIS_URL=redis://default:<password>@<host>:6379/0
+```
+
+- em `client/.env.local`, defina:
+
+```env
+VITE_API_URL=https://seu-backend.onrender.com
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_sua_chave
+VITE_CLERK_TOKEN_TEMPLATE=backend_api
+VITE_RESTRICTED_UI_EMAILS=voce@empresa.com,admin@empresa.com
+```
+
+Configuração alternativa (local-first com SQLite):
 
 - em `.env`, ajuste `DATABASE__ENGINE=sqlite`
 - em `client/.env.local`, defina:
@@ -133,6 +167,31 @@ Observações:
 
 ### 4) Subir aplicação
 
+Fluxo recomendado (cloud-first): frontend local consumindo API em produção.
+
+Comando único (Windows):
+
+```powershell
+.\start_nesh_dev.bat
+```
+
+Para diagnóstico de autenticação Clerk no frontend:
+
+```powershell
+.\start_nesh_dev.bat --auth-debug
+```
+
+O script `start_nesh_dev.bat` atual é **frontend-only**:
+
+- valida Node/npm e `client/.env.local`
+- instala dependências frontend quando necessário
+- inicia o Vite na porta `5173`
+- abre `http://127.0.0.1:5173`
+
+Ele **não** inicia backend, **não** executa `docker compose up -d` e **não** valida saúde de API.
+
+Se você precisar rodar backend localmente (modo de desenvolvimento de API):
+
 Terminal 1 (backend):
 
 ```powershell
@@ -147,20 +206,6 @@ npm run dev
 ```
 
 Acesse `http://127.0.0.1:5173`.
-
-Alternativa com script único (Windows):
-
-```powershell
-.\start_nesh_dev.bat
-```
-
-Para diagnóstico de autenticação Clerk no frontend:
-
-```powershell
-.\start_nesh_dev.bat --auth-debug
-```
-
-O script faz preflight, executa `docker compose up -d` automaticamente (essencial para Redis e infraestrutura mesmo em modo SQLite), espera os serviços (`db`, `redis`, `pgadmin`) e bloqueia startup se faltarem variáveis obrigatórias de auth em `.env` ou em `client/.env.local`. Em caso de falha, exibe checklist com ações manuais.
 
 Healthcheck backend:
 
@@ -397,6 +442,9 @@ Mudanças principais já aplicadas:
 | `DATABASE__ENGINE` | Seleciona engine (`sqlite` ou `postgresql`) |
 | `DATABASE__POSTGRES_URL` | URL asyncpg usada quando engine = `postgresql` |
 | `SERVER__ENV` | Comportamento de middleware/auth (`development` habilita fallbacks) |
+| `SERVER__CORS_ALLOWED_ORIGINS` | Lista JSON de origens permitidas para CORS (produção deve conter apenas domínios oficiais) |
+| `CACHE__ENABLE_REDIS` | Liga/desliga Redis para cache/rate-limit distribuído |
+| `CACHE__REDIS_URL` | URL do Redis (ex: Upstash) |
 | `AUTH__CLERK_DOMAIN` | Validação JWT via JWKS do Clerk |
 | `AUTH__CLERK_ISSUER` | Valida `iss` explicitamente (`https://<seu-dominio-clerk>`) |
 | `AUTH__CLERK_AUDIENCE` | Valida `aud` no backend (ex: `fiscal-api`) |
@@ -425,12 +473,24 @@ docs/            Documentação funcional/técnica
 
 ## Deploy/produção
 
-Suporte confirmado no repositório:
+Fluxo operacional atual (cloud-first):
+
+- Banco de dados: PostgreSQL gerenciado (Neon)
+- API: FastAPI em provedor cloud (Render)
+- Frontend: local em desenvolvimento (`npm run dev`) ou hospedado separadamente
+
+Suporte técnico confirmado no repositório:
 
 - Build de frontend: `cd client && npm run build`
 - Backend serve `client/dist` automaticamente quando a pasta existe.
 
-Não há script dedicado de deploy/orquestração além de `docker-compose.yml` para banco local de desenvolvimento.
+Checklist mínimo para produção:
+
+1. Configurar `DATABASE__POSTGRES_URL` com SSL (`sslmode=require`).
+2. Configurar Clerk (`AUTH__CLERK_*`) com `AUTHORIZED_PARTIES` incluindo o domínio real do frontend.
+3. Configurar `SERVER__CORS_ALLOWED_ORIGINS` com domínios oficiais (sem curingas em produção).
+4. Configurar Redis (opcional, recomendado): `CACHE__ENABLE_REDIS=true` e `CACHE__REDIS_URL`.
+5. Validar `GET /api/status` após deploy.
 
 ## Documentação para IA e manutenção
 

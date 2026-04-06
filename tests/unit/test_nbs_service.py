@@ -1,8 +1,10 @@
 import sqlite3
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
 
+import backend.services.nbs_service as nbs_service_module
 from backend.config.exceptions import DatabaseNotFoundError, NotFoundError
 from backend.config.services_db_schema import (
     CATALOG_METADATA_CREATE_SQL,
@@ -222,6 +224,33 @@ class _FakeNbsRepo:
             "ancestors": [],
             "entry": {"code": "1.01", "body_text": "Trecho público"},
         }
+
+
+class _CountingNbsRepo(_FakeNbsRepo):
+    def __init__(self, *, tenant_id: str | None = None):
+        self.tenant_id = tenant_id
+        self.calls = {
+            "search": 0,
+            "get_item_details": 0,
+            "search_nebs": 0,
+            "get_nebs_details": 0,
+        }
+
+    async def search(self, query: str, limit: int = 50):
+        self.calls["search"] += 1
+        return await super().search(query, limit=limit)
+
+    async def get_item_details(self, code: str):
+        self.calls["get_item_details"] += 1
+        return await super().get_item_details(code)
+
+    async def search_nebs(self, query: str, limit: int = 50):
+        self.calls["search_nebs"] += 1
+        return await super().search_nebs(query, limit=limit)
+
+    async def get_nebs_details(self, code: str):
+        self.calls["get_nebs_details"] += 1
+        return await super().get_nebs_details(code)
 
 
 def _seed_services_db_with_custom_root(
@@ -530,3 +559,95 @@ async def test_repository_mode_check_connection_exposes_counts_and_metadata():
     assert payload["nbs_items"] == 12
     assert payload["nebs_entries"] == 4
     assert payload["metadata"]["nbs_updated_at"] == "2026-03-25T10:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_repository_mode_search_uses_l1_cache_after_first_fetch():
+    repo = _CountingNbsRepo(tenant_id="tenant-a")
+    service = NbsService(repository=repo)
+
+    first = await service.search("1.01")
+    second = await service.search("1.01")
+
+    assert first == second
+    assert repo.calls["search"] == 1
+
+
+@pytest.mark.asyncio
+async def test_repository_mode_get_item_details_uses_l1_cache_after_first_fetch():
+    repo = _CountingNbsRepo(tenant_id="tenant-a")
+    service = NbsService(repository=repo)
+
+    first = await service.get_item_details("1.01")
+    second = await service.get_item_details("1.01")
+
+    assert first == second
+    assert repo.calls["get_item_details"] == 1
+
+
+@pytest.mark.asyncio
+async def test_repository_mode_cache_keys_are_tenant_scoped():
+    tenant_state = {"value": "tenant-a"}
+    calls: list[tuple[str | None, str]] = []
+
+    @asynccontextmanager
+    async def _repo_factory():
+        repo = _CountingNbsRepo(tenant_id=tenant_state["value"])
+        original_search = repo.search
+
+        async def _wrapped_search(query: str, limit: int = 50):
+            calls.append((repo.tenant_id, query))
+            return await original_search(query, limit=limit)
+
+        repo.search = _wrapped_search  # type: ignore[method-assign]
+        yield repo
+
+    service = NbsService(repository_factory=_repo_factory)
+
+    await service.search("1.01")
+    tenant_state["value"] = "tenant-b"
+    await service.search("1.01")
+
+    assert calls == [("tenant-a", "1.01"), ("tenant-b", "1.01")]
+
+
+@pytest.mark.asyncio
+async def test_repository_mode_search_uses_redis_before_repository(monkeypatch):
+    repo = _CountingNbsRepo(tenant_id="tenant-a")
+    service = NbsService(repository=repo)
+    cached_payload = {
+        "success": True,
+        "query": "1.01",
+        "normalized": "1.01",
+        "results": [{"code": "1.01"}],
+        "total": 1,
+    }
+
+    monkeypatch.setattr(nbs_service_module.redis_cache, "_client", object())
+
+    async def _fake_get_services_search(namespace: str, scope: str, key: str):
+        assert namespace == "nbs"
+        assert scope == "tenant-a"
+        assert key
+        return cached_payload
+
+    async def _fake_set_services_search(
+        namespace: str, scope: str, key: str, value: dict
+    ):
+        raise AssertionError("Redis set should not run on cache hit")
+
+    monkeypatch.setattr(
+        nbs_service_module.redis_cache,
+        "get_services_search",
+        _fake_get_services_search,
+    )
+    monkeypatch.setattr(
+        nbs_service_module.redis_cache,
+        "set_services_search",
+        _fake_set_services_search,
+    )
+
+    payload = await service.search("1.01")
+
+    assert payload == cached_payload
+    assert repo.calls["search"] == 0
