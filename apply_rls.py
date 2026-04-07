@@ -16,5 +16,6 @@ async def run_rls():
     print("RLS applied successfully.")
     await engine.dispose()
 
+
 if __name__ == "__main__":
     asyncio.run(run_rls())

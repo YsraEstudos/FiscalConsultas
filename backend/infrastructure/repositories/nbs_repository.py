@@ -157,7 +157,7 @@ class NbsRepository:
                 SELECT code, code_clean, description, parent_code, level, has_nebs
                 FROM nbs_items
                 WHERE parent_code IS NULL
-                {self._tenant_predicate_sql('nbs_items')}
+                {self._tenant_predicate_sql("nbs_items")}
                 ORDER BY source_order ASC
                 LIMIT :limit
             """
@@ -196,7 +196,7 @@ class NbsRepository:
                 OR (:normalized_query <> '' AND n.description_normalized LIKE :normalized_like)
                 OR {fts_predicate}
             )
-            {self._tenant_predicate_sql('n')}
+            {self._tenant_predicate_sql("n")}
             ORDER BY match_score DESC, LENGTH(n.code_clean) ASC, n.source_order ASC
             LIMIT :limit
         """
@@ -231,8 +231,8 @@ class NbsRepository:
         sql = f"""
             SELECT code, code_clean, description, parent_code, level, has_nebs
             FROM nbs_items
-            WHERE ({' OR '.join(where_clauses)})
-            {self._tenant_predicate_sql('nbs_items')}
+            WHERE ({" OR ".join(where_clauses)})
+            {self._tenant_predicate_sql("nbs_items")}
             ORDER BY LENGTH(code_clean) DESC, source_order ASC
             LIMIT 1
         """
@@ -255,7 +255,7 @@ class NbsRepository:
                 SELECT code, code_clean, description, parent_code, level, has_nebs
                 FROM nbs_items
                 WHERE code = :parent_code
-                {self._tenant_predicate_sql('nbs_items')}
+                {self._tenant_predicate_sql("nbs_items")}
                 LIMIT 1
             """
             row = (await self.session.execute(text(sql), params)).first()
@@ -275,7 +275,7 @@ class NbsRepository:
             SELECT code, code_clean, description, parent_code, level, has_nebs
             FROM nbs_items
             WHERE (code = :root_code OR code LIKE :root_prefix)
-            {self._tenant_predicate_sql('nbs_items')}
+            {self._tenant_predicate_sql("nbs_items")}
             ORDER BY source_order ASC
         """
         result = await self.session.execute(
@@ -341,9 +341,9 @@ class NbsRepository:
                 source_hash,
                 updated_at
             FROM nebs_entries
-            WHERE ({' OR '.join(where_clauses)})
+            WHERE ({" OR ".join(where_clauses)})
               AND parser_status = :parser_status
-              {self._tenant_predicate_sql('nebs_entries')}
+              {self._tenant_predicate_sql("nebs_entries")}
             ORDER BY LENGTH(code_clean) DESC
             LIMIT 1
         """
@@ -361,7 +361,7 @@ class NbsRepository:
             SELECT code, code_clean, description, parent_code, level, has_nebs
             FROM nbs_items
             WHERE parent_code = :code
-            {self._tenant_predicate_sql('nbs_items')}
+            {self._tenant_predicate_sql("nbs_items")}
             ORDER BY source_order ASC
         """
         child_rows = await self.session.execute(
@@ -421,7 +421,7 @@ class NbsRepository:
                     OR (:normalized_query <> '' AND e.title_normalized LIKE :normalized_prefix)
                     OR {fts_predicate}
               )
-              {self._tenant_predicate_sql('e')}
+              {self._tenant_predicate_sql("e")}
             ORDER BY match_score DESC, fts_rank DESC, LENGTH(e.code_clean) ASC, e.page_start ASC
             LIMIT :limit
         """
