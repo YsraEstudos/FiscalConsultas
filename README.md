@@ -215,6 +215,36 @@ Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/status"
 
 Resposta esperada: JSON com `status`, `database` e `tipi`.
 
+## Deploy no Cloudflare
+
+O caminho mais simples para este repositório é:
+
+1. publicar o frontend em **Cloudflare Pages**
+2. manter o backend FastAPI em um host compatível com Python, como Render, Fly.io ou Railway
+
+Motivo: o Cloudflare Pages hospeda bem o `client` estático, mas não executa este backend FastAPI diretamente sem uma reestruturação maior.
+
+### Frontend no Pages
+
+- `Framework preset`: `Vite`
+- `Build command`: `npm run build`
+- `Build output directory`: `dist`
+- `Root directory`: `client`
+
+Depois do deploy, ajuste `client/.env.local` ou as variáveis do projeto no Pages com:
+
+```env
+VITE_API_URL=https://seu-backend.com
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_sua_chave
+VITE_CLERK_TOKEN_TEMPLATE=backend_api
+```
+
+Se você quiser usar uma API própria em outro domínio, ela precisa permitir CORS para o domínio do Pages e aceitar o token do Clerk.
+
+### Rotas do React
+
+O arquivo `client/public/_redirects` já garante fallback para SPA no Cloudflare Pages, então rotas internas como `/`, `/perfil` ou abas profundas não quebram ao atualizar a página.
+
 ## Workflow de desenvolvimento
 
 ### Comandos principais
