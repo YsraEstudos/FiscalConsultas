@@ -972,7 +972,9 @@ class TenantMiddleware:
         await response(scope, receive, send_wrapper)
 
     @staticmethod
-    def _wrap_send_with_request_id(send: Any, request_id: str, scope: dict[str, Any], org_id: Optional[str]) -> Any:
+    def _wrap_send_with_request_id(
+        send: Any, request_id: str, scope: dict[str, Any], org_id: Optional[str]
+    ) -> Any:
         async def send_wrapper(message: dict[str, Any]) -> None:
             if message.get("type") == "http.response.start":
                 headers = list(message.get("headers", []))
