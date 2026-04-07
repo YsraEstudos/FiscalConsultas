@@ -1,0 +1,3 @@
+## 2025-04-07 - Python String/Regex Repeated Operations (TextProcessor)
+**Learning:** In Python string processing utilities (e.g., Markdown cleaners, stemmers), redundant repetitive operations create substantial overhead for full-text search initialization. Caching word processing avoids re-evaluating the stemmer logic for common words. But never apply `lru_cache` directly to an instance method because `self` is part of the cache key and will cause cache misses across instances or memory leaks. Use a module-level cached static method.
+**Action:** Apply `@staticmethod` on the processor and define a `@lru_cache(maxsize=4096)` static method to handle the actual operation mapping, ensuring all processor instances hit the same cache cleanly.
