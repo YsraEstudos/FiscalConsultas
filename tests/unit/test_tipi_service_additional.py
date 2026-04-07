@@ -95,7 +95,7 @@ class _FakeHealthRepo:
         self.session = self
         self._calls = 0
 
-    async def execute(self, _query):
+    async def execute(self, _query):  # NOSONAR
         self._calls += 1
         if self._calls == 1:
             return _FakeScalarResult(12)

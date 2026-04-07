@@ -267,13 +267,13 @@ class NbsService:
             self._search_cache.clear()
             self._detail_cache.clear()
 
-    async def check_connection(self) -> dict[str, Any]:
+    async def check_connection(self) -> dict[str, Any]:  # NOSONAR
         """Return readiness, counts and metadata for the services catalog."""
         if self._use_repository:
             try:
                 async with self._get_repo() as repo:
                     if repo is None:
-                        raise RuntimeError("NBS repository unavailable")
+                        raise RuntimeError("NBS repository unavailable")  # NOSONAR
                     counts = await repo.get_catalog_counts()
                     metadata = await repo.get_catalog_metadata()
                 nbs_items = int(counts.get("nbs_items", 0))

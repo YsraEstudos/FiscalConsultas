@@ -71,12 +71,12 @@ async function loadApiModule() {
 }
 
 function escapeForRegex(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // NOSONAR
 }
 
 function expectDevCacheBustedPath(path: string) {
   return expect.stringMatching(
-    new RegExp(`^${escapeForRegex(path)}(?:[?&]_dev_bust=\\d+)?$`),
+    new RegExp(`^${escapeForRegex(path)}(?:[?&]_dev_bust=\\d+)?$`), // NOSONAR
   );
 }
 

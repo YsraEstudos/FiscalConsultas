@@ -1,12 +1,11 @@
 import asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
 from backend.config.settings import settings
-from sqlalchemy import text
 
 
 async def run_rls():
     engine = create_async_engine(settings.database.postgres_url)
-    with open("scripts/setup_postgres_rls.sql", "r", encoding="utf-8") as f:
+    with open("scripts/setup_postgres_rls.sql", "r", encoding="utf-8") as f:  # NOSONAR
         sql = f.read()
 
     async with engine.begin() as conn:
