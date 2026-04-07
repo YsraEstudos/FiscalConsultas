@@ -85,9 +85,7 @@ def _coerce_pg_timestamp(value: str | datetime) -> datetime:
     return timestamp
 
 
-def _build_metadata_entries(
-    prefix: str, values: dict[str, str]
-) -> list[dict[str, str | None]]:
+def _build_metadata_entries(prefix: str, values: dict[str, str]) -> list[dict[str, str | None]]:
     return [
         {"key": f"{prefix}_{key}", "value": value, "tenant_id": None}
         for key, value in values.items()
@@ -322,7 +320,7 @@ async def migrate_positions(sqlite_path: str, pg_session: AsyncSession) -> int:
 
         deduped_positions = list(unique_positions.values())
         for start in range(0, len(deduped_positions), 1000):
-            batch = deduped_positions[start : start + 1000]
+            batch = deduped_positions[start:start + 1000]
             stmt = pg_insert(Position).values(batch)
             stmt = stmt.on_conflict_do_update(
                 index_elements=["codigo"],
@@ -452,9 +450,7 @@ async def migrate_glossary(sqlite_path: str, pg_session: AsyncSession) -> int:
     return count
 
 
-async def migrate_tipi_positions(
-    sqlite_path: str, pg_session: AsyncSession
-) -> tuple[int, int]:
+async def migrate_tipi_positions(sqlite_path: str, pg_session: AsyncSession) -> tuple[int, int]:
     """Migrate TIPI positions from SQLite into PostgreSQL."""
     if not os.path.exists(sqlite_path):
         raise FileNotFoundError(f"TIPI SQLite não encontrado: {sqlite_path}")
@@ -753,11 +749,7 @@ async def run_full_migration() -> int:
         "nbs_csv": NBS_CSV_PATH,
         "nebs_pdf": NEBS_PDF_PATH,
     }
-    missing_sources = [
-        f"{name}: {path}"
-        for name, path in required_sources.items()
-        if not path.exists()
-    ]
+    missing_sources = [f"{name}: {path}" for name, path in required_sources.items() if not path.exists()]
     if missing_sources:
         print("\nERRO: fontes obrigatórias ausentes:")
         for missing in missing_sources:

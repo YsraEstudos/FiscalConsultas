@@ -232,9 +232,7 @@ async def search(
     Raises:
         ValidationError: Se a query estiver vazia ou for muito longa.
     """
-    request_id = (
-        get_current_request_id() or request.headers.get("x-request-id") or "unknown"
-    )
+    request_id = get_current_request_id() or request.headers.get("x-request-id") or "unknown"
     logger.info(
         "search_request_received request_id=%s path=%s tenant=%s ncm=%s",
         request_id,

@@ -114,9 +114,7 @@ def _normalize_db_status(raw_stats: dict | None, latency_ms: float) -> dict:
     positions = _to_int(raw_stats.get("positions"))
     has_error = raw_stats.get("status") == "error"
     payload = {
-        "status": "online"
-        if not has_error and chapters > 0 and positions > 0
-        else "error",
+        "status": "online" if not has_error and chapters > 0 and positions > 0 else "error",
         "chapters": chapters,
         "positions": positions,
         "latency_ms": latency_ms,
@@ -177,7 +175,9 @@ def _normalize_count_catalog_status(
     total = _to_int(raw_stats.get(count_field))
     payload = {
         "status": (
-            "online" if raw_stats.get("status") != "error" and total > 0 else "error"
+            "online"
+            if raw_stats.get("status") != "error" and total > 0
+            else "error"
         ),
         public_count_field: total,
     }
@@ -289,13 +289,7 @@ async def _collect_status_payloads_uncached(
         and normalized_nebs.get("status") == "online"
         else "error"
     )
-    return (
-        normalized_db,
-        normalized_tipi,
-        normalized_nbs,
-        normalized_nebs,
-        overall_status,
-    )
+    return normalized_db, normalized_tipi, normalized_nbs, normalized_nebs, overall_status
 
 
 def _build_status_snapshot(
@@ -325,7 +319,9 @@ def _unpack_status_snapshot(snapshot: dict) -> tuple[dict, dict, dict, dict, str
 
 
 async def _refresh_status_snapshot(request: Request, ttl_seconds: int) -> dict:
-    snapshot = _build_status_snapshot(*await _collect_status_payloads_uncached(request))
+    snapshot = _build_status_snapshot(
+        *await _collect_status_payloads_uncached(request)
+    )
     _STATUS_CACHE["value"] = snapshot
     _STATUS_CACHE["expires_at"] = time.monotonic() + ttl_seconds
     if redis_cache.available:
@@ -382,9 +378,7 @@ async def _get_status_snapshot(request: Request) -> dict:
                 _STATUS_CACHE_REFRESH_TASK = None
 
 
-async def _collect_status_payloads(
-    request: Request,
-) -> tuple[dict, dict, dict, dict, str]:
+async def _collect_status_payloads(request: Request) -> tuple[dict, dict, dict, dict, str]:
     return _unpack_status_snapshot(await _get_status_snapshot(request))
 
 
@@ -479,7 +473,9 @@ async def get_status(request: Request):
         normalized_nbs,
         normalized_nebs,
         overall_status,
-    ) = await _collect_status_payloads(request)
+    ) = await _collect_status_payloads(
+        request
+    )
     return _build_public_status_payload(
         normalized_db,
         normalized_tipi,
@@ -504,7 +500,9 @@ async def get_status_details(request: Request):
         normalized_nbs,
         normalized_nebs,
         overall_status,
-    ) = await _collect_status_payloads(request)
+    ) = await _collect_status_payloads(
+        request
+    )
     return _build_detailed_status_payload(
         request,
         normalized_db,
