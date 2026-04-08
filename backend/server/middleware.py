@@ -320,7 +320,9 @@ def _log_jwt_failure(
             "issuer_hint_from_clerk_domain": _derive_issuer_hint_from_domain(),
             "audience": _resolve_expected_audience(),
             "azp": sorted(_resolve_expected_azp()),
-            "azp_regex": None if expected_azp_regex is None else expected_azp_regex.pattern,
+            "azp_regex": None
+            if expected_azp_regex is None
+            else expected_azp_regex.pattern,
             "clock_skew_seconds_configured": _configured_clock_skew_seconds(),
             "clock_skew_seconds_effective": _effective_clock_skew_seconds(),
         },
@@ -1016,7 +1018,9 @@ class TenantMiddleware:
         await response(scope, receive, send_wrapper)
 
     @staticmethod
-    def _wrap_send_with_request_id(send: Any, request_id: str, scope: dict[str, Any], org_id: Optional[str]) -> Any:
+    def _wrap_send_with_request_id(
+        send: Any, request_id: str, scope: dict[str, Any], org_id: Optional[str]
+    ) -> Any:
         async def send_wrapper(message: dict[str, Any]) -> None:
             if message.get("type") == "http.response.start":
                 headers = list(message.get("headers", []))

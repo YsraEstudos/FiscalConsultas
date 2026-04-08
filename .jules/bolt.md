@@ -1,0 +1,3 @@
+## 2024-04-08 - Stemmer Cache Miss Across Instances
+**Learning:** Python's `functools.lru_cache` includes the `self` instance reference when decorating instance methods. Because `PortugueseStemmer` instances might be created dynamically or exist per-request, a local method-scoped cache causes a massive amount of cache misses, drastically reducing the effectiveness of the cache.
+**Action:** When caching text-processing utility methods that depend only on the input arguments, ensure they are converted to `@staticmethod` or refactored into module-level functions so the cache is shared globally across all components and instances.
