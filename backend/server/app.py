@@ -70,6 +70,7 @@ _CONTENT_SECURITY_POLICY = "; ".join(
             "connect-src 'self' https: wss: http://127.0.0.1:8000 "
             "http://localhost:8000 ws://127.0.0.1:* ws://localhost:*"
         ),
+        "worker-src 'self' blob:",
         "frame-src 'self' https:",
     )
 )

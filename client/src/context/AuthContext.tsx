@@ -35,12 +35,87 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+type CommonAuthState = {
+    user: ReturnType<typeof useUser>['user'];
+    isSignedIn: boolean;
+    isLoading: boolean;
+    getToken: ReturnType<typeof useClerkAuth>['getToken'];
+    signOut: ReturnType<typeof useClerkAuth>['signOut'];
+};
+
+type OrganizationLike = {
+    id?: string | null;
+    name?: string | null;
+    slug?: string | null;
+} | null | undefined;
+
+type MembershipLike = {
+    role?: string | null;
+} | null | undefined;
+
+function buildContextValue(
+    baseState: CommonAuthState,
+    organization: OrganizationLike,
+    membership: MembershipLike,
+): AuthContextType {
+    const { user, isSignedIn, isLoading, getToken, signOut } = baseState;
+
+    return {
+        isSignedIn,
+        isLoading,
+        userId: user?.id || null,
+        userName: user?.fullName || user?.firstName || null,
+        userEmail: user?.primaryEmailAddress?.emailAddress || null,
+        userImageUrl: user?.imageUrl || null,
+        orgId: organization?.id || null,
+        orgName: organization?.name || null,
+        orgSlug: organization?.slug || null,
+        getToken: async () => {
+            try {
+                return await getToken();
+            } catch (error) {
+                console.error('[AuthContext] Failed to get token:', error);
+                return null;
+            }
+        },
+        isAdmin: hasPrivilegedRole(membership?.role),
+        authToken: null,
+        login: (_token?: string | null) => {
+            console.warn('[AuthContext] login() is deprecated. Use Clerk components.');
+        },
+        logout: () => {
+            void signOut();
+        }
+    };
+}
+
+function SignedInAuthProvider({
+    children,
+    baseState,
+}: {
+    children: ReactNode;
+    baseState: CommonAuthState;
+}) {
+    const { organization, membership } = useOrganization();
+
+    return (
+        <AuthContext.Provider value={buildContextValue(baseState, organization, membership)}>
+            {children}
+        </AuthContext.Provider>
+    );
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
     const { user, isSignedIn, isLoaded: userLoaded } = useUser();
     const { getToken, signOut, isLoaded: authLoaded } = useClerkAuth();
-    const { organization, membership } = useOrganization();
-
     const isLoading = !userLoaded || !authLoaded;
+    const baseState: CommonAuthState = {
+        user,
+        isSignedIn: !!isSignedIn,
+        isLoading,
+        getToken,
+        signOut,
+    };
 
     // Registra o getToken no módulo API para que o interceptor possa usá-lo
     useEffect(() => {
@@ -56,50 +131,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log('[AuthContext] State:', {
                 isSignedIn,
                 userId: user?.id,
-                orgId: organization?.id,
-                orgName: organization?.name
+                hasOrganizationAccess: !!isSignedIn,
             });
         }
-    }, [isLoading, isSignedIn, user?.id, organization?.id, organization?.name]);
+    }, [isLoading, isSignedIn, user?.id]);
 
-    const contextValue: AuthContextType = {
-        // User Info
-        isSignedIn: !!isSignedIn,
-        isLoading,
-        userId: user?.id || null,
-        userName: user?.fullName || user?.firstName || null,
-        userEmail: user?.primaryEmailAddress?.emailAddress || null,
-        userImageUrl: user?.imageUrl || null,
-
-        // Organization (Tenant) Info
-        orgId: organization?.id || null,
-        orgName: organization?.name || null,
-        orgSlug: organization?.slug || null,
-
-        // Token for API calls - Clerk handles refresh automatically
-        getToken: async () => {
-            try {
-                return await getToken();
-            } catch (error) {
-                console.error('[AuthContext] Failed to get token:', error);
-                return null;
-            }
-        },
-
-        // Admin detection from Clerk organization membership role
-        isAdmin: hasPrivilegedRole(membership?.role),
-        authToken: null, // Use getToken() instead
-        login: (_token?: string | null) => {
-            // No-op: Clerk's <SignIn /> component handles login UI
-            console.warn('[AuthContext] login() is deprecated. Use Clerk components.');
-        },
-        logout: () => {
-            void signOut();
-        }
-    };
+    if (isSignedIn) {
+        return <SignedInAuthProvider baseState={baseState}>{children}</SignedInAuthProvider>;
+    }
 
     return (
-        <AuthContext.Provider value={contextValue}>
+        <AuthContext.Provider value={buildContextValue(baseState, null, null)}>
             {children}
         </AuthContext.Provider>
     );
