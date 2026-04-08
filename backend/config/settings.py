@@ -1,10 +1,14 @@
-import json
 import os
 import secrets
 from typing import List, Literal, Optional, Set
 
 from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    JsonConfigSettingsSource,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 # Root path resolving
 PROJECT_ROOT = os.path.dirname(
@@ -158,10 +162,28 @@ class AppSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=".env",
+        json_file=os.path.join(PROJECT_ROOT, "backend", "config", "settings.json"),
         env_nested_delimiter="__",
         case_sensitive=False,
         extra="ignore",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            JsonConfigSettingsSource(settings_cls),
+            file_secret_settings,
+        )
 
     @classmethod
     def load(cls) -> "AppSettings":
@@ -171,20 +193,7 @@ class AppSettings(BaseSettings):
         2. settings.json
         3. Defaults
         """
-        # Try loading from JSON first to populate defaults, then override with Env
-        config_path = os.path.join(PROJECT_ROOT, "backend", "config", "settings.json")
-        json_data = {}
-
-        if os.path.exists(config_path):
-            try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    json_data = json.load(f)
-            except Exception as e:
-                print(f"⚠️ Failed to load settings.json: {e}")
-
-        # Pydantic handles merging: passed kwargs > env vars > defaults
-        # We pass json_data as kwargs
-        return cls(**json_data)
+        return cls()
 
 
 # Singleton instance
