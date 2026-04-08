@@ -147,7 +147,9 @@ describe('api service', () => {
 
     await mockAxios.handlers.requestFulfilled?.({ url: 'https://example.com/status', headers });
     expect(getter).not.toHaveBeenCalled();
-    expect(headers.set).not.toHaveBeenCalled();
+    // Only X-Request-Id should have been injected
+    expect(headers.set).toHaveBeenCalledTimes(1);
+    expect(headers.set).toHaveBeenCalledWith('X-Request-Id', expect.any(String));
 
     apiModule.unregisterClerkTokenGetter();
   });
@@ -165,7 +167,8 @@ describe('api service', () => {
 
     expect(out).toBe(config);
     expect(warnSpy).toHaveBeenCalled();
-    expect(headers.set).not.toHaveBeenCalled();
+    expect(headers.set).toHaveBeenCalledTimes(1);
+    expect(headers.set).toHaveBeenCalledWith('X-Request-Id', expect.any(String));
     apiModule.unregisterClerkTokenGetter();
   });
 
@@ -181,8 +184,9 @@ describe('api service', () => {
 
     expect(getter).toHaveBeenCalledTimes(2);
     expect(getter).toHaveBeenNthCalledWith(2, expect.objectContaining({ skipCache: true }));
-    expect(headers.set).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledWith('[API] No Clerk token available for authenticated request:', '/profile/me');
+    expect(headers.set).toHaveBeenCalledTimes(1);
+    expect(headers.set).toHaveBeenCalledWith('X-Request-Id', expect.any(String));
+    expect(warnSpy).toHaveBeenCalledWith('[API] No Clerk token available for authenticated request:', '/profile/me', expect.any(Object));
 
     apiModule.unregisterClerkTokenGetter();
     warnSpy.mockRestore();

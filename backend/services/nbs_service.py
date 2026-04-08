@@ -279,9 +279,9 @@ class NbsService:
                 nbs_items = int(counts.get("nbs_items", 0))
                 nebs_entries = int(counts.get("nebs_entries", 0))
                 return {
-                    "status": (
-                        "online" if nbs_items > 0 and nebs_entries > 0 else "error"
-                    ),
+                    "status": "online"
+                    if nbs_items > 0 and nebs_entries > 0
+                    else "error",
                     "nbs_items": nbs_items,
                     "nebs_entries": nebs_entries,
                     "metadata": metadata,

@@ -575,8 +575,7 @@ async def debug_anchors(
 
     # Collect all IDs from the rendered HTML
     html_content = response_data.get("markdown", "") or ""
-    id_pattern = re.compile(r'id="([^"]+)"')
-    all_ids = id_pattern.findall(html_content)
+    all_ids = re.findall(r'id="([^"]+)"', html_content)
 
     # Filter to position-related IDs
     pos_ids = [id for id in all_ids if id.startswith("pos-") or id.startswith("cap-")]
