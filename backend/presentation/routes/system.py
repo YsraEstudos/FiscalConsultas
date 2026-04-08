@@ -3,14 +3,15 @@ import re
 import time
 from typing import Annotated
 
-from backend.infrastructure.redis_client import redis_cache
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+
 from backend.config.settings import is_valid_admin_token, reload_settings, settings
+from backend.infrastructure.redis_client import redis_cache
 from backend.server.dependencies import get_nesh_service
 from backend.server.middleware import decode_clerk_jwt
 from backend.server.rate_limit import status_rate_limiter
 from backend.services import NeshService
 from backend.utils.auth import extract_bearer_token, extract_client_ip, is_admin_payload
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 router = APIRouter()
 _STATUS_CACHE: dict[str, object | None] = {"value": None, "expires_at": 0.0}
@@ -114,9 +115,9 @@ def _normalize_db_status(raw_stats: dict | None, latency_ms: float) -> dict:
     positions = _to_int(raw_stats.get("positions"))
     has_error = raw_stats.get("status") == "error"
     payload = {
-        "status": "online"
-        if not has_error and chapters > 0 and positions > 0
-        else "error",
+        "status": (
+            "online" if not has_error and chapters > 0 and positions > 0 else "error"
+        ),
         "chapters": chapters,
         "positions": positions,
         "latency_ms": latency_ms,
@@ -199,8 +200,9 @@ async def _collect_db_status(request: Request) -> tuple[dict, float]:
         return db_stats, latency_ms
 
     try:
-        from backend.infrastructure.db_engine import get_session
         from sqlalchemy import text
+
+        from backend.infrastructure.db_engine import get_session
 
         async with get_session() as session:
             chapters_count = await session.execute(
@@ -213,14 +215,12 @@ async def _collect_db_status(request: Request) -> tuple[dict, float]:
             if settings.database.is_postgres:
                 try:
                     metadata_result = await session.execute(
-                        text(
-                            """
+                        text("""
                             SELECT key, value
                             FROM catalog_metadata
                             WHERE key LIKE 'nesh_%'
                             ORDER BY key
-                            """
-                        )
+                        """)
                     )
                     metadata = {row.key: row.value for row in metadata_result}
                 except Exception:

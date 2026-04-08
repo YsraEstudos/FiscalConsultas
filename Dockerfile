@@ -29,5 +29,16 @@ ENV SERVER__PORT=10000
 # Porta padrão exposta pelo Render
 EXPOSE 10000
 
+# Install curl for HEALTHCHECK and configure non-root user
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/* && \
+    useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+
+USER appuser
+
+# Healthcheck checking the status endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:10000/status || exit 1
+
 # Comando para iniciar o servidor via uv
 CMD ["uv", "run", "Nesh.py"]
