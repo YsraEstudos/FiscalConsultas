@@ -93,10 +93,13 @@ AUTH__CLERK_DOMAIN=your-instance.clerk.accounts.dev
 AUTH__CLERK_ISSUER=https://your-instance.clerk.accounts.dev
 AUTH__CLERK_AUDIENCE=fiscal-api
 AUTH__CLERK_AUTHORIZED_PARTIES=["http://localhost:5173","http://127.0.0.1:5173","https://seu-frontend.com"]
+AUTH__CLERK_AUTHORIZED_PARTIES_REGEX=^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$
 AUTH__CLERK_CLOCK_SKEW_SECONDS=120
 
 # Trave CORS para os domínios oficiais do frontend
 SERVER__CORS_ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","https://seu-frontend.com"]
+# Opcional: libere previews do mesmo projeto Cloudflare Pages
+SERVER__CORS_ALLOWED_ORIGIN_REGEX=^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$
 
 # Redis opcional (Upstash)
 CACHE__ENABLE_REDIS=true
@@ -241,9 +244,86 @@ VITE_CLERK_TOKEN_TEMPLATE=backend_api
 
 Se você quiser usar uma API própria em outro domínio, ela precisa permitir CORS para o domínio do Pages e aceitar o token do Clerk.
 
+Para previews do Cloudflare Pages, o backend também precisa aceitar subdomínios como
+`https://<preview>.fiscalconsultas.pages.dev`. Como essas URLs mudam a cada deploy,
+o caminho mais estável é configurar um regex controlado no backend, além do domínio
+principal em `SERVER__CORS_ALLOWED_ORIGINS` e `AUTH__CLERK_AUTHORIZED_PARTIES`.
+
 ### Rotas do React
 
 O arquivo `client/public/_redirects` já garante fallback para SPA no Cloudflare Pages, então rotas internas como `/`, `/perfil` ou abas profundas não quebram ao atualizar a página.
+
+## Deploy no Render
+
+Se você quer deixar o projeto funcionando com `Render + Neon + Upstash`, o caminho mais simples é:
+
+1. colocar o backend FastAPI no Render
+2. colocar o banco Postgres no Neon
+3. colocar o cache Redis no Upstash
+4. manter o frontend estático em um host separado, como Cloudflare Pages
+
+### 1) Banco no Neon
+
+No Neon, crie um banco e copie a URL de conexão do Postgres.
+
+Use essa URL no Render em:
+
+```env
+DATABASE__ENGINE=postgresql
+DATABASE__POSTGRES_URL=postgresql+asyncpg://<user>:<password>@<host>/<db>?sslmode=require
+```
+
+### 2) Cache no Upstash
+
+No Upstash, crie um Redis e copie a URL de conexão.
+
+Use essa URL no Render em:
+
+```env
+CACHE__ENABLE_REDIS=true
+CACHE__REDIS_URL=<upstash-redis-url>
+```
+
+### 3) Backend no Render
+
+No Render, crie um `Web Service` apontando para este repositório.
+
+Configuração recomendada:
+
+- `Runtime`: `Docker`
+- `Health Check Path`: `/api/status`
+- `Auto Deploy`: ligado, se você quiser deploy automático
+
+O backend já tem um `Dockerfile`, então o Render não precisa de build customizado.
+
+No painel de variáveis de ambiente do Render, use:
+
+```env
+SERVER__ENV=production
+SERVER__HOST=0.0.0.0
+AUTH__CLERK_DOMAIN=your-instance.clerk.accounts.dev
+AUTH__CLERK_ISSUER=https://your-instance.clerk.accounts.dev
+AUTH__CLERK_AUDIENCE=fiscal-api
+AUTH__CLERK_AUTHORIZED_PARTIES=["http://localhost:5173","http://127.0.0.1:5173","https://fiscalconsultas.pages.dev"]
+AUTH__CLERK_AUTHORIZED_PARTIES_REGEX=^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$
+AUTH__CLERK_CLOCK_SKEW_SECONDS=120
+SERVER__CORS_ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","https://fiscalconsultas.pages.dev"]
+SERVER__CORS_ALLOWED_ORIGIN_REGEX=^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$
+```
+
+Se você usar previews do Cloudflare Pages, essas duas variáveis com regex evitam dor de cabeça com subdomínios temporários.
+
+### 4) Frontend
+
+Se o frontend continuar no Cloudflare Pages, a URL da API no Pages deve apontar para o Render:
+
+```env
+VITE_API_URL=https://fiscal-api-5eok.onrender.com
+VITE_CLERK_PUBLISHABLE_KEY=pk_live_sua_chave
+VITE_CLERK_TOKEN_TEMPLATE=backend_api
+```
+
+Se você ainda estiver usando a chave de desenvolvimento do Clerk no site publicado, o Clerk vai mostrar aviso no console. Para produção, troque pela chave live.
 
 ## Workflow de desenvolvimento
 
@@ -473,12 +553,14 @@ Mudanças principais já aplicadas:
 | `DATABASE__POSTGRES_URL` | URL asyncpg usada quando engine = `postgresql` |
 | `SERVER__ENV` | Comportamento de middleware/auth (`development` habilita fallbacks) |
 | `SERVER__CORS_ALLOWED_ORIGINS` | Lista JSON de origens permitidas para CORS (produção deve conter apenas domínios oficiais) |
+| `SERVER__CORS_ALLOWED_ORIGIN_REGEX` | Regex opcional para liberar previews controlados (ex.: subdomínios do Cloudflare Pages) |
 | `CACHE__ENABLE_REDIS` | Liga/desliga Redis para cache/rate-limit distribuído |
 | `CACHE__REDIS_URL` | URL do Redis (ex: Upstash) |
 | `AUTH__CLERK_DOMAIN` | Validação JWT via JWKS do Clerk |
 | `AUTH__CLERK_ISSUER` | Valida `iss` explicitamente (`https://<seu-dominio-clerk>`) |
 | `AUTH__CLERK_AUDIENCE` | Valida `aud` no backend (ex: `fiscal-api`) |
 | `AUTH__CLERK_AUTHORIZED_PARTIES` | Valida `azp` (lista JSON; ex: `localhost` e `127.0.0.1`) |
+| `AUTH__CLERK_AUTHORIZED_PARTIES_REGEX` | Regex opcional para aceitar `azp` de previews controlados |
 | `AUTH__CLERK_CLOCK_SKEW_SECONDS` | Tolerância de clock para `exp/iat/nbf` (recomendado `120` em dev local) |
 | `BILLING__ASAAS_WEBHOOK_TOKEN` | Validação de token no webhook `/api/webhooks/asaas` |
 | `SECURITY__AI_CHAT_REQUESTS_PER_MINUTE` | Rate limit do endpoint `/api/ai/chat` |

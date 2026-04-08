@@ -163,6 +163,25 @@ def test_get_jwks_client_caches_instance(monkeypatch):
     assert "demo.clerk.accounts.dev" in first.url
 
 
+def test_resolve_expected_azp_regex_compiles_and_caches(monkeypatch):
+    monkeypatch.setattr(
+        middleware.settings.auth,
+        "clerk_authorized_parties_regex",
+        r"^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$",
+        raising=False,
+    )
+    middleware._cached_expected_azp_regex_raw = None
+    middleware._cached_expected_azp_regex = None
+
+    first = middleware._resolve_expected_azp_regex()
+    second = middleware._resolve_expected_azp_regex()
+
+    assert first is not None
+    assert first is second
+    assert first.fullmatch("https://fiscalconsultas.pages.dev")
+    assert first.fullmatch("https://preview123.fiscalconsultas.pages.dev")
+
+
 @pytest.mark.asyncio
 async def test_decode_clerk_jwt_jwks_path_and_cache(monkeypatch):
     class _SigningKey:
@@ -235,10 +254,62 @@ async def test_decode_clerk_jwt_validates_issuer_audience_and_azp(monkeypatch):
         ["http://localhost:5173"],
         raising=False,
     )
+    monkeypatch.setattr(
+        middleware.settings.auth, "clerk_authorized_parties_regex", "", raising=False
+    )
 
     payload = await middleware.decode_clerk_jwt("token-claims-ok")
     assert payload is not None
     assert payload["sub"] == "user_ok"
+
+
+@pytest.mark.asyncio
+async def test_decode_clerk_jwt_accepts_azp_regex(monkeypatch):
+    class _SigningKey:
+        key = "pub-key"
+
+    class _FakeJWKS:
+        def get_signing_key_from_jwt(self, _token):
+            return _SigningKey()
+
+    middleware._jwt_decode_cache.clear()
+    middleware._cached_expected_azp_regex_raw = None
+    middleware._cached_expected_azp_regex = None
+    monkeypatch.setattr(middleware, "get_jwks_client", lambda: _FakeJWKS())
+    monkeypatch.setattr(
+        middleware.jwt,
+        "decode",
+        lambda *_args, **_kwargs: {
+            "sub": "user_preview",
+            "org_id": "org_preview",
+            "iss": "https://demo.clerk.accounts.dev",
+            "aud": "fiscal-api",
+            "azp": "https://967b1af1.fiscalconsultas.pages.dev",
+            "exp": 9999999999,
+        },
+    )
+    monkeypatch.setattr(
+        middleware.settings.auth,
+        "clerk_issuer",
+        "https://demo.clerk.accounts.dev",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        middleware.settings.auth, "clerk_audience", "fiscal-api", raising=False
+    )
+    monkeypatch.setattr(
+        middleware.settings.auth, "clerk_authorized_parties", [], raising=False
+    )
+    monkeypatch.setattr(
+        middleware.settings.auth,
+        "clerk_authorized_parties_regex",
+        r"^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$",
+        raising=False,
+    )
+
+    payload = await middleware.decode_clerk_jwt("token-preview-azp")
+    assert payload is not None
+    assert payload["sub"] == "user_preview"
 
 
 @pytest.mark.asyncio
@@ -278,6 +349,9 @@ async def test_decode_clerk_jwt_rejects_audience_mismatch(monkeypatch):
         "clerk_authorized_parties",
         ["http://localhost:5173"],
         raising=False,
+    )
+    monkeypatch.setattr(
+        middleware.settings.auth, "clerk_authorized_parties_regex", "", raising=False
     )
 
     warned: list[str] = []
@@ -324,6 +398,9 @@ async def test_decode_clerk_jwt_rejects_issuer_and_azp_mismatch(monkeypatch):
         "clerk_authorized_parties",
         ["http://localhost:5173"],
         raising=False,
+    )
+    monkeypatch.setattr(
+        middleware.settings.auth, "clerk_authorized_parties_regex", "", raising=False
     )
 
     warned: list[str] = []

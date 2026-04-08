@@ -321,13 +321,21 @@ cors_origins = settings.server.cors_allowed_origins or [
     "http://127.0.0.1:5173",
 ]
 
+# Optional regex allows controlled preview domains (for example Cloudflare Pages)
+# while keeping explicit origin allowlists for production domains.
+cors_regex_parts: list[str] = []
+configured_cors_regex = (settings.server.cors_allowed_origin_regex or "").strip()
+if configured_cors_regex:
+    cors_regex_parts.append(f"(?:{configured_cors_regex})")
+
 # Dev convenience: allow local-network Vite hosts on :5173
 # without opening broad CORS in production.
-cors_allow_origin_regex = None
 if settings.server.env == "development":
-    cors_allow_origin_regex = (
-        r"^https?://(?:localhost|127\.0\.0\.1|\d{1,3}(?:\.\d{1,3}){3})(?::5173)?$"
+    cors_regex_parts.append(
+        r"(?:^https?://(?:localhost|127\.0\.0\.1|\d{1,3}(?:\.\d{1,3}){3})(?::5173)?$)"
     )
+
+cors_allow_origin_regex = "|".join(cors_regex_parts) or None
 
 app.add_middleware(
     CORSMiddleware,

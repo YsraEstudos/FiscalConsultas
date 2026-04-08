@@ -14,10 +14,11 @@ import hashlib
 import ipaddress
 import json
 import logging
+import re
 import time
 import uuid
 from contextvars import ContextVar
-from typing import Any, Coroutine, Dict, Optional
+from typing import Any, Coroutine, Dict, Optional, Pattern
 from urllib.parse import urlparse
 
 import jwt
@@ -62,6 +63,9 @@ _jwt_failure_reason_ctx: ContextVar[Optional[str]] = ContextVar(
 _request_id_ctx: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
 _DEV_MIN_CLOCK_SKEW_SECONDS = 120
 _LOCALHOST_HOSTS = {"localhost"}
+_NEVER_MATCH_REGEX = re.compile(r"(?!x)x")
+_cached_expected_azp_regex_raw: Optional[str] = None
+_cached_expected_azp_regex: Optional[Pattern[str]] = None
 
 
 def _normalize_clerk_domain(raw_domain: Optional[str]) -> Optional[str]:
@@ -182,6 +186,29 @@ def _resolve_expected_azp() -> set[str]:
     return expected
 
 
+def _resolve_expected_azp_regex() -> Optional[Pattern[str]]:
+    global _cached_expected_azp_regex_raw, _cached_expected_azp_regex
+
+    raw = (settings.auth.clerk_authorized_parties_regex or "").strip()
+    if raw == _cached_expected_azp_regex_raw:
+        return _cached_expected_azp_regex
+
+    _cached_expected_azp_regex_raw = raw
+    if not raw:
+        _cached_expected_azp_regex = None
+        return None
+
+    try:
+        _cached_expected_azp_regex = re.compile(raw)
+    except re.error as error:
+        logger.error(
+            "AUTH__CLERK_AUTHORIZED_PARTIES_REGEX inválido: %r (%s)", raw, error
+        )
+        _cached_expected_azp_regex = _NEVER_MATCH_REGEX
+
+    return _cached_expected_azp_regex
+
+
 def _parse_clock_skew_seconds(raw_value: Any) -> int:
     try:
         parsed = int(raw_value)
@@ -246,18 +273,32 @@ def _validate_expected_issuer(
         )
 
 
-def _validate_expected_azp(payload: dict[str, Any], expected_azp: set[str]) -> None:
-    if not expected_azp:
+def _validate_expected_azp(
+    payload: dict[str, Any],
+    expected_azp: set[str],
+    expected_azp_regex: Optional[Pattern[str]],
+) -> None:
+    if not expected_azp and expected_azp_regex is None:
         return
 
     token_azp = payload.get("azp")
     if not isinstance(token_azp, str) or not token_azp.strip():
         raise jwt.InvalidTokenError("Missing 'azp' claim")
 
-    if token_azp not in expected_azp:
-        raise jwt.InvalidTokenError(
-            f"Invalid azp. expected one of {sorted(expected_azp)!r}, received={token_azp!r}"
-        )
+    normalized_azp = token_azp.strip()
+    matches_explicit = normalized_azp in expected_azp
+    matches_regex = bool(
+        expected_azp_regex is not None and expected_azp_regex.fullmatch(normalized_azp)
+    )
+    if matches_explicit or matches_regex:
+        return
+
+    regex_pattern = expected_azp_regex.pattern if expected_azp_regex else None
+    raise jwt.InvalidTokenError(
+        "Invalid azp. "
+        f"expected one of {sorted(expected_azp)!r} or regex {regex_pattern!r}, "
+        f"received={normalized_azp!r}"
+    )
 
 
 def _log_jwt_failure(
@@ -267,6 +308,7 @@ def _log_jwt_failure(
     extra: Optional[dict[str, Any]] = None,
 ) -> None:
     _jwt_failure_reason_ctx.set(reason)
+    expected_azp_regex = _resolve_expected_azp_regex()
     payload = {
         "event": "jwt_validation_failed",
         "reason": reason,
@@ -278,6 +320,7 @@ def _log_jwt_failure(
             "issuer_hint_from_clerk_domain": _derive_issuer_hint_from_domain(),
             "audience": _resolve_expected_audience(),
             "azp": sorted(_resolve_expected_azp()),
+            "azp_regex": None if expected_azp_regex is None else expected_azp_regex.pattern,
             "clock_skew_seconds_configured": _configured_clock_skew_seconds(),
             "clock_skew_seconds_effective": _effective_clock_skew_seconds(),
         },
@@ -583,6 +626,7 @@ async def decode_clerk_jwt(token: str) -> Optional[dict]:
     expected_issuer = _resolve_expected_issuer()
     expected_audience = _resolve_expected_audience()
     expected_azp = _resolve_expected_azp()
+    expected_azp_regex = _resolve_expected_azp_regex()
 
     try:
         jwks_client = get_jwks_client()
@@ -624,7 +668,7 @@ async def decode_clerk_jwt(token: str) -> Optional[dict]:
             return None
 
         _validate_expected_issuer(payload, expected_issuer)
-        _validate_expected_azp(payload, expected_azp)
+        _validate_expected_azp(payload, expected_azp, expected_azp_regex)
 
         if not _validate_expected_audience_claim(
             payload, expected_audience, token_snapshot

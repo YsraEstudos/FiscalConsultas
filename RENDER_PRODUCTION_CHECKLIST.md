@@ -14,20 +14,19 @@ Este checklist cobre a parte operacional que precisa ser aplicada fora do códig
 - O Render recomenda usar a mesma região e a URL interna do banco/Key Value para minimizar latência e usar a private network.
 - Se a API ou o banco já estiverem em outra região, o próprio Render documenta que a região não é alterada in-place; nesse caso, crie um novo recurso na região correta e faça a migração.
 
-## 3. Key Value para cache compartilhado
+## 3. Redis para cache compartilhado
 
-- Provisione um Render Key Value em região igual à API.
-- Para cache, use a política `allkeys-lru`.
-- Use instância paga se quiser persistência em disco.
+- Provisione um Redis compatível com o backend, como Upstash.
+- Se você preferir o ecossistema do Render, um Key Value também funciona.
 - Configure a variável `CACHE__ENABLE_REDIS=true`.
-- Configure `CACHE__REDIS_URL` com a internal URL do Key Value.
+- Configure `CACHE__REDIS_URL` com a URL do Redis que você criou.
 
 ## 4. Variáveis recomendadas
 
 - `DATABASE__ENGINE=postgresql`
 - `DATABASE__POSTGRES_URL=<internal postgres url>`
 - `CACHE__ENABLE_REDIS=true`
-- `CACHE__REDIS_URL=<internal key value url>`
+- `CACHE__REDIS_URL=<upstash redis url>`
 - `CACHE__SERVICES_SEARCH_TTL=600`
 - `CACHE__SERVICES_DETAIL_TTL=1800`
 - `CACHE__STATUS_CACHE_TTL=20`
@@ -41,6 +40,6 @@ Este checklist cobre a parte operacional que precisa ser aplicada fora do códig
 
 - Regions: https://render.com/docs/regions
 - Postgres/internal URL: https://render.com/docs/databases
-- Key Value: https://render.com/redis
+- Redis: https://upstash.com/redis
 - Health checks: https://render.com/docs/health-checks
 - Free limitations: https://render.com/docs/free

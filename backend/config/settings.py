@@ -17,6 +17,7 @@ class ServerSettings(BaseModel):
     host: str = "127.0.0.1"
     env: str = "development"
     cors_allowed_origins: List[str] = Field(default_factory=list)
+    cors_allowed_origin_regex: Optional[str] = None
 
 
 class DatabaseSettings(BaseModel):
@@ -103,6 +104,7 @@ class AuthSettings(BaseModel):
     clerk_issuer: Optional[str] = None  # ex: https://your-app.clerk.accounts.dev
     clerk_audience: Optional[str] = None  # opcional; exige match em "aud"
     clerk_authorized_parties: List[str] = Field(default_factory=list)  # valida "azp"
+    clerk_authorized_parties_regex: Optional[str] = None  # regex opcional para previews
     clerk_clock_skew_seconds: int = 120  # tolerancia para exp/nbf/iat
 
 
