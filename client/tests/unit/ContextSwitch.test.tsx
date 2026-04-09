@@ -28,8 +28,21 @@ vi.mock('../../src/components/TabsBar', () => ({
 // Mock dependencies
 vi.mock('../../src/services/api', () => ({
     searchNCM: vi.fn(),
-    searchTip: vi.fn(),
-    getGlossaryTerm: vi.fn()
+    searchTipi: vi.fn(),
+    getGlossaryTerm: vi.fn(),
+    getSystemStatus: vi.fn().mockResolvedValue({
+        status: 'online',
+        database: { status: 'online' },
+        tipi: { status: 'online' },
+        nbs: { status: 'online' },
+        nebs: { status: 'online' },
+        catalogs: {
+            nesh: { status: 'online' },
+            tipi: { status: 'online' },
+            nbs: { status: 'online' },
+            nebs: { status: 'online' },
+        },
+    }),
 }));
 
 // Mock Settings Context

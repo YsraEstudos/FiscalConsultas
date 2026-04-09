@@ -196,8 +196,6 @@ describe('useComments behavior', () => {
       selected_text: 'Motores elétricos',
       body: 'Novo comentário',
       is_private: true,
-      user_name: 'Alice',
-      user_image_url: undefined,
     });
     expect(result.current.comments).toEqual([
       expect.objectContaining({

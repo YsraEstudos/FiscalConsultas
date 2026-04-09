@@ -282,7 +282,9 @@ describe('Header', () => {
     expect(loadingButton).toBeDisabled();
     fireEvent.click(loadingButton);
     expect(signOutMock).toHaveBeenCalledTimes(1);
-    expect(signOutMock).toHaveBeenCalledWith({ redirectUrl: '/' });
+    expect(signOutMock).toHaveBeenCalledWith({
+      redirectUrl: 'http://localhost:3000/',
+    });
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.getByText('Confirmar saída')).toBeInTheDocument();

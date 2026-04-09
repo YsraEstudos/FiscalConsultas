@@ -55,9 +55,11 @@ const originals: Record<ConsoleMethod, (...args: unknown[]) => void> = {} as Rec
 
 for (const method of METHODS) {
     const fn = console[method as keyof Console];
-    originals[method] = (typeof fn === 'function' ? fn.bind(console) : () => { }) as (
-        ...args: unknown[]
-    ) => void;
+    originals[method] = typeof fn === 'function'
+        ? ((...args: unknown[]) => {
+            Reflect.apply(fn as (...methodArgs: unknown[]) => void, console, args);
+        })
+        : () => { };
 }
 
 const noop = () => { };

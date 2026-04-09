@@ -1,7 +1,7 @@
 // consoleSilencer MUST be first — it patches console.* before Clerk / React load.
 import './utils/consoleSilencer'
 
-import { StrictMode, Suspense } from 'react'
+import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ClerkProvider } from '@clerk/react'
 import './index.css'
