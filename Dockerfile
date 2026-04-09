@@ -22,6 +22,8 @@ RUN mkdir -p database \
 
 # Configurações de ambiente para o container
 ENV PYTHONUNBUFFERED=1
+ENV VIRTUAL_ENV=/app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 ENV SERVER__ENV=production
 ENV SERVER__HOST=0.0.0.0
 ENV SERVER__PORT=10000
@@ -33,5 +35,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD ["pyt
 
 USER app
 
-# Comando para iniciar o servidor via uv
-CMD ["uv", "run", "Nesh.py"]
+# Inicia com o Python do virtualenv já materializado na imagem.
+# Evita que o runtime tente sincronizar dependências ou acessar o PyPI.
+CMD ["python", "Nesh.py"]

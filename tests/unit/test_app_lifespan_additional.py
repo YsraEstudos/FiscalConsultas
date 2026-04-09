@@ -238,6 +238,29 @@ async def test_lifespan_sqlite_handles_import_error_for_db_engine(
 
 
 @pytest.mark.asyncio
+async def test_lifespan_records_release_metadata(monkeypatch, core_mocks):
+    fake_db = _FakeDbAdapter("db.sqlite")
+
+    monkeypatch.setattr(app_module.settings.database, "engine", "sqlite")
+    monkeypatch.setattr(app_module.settings.cache, "enable_redis", False)
+    monkeypatch.setattr(app_module, "DatabaseAdapter", lambda _path: fake_db)
+    monkeypatch.setattr(nesh_service_module, "NeshService", _FakeNeshService)
+    monkeypatch.setenv("RENDER_SERVICE_ID", "srv-test")
+    monkeypatch.setenv("RENDER_GIT_COMMIT", "commit-test")
+    monkeypatch.setenv("RENDER_GIT_BRANCH", "main")
+
+    app = _make_fake_fastapi()
+    async with app_module.lifespan(app):
+        assert app.state.release_metadata["render_service_id"] == "srv-test"
+        assert app.state.release_metadata["git_commit"] == "commit-test"
+        assert app.state.release_metadata["git_branch"] == "main"
+        assert app.state.release_metadata["server_env"] == app_module.settings.server.env
+
+    assert fake_db.closed is True
+    assert app.state.nbs_service.closed is True
+
+
+@pytest.mark.asyncio
 async def test_lifespan_sqlite_init_db_success_closes_sqlmodel_engine(
     monkeypatch, core_mocks
 ):

@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -96,6 +97,69 @@ def _validate_dev_tenant_override_safety() -> None:
 
 def _should_expose_api_docs() -> bool:
     return settings.server.env == "development" and settings.features.debug_mode
+
+
+def _first_non_empty_env(*names: str) -> str | None:
+    for name in names:
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    return None
+
+
+def _collect_release_metadata(app: FastAPI) -> dict[str, str]:
+    metadata: dict[str, str] = {
+        "app_version": getattr(app, "version", "unknown"),
+        "server_env": settings.server.env,
+    }
+
+    direct_env_map = {
+        "render_service_id": "RENDER_SERVICE_ID",
+        "render_service_name": "RENDER_SERVICE_NAME",
+        "render_instance_id": "RENDER_INSTANCE_ID",
+        "render_external_url": "RENDER_EXTERNAL_URL",
+        "render_region": "RENDER_REGION",
+    }
+    for field, env_name in direct_env_map.items():
+        value = os.getenv(env_name, "").strip()
+        if value:
+            metadata[field] = value
+
+    git_commit = _first_non_empty_env(
+        "RENDER_GIT_COMMIT",
+        "SOURCE_VERSION",
+        "GIT_COMMIT",
+        "COMMIT_SHA",
+    )
+    if git_commit:
+        metadata["git_commit"] = git_commit
+
+    git_branch = _first_non_empty_env(
+        "RENDER_GIT_BRANCH",
+        "GIT_BRANCH",
+        "BRANCH",
+    )
+    if git_branch:
+        metadata["git_branch"] = git_branch
+
+    deploy_id = _first_non_empty_env(
+        "RENDER_DEPLOY_ID",
+        "RENDER_BUILD_ID",
+        "DEPLOY_ID",
+    )
+    if deploy_id:
+        metadata["deploy_id"] = deploy_id
+
+    return metadata
+
+
+def _record_release_metadata(app: FastAPI) -> None:
+    metadata = _collect_release_metadata(app)
+    app.state.release_metadata = metadata
+    logger.info(
+        "Runtime release metadata: %s",
+        json.dumps(metadata, ensure_ascii=False, sort_keys=True),
+    )
 
 
 def _request_uses_https(request: Request) -> bool:
@@ -279,6 +343,7 @@ async def _shutdown_resources(app: FastAPI) -> None:
 async def lifespan(app: FastAPI):
     project_root = _resolve_project_root()
     try:
+        _record_release_metadata(app)
         _validate_dev_tenant_override_safety()
         await _init_primary_database(app)
         await _init_sqlmodel_engine(app)
