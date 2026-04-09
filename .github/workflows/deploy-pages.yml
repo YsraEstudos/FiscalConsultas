@@ -23,7 +23,7 @@ jobs:
         working-directory: client
     env:
       VITE_API_URL: https://fiscal-api-5eok.onrender.com
-      VITE_CLERK_PUBLISHABLE_KEY: pk_test_ZGVsaWNhdGUtaGVkZ2Vob2ctMTUuY2xlcmsuYWNjb3VudHMuZGV2JA
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
       VITE_CLERK_TOKEN_TEMPLATE: backend_api
     steps:
       - name: Checkout
@@ -38,6 +38,13 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Validate Clerk key
+        run: |
+          if [ -z "${VITE_CLERK_PUBLISHABLE_KEY}" ]; then
+            echo "Missing GitHub repository variable VITE_CLERK_PUBLISHABLE_KEY"
+            exit 1
+          fi
 
       - name: Patch app for GitHub Pages project path
         run: |

@@ -238,7 +238,7 @@ Depois do deploy, ajuste `client/.env.local` ou as variáveis do projeto no Page
 
 ```env
 VITE_API_URL=https://seu-backend.com
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_sua_chave
+VITE_CLERK_PUBLISHABLE_KEY=pk_live_sua_chave
 VITE_CLERK_TOKEN_TEMPLATE=backend_api
 ```
 
@@ -253,6 +253,20 @@ principal em `SERVER__CORS_ALLOWED_ORIGINS` e `AUTH__CLERK_AUTHORIZED_PARTIES`.
 
 O arquivo `client/public/_redirects` já garante fallback para SPA no Cloudflare Pages, então rotas internas como `/`, `/perfil` ou abas profundas não quebram ao atualizar a página.
 
+## Deploy no GitHub Pages
+
+Também é possível publicar o frontend estático no GitHub Pages em:
+
+- `https://ysraestudos.github.io/FiscalConsultas/`
+
+Checklist mínimo:
+
+1. Em `Settings > Pages`, deixe `Source = GitHub Actions`.
+2. Cadastre `Settings > Secrets and variables > Actions > Variables > VITE_CLERK_PUBLISHABLE_KEY` com uma chave `pk_live_...`.
+3. Execute o workflow `Deploy GitHub Pages`.
+
+Esse workflow usa o path-base `/FiscalConsultas/`, gera fallback SPA (`404.html`) e deve falhar se a variável `VITE_CLERK_PUBLISHABLE_KEY` não estiver definida.
+
 ## Deploy no Render
 
 Se você quer deixar o projeto funcionando com `Render + Neon + Upstash`, o caminho mais simples é:
@@ -260,7 +274,7 @@ Se você quer deixar o projeto funcionando com `Render + Neon + Upstash`, o cami
 1. colocar o backend FastAPI no Render
 2. colocar o banco Postgres no Neon
 3. colocar o cache Redis no Upstash
-4. manter o frontend estático em um host separado, como Cloudflare Pages
+4. manter o frontend estático em um host separado, como Cloudflare Pages ou GitHub Pages
 
 ### 1) Banco no Neon
 
@@ -312,6 +326,8 @@ SERVER__CORS_ALLOWED_ORIGIN_REGEX=^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pag
 ```
 
 Se você usar previews do Cloudflare Pages, essas duas variáveis com regex evitam dor de cabeça com subdomínios temporários.
+Se o frontend estiver no GitHub Pages, inclua `https://ysraestudos.github.io` em
+`AUTH__CLERK_AUTHORIZED_PARTIES` e `SERVER__CORS_ALLOWED_ORIGINS`.
 
 ### 4) Frontend
 

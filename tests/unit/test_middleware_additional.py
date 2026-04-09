@@ -652,18 +652,52 @@ async def test_dispatch_skips_non_api_and_public_paths(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_dispatch_returns_401_in_prod_postgres_without_tenant(monkeypatch):
+async def test_dispatch_allows_public_catalog_routes_in_prod_postgres_without_tenant(
+    monkeypatch,
+):
     monkeypatch.setattr(middleware.settings.server, "env", "production", raising=False)
     monkeypatch.setattr(
         middleware.settings.database, "engine", "postgresql", raising=False
     )
-    called = []
+    called: list[str] = []
+
+    async def app(scope, receive, send):  # NOSONAR
+        called.append(scope["path"])
+        response = JSONResponse({"ok": True})
+        await response(scope, receive, send)
+
+    mw = middleware.TenantMiddleware(app=app)
+    public_paths = [
+        "/api/search",
+        "/api/chapters",
+        "/api/glossary",
+        "/api/tipi/search",
+        "/api/tipi/chapters",
+        "/api/nesh/chapter/84/notes",
+    ]
+
+    for path in public_paths:
+        status, _ = await _invoke_middleware(mw, _build_scope(path))
+        assert status == 200
+
+    assert called == public_paths
+
+
+@pytest.mark.asyncio
+async def test_dispatch_returns_401_for_protected_route_in_prod_postgres_without_tenant(
+    monkeypatch,
+):
+    monkeypatch.setattr(middleware.settings.server, "env", "production", raising=False)
+    monkeypatch.setattr(
+        middleware.settings.database, "engine", "postgresql", raising=False
+    )
+    called: list[str] = []
 
     async def app(_scope, _receive, _send):  # NOSONAR
         called.append("called")
 
     mw = middleware.TenantMiddleware(app=app)
-    status, _ = await _invoke_middleware(mw, _build_scope("/api/search"))
+    status, _ = await _invoke_middleware(mw, _build_scope("/api/profile/me"))
     assert status == 401
     assert called == []
 
@@ -684,7 +718,7 @@ async def test_dispatch_sets_tenant_from_debug_fallback_and_resets(monkeypatch):
         await response(scope, receive, send)
 
     mw = middleware.TenantMiddleware(app=app)
-    status, _ = await _invoke_middleware(mw, _build_scope("/api/search"))
+    status, _ = await _invoke_middleware(mw, _build_scope("/api/profile/me"))
     assert status == 200
     assert seen == ["org_default"]
     assert tenant_context.get() == ""
@@ -708,7 +742,7 @@ async def test_dispatch_does_not_apply_dev_tenant_fallback_for_remote_client(
         await response(scope, receive, send)
 
     mw = middleware.TenantMiddleware(app=app)
-    remote_scope = _build_scope("/api/search")
+    remote_scope = _build_scope("/api/profile/me")
     remote_scope["client"] = ("203.0.113.40", 12345)
 
     status, _ = await _invoke_middleware(mw, remote_scope)
@@ -753,7 +787,7 @@ async def test_dispatch_sets_tenant_from_bearer_and_schedules_provision(monkeypa
     mw = middleware.TenantMiddleware(app=app)
     status, _ = await _invoke_middleware(
         mw,
-        _build_scope("/api/search", headers={"Authorization": "Bearer tkn"}),
+        _build_scope("/api/profile/me", headers={"Authorization": "Bearer tkn"}),
     )
     assert status == 200
     assert seen == ["org_bearer"]

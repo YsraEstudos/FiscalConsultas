@@ -856,9 +856,17 @@ class TenantMiddleware:
         "/api/auth/me",
         "/api/status",
         "/api/status/details",
+        "/api/search",
+        "/api/chapters",
+        "/api/glossary",
+        "/api/tipi/search",
+        "/api/tipi/chapters",
         "/api/webhooks",
     }
-    PUBLIC_PREFIX_PATHS = ("/api/webhooks/",)
+    PUBLIC_PREFIX_PATHS = (
+        "/api/webhooks/",
+        "/api/nesh/chapter/",
+    )
 
     def __init__(self, app):
         self.app = app
