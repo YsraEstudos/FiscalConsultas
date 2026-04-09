@@ -31,7 +31,7 @@ from backend.services.ai_service import AiService
 from backend.services.nbs_service import NbsService
 from backend.services.tipi_service import TipiService
 from backend.utils.frontend_check import verify_frontend_build
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -420,6 +420,9 @@ app.add_middleware(
         "Asaas-Access-Token",
         "X-Asaas-Access-Token",
     ],
+    expose_headers=[
+        "X-Request-Id",
+    ],
 )
 
 
@@ -474,3 +477,7 @@ else:
                 "Run 'npm run build' in client/ folder."
             )
         }
+
+    @app.head("/", include_in_schema=False)
+    async def read_root_head():
+        return Response(status_code=200)

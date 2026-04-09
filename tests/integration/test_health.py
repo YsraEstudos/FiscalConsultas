@@ -1,10 +1,39 @@
+import importlib
+import os
 import uuid
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi.testclient import TestClient
 
 from backend.presentation.routes import system
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.fixture
+def fallback_client():
+    import backend.server.app as app_module
+
+    static_dir = (
+        Path(app_module.__file__).resolve().parents[2] / "client" / "dist"
+    ).resolve()
+    real_exists = os.path.exists
+
+    def _fake_exists(path):
+        try:
+            if Path(path).resolve() == static_dir:
+                return False
+        except OSError:
+            pass
+        return real_exists(path)
+
+    with patch("os.path.exists", side_effect=_fake_exists):
+        reloaded_app_module = importlib.reload(app_module)
+        with TestClient(reloaded_app_module.app) as test_client:
+            yield test_client
+    importlib.reload(app_module)
 
 
 def test_status_endpoint(client):
@@ -149,3 +178,34 @@ def test_frontend_fallback(client):
     # Should return either HTML (if build exists) or the fallback JSON message
     # We don't strictly assert content type here as it depends on build state,
     # but 200 OK means it didn't crash.
+
+
+def test_root_and_status_support_head_requests(fallback_client):
+    root_response = fallback_client.head("/")
+    status_response = fallback_client.head("/api/status")
+
+    assert root_response.status_code == 200
+    assert status_response.status_code == 200
+
+
+def test_status_head_skips_rate_limit(client, monkeypatch):
+    monkeypatch.setattr(
+        system.status_rate_limiter,
+        "consume",
+        AsyncMock(return_value=(False, 7)),
+    )
+
+    response = client.head("/api/status")
+
+    assert response.status_code == 200
+
+
+def test_cors_exposes_request_id_header(client):
+    response = client.get(
+        "/api/status",
+        headers={"Origin": "https://ysraestudos.github.io"},
+    )
+
+    assert response.status_code == 200
+    exposed_headers = response.headers.get("Access-Control-Expose-Headers", "")
+    assert "X-Request-Id" in exposed_headers

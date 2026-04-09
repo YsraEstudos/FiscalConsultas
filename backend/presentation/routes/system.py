@@ -10,7 +10,7 @@ from backend.server.middleware import decode_clerk_jwt
 from backend.server.rate_limit import status_rate_limiter
 from backend.services import NeshService
 from backend.utils.auth import extract_bearer_token, extract_client_ip, is_admin_payload
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 router = APIRouter()
 _STATUS_CACHE: dict[str, object | None] = {"value": None, "expires_at": 0.0}
@@ -324,18 +324,66 @@ def _unpack_status_snapshot(snapshot: dict) -> tuple[dict, dict, dict, dict, str
     )
 
 
+def _store_status_snapshot(snapshot: dict, *, expires_at: float) -> dict:
+    _STATUS_CACHE["value"] = snapshot
+    _STATUS_CACHE["expires_at"] = expires_at
+    return snapshot
+
+
 async def _refresh_status_snapshot(request: Request, ttl_seconds: int) -> dict:
     snapshot = _build_status_snapshot(*await _collect_status_payloads_uncached(request))
-    _STATUS_CACHE["value"] = snapshot
-    _STATUS_CACHE["expires_at"] = time.monotonic() + ttl_seconds
+    _store_status_snapshot(snapshot, expires_at=time.monotonic() + ttl_seconds)
     if redis_cache.available:
         await redis_cache.set_status_snapshot("public", snapshot)
     return snapshot
 
 
-async def _get_status_snapshot(request: Request) -> dict:
+async def _read_redis_status_snapshot(*, now: float, ttl_seconds: int) -> dict | None:
+    if not redis_cache.available:
+        return None
+
+    redis_cached = await redis_cache.get_status_snapshot("public")
+    if not isinstance(redis_cached, dict):
+        return None
+
+    return _store_status_snapshot(redis_cached, expires_at=now + ttl_seconds)
+
+
+async def _await_status_refresh_snapshot(request: Request, ttl_seconds: int) -> dict:
     global _STATUS_CACHE_REFRESH_TASK
 
+    task: asyncio.Task | None = None
+    lock = _get_status_cache_lock()
+    async with lock:
+        cached = _read_l1_status_snapshot()
+        if cached is not None:
+            return cached
+
+        task = _STATUS_CACHE_REFRESH_TASK
+        if task is None:
+            task = asyncio.create_task(_refresh_status_snapshot(request, ttl_seconds))
+            _STATUS_CACHE_REFRESH_TASK = task
+
+    try:
+        return await task
+    finally:
+        async with lock:
+            if _STATUS_CACHE_REFRESH_TASK is task:
+                _STATUS_CACHE_REFRESH_TASK = None
+
+
+async def _recover_status_snapshot(ttl_seconds: int) -> dict | None:
+    stale = _read_stale_l1_status_snapshot()
+    if stale is not None:
+        return stale
+
+    return await _read_redis_status_snapshot(
+        now=time.monotonic(),
+        ttl_seconds=ttl_seconds,
+    )
+
+
+async def _get_status_snapshot(request: Request) -> dict:
     ttl_seconds = _status_cache_ttl_seconds()
     if ttl_seconds <= 0:
         return _build_status_snapshot(*await _collect_status_payloads_uncached(request))
@@ -345,41 +393,17 @@ async def _get_status_snapshot(request: Request) -> dict:
     if cached is not None:
         return cached
 
-    if redis_cache.available:
-        redis_cached = await redis_cache.get_status_snapshot("public")
-        if isinstance(redis_cached, dict):
-            _STATUS_CACHE["value"] = redis_cached
-            _STATUS_CACHE["expires_at"] = now + ttl_seconds
-            return redis_cached
-
-    task: asyncio.Task | None = None
-    lock = _get_status_cache_lock()
-    async with lock:
-        cached = _read_l1_status_snapshot()
-        if cached is not None:
-            return cached
-        task = _STATUS_CACHE_REFRESH_TASK
-        if task is None:
-            task = asyncio.create_task(_refresh_status_snapshot(request, ttl_seconds))
-            _STATUS_CACHE_REFRESH_TASK = task
+    redis_cached = await _read_redis_status_snapshot(now=now, ttl_seconds=ttl_seconds)
+    if redis_cached is not None:
+        return redis_cached
 
     try:
-        return await task
+        return await _await_status_refresh_snapshot(request, ttl_seconds)
     except Exception:
-        stale = _read_stale_l1_status_snapshot()
-        if stale is not None:
-            return stale
-        if redis_cache.available:
-            redis_cached = await redis_cache.get_status_snapshot("public")
-            if isinstance(redis_cached, dict):
-                _STATUS_CACHE["value"] = redis_cached
-                _STATUS_CACHE["expires_at"] = time.monotonic() + ttl_seconds
-                return redis_cached
+        fallback = await _recover_status_snapshot(ttl_seconds)
+        if fallback is not None:
+            return fallback
         raise
-    finally:
-        async with lock:
-            if _STATUS_CACHE_REFRESH_TASK is task:
-                _STATUS_CACHE_REFRESH_TASK = None
 
 
 async def _collect_status_payloads(
@@ -487,6 +511,12 @@ async def get_status(request: Request):
         normalized_nebs,
         overall_status,
     )
+
+
+@router.head("/status", include_in_schema=False)
+async def head_status(request: Request):
+    await _collect_status_payloads(request)
+    return Response(status_code=200)
 
 
 @router.get("/status/details", responses=STATUS_DETAILS_RESPONSES)
