@@ -203,9 +203,9 @@ describe('useSearch behavior', () => {
   });
 
   it.each([
-    ['nbs', 'Token ausente', 'Faça login para acessar o catálogo de serviços.'],
-    ['nebs', 'Token inválido ou expirado', 'Sua sessão expirou. Faça login novamente para acessar o catálogo de serviços.'],
-  ])('uses the shared catalog error mapper for %s tabs', async (doc, detail, message) => {
+    ['nbs', 429, 'Muitas tentativas no catálogo de serviços. Aguarde um instante e tente novamente.'],
+    ['nebs', 503, 'Catálogo de serviços indisponível no momento. Tente novamente em instantes.'],
+  ])('uses the shared catalog error mapper for %s tabs', async (doc, status, message) => {
     const updateTab = vi.fn();
     const addToHistory = vi.fn();
     const tabsById = new Map([[
@@ -215,7 +215,7 @@ describe('useSearch behavior', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const error = {
       isAxiosError: true,
-      response: { status: 401, data: { detail } },
+      response: { status },
     };
 
     if (doc === 'nbs') {

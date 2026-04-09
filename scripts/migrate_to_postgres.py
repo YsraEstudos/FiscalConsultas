@@ -28,8 +28,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.config.settings import settings
-from backend.domain.sqlmodels import (
+# These imports intentionally come after PROJECT_ROOT is inserted into sys.path so
+# the script can be executed directly from the repository root or nested paths.
+from backend.config.settings import settings  # noqa: E402
+from backend.domain.sqlmodels import (  # noqa: E402
     CatalogMetadata,
     Chapter,
     ChapterNotes,
@@ -39,10 +41,10 @@ from backend.domain.sqlmodels import (
     Position,
     TipiPosition,
 )
-from backend.infrastructure.db_engine import get_session
-from backend.utils.hash_util import calculate_file_sha256
-from backend.utils.nbs_parser import build_nbs_items, iter_nbs_rows
-from backend.utils.nebs_parser import parse_nebs_pdf, write_nebs_audit_report
+from backend.infrastructure.db_engine import get_session  # noqa: E402
+from backend.utils.hash_util import calculate_file_sha256  # noqa: E402
+from backend.utils.nbs_parser import build_nbs_items, iter_nbs_rows  # noqa: E402
+from backend.utils.nebs_parser import parse_nebs_pdf, write_nebs_audit_report  # noqa: E402
 
 DATA_DIR = PROJECT_ROOT / "data"
 REPORTS_DIR = PROJECT_ROOT / "reports" / "nebs"
@@ -85,7 +87,9 @@ def _coerce_pg_timestamp(value: str | datetime) -> datetime:
     return timestamp
 
 
-def _build_metadata_entries(prefix: str, values: dict[str, str]) -> list[dict[str, str | None]]:
+def _build_metadata_entries(
+    prefix: str, values: dict[str, str]
+) -> list[dict[str, str | None]]:
     return [
         {"key": f"{prefix}_{key}", "value": value, "tenant_id": None}
         for key, value in values.items()
@@ -320,7 +324,7 @@ async def migrate_positions(sqlite_path: str, pg_session: AsyncSession) -> int:
 
         deduped_positions = list(unique_positions.values())
         for start in range(0, len(deduped_positions), 1000):
-            batch = deduped_positions[start:start + 1000]
+            batch = deduped_positions[start : start + 1000]
             stmt = pg_insert(Position).values(batch)
             stmt = stmt.on_conflict_do_update(
                 index_elements=["codigo"],
@@ -450,7 +454,9 @@ async def migrate_glossary(sqlite_path: str, pg_session: AsyncSession) -> int:
     return count
 
 
-async def migrate_tipi_positions(sqlite_path: str, pg_session: AsyncSession) -> tuple[int, int]:
+async def migrate_tipi_positions(
+    sqlite_path: str, pg_session: AsyncSession
+) -> tuple[int, int]:
     """Migrate TIPI positions from SQLite into PostgreSQL."""
     if not os.path.exists(sqlite_path):
         raise FileNotFoundError(f"TIPI SQLite não encontrado: {sqlite_path}")
@@ -749,7 +755,11 @@ async def run_full_migration() -> int:
         "nbs_csv": NBS_CSV_PATH,
         "nebs_pdf": NEBS_PDF_PATH,
     }
-    missing_sources = [f"{name}: {path}" for name, path in required_sources.items() if not path.exists()]
+    missing_sources = [
+        f"{name}: {path}"
+        for name, path in required_sources.items()
+        if not path.exists()
+    ]
     if missing_sources:
         print("\nERRO: fontes obrigatórias ausentes:")
         for missing in missing_sources:

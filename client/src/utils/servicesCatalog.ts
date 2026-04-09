@@ -1,7 +1,6 @@
 import axios from 'axios';
 
 import type { SystemStatusResponse } from '../types/api.types';
-import { getApiErrorDetail, isLanHostInDev } from './apiError';
 
 export type ServiceCatalogDoc = 'nbs' | 'nebs';
 export type ServiceCatalogAvailability = 'online' | 'offline' | 'unknown';
@@ -97,31 +96,15 @@ export function getServiceCatalogErrorMessage(
     const fallback = doc === 'nbs'
         ? 'Erro ao carregar o catálogo NBS.'
         : 'Erro ao carregar o catálogo NEBS.';
-    const detail = getApiErrorDetail(error);
 
     if (axios.isAxiosError(error)) {
         const status = error.response?.status;
-
-        if (status === 401) {
-            if (detail === 'Token ausente') {
-                if (isLanHostInDev()) {
-                    return 'Token do Clerk indisponível neste host de rede. Abra em http://localhost:5173 para acessar o catálogo de serviços.';
-                }
-                return 'Faça login para acessar o catálogo de serviços.';
-            }
-
-            if (detail?.startsWith('Token inválido ou expirado')) {
-                return 'Sua sessão expirou. Faça login novamente para acessar o catálogo de serviços.';
-            }
-
-            return 'Sua sessão expirou. Faça login novamente para acessar o catálogo de serviços.';
-        }
 
         if (status === 429) {
             return 'Muitas tentativas no catálogo de serviços. Aguarde um instante e tente novamente.';
         }
 
-        if (status != null && status >= 500) {
+        if (status === 401 || status === 403 || (status != null && status >= 500)) {
             return 'Catálogo de serviços indisponível no momento. Tente novamente em instantes.';
         }
 

@@ -71,7 +71,7 @@ type ClerkTokenGetterOptions = {
 type ClerkTokenGetter = (options?: ClerkTokenGetterOptions) => Promise<string | null>;
 
 let clerkGetToken: ClerkTokenGetter | null = null;
-const PUBLIC_ROUTES = ['/status', '/glossary'];
+const PUBLIC_ROUTES = ['/status', '/glossary', '/services/'];
 const AUTH_DEBUG_ENABLED = String(import.meta.env.VITE_AUTH_DEBUG || '').toLowerCase() === 'true';
 const CLERK_TOKEN_TEMPLATE = (import.meta.env.VITE_CLERK_TOKEN_TEMPLATE || '').trim() || undefined;
 const AUTH_REFRESH_COOLDOWN_MS = 2500;
@@ -80,6 +80,7 @@ const REQUEST_ID_HEADER = 'X-Request-Id';
 const JWT_DEBUG_FIELDS = ['iss', 'sub', 'sid', 'azp', 'aud', 'org_id', 'exp', 'iat', 'nbf'] as const;
 let inFlightForcedRefreshPromise: Promise<string | null> | null = null;
 let lastForcedRefreshAtMs = 0;
+let requestIdCounter = 0;
 
 function getRequestPath(url?: string): string {
     if (!url) return '';
@@ -209,11 +210,23 @@ function maskToken(token: string): string {
 }
 
 function getOrCreateRequestId(): string {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-        return crypto.randomUUID();
+    const cryptoApi = globalThis.crypto;
+    if (typeof cryptoApi?.randomUUID === 'function') {
+        return cryptoApi.randomUUID();
     }
 
-    return `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    if (typeof cryptoApi?.getRandomValues === 'function') {
+        const randomBytes = new Uint8Array(8);
+        cryptoApi.getRandomValues(randomBytes);
+        const randomSuffix = Array.from(
+            randomBytes,
+            (value) => value.toString(16).padStart(2, '0'),
+        ).join('');
+        return `req_${Date.now()}_${randomSuffix}`;
+    }
+
+    requestIdCounter += 1;
+    return `req_${Date.now()}_${requestIdCounter.toString(36)}`;
 }
 
 function logJwtDebug(

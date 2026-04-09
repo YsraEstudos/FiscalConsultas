@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 import { installServicesMock, makeNbsSearch } from './fixtures/service-mocks';
 import { openServicesModal, searchServices } from './fixtures/services-ui';
 
-test('redirects signed-out users to Clerk before opening the services catalog', async ({ page }) => {
+test('allows signed-out users to open the services catalog without Clerk', async ({ page }) => {
   let servicesRequestCount = 0;
   page.on('request', (request) => {
     if (request.url().includes('/api/services/')) {
@@ -24,8 +24,7 @@ test('redirects signed-out users to Clerk before opening the services catalog', 
   await page.getByRole('button', { name: /Menu/, exact: true }).click();
   await page.getByRole('button', { name: /Serviços \(NBS\)/ }).click();
 
-  await expect(page.getByText(/Faça login para acessar o catálogo de serviços/i)).toBeVisible();
-  await page.waitForTimeout(250);
+  await expect(page.getByRole('heading', { name: 'Pronto para buscar' })).toBeVisible();
 
   const clerkState = await page.evaluate(() => (
     (window as typeof window & {
@@ -34,9 +33,8 @@ test('redirects signed-out users to Clerk before opening the services catalog', 
   ));
 
   expect(clerkState?.isSignedIn).toBe(false);
-  expect(clerkState?.openSignInCalls).toBe(1);
+  expect(clerkState?.openSignInCalls).toBe(0);
   expect(servicesRequestCount).toBe(0);
-  await expect(page.getByRole('heading', { name: 'Pronto para buscar' })).toBeVisible();
 });
 
 test('disables the services entry point when /api/status reports the catalog offline', async ({ page }) => {
