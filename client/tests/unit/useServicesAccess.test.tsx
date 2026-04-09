@@ -144,6 +144,39 @@ describe('useServicesAccess', () => {
     }
   });
 
+  it('falls back to unknown when a stale online snapshot cannot be refreshed', async () => {
+    let currentTime = 2_000_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => currentTime);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    refs.getSystemStatusMock.mockResolvedValue(makeSystemStatusResponse());
+
+    try {
+      const { result } = renderHook(() => useServicesAccess());
+
+      await waitFor(() => {
+        expect(result.current.servicesAvailability).toBe('online');
+      });
+
+      currentTime += 31_000;
+      refs.getSystemStatusMock.mockRejectedValueOnce(new Error('status down'));
+
+      await act(async () => {
+        await expect(result.current.ensureServicesAccess()).resolves.toBe(true);
+      });
+
+      expect(refs.getSystemStatusMock).toHaveBeenCalledTimes(2);
+      await waitFor(() => {
+        expect(result.current.servicesAvailability).toBe('unknown');
+        expect(result.current.servicesUnavailableReason).toBeNull();
+      });
+      expect(refs.toastErrorMock).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+      nowSpy.mockRestore();
+    }
+  });
+
   it('fails fast for service searches when the offline snapshot is still fresh', async () => {
     refs.getSystemStatusMock.mockResolvedValue(
       makeSystemStatusResponse({ status: 'error', nbs: 'error', nebs: 'error' }),

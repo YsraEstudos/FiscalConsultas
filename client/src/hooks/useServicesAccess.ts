@@ -47,7 +47,7 @@ export function useServicesAccess() {
                 console.warn('[useServicesAccess] Failed to refresh /api/status:', error);
 
                 const previous = snapshotRef.current;
-                if (previous.availability === 'online') {
+                if (previous.availability === 'online' && isSnapshotFresh(previous)) {
                     return previous;
                 }
 
