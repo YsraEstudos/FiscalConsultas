@@ -20,7 +20,7 @@ O objetivo é tirar a aplicação do "localhost" e garantir alta disponibilidade
   - Garantir certificados SSL (HTTPS) ativos para o funcionamento do Clerk, Webhooks do Asaas e segurança geral.
   - Configurar `SERVER__CORS_ALLOWED_ORIGINS` com lista JSON apenas dos domínios oficiais (sem curingas em produção).
 
-### Estado Atual em Produção (2026-04-09)
+### Estado Atual em Produção (2026-03-31)
 
 - Backend FastAPI publicado no Render e respondendo healthcheck em produção.
 - Banco PostgreSQL gerenciado no Neon provisionado com migrações e carga inicial já aplicadas.
@@ -47,17 +47,18 @@ Garantir que o código esteja robusto, coeso e fácil de manter antes do lançam
 
 Garantir que a plataforma seja fluida, rápida e passe uma percepção de produto "Premium".
 
-- [x] **Autoscroll robusto e sincronização de navegação**
-  - `useRobustScroll.ts` já recebe candidatos de anchor, usa `MutationObserver` e timeout real.
-  - `ResultDisplay.tsx` já prepara o DOM antes do scroll e evita corrida entre restauração e auto-scroll.
-- [x] **Tabs com lazy loading, keep alive e loading states**
-  - `TabPanel` já faz lazy mount + keep alive.
-  - `ResultSkeleton` já cobre o carregamento das abas.
-  - `TabsBar.tsx` já preserva a visibilidade no strip horizontal e fecha a aba com o botão do meio.
-- [ ] **Split do `CrossChapterNoteContext`**
-  - Separar dados de notas de ações/fetch para reduzir acoplamento e re-renders.
+- [ ] **Correção Definitiva do Autoscroll**:
+  - Refatorar internamente o `useRobustScroll.ts` (remover timeouts/observers desnecessários).
+  - Passar `targetId` em `ResultDisplay.tsx` para `useMemo` (evitar race conditions).
+  - Eliminar mutações imperativas no DOM (fallback `data-ncm`).
+- [ ] **Performance de Múltiplas Abas (Multi-tabs)**:
+  - Extrair o mapeamento de abas para um `<TabContent>` memorizado.
+  - Fazer split do `CrossChapterNoteContext` (dividir entre contexto de dados e contexto de ações) com cache limitado.
 - [ ] **Renderização Estrita no Frontend**:
-  - Desativar o fallback legado em `ResultDisplay.tsx`/`NeshRenderer.ts`, garantindo que o HTML chegue unicamente do backend.
+  - Desativar fallback de renderização no frontend (`NeshRenderer.ts`), garantindo que o HTML da NESH chegue unicamente do backend.
+- [ ] **Polimento Visual e Interação**:
+  - Adicionar indicadores de carregamento (Loading states) consistentes.
+  - O clique do scroll do mouse deve fechar a aba atual.
 
 ---
 
@@ -65,14 +66,16 @@ Garantir que a plataforma seja fluida, rápida e passe uma percepção de produt
 
 Garantir que o site seja encontrável e transmita confiança.
 
-- [ ] **Metadados e indexação**:
+- [ ] **Otimização de Meta Tags (`client/index.html`)**:
+  - Adicionar `<title>` descritivo e único.
   - Adicionar `<meta name="description">` com palavras-chave relevantes.
   - Configurar **OpenGraph (OG Tags)** para pré-visualização em redes sociais.
-  - Criar `robots.txt`.
-  - Gerar `sitemap.xml` para as páginas públicas.
 - [ ] **Ativos Visuais e Limpeza**:
   - Substituir o favicon padrão do Vite pelo logo do Nesh.
   - Executar limpeza de código (remover `console.log` no frontend e `prints` vazados no backend).
+- [ ] **Indexação**:
+  - Criar arquivo `robots.txt`.
+  - Gerar `sitemap.xml` para as páginas públicas.
 
 ---
 
@@ -110,6 +113,7 @@ Proteção contra abusos e falhas técnicas para operação contínua.
 - [ ] **Monitoramento de Erros e Logs (APM)**:
   - Integrar logs com Sentry, Datadog ou ferramentas nativas em nuvem.
 - [ ] **Healthcheck e Métricas**:
+  - Expandir o endpoint `/api/status` para reportar detalhes da conexão (DB/Redis).
   - Criar um endpoint Prometheus/métrica oculta (`/api/metrics`) protegido por token.
 
 ---
@@ -124,7 +128,7 @@ Proteção contra abusos e falhas técnicas para operação contínua.
 
 ## 📅 Roadmap de Produção Sugerido
 
-- **Sprint 1 (Dívida e UX)**: Refatoração do parsing no Backend e os últimos ajustes de UX ainda em aberto (Split do `CrossChapterNoteContext` e renderização estrita no frontend).
+- **Sprint 1 (Dívida e UX)**: Refatoração do parsing no Backend e conserto das issues visuais Críticas (Autoscroll, Multi-tabs).
 - **Sprint 2 (Docker e Infra)**: Subir ambiente de Produção e testar Deploy Backend + Frontend no banco real.
 - **Sprint 3 (SEO e QA Jurídico)**: Identidade visual final, Política de Privacidade e testes reais do Asaas com SSL habilitado.
 - **Sprint 4 (Monitoramento e Go-Live)**: Ligar endpoints de observabilidade, validar logs e Lançamento Oficial.
@@ -135,12 +139,10 @@ Proteção contra abusos e falhas técnicas para operação contínua.
 
 ### Já confirmado no repositório
 
-- O shell SPA em `client/index.html` já publica `Content-Security-Policy`, `referrer` policy e `Permissions-Policy` via meta tags, mas isso ainda não substitui um middleware backend centralizado para todas as respostas de API.
-- O `client/index.html` já tem `<title>`; o que continua pendente para SEO é `meta description`, OpenGraph, `robots.txt` e `sitemap.xml`.
+- As proteções de cabeçalho já existem no backend, incluindo `CSP`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` e `HSTS` condicional.
 - O endpoint `GET /api/status/details` existe e é restrito a admin, assim como `GET /api/cache-metrics`.
 - O suporte a isolamento por tenant/RLS é real: há injeção de `app.current_tenant` e o script `scripts/setup_postgres_rls.sql` aplica `ENABLE ROW LEVEL SECURITY`, `FORCE ROW LEVEL SECURITY` e policies.
 - O frontend já usa `TabPanel` com lazy loading/keep alive e já exibe `ResultSkeleton` durante carregamento.
-- O clique do meio na `TabsBar` já fecha a aba, então isso não precisa voltar para backlog.
 - O callback de `onConsumeNewSearch` já está alinhado entre `ResultDisplay.tsx` e `App.tsx`; o bug descrito no doc de refatoração não se confirma no código atual.
 - O fluxo de sanitização de HTML continua passando por `sanitizeRichHtml`, então a hipótese de bypass direto de sanitização não bate com a implementação atual.
 
@@ -158,32 +160,3 @@ Proteção contra abusos e falhas técnicas para operação contínua.
 
 - Trate como concluído apenas o que estiver na seção acima de validação.
 - O restante do roadmap continua sendo dívida técnica real ou trabalho de lançamento ainda pendente.
-
----
-
-## 🛠️ 9. Guia de Operação e Diagnóstico (Onde Investigar?)
-
-Para manutenção rápida e resolução de incidentes em produção, siga este mapa:
-
-| Serviço | Utilidade no Projeto | Onde olhar em caso de erro (Logs) |
-| :--- | :--- | :--- |
-| **Render** | Hospeda o Backend (API FastAPI) | Painel do Render > Web Service > Aba **Logs** |
-| **Neon** | Banco de Dados Principal (PostgreSQL) | Console do Neon > Aba **Operations/Logs** |
-| **Upstash** | Cache Global e Rate Limit (Redis) | Console do Upstash > Aba **Logs/Metrics** |
-| **Clerk** | Autenticação e Gestão de Usuários | Console do Browser (F12) ou Dashboard do Clerk > **Logs** |
-
----
-
-## 📉 10. Estratégias para Consumo Mínimo (Neon/Upstash)
-
-O Neon cobra por "Compute Hours" (CU-hrs). Para manter o custo próximo de zero:
-
-- [ ] **10.1 Ativação do Upstash (Crítico)**:
-  - Garantir que `CACHE__ENABLE_REDIS=true` e `CACHE__REDIS_URL` estejam configurados.
-  - Com Redis, buscas repetidas **não acordam o Neon**, economizando 100% de CU nesses casos.
-- [ ] **10.2 Otimização de Busca (Short-circuit)**:
-  - Modificar o `NeshService` para interromper buscas secundárias (Tier 3) se o Tier 1 encontrar resultados exatos de alta qualidade.
-- [ ] **10.3 Expansão do Cache L1 (In-memory)**:
-  - Aumentar `_FTS_CACHE_SIZE` para 256 e `CHAPTER_CACHE_SIZE` para 128 diretamente no código.
-- [ ] **10.4 Diagnóstico de "Wake-ups"**:
-  - Se o Neon estiver acordando demais sem motivo, verificar o intervalo de polling do endpoint `/api/status` no Frontend ou integrações externas.
