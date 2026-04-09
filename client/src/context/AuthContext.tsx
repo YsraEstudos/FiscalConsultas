@@ -8,6 +8,7 @@ import { createContext, useContext, useEffect, ReactNode } from 'react';
 import { useUser, useAuth as useClerkAuth, useOrganization } from '@clerk/react';
 import { registerClerkTokenGetter, unregisterClerkTokenGetter } from '../services/api';
 import { hasPrivilegedRole } from '../utils/authz';
+import { activateConsoleForAdmin } from '../utils/consoleSilencer';
 
 interface AuthContextType {
     // User Info
@@ -125,16 +126,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
     }, [getToken]);
 
-    // Log auth state for debugging (dev only)
+    // Activate/keep console silence based on the resolved user email.
     useEffect(() => {
-        if (import.meta.env.DEV && !isLoading) {
-            console.log('[AuthContext] State:', {
-                isSignedIn,
-                userId: user?.id,
-                hasOrganizationAccess: !!isSignedIn,
-            });
+        if (!isLoading) {
+            activateConsoleForAdmin(user?.primaryEmailAddress?.emailAddress);
         }
-    }, [isLoading, isSignedIn, user?.id]);
+    }, [isLoading, user?.primaryEmailAddress?.emailAddress]);
 
     if (isSignedIn) {
         return <SignedInAuthProvider baseState={baseState}>{children}</SignedInAuthProvider>;

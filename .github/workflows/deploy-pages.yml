@@ -28,6 +28,7 @@ jobs:
       VITE_API_URL: https://fiscal-api-5eok.onrender.com
       VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
       VITE_CLERK_TOKEN_TEMPLATE: backend_api
+      VITE_ADMIN_EMAIL: israelsena2@gmail.com
     steps:
       - name: Checkout
         uses: actions/checkout@v4
