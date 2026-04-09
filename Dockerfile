@@ -14,10 +14,13 @@ COPY pyproject.toml uv.lock ./
 # Instalar dependências de produção (sem o grupo dev)
 RUN uv sync --frozen --no-dev
 
-# Copiar o restante do código
-COPY backend migrations scripts ./
+# Copiar o restante do código preservando a árvore esperada pelo runtime.
+COPY backend ./backend
+COPY migrations ./migrations
+COPY scripts ./scripts
 COPY Nesh.py alembic.ini README.md ./
-RUN mkdir -p database \
+RUN test -f /app/backend/server/app.py \
+    && mkdir -p database \
     && chown -R app:app /app
 
 # Configurações de ambiente para o container
