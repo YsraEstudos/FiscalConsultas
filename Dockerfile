@@ -22,6 +22,7 @@ RUN mkdir -p database \
 
 # Configurações de ambiente para o container
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 ENV VIRTUAL_ENV=/app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 ENV SERVER__ENV=production
