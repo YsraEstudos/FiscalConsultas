@@ -54,8 +54,8 @@ const originals: Record<ConsoleMethod, (...args: unknown[]) => void> = {} as Rec
 >;
 
 for (const method of METHODS) {
-    const fn = console[method as keyof Console];
-    originals[method] = (typeof fn === 'function' ? fn.bind(console) : () => { }) as (
+    const fn = console[method as keyof Console] as unknown;
+    originals[method] = (typeof fn === 'function' ? (fn as Function).bind(console) : () => { }) as (
         ...args: unknown[]
     ) => void;
 }

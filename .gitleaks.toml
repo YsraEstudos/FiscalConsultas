@@ -3,6 +3,13 @@ title = "Fiscal gitleaks configuration"
 [extend]
 useDefault = true
 
+[allowlist]
+description = "Allow GitHub Actions vars"
+regexTarget = "match"
+regexes = [
+    '''\$\{\{\s*vars\.VITE_CLERK_PUBLISHABLE_KEY\s*\}\}'''
+]
+
 [[allowlists]]
 description = "Comment test fixtures that use anchor_key DTO fields"
 paths = [
