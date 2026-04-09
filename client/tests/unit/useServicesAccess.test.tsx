@@ -104,6 +104,51 @@ describe('useServicesAccess', () => {
     }
   });
 
+  it('falls back to unknown instead of blocking on a stale offline snapshot', async () => {
+    let currentTime = 1_000_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => currentTime);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    refs.getSystemStatusMock.mockResolvedValue({
+      status: 'error',
+      database: { status: 'online' },
+      tipi: { status: 'online' },
+      nbs: { status: 'error' },
+      nebs: { status: 'online' },
+      catalogs: {
+        nesh: { status: 'online' },
+        tipi: { status: 'online' },
+        nbs: { status: 'error' },
+        nebs: { status: 'online' },
+      },
+    });
+
+    try {
+      const { result } = renderHook(() => useServicesAccess());
+
+      await waitFor(() => {
+        expect(result.current.servicesUnavailableReason).toBe('Catálogo NBS indisponível no momento.');
+      });
+
+      currentTime += 31_000;
+      refs.getSystemStatusMock.mockRejectedValueOnce(new Error('status down'));
+
+      await act(async () => {
+        await expect(result.current.ensureServicesAccess()).resolves.toBe(true);
+      });
+
+      expect(refs.getSystemStatusMock).toHaveBeenCalledTimes(2);
+      expect(refs.toastErrorMock).not.toHaveBeenCalled();
+      await waitFor(() => {
+        expect(result.current.servicesAvailability).toBe('unknown');
+        expect(result.current.servicesUnavailableReason).toBeNull();
+      });
+    } finally {
+      warnSpy.mockRestore();
+      nowSpy.mockRestore();
+    }
+  });
+
   it('fails fast for service searches when the offline snapshot is still fresh', async () => {
     refs.getSystemStatusMock.mockResolvedValue({
       nbs: { status: 'error' },

@@ -19,6 +19,9 @@ class _FakeRowsResult:
     def __init__(self, rows):
         self._rows = rows
 
+    def first(self):
+        return self._rows[0] if self._rows else None
+
     def __iter__(self):
         return iter(self._rows)
 
@@ -74,3 +77,90 @@ async def test_catalog_counts_and_metadata_public_scope_filter_to_null_tenant():
     assert counts_params_1 == {}
     assert counts_params_2 == {}
     assert metadata_params == {}
+
+
+@pytest.mark.asyncio
+async def test_get_item_details_public_scope_filters_to_null_tenant():
+    session = _FakeSession(
+        [
+            _FakeRowsResult(
+                [
+                    SimpleNamespace(
+                        code="1.01",
+                        code_clean="101",
+                        description="Serviços de construção",
+                        parent_code=None,
+                        level=0,
+                        has_nebs=True,
+                    )
+                ]
+            ),
+            _FakeRowsResult([]),
+            _FakeRowsResult([]),
+            _FakeRowsResult([]),
+        ]
+    )
+    repo = NbsRepository(session)
+
+    details = await repo.get_item_details("1.01")
+
+    assert details["success"] is True
+    assert details["item"]["code"] == "1.01"
+    assert details["nebs"] is None
+
+    assert len(session.calls) == 4
+    for stmt, params in session.calls:
+        assert "tenant_id IS NULL" in str(stmt)
+        assert "tenant_id" not in params
+
+
+@pytest.mark.asyncio
+async def test_get_nebs_details_public_scope_filters_to_null_tenant():
+    session = _FakeSession(
+        [
+            _FakeRowsResult(
+                [
+                    SimpleNamespace(
+                        code="1.0102.61",
+                        code_clean="1010261",
+                        description="Serviços de construção",
+                        parent_code=None,
+                        level=0,
+                        has_nebs=True,
+                    )
+                ]
+            ),
+            _FakeRowsResult(
+                [
+                    SimpleNamespace(
+                        code="1.0102.61",
+                        code_clean="1010261",
+                        title="Serviços de construção de usinas",
+                        title_normalized="servicos de construcao de usinas",
+                        body_text="Conteúdo público",
+                        body_markdown="Conteúdo público",
+                        body_normalized="conteudo publico",
+                        section_title="Seção 1",
+                        page_start=1,
+                        page_end=2,
+                        parser_status="trusted",
+                        parse_warnings=None,
+                        source_hash="hash",
+                        updated_at="2026-04-09",
+                    )
+                ]
+            ),
+        ]
+    )
+    repo = NbsRepository(session)
+
+    details = await repo.get_nebs_details("1.0102.61")
+
+    assert details["success"] is True
+    assert details["item"]["code"] == "1.0102.61"
+    assert details["entry"]["code"] == "1.0102.61"
+
+    assert len(session.calls) == 2
+    for stmt, params in session.calls:
+        assert "tenant_id IS NULL" in str(stmt)
+        assert "tenant_id" not in params

@@ -22,10 +22,11 @@ from typing import Any, Coroutine, Dict, Optional, Pattern
 from urllib.parse import urlparse
 
 import jwt
-from backend.config.settings import settings
-from backend.infrastructure.db_engine import tenant_context
 from jwt import PyJWKClient
 from starlette.responses import JSONResponse
+
+from backend.config.settings import settings
+from backend.infrastructure.db_engine import tenant_context
 
 logger = logging.getLogger("middleware.tenant")
 
@@ -320,7 +321,9 @@ def _log_jwt_failure(
             "issuer_hint_from_clerk_domain": _derive_issuer_hint_from_domain(),
             "audience": _resolve_expected_audience(),
             "azp": sorted(_resolve_expected_azp()),
-            "azp_regex": None if expected_azp_regex is None else expected_azp_regex.pattern,
+            "azp_regex": None
+            if expected_azp_regex is None
+            else expected_azp_regex.pattern,
             "clock_skew_seconds_configured": _configured_clock_skew_seconds(),
             "clock_skew_seconds_effective": _effective_clock_skew_seconds(),
         },
@@ -1026,7 +1029,9 @@ class TenantMiddleware:
         await response(scope, receive, send_wrapper)
 
     @staticmethod
-    def _wrap_send_with_request_id(send: Any, request_id: str, scope: dict[str, Any], org_id: Optional[str]) -> Any:
+    def _wrap_send_with_request_id(
+        send: Any, request_id: str, scope: dict[str, Any], org_id: Optional[str]
+    ) -> Any:
         async def send_wrapper(message: dict[str, Any]) -> None:
             if message.get("type") == "http.response.start":
                 headers = list(message.get("headers", []))
