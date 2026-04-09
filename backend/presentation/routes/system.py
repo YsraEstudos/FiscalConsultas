@@ -491,7 +491,7 @@ async def get_status(request: Request):
 
 @router.head("/status", include_in_schema=False)
 async def head_status(request: Request):
-    await get_status(request)
+    await _collect_status_payloads(request)
     return Response(status_code=200)
 
 
