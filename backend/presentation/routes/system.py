@@ -10,7 +10,7 @@ from backend.server.middleware import decode_clerk_jwt
 from backend.server.rate_limit import status_rate_limiter
 from backend.services import NeshService
 from backend.utils.auth import extract_bearer_token, extract_client_ip, is_admin_payload
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 router = APIRouter()
 _STATUS_CACHE: dict[str, object | None] = {"value": None, "expires_at": 0.0}
@@ -487,6 +487,12 @@ async def get_status(request: Request):
         normalized_nebs,
         overall_status,
     )
+
+
+@router.head("/status", include_in_schema=False)
+async def head_status(request: Request):
+    await get_status(request)
+    return Response(status_code=200)
 
 
 @router.get("/status/details", responses=STATUS_DETAILS_RESPONSES)

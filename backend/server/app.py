@@ -420,6 +420,9 @@ app.add_middleware(
         "Asaas-Access-Token",
         "X-Asaas-Access-Token",
     ],
+    expose_headers=[
+        "X-Request-Id",
+    ],
 )
 
 
@@ -474,3 +477,7 @@ else:
                 "Run 'npm run build' in client/ folder."
             )
         }
+
+    @app.head("/", include_in_schema=False)
+    async def read_root_head():
+        return Response(status_code=200)

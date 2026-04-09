@@ -149,3 +149,22 @@ def test_frontend_fallback(client):
     # Should return either HTML (if build exists) or the fallback JSON message
     # We don't strictly assert content type here as it depends on build state,
     # but 200 OK means it didn't crash.
+
+
+def test_root_and_status_support_head_requests(client):
+    root_response = client.head("/")
+    status_response = client.head("/api/status")
+
+    assert root_response.status_code == 200
+    assert status_response.status_code == 200
+
+
+def test_cors_exposes_request_id_header(client):
+    response = client.get(
+        "/api/status",
+        headers={"Origin": "https://ysraestudos.github.io"},
+    )
+
+    assert response.status_code == 200
+    exposed_headers = response.headers.get("Access-Control-Expose-Headers", "")
+    assert "X-Request-Id" in exposed_headers
