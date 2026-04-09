@@ -6,6 +6,7 @@ Sistema híbrido de consulta fiscal (NESH + TIPI) com backend FastAPI e frontend
 
 - Busca por código e texto nas Notas Explicativas do Sistema Harmonizado (NESH).
 - Busca na TIPI com visualização por família (`family`) ou capítulo (`chapter`).
+- Busca pública em NBS e NEBS para consulta e detalhe, sem exigir login.
 - Frontend com navegação por abas, smart-links e recursos de produtividade (glossário, notas, chat IA).
 
 ## Requisitos
@@ -164,6 +165,7 @@ Checklist rápido Clerk (dev local):
 - `VITE_CLERK_TOKEN_TEMPLATE` deve ter o mesmo nome do template configurado no Clerk.
 - `AUTH__CLERK_AUTHORIZED_PARTIES` deve incluir `http://localhost:5173` e `http://127.0.0.1:5173`.
 - `VITE_RESTRICTED_UI_EMAILS` é opcional e controla apenas superfícies de UI restritas no frontend (chat IA, comentários e aba de contribuições). Não substitui autorização backend.
+- NBS/NEBS são públicos para busca e detalhe; login continua sendo necessário só para áreas autenticadas como comentários, chat IA e gestão/admin.
 
 ### 3) Preparar dados locais (SQLite)
 

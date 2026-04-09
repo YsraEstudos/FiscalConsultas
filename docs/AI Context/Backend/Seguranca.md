@@ -12,11 +12,16 @@ Arquivo: `backend/server/middleware.py`.
 - ignora rotas publicas definidas em whitelist:
   - `/api/auth/me`
   - `/api/status`
+  - `/api/services/nbs/search`
+  - `/api/services/nbs/{code}`
+  - `/api/services/nebs/search`
+  - `/api/services/nebs/{code}`
   - `/api/webhooks`
   - prefixo `/api/webhooks/`
 - extrai JWT do header `Authorization: Bearer ...`.
 - extrai `org_id` do payload Clerk para contexto multi-tenant.
 - em desenvolvimento (`debug_mode=true`), pode usar fallback `_tenant` query param ou `org_default`.
+- as rotas públicas de NBS/NEBS continuam sujeitas a rate limit e validação de query/código, mas não exigem JWT nem retornam `401` por token ausente/inválido.
 
 ### 1.2 Validacao JWT Clerk
 

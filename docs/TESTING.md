@@ -21,13 +21,13 @@
 1. Sanitização de HTML/backend-rendered content no frontend (`contentSecurity.ts`, `MarkdownPane`, `ResultDisplay`).
 2. Gating de moderação/admin por role do Clerk (`AuthContext`, `authz.ts`, `ModalManager`).
 3. Gating de UI restrita por `VITE_RESTRICTED_UI_EMAILS` sem vazar controles para usuários não autorizados.
-4. Auth enforcement on `/api/ai/chat` (401 vs 200 contract).
-5. AI chat rate-limit behavior (`429` + `Retry-After` header).
-6. Webhook contract for `/api/webhooks/asaas` (token validation, payload validation, event routing).
-7. Search route contract aliasing (`results` vs `resultados`) for legacy frontend compatibility.
-8. TIPI route compatibility fields (`total_capitulos`, normalized text defaults).
-9. Cross-chapter note cache/dedup behavior on frontend.
-10. Existing NCM/TIPI unit+integration regression tests.
+4. Public service route contract for `/api/services/nbs/*` and `/api/services/nebs/*` (anonymous `200`, `429` still enforced, no login modal).
+5. Auth enforcement on `/api/ai/chat` (401 vs 200 contract).
+6. AI chat rate-limit behavior (`429` + `Retry-After` header).
+7. Webhook contract for `/api/webhooks/asaas` (token validation, payload validation, event routing).
+8. Search route contract aliasing (`results` vs `resultados`) for legacy frontend compatibility.
+9. TIPI route compatibility fields (`total_capitulos`, normalized text defaults).
+10. Cross-chapter note cache/dedup behavior on frontend.
 
 ## Out of Scope (Initial)
 - Full E2E browser automation (Playwright): deferred to avoid extra CI flakiness now.
