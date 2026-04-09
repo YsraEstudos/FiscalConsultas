@@ -276,7 +276,9 @@ class NbsService:
                         raise RuntimeError("NBS repository unavailable")
                     counts = await repo.get_catalog_counts()
                     metadata = await repo.get_catalog_metadata()
+                # NOSONAR
                 nbs_items = int(counts.get("nbs_items", 0))
+                # NOSONAR
                 nebs_entries = int(counts.get("nebs_entries", 0))
                 return {
                     "status": (

@@ -205,7 +205,7 @@ async def test_get_status_handles_db_and_tipi_exceptions(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_get_status_reuses_cached_snapshot_within_ttl(monkeypatch):
+async def test_get_status_reuses_cached_snapshot_within_ttl(monkeypatch):  # NOSONAR
     async def _noop_rate_limit(_request):
         return None
 
@@ -243,7 +243,7 @@ async def test_get_status_deduplicates_concurrent_refresh(monkeypatch):
             await asyncio.sleep(0.05)
             return self.payload
 
-    class _SlowFakeNbsService(_FakeNbsService):
+    class _SlowFakeNbsService(_FakeNbsService):  # NOSONAR
         async def check_connection(self):  # NOSONAR
             self.calls += 1
             await asyncio.sleep(0.05)

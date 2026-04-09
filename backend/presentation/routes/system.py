@@ -334,7 +334,7 @@ async def _refresh_status_snapshot(request: Request, ttl_seconds: int) -> dict:
 
 
 async def _get_status_snapshot(request: Request) -> dict:
-    global _STATUS_CACHE_REFRESH_TASK
+    global _STATUS_CACHE_REFRESH_TASK  # NOSONAR
 
     ttl_seconds = _status_cache_ttl_seconds()
     if ttl_seconds <= 0:

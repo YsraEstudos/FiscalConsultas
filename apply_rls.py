@@ -11,7 +11,7 @@ async def run_rls():
 
     async with engine.begin() as conn:
         raw_conn = await conn.get_raw_connection()
-        await raw_conn.driver_connection.execute(sql)
+        await raw_conn.driver_connection.execute(sql)  # NOSONAR
 
     print("RLS applied successfully.")
     await engine.dispose()

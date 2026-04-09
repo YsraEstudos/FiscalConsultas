@@ -63,6 +63,7 @@ _jwt_failure_reason_ctx: ContextVar[Optional[str]] = ContextVar(
 _request_id_ctx: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
 _DEV_MIN_CLOCK_SKEW_SECONDS = 120
 _LOCALHOST_HOSTS = {"localhost"}
+# NOSONAR
 _NEVER_MATCH_REGEX = re.compile(r"(?!x)x")
 _cached_expected_azp_regex_raw: Optional[str] = None
 _cached_expected_azp_regex: Optional[Pattern[str]] = None

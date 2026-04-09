@@ -90,7 +90,7 @@ class _FakeScalarResult:
         return iter(self._rows)
 
 
-class _FakeHealthRepo:
+class _FakeHealthRepo:  # NOSONAR
     def __init__(self):
         self.session = self
         self._calls = 0

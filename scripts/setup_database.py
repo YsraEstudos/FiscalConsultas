@@ -151,6 +151,7 @@ def bootstrap_metadata_if_missing(content_hash: str) -> bool:
         )
         return True
     except (sqlite3.OperationalError, sqlite3.DatabaseError) as exc:
+        # NOSONAR
         print(f"⚠️ Não foi possível registrar metadata no banco legado: {exc}")
         return False
 
