@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useServicesAccess } from '../../src/hooks/useServicesAccess';
+import type { SystemStatusResponse } from '../../src/types/api.types';
 
 const refs = vi.hoisted(() => ({
   getSystemStatusMock: vi.fn(),
@@ -18,6 +19,32 @@ vi.mock('react-hot-toast', () => ({
   },
 }));
 
+type ServiceStatus = 'online' | 'error';
+
+function makeSystemStatusResponse({
+  status = 'online',
+  nbs = 'online',
+  nebs = 'online',
+}: {
+  status?: 'online' | 'error';
+  nbs?: ServiceStatus;
+  nebs?: ServiceStatus;
+} = {}): SystemStatusResponse {
+  return {
+    status,
+    database: { status: 'online' },
+    tipi: { status: 'online' },
+    nbs: { status: nbs },
+    nebs: { status: nebs },
+    catalogs: {
+      nesh: { status: 'online' },
+      tipi: { status: 'online' },
+      nbs: { status: nbs },
+      nebs: { status: nebs },
+    },
+  };
+}
+
 describe('useServicesAccess', () => {
   beforeEach(() => {
     refs.getSystemStatusMock.mockReset();
@@ -25,19 +52,7 @@ describe('useServicesAccess', () => {
   });
 
   it('keeps services available when status is healthy for anonymous access', async () => {
-    refs.getSystemStatusMock.mockResolvedValue({
-      status: 'online',
-      database: { status: 'online' },
-      tipi: { status: 'online' },
-      nbs: { status: 'online' },
-      nebs: { status: 'online' },
-      catalogs: {
-        nesh: { status: 'online' },
-        tipi: { status: 'online' },
-        nbs: { status: 'online' },
-        nebs: { status: 'online' },
-      },
-    });
+    refs.getSystemStatusMock.mockResolvedValue(makeSystemStatusResponse());
 
     const { result } = renderHook(() => useServicesAccess());
 
@@ -53,19 +68,9 @@ describe('useServicesAccess', () => {
   });
 
   it('blocks access and exposes the offline reason when NBS/NEBS are offline', async () => {
-    refs.getSystemStatusMock.mockResolvedValue({
-      status: 'error',
-      database: { status: 'online' },
-      tipi: { status: 'online' },
-      nbs: { status: 'error' },
-      nebs: { status: 'online' },
-      catalogs: {
-        nesh: { status: 'online' },
-        tipi: { status: 'online' },
-        nbs: { status: 'error' },
-        nebs: { status: 'online' },
-      },
-    });
+    refs.getSystemStatusMock.mockResolvedValue(
+      makeSystemStatusResponse({ status: 'error', nbs: 'error' }),
+    );
 
     const { result } = renderHook(() => useServicesAccess());
 
@@ -109,19 +114,9 @@ describe('useServicesAccess', () => {
     const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => currentTime);
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    refs.getSystemStatusMock.mockResolvedValue({
-      status: 'error',
-      database: { status: 'online' },
-      tipi: { status: 'online' },
-      nbs: { status: 'error' },
-      nebs: { status: 'online' },
-      catalogs: {
-        nesh: { status: 'online' },
-        tipi: { status: 'online' },
-        nbs: { status: 'error' },
-        nebs: { status: 'online' },
-      },
-    });
+    refs.getSystemStatusMock.mockResolvedValue(
+      makeSystemStatusResponse({ status: 'error', nbs: 'error' }),
+    );
 
     try {
       const { result } = renderHook(() => useServicesAccess());
@@ -150,10 +145,9 @@ describe('useServicesAccess', () => {
   });
 
   it('fails fast for service searches when the offline snapshot is still fresh', async () => {
-    refs.getSystemStatusMock.mockResolvedValue({
-      nbs: { status: 'error' },
-      nebs: { status: 'error' },
-    });
+    refs.getSystemStatusMock.mockResolvedValue(
+      makeSystemStatusResponse({ status: 'error', nbs: 'error', nebs: 'error' }),
+    );
 
     const { result } = renderHook(() => useServicesAccess());
 

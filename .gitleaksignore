@@ -1,3 +1,3 @@
-# Ignore commits that introduced API keys (subsequently purged by BFG, but still cached in GitHub PR action)
-45ea4df85ebb10785150ce08251ef8ea4f515a02
-c77b3d307a560da67c6b389f67c263b026754b4f
+# False positives for the public Clerk publishable key repository variable in git history.
+a87cec5730aa7f466af9e6794dcc5f11af21d2f4:.github/workflows/deploy-pages.yml:generic-api-key:26
+2ac7a567ca223b5e849835b132789860a47e4fcd:.github/workflows/github-pages-deploy.yml:generic-api-key:26
