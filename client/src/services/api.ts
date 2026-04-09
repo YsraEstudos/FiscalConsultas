@@ -71,7 +71,7 @@ type ClerkTokenGetterOptions = {
 type ClerkTokenGetter = (options?: ClerkTokenGetterOptions) => Promise<string | null>;
 
 let clerkGetToken: ClerkTokenGetter | null = null;
-const PUBLIC_ROUTES = ['/status', '/glossary'];
+const PUBLIC_ROUTES = ['/status', '/glossary', '/services/'];
 const AUTH_DEBUG_ENABLED = String(import.meta.env.VITE_AUTH_DEBUG || '').toLowerCase() === 'true';
 const CLERK_TOKEN_TEMPLATE = (import.meta.env.VITE_CLERK_TOKEN_TEMPLATE || '').trim() || undefined;
 const AUTH_REFRESH_COOLDOWN_MS = 2500;

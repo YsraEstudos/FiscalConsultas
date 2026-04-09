@@ -99,7 +99,7 @@ class NbsRepository:
     def _tenant_predicate_sql(self, alias: str) -> str:
         if self.tenant_id:
             return f" AND ({alias}.tenant_id = :tenant_id OR {alias}.tenant_id IS NULL)"
-        return ""
+        return f" AND {alias}.tenant_id IS NULL"
 
     def _tenant_params(self) -> dict[str, Any]:
         if self.tenant_id:

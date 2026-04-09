@@ -100,13 +100,7 @@ def _cleanup_overrides():
 
 
 @pytest.fixture(autouse=True)
-def _mock_route_auth(monkeypatch):
-    async def _fake_decode(_token: str):
-        return {"sub": "user_1", "org_id": "org_1"}
-
-    monkeypatch.setattr(services_routes, "decode_clerk_jwt", _fake_decode)
-    monkeypatch.setattr(services_routes, "get_last_jwt_failure_reason", lambda: None)
-
+def _mock_rate_limits(monkeypatch):
     async def _allow_consume(*, key: str, limit: int):
         return True, 0
 
@@ -118,23 +112,36 @@ def _mock_route_auth(monkeypatch):
     )
 
 
-def test_services_routes_require_authorization_header(client):
+def test_services_routes_allow_anonymous_access(client):
     app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
 
-    endpoints = (
-        "/api/services/nbs/search?q=construcao",
-        "/api/services/nbs/1.01",
-        "/api/services/nebs/search?q=energia",
-        "/api/services/nebs/1.0102.61",
-    )
+    nbs_search = client.get("/api/services/nbs/search?q=construcao")
+    nbs_detail = client.get("/api/services/nbs/1.01")
+    nebs_search = client.get("/api/services/nebs/search?q=energia")
+    nebs_detail = client.get("/api/services/nebs/1.0102.61")
 
-    for endpoint in endpoints:
-        response = client.get(endpoint)
-        assert response.status_code == 401
-        assert response.json()["detail"] == "Token ausente"
+    assert nbs_search.status_code == 200
+    assert nbs_detail.status_code == 200
+    assert nebs_search.status_code == 200
+    assert nebs_detail.status_code == 200
 
 
-def test_services_routes_rate_limit_anonymous_requests_before_auth(client, monkeypatch):
+def test_services_routes_ignore_invalid_authorization_headers(client):
+    app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
+    headers = {"Authorization": "Bearer broken-token"}
+
+    nbs_search = client.get("/api/services/nbs/search?q=construcao", headers=headers)
+    nbs_detail = client.get("/api/services/nbs/1.01", headers=headers)
+    nebs_search = client.get("/api/services/nebs/search?q=energia", headers=headers)
+    nebs_detail = client.get("/api/services/nebs/1.0102.61", headers=headers)
+
+    assert nbs_search.status_code == 200
+    assert nbs_detail.status_code == 200
+    assert nebs_search.status_code == 200
+    assert nebs_detail.status_code == 200
+
+
+def test_services_routes_rate_limit_anonymous_requests(client, monkeypatch):
     app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
     consumed_keys: list[str] = []
 
@@ -155,48 +162,13 @@ def test_services_routes_rate_limit_anonymous_requests_before_auth(client, monke
     assert consumed_keys == ["services:ip:testclient"]
 
 
-@pytest.mark.parametrize(
-    "failure_reason",
-    [
-        "token expirado",
-        "assinatura inválida",
-    ],
-)
-def test_services_routes_reject_invalid_or_expired_tokens(
-    client, monkeypatch, failure_reason
-):
-    app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
-    headers = {"Authorization": "Bearer broken-token"}
-
-    async def _reject_decode(_token: str):
-        return None
-
-    monkeypatch.setattr(services_routes, "decode_clerk_jwt", _reject_decode)
-    monkeypatch.setattr(
-        services_routes, "get_last_jwt_failure_reason", lambda: failure_reason
-    )
-
-    endpoints = (
-        "/api/services/nbs/search?q=construcao",
-        "/api/services/nbs/1.01",
-        "/api/services/nebs/search?q=energia",
-        "/api/services/nebs/1.0102.61",
-    )
-
-    for endpoint in endpoints:
-        response = client.get(endpoint, headers=headers)
-        assert response.status_code == 401
-        assert response.json()["detail"] == "Token inválido ou expirado"
-
-
 def test_services_routes_expose_nbs_and_nebs_contracts(client):
     app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
-    headers = {"Authorization": "Bearer test-token"}
 
-    nbs_search = client.get("/api/services/nbs/search?q=construcao", headers=headers)
-    nbs_detail = client.get("/api/services/nbs/1.01", headers=headers)
-    nebs_search = client.get("/api/services/nebs/search?q=energia", headers=headers)
-    nebs_detail = client.get("/api/services/nebs/1.0102.61", headers=headers)
+    nbs_search = client.get("/api/services/nbs/search?q=construcao")
+    nbs_detail = client.get("/api/services/nbs/1.01")
+    nebs_search = client.get("/api/services/nebs/search?q=energia")
+    nebs_detail = client.get("/api/services/nebs/1.0102.61")
 
     assert nbs_search.status_code == 200
     assert nbs_detail.status_code == 200
@@ -219,7 +191,7 @@ def test_services_routes_expose_nbs_and_nebs_contracts(client):
     assert "updated_at" not in nebs_detail.json()["entry"]
 
 
-def test_services_routes_document_auth_and_rate_limit_responses():
+def test_services_routes_document_public_rate_limit_responses():
     openapi = app.openapi()
     expected_paths = {
         "/api/services/nbs/search": "Limite de requisições para busca de serviços excedido.",
@@ -230,9 +202,7 @@ def test_services_routes_document_auth_and_rate_limit_responses():
 
     for path, expected_429 in expected_paths.items():
         responses = openapi["paths"][path]["get"]["responses"]
-        assert responses["401"]["description"] == (
-            "Token Bearer ausente, inválido ou expirado."
-        )
+        assert "401" not in responses
         assert responses["429"]["description"] == expected_429
 
 
@@ -247,7 +217,6 @@ def test_services_detail_rejects_overly_long_code(
     client, endpoint, service_method, monkeypatch
 ):
     app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
-    headers = {"Authorization": "Bearer test-token"}
     oversized_code = "1" * (services_routes.MAX_SERVICE_CODE_LENGTH + 1)
     called = {"value": False}
 
@@ -263,7 +232,6 @@ def test_services_detail_rejects_overly_long_code(
 
     response = client.get(
         endpoint.format(code=oversized_code),
-        headers=headers,
     )
 
     assert response.status_code == 400
@@ -273,7 +241,6 @@ def test_services_detail_rejects_overly_long_code(
 
 def test_services_search_returns_retry_after_when_rate_limited(client, monkeypatch):
     app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
-    headers = {"Authorization": "Bearer test-token"}
 
     async def _deny_consume(*, key: str, limit: int):
         return False, 23
@@ -282,7 +249,7 @@ def test_services_search_returns_retry_after_when_rate_limited(client, monkeypat
         services_routes.services_search_rate_limiter, "consume", _deny_consume
     )
 
-    response = client.get("/api/services/nebs/search?q=energia", headers=headers)
+    response = client.get("/api/services/nebs/search?q=energia")
 
     assert response.status_code == 429
     assert response.headers["Retry-After"] == "23"
@@ -291,7 +258,6 @@ def test_services_search_returns_retry_after_when_rate_limited(client, monkeypat
 
 def test_services_detail_returns_retry_after_when_rate_limited(client, monkeypatch):
     app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
-    headers = {"Authorization": "Bearer test-token"}
 
     async def _deny_detail(*, key: str, limit: int):
         return False, 11
@@ -300,8 +266,8 @@ def test_services_detail_returns_retry_after_when_rate_limited(client, monkeypat
         services_routes.services_detail_rate_limiter, "consume", _deny_detail
     )
 
-    nbs_response = client.get("/api/services/nbs/1.01", headers=headers)
-    nebs_response = client.get("/api/services/nebs/1.0102.61", headers=headers)
+    nbs_response = client.get("/api/services/nbs/1.01")
+    nebs_response = client.get("/api/services/nebs/1.0102.61")
 
     assert nbs_response.status_code == 429
     assert nbs_response.headers["Retry-After"] == "11"

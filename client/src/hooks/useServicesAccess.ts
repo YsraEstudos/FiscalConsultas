@@ -1,8 +1,6 @@
-import { useClerk } from '@clerk/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 
-import { useAuth } from '../context/AuthContext';
 import { getSystemStatus } from '../services/api';
 import {
     buildServiceCatalogSnapshot,
@@ -17,8 +15,6 @@ function isSnapshotFresh(snapshot: ServiceCatalogSnapshot): boolean {
 }
 
 export function useServicesAccess() {
-    const { isLoading, isSignedIn } = useAuth();
-    const clerk = useClerk();
     const [snapshot, setSnapshot] = useState<ServiceCatalogSnapshot>(
         UNKNOWN_SERVICE_CATALOG_SNAPSHOT,
     );
@@ -66,32 +62,18 @@ export function useServicesAccess() {
     }, [commitSnapshot]);
 
     useEffect(() => {
-        if (isLoading) return;
-        if (!isSignedIn) {
-            commitSnapshot(UNKNOWN_SERVICE_CATALOG_SNAPSHOT);
-            return;
-        }
         void refreshServicesStatus(false);
-    }, [commitSnapshot, isLoading, isSignedIn, refreshServicesStatus]);
+    }, [refreshServicesStatus]);
 
     const ensureServicesAccess = useCallback(async () => {
-        if (isLoading) {
-            toast.error('Aguarde a autenticação carregar e tente novamente.');
-            return false;
-        }
-
-        if (!isSignedIn) {
-            toast.error('Faça login para acessar o catálogo de serviços.');
-            try {
-                await clerk.openSignIn?.();
-            } catch (error) {
-                console.warn('[useServicesAccess] Failed to open Clerk sign-in:', error);
-            }
-            return false;
-        }
-
         const current = snapshotRef.current;
-        const needsRevalidation = current.availability === 'unknown' || !isSnapshotFresh(current);
+        if (current.availability === 'offline' && isSnapshotFresh(current)) {
+            toast.error(current.message || 'Catálogo de serviços indisponível no momento.');
+            return false;
+        }
+
+        const needsRevalidation = current.availability === 'unknown'
+            || !isSnapshotFresh(current);
         const resolved = needsRevalidation
             ? await refreshServicesStatus(true)
             : current;
@@ -102,23 +84,9 @@ export function useServicesAccess() {
         }
 
         return true;
-    }, [clerk, isLoading, isSignedIn, refreshServicesStatus]);
+    }, [refreshServicesStatus]);
+
     const ensureServicesSearchAccess = useCallback(async () => {
-        if (isLoading) {
-            toast.error('Aguarde a autenticação carregar e tente novamente.');
-            return false;
-        }
-
-        if (!isSignedIn) {
-            toast.error('Faça login para acessar o catálogo de serviços.');
-            try {
-                await clerk.openSignIn?.();
-            } catch (error) {
-                console.warn('[useServicesAccess] Failed to open Clerk sign-in:', error);
-            }
-            return false;
-        }
-
         const current = snapshotRef.current;
         const isOfflineAndFresh = current.availability === 'offline' && isSnapshotFresh(current);
         if (isOfflineAndFresh) {
@@ -131,14 +99,14 @@ export function useServicesAccess() {
         }
 
         return true;
-    }, [clerk, isLoading, isSignedIn, refreshServicesStatus]);
+    }, [refreshServicesStatus]);
 
     return {
         ensureServicesAccess,
         ensureServicesSearchAccess,
         refreshServicesStatus,
         servicesAvailability: snapshot.availability,
-        servicesUnavailableReason: isSignedIn && snapshot.availability === 'offline' && isSnapshotFresh(snapshot)
+        servicesUnavailableReason: snapshot.availability === 'offline' && isSnapshotFresh(snapshot)
             ? snapshot.message
             : null,
     };
