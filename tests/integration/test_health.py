@@ -2,7 +2,7 @@ import importlib
 import os
 import uuid
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -189,10 +189,11 @@ def test_root_and_status_support_head_requests(fallback_client):
 
 
 def test_status_head_skips_rate_limit(client, monkeypatch):
-    async def _deny_consume(*, key: str, limit: int):
-        return False, 7
-
-    monkeypatch.setattr(system.status_rate_limiter, "consume", _deny_consume)
+    monkeypatch.setattr(
+        system.status_rate_limiter,
+        "consume",
+        AsyncMock(return_value=(False, 7)),
+    )
 
     response = client.head("/api/status")
 
