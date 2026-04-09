@@ -3,12 +3,15 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 const useE2eMockAuth = typeof process !== 'undefined' && process.env.VITE_E2E_MOCK_AUTH === 'true';
+const rawPublicBasePath = typeof process !== 'undefined' ? (process.env.VITE_PUBLIC_BASE_PATH || '/') : '/';
+const normalizedPublicBasePath = rawPublicBasePath.endsWith('/') ? rawPublicBasePath : `${rawPublicBasePath}/`;
 const clerkMockPath = fileURLToPath(
   new URL('./tests/playwright/mocks/clerk.tsx', import.meta.url)
 );
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: normalizedPublicBasePath,
   plugins: [react()],
   resolve: {
     alias: useE2eMockAuth

@@ -99,7 +99,8 @@ export function Header({
         if (isSigningOut) return;
         setIsSigningOut(true);
         try {
-            await signOut({ redirectUrl: '/' });
+            const redirectUrl = new URL(import.meta.env.BASE_URL, window.location.origin).toString();
+            await signOut({ redirectUrl });
         } finally {
             setIsSigningOut(false);
             setIsLogoutConfirmOpen(false);

@@ -68,7 +68,8 @@ _CONTENT_SECURITY_POLICY = "; ".join(
         "font-src 'self' https://fonts.gstatic.com data:",
         (
             "connect-src 'self' https: wss: http://127.0.0.1:8000 "
-            "http://localhost:8000 ws://127.0.0.1:* ws://localhost:*"
+            "http://localhost:8000 ws://127.0.0.1:* ws://localhost:* "
+            "wss://me.kis.v2.scr.kaspersky-labs.com"
         ),
         "worker-src 'self' blob:",
         "frame-src 'self' https:",
@@ -319,6 +320,7 @@ app.add_middleware(TenantMiddleware)
 cors_origins = settings.server.cors_allowed_origins or [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://ysraestudos.github.io",
 ]
 
 # Optional regex allows controlled preview domains (for example Cloudflare Pages)

@@ -89,6 +89,21 @@ function buildContextValue(
     };
 }
 
+export function GuestAuthProvider({ children }: { children: ReactNode }) {
+    const baseState: CommonAuthState = {
+        user: undefined,
+        isSignedIn: false,
+        isLoading: false,
+        getToken: async () => null,
+        signOut: async () => {},
+    };
+    return (
+        <AuthContext.Provider value={buildContextValue(baseState, null, null)}>
+            {children}
+        </AuthContext.Provider>
+    );
+}
+
 function SignedInAuthProvider({
     children,
     baseState,

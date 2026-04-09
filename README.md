@@ -101,19 +101,28 @@ SERVER__CORS_ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","h
 # Opcional: libere previews do mesmo projeto Cloudflare Pages
 SERVER__CORS_ALLOWED_ORIGIN_REGEX=^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$
 
-# Redis opcional (Upstash)
-CACHE__ENABLE_REDIS=true
-CACHE__REDIS_URL=redis://default:<password>@<host>:6379/0
+# Redis opcional (Upstash/Render Key Value)
+# Se este ambiente não tiver Redis provisionado, defina false explicitamente
+CACHE__ENABLE_REDIS=false
+# Preencha apenas quando CACHE__ENABLE_REDIS=true
+# Para Upstash, use a Redis URL TLS (rediss://), nao a REST URL/token
+CACHE__REDIS_URL=rediss://default:<password>@<host>:6379
+
+# IA opcional (Gemini)
+# Sem GOOGLE_API_KEY, o backend sobe normal e o chat IA fica desativado
+GOOGLE_API_KEY=
 ```
 
 - em `client/.env.local`, defina:
 
 ```env
 VITE_API_URL=https://seu-backend.onrender.com
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_sua_chave
+VITE_CLERK_PUBLISHABLE_KEY=pk_live_sua_chave
 VITE_CLERK_TOKEN_TEMPLATE=backend_api
 VITE_RESTRICTED_UI_EMAILS=voce@empresa.com,admin@empresa.com
 ```
+
+Se voce estiver apenas desenvolvendo localmente, pode usar `pk_test_...`. Em site publicado, use `pk_live_...`.
 
 Configuração alternativa (local-first com SQLite):
 
@@ -243,6 +252,7 @@ VITE_CLERK_TOKEN_TEMPLATE=backend_api
 ```
 
 Se você quiser usar uma API própria em outro domínio, ela precisa permitir CORS para o domínio do Pages e aceitar o token do Clerk.
+Depois de trocar variáveis no Cloudflare Pages, faça um novo deploy e recarregue o site com `Ctrl + F5`.
 
 Para previews do Cloudflare Pages, o backend também precisa aceitar subdomínios como
 `https://<preview>.fiscalconsultas.pages.dev`. Como essas URLs mudam a cada deploy,
@@ -259,13 +269,27 @@ Também é possível publicar o frontend estático no GitHub Pages em:
 
 - `https://ysraestudos.github.io/FiscalConsultas/`
 
-Checklist mínimo:
+Requisitos e checklist:
 
 1. Em `Settings > Pages`, deixe `Source = GitHub Actions`.
-2. Cadastre `Settings > Secrets and variables > Actions > Variables > VITE_CLERK_PUBLISHABLE_KEY` com uma chave `pk_live_...`.
-3. Execute o workflow `Deploy GitHub Pages`.
+2. Cadastre `Settings > Secrets and variables > Actions > Variables > VITE_CLERK_PUBLISHABLE_KEY` com uma chave `pk_live_...` (ou `pk_test_...` para desenvolvimento). Sem isso, o workflow falhará.
+3. Certifique-se de que o backend permite a origem `https://ysraestudos.github.io` em `SERVER__CORS_ALLOWED_ORIGINS` e `AUTH__CLERK_AUTHORIZED_PARTIES`.
+4. Execute o workflow `Deploy GitHub Pages` na aba `Actions`.
 
-Esse workflow usa o path-base `/FiscalConsultas/`, gera fallback SPA (`404.html`) e deve falhar se a variável `VITE_CLERK_PUBLISHABLE_KEY` não estiver definida.
+Observações operacionais:
+
+- O deploy usa o path-base `/FiscalConsultas/` por ser um **project site**.
+- O workflow gera fallback SPA (`404.html`) para recarregamentos em rotas internas.
+- O build do frontend aponta por padrão para `VITE_API_URL=https://fiscal-api-5eok.onrender.com`.
+
+### Ajuste no Backend (CORS/Auth)
+
+Se o frontend estiver no GitHub Pages, o backend (ex: Render) deve autorizar o host:
+
+```env
+AUTH__CLERK_AUTHORIZED_PARTIES=["http://localhost:5173","http://127.0.0.1:5173","https://ysraestudos.github.io"]
+SERVER__CORS_ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","https://ysraestudos.github.io"]
+```
 
 ## Deploy no Render
 
@@ -295,8 +319,13 @@ Use essa URL no Render em:
 
 ```env
 CACHE__ENABLE_REDIS=true
-CACHE__REDIS_URL=<upstash-redis-url>
+CACHE__REDIS_URL=rediss://default:<password>@<host>:6379
 ```
+
+Se você ainda não provisionou Redis nesse ambiente, defina `CACHE__ENABLE_REDIS=false`
+no Render. Sem esse override, o backend pode cair no fallback local
+`redis://localhost:6379/0` e registrar warning no startup.
+Se estiver usando Upstash, copie a Redis URL do painel e nao a REST URL/token.
 
 ### 3) Backend no Render
 
@@ -323,9 +352,12 @@ AUTH__CLERK_AUTHORIZED_PARTIES_REGEX=^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.
 AUTH__CLERK_CLOCK_SKEW_SECONDS=120
 SERVER__CORS_ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","https://fiscalconsultas.pages.dev"]
 SERVER__CORS_ALLOWED_ORIGIN_REGEX=^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$
+GOOGLE_API_KEY=
 ```
 
 Se você usar previews do Cloudflare Pages, essas duas variáveis com regex evitam dor de cabeça com subdomínios temporários.
+Se não quiser habilitar IA nesse ambiente, pode deixar `GOOGLE_API_KEY` ausente; o backend
+sobe normalmente e apenas os recursos de chat IA ficam desativados.
 Se o frontend estiver no GitHub Pages, inclua `https://ysraestudos.github.io` em
 `AUTH__CLERK_AUTHORIZED_PARTIES` e `SERVER__CORS_ALLOWED_ORIGINS`.
 
@@ -340,6 +372,18 @@ VITE_CLERK_TOKEN_TEMPLATE=backend_api
 ```
 
 Se você ainda estiver usando a chave de desenvolvimento do Clerk no site publicado, o Clerk vai mostrar aviso no console. Para produção, troque pela chave live.
+
+Se o frontend estiver no GitHub Pages, a URL final do project site deste repositorio e:
+
+- `https://ysraestudos.github.io/FiscalConsultas/`
+
+### Diagnóstico rápido no Render
+
+- `Frontend build not found at /app/client/dist`: esperado quando o frontend está hospedado separadamente (por exemplo, no Cloudflare Pages ou GitHub Pages).
+- `GOOGLE_API_KEY not found. AI features disabled.`: esperado quando IA não está habilitada nesse ambiente.
+- `Redis connect failed ... localhost:6379`: indica `CACHE__ENABLE_REDIS=true` sem Redis externo configurado. Corrija `CACHE__REDIS_URL` ou desligue Redis explicitamente.
+- `Redis connect failed: invalid username-password pair`: a app chegou ao Redis, mas a `CACHE__REDIS_URL` está no formato errado ou com credencial incorreta. Em Upstash, use a Redis URL TLS (`rediss://default:<password>@<host>:6379`), não a REST URL/token.
+- `OPTIONS /api/search ... 400 Bad Request`: normalmente indica falha de preflight/CORS. Revise `SERVER__CORS_ALLOWED_ORIGINS`, `SERVER__CORS_ALLOWED_ORIGIN_REGEX` e `AUTH__CLERK_AUTHORIZED_PARTIES` para incluir o domínio real do frontend e, se necessário, os previews.
 
 ## Workflow de desenvolvimento
 
@@ -619,6 +663,11 @@ Checklist mínimo para produção:
 3. Configurar `SERVER__CORS_ALLOWED_ORIGINS` com domínios oficiais (sem curingas em produção).
 4. Configurar Redis (opcional, recomendado): `CACHE__ENABLE_REDIS=true` e `CACHE__REDIS_URL`.
 5. Validar `GET /api/status` após deploy.
+
+Exemplos de origem real do frontend:
+
+- Cloudflare Pages: `https://fiscalconsultas.pages.dev`
+- GitHub Pages (project site): `https://ysraestudos.github.io`
 
 ## Documentação para IA e manutenção
 

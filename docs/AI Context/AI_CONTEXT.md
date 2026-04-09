@@ -1,7 +1,7 @@
 # Nesh / Fiscal - AI_CONTEXT
 
-Atualizado em: 2026-03-31
-Base desta revisao: README, `start_nesh_dev.bat`, `client/package.json`, `docs/TESTING.md` e workflows atuais de CI/MegaLinter.
+Atualizado em: 2026-04-09
+Base desta revisao: README, `start_nesh_dev.bat`, `client/package.json`, `docs/TESTING.md` e workflows atuais de CI/MegaLinter/Pages.
 
 ## 1) Proposito
 
@@ -24,6 +24,8 @@ A UX e orientada por navegacao rapida (abas, smart-links, menu contextual, autos
   - exige `VITE_CLERK_PUBLISHABLE_KEY`.
 - Shell SPA real: `client/index.html`
   - publica CSP, `referrer` policy e `Permissions-Policy` via meta tags.
+- Frontend estatico pode ser publicado fora do backend
+  - Cloudflare Pages ou GitHub Pages (`https://ysraestudos.github.io/FiscalConsultas/` no modo project site).
 
 ## 3) Mapa Arquitetural Atual
 
@@ -213,6 +215,10 @@ CI adicional em `.github/workflows/megalinter.yml`:
 - `pull_request` (`PR Smart`): `VALIDATE_ALL_CODEBASE=false` e linters/scanners selecionados para diff de PR.
 - `workflow_dispatch` e `schedule` (`Full Audit`): `VALIDATE_ALL_CODEBASE=true` para varredura completa.
 - `PYTHON_PYLINT` e `PYTHON_PYRIGHT` ficam fora do PR Smart e sao cobertos no workflow de testes do backend.
+- GitHub Pages:
+  - publicacao do frontend estatico por GitHub Actions.
+  - o project site deste repo usa o path-base `/FiscalConsultas/`.
+  - a origem publica esperada no backend e `https://ysraestudos.github.io`.
 
 ## 11) Drift Documental (status atual)
 
