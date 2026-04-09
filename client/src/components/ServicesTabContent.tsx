@@ -11,7 +11,10 @@ import type {
     NebsSearchResponse,
     ServiceDocType,
 } from '../types/api.types';
-import { getServiceCatalogErrorMessage } from '../utils/servicesCatalog';
+import {
+    getServiceCatalogErrorInfo,
+    reportServiceCatalogError,
+} from '../utils/servicesCatalog';
 import {
     ServicesWorkspace,
     type ServicesWorkspaceNebsState,
@@ -80,7 +83,9 @@ export function ServicesTabContent({
             if (detailRequestRef.current !== requestId) return;
             setNbsDetail(null);
             setDetailStatus('error');
-            toast.error(getServiceCatalogErrorMessage(error, 'nbs'));
+            const serviceError = getServiceCatalogErrorInfo(error, 'nbs');
+            reportServiceCatalogError(error, 'nbs', serviceError);
+            toast.error(serviceError.message);
         }
     }, []);
 
@@ -102,7 +107,9 @@ export function ServicesTabContent({
             if (detailRequestRef.current !== requestId) return;
             setNebsDetail(null);
             setDetailStatus('error');
-            toast.error(getServiceCatalogErrorMessage(error, 'nebs'));
+            const serviceError = getServiceCatalogErrorInfo(error, 'nebs');
+            reportServiceCatalogError(error, 'nebs', serviceError);
+            toast.error(serviceError.message);
         }
     }, []);
 

@@ -14,9 +14,16 @@ Arquivo: `backend/server/middleware.py`.
   - `/api/status`
   - `/api/webhooks`
   - prefixo `/api/webhooks/`
+  - prefixo `/api/services/nbs/`
+  - prefixo `/api/services/nebs/`
 - extrai JWT do header `Authorization: Bearer ...`.
 - extrai `org_id` do payload Clerk para contexto multi-tenant.
 - em desenvolvimento (`debug_mode=true`), pode usar fallback `_tenant` query param ou `org_default`.
+
+Contrato atual:
+
+- `NBS/NEBS` permanecem publicos para busca e detalhe (`/api/services/*`).
+- Clerk continua obrigatorio apenas nas rotas protegidas, como comentarios, perfil e chat IA.
 
 ### 1.2 Validacao JWT Clerk
 

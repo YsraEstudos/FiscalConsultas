@@ -9,8 +9,9 @@ import { extractChapter, isSameChapter } from '../utils/chapterDetection';
 import type { SearchResponse } from '../types/api.types';
 import { isCodeSearchResponse } from '../types/api.types';
 import {
-    getServiceCatalogErrorMessage,
+    getServiceCatalogErrorInfo,
     isServiceCatalogDoc,
+    reportServiceCatalogError,
 } from '../utils/servicesCatalog';
 
 const buildLoadedChaptersByDoc = (value?: Record<DocType, string[]>): Record<DocType, string[]> => ({
@@ -134,7 +135,9 @@ export function useSearch(
             let message = 'Erro ao buscar dados. Verifique a API.';
 
             if (isServiceCatalogDoc(doc)) {
-                message = getServiceCatalogErrorMessage(err, doc);
+                const serviceError = getServiceCatalogErrorInfo(err, doc);
+                reportServiceCatalogError(err, doc, serviceError);
+                message = serviceError.message;
             } else if (axios.isAxiosError(err)) {
                 const status = err.response?.status;
                 if (status === 404) {
