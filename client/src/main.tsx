@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { ClerkProvider } from '@clerk/react'
 import './index.css'
 import App from './App'
-import { AuthProvider, GuestAuthProvider } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
 import { GlossaryProvider } from './context/GlossaryContext';
 import { CrossChapterNoteProvider } from './context/CrossChapterNoteContext';
@@ -15,76 +15,42 @@ const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Failed to find the root element');
 
-// Função para renderizar o App com ou sem Clerk
-const renderApp = (useClerk: boolean) => {
-    const appContent = (
-        <AuthProvider>
-            <SettingsProvider>
-                <GlossaryProvider>
-                    <CrossChapterNoteProvider>
-                        <App />
-                    </CrossChapterNoteProvider>
-                </GlossaryProvider>
-            </SettingsProvider>
-        </AuthProvider>
+if (PUBLISHABLE_KEY) {
+    createRoot(rootElement).render(
+        <StrictMode>
+            <ClerkProvider publishableKey={PUBLISHABLE_KEY} appearance={clerkTheme}>
+                <AuthProvider>
+                    <SettingsProvider>
+                        <GlossaryProvider>
+                            <CrossChapterNoteProvider>
+                                <App />
+                            </CrossChapterNoteProvider>
+                        </GlossaryProvider>
+                    </SettingsProvider>
+                </AuthProvider>
+            </ClerkProvider>
+        </StrictMode>,
     );
-
-    const fallbackContent = (
-        <GuestAuthProvider>
-            <SettingsProvider>
-                <GlossaryProvider>
-                    <CrossChapterNoteProvider>
-                        <App />
-                    </CrossChapterNoteProvider>
-                </GlossaryProvider>
-            </SettingsProvider>
-        </GuestAuthProvider>
+} else {
+    console.error(
+        'Missing Clerk key. Configure VITE_CLERK_PUBLISHABLE_KEY in client/.env.local and restart Vite.'
     );
 
     createRoot(rootElement).render(
         <StrictMode>
-            <Suspense fallback={<div style={{ padding: '20px', fontFamily: 'sans-serif' }}>Carregando...</div>}>
-                {useClerk && PUBLISHABLE_KEY ? (
-                    <ClerkProvider 
-                        publishableKey={PUBLISHABLE_KEY} 
-                        appearance={clerkTheme}
-                    >
-                        {appContent}
-                    </ClerkProvider>
-                ) : (
-                    /* Modo Visitante: Carrega sem ClerkProvider se houver erro ou falta de chave */
-                    fallbackContent
-                )}
-            </Suspense>
-        </StrictMode>
+            <main className="security-fallback-main">
+                <h1 className="security-fallback-title">Configuration Required</h1>
+                <p>
+                    Missing <code>VITE_CLERK_PUBLISHABLE_KEY</code>.
+                </p>
+                <p>
+                    Create <code>client/.env.local</code> with:
+                </p>
+                <pre className="security-fallback-pre">
+                    VITE_CLERK_PUBLISHABLE_KEY=pk_test_your_key
+                </pre>
+                <p>Then restart <code>npm run dev</code>.</p>
+            </main>
+        </StrictMode>,
     );
-};
-
-// Tenta iniciar com Clerk, se houver erro de carregamento (como o de CSP), 
-// ele detecta e carrega o app em modo "Guest" para não travar a busca.
-try {
-    if (!PUBLISHABLE_KEY) {
-        console.warn('Missing Clerk key. Entering Guest Mode.');
-        renderApp(false);
-    } else {
-        renderApp(true);
-    }
-} catch (e) {
-    console.warn("Clerk falhou ao inicializar. Entrando em Modo Visitante.", e);
-    renderApp(false);
 }
-
-// Escuta erros globais de script (como falha ao baixar o JS do Clerk)
-window.addEventListener('error', (event) => {
-    if (event.message?.includes('Clerk') || (event.target as any)?.src?.includes('clerk')) {
-        console.warn("Falha detectada no script do Clerk. Ativando fallback.");
-        renderApp(false);
-    }
-}, true);
-
-window.addEventListener('unhandledrejection', (event) => {
-    if (event.reason?.message?.includes('Clerk') || event.reason?.message?.includes('failed to load script: https://clerk')) {
-        console.warn("Rejeição de promessa detectada no script do Clerk. Ativando fallback.");
-        renderApp(false);
-    }
-});
