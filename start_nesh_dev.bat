@@ -8,6 +8,8 @@ set "RUN_BACKEND=1"
 set "CHECKLIST_FILE=%TEMP%\nesh_dev_startup.txt"
 set "CHECKLIST_SHOWN=0"
 set "FAIL_REASON="
+set "BACKEND_UV_SYNC_MODE=no-sync"
+set "BACKEND_BOOT_CMD=uv run --no-sync Nesh.py"
 
 set "CHK_NODE=PENDENTE"
 set "CHK_NPM=PENDENTE"
@@ -17,9 +19,16 @@ set "CHK_BACKEND_PORT=PENDENTE"
 set "CHK_BACKEND_HEALTH=PENDENTE"
 set "CHK_FRONTEND_ENV=PENDENTE"
 set "CHK_FRONTEND_DEPS=PENDENTE"
+set "CHK_FRONTEND_BUILD=PENDENTE"
 set "CHK_FRONTEND_PORT=PENDENTE"
 
-set "FRONTEND_BOOT_CMD=npm run dev"
+set "FRONTEND_MODE=preview"
+set "FRONTEND_PORT=5173"
+set "FRONTEND_WAIT_ATTEMPTS=90"
+set "FRONTEND_BOOT_CMD="
+set "FRONTEND_WINDOW_TITLE="
+set "FRONTEND_LOCAL_URL="
+set "FRONTEND_PUBLIC_URL="
 
 :parse_args
 if "%~1"=="" goto args_done
@@ -27,12 +36,35 @@ if /I "%~1"=="--auth-debug" (
     set "ENABLE_AUTH_DEBUG=1"
 ) else if /I "%~1"=="--frontend-only" (
     set "RUN_BACKEND=0"
+) else if /I "%~1"=="--backend-sync" (
+    set "BACKEND_UV_SYNC_MODE=sync"
+    set "BACKEND_BOOT_CMD=uv run Nesh.py"
+) else if /I "%~1"=="--public-preview" (
+    set "FRONTEND_MODE=preview"
+    set "FRONTEND_PORT=5173"
+) else if /I "%~1"=="--dev-hmr" (
+    set "FRONTEND_MODE=dev"
+    set "FRONTEND_PORT=5173"
 ) else (
     echo [WARN] Argumento ignorado: %~1
 )
 shift
 goto parse_args
 :args_done
+
+if /I "!FRONTEND_MODE!"=="preview" (
+    set "FRONTEND_WAIT_ATTEMPTS=90"
+    set "FRONTEND_WINDOW_TITLE=Nesh Client (Preview)"
+    set "FRONTEND_BOOT_CMD=npm run build && npm run preview -- --host 0.0.0.0 --port !FRONTEND_PORT! --strictPort"
+    set "CHK_FRONTEND_BUILD=PENDENTE"
+) else (
+    set "FRONTEND_WAIT_ATTEMPTS=50"
+    set "FRONTEND_WINDOW_TITLE=Nesh Client (Dev)"
+    set "FRONTEND_BOOT_CMD=npm run dev -- --host --port !FRONTEND_PORT! --strictPort"
+    set "CHK_FRONTEND_BUILD=IGNORADO"
+)
+set "FRONTEND_LOCAL_URL=http://127.0.0.1:!FRONTEND_PORT!"
+set "FRONTEND_PUBLIC_URL="
 
 where node >nul 2>&1
 if errorlevel 1 (
@@ -88,22 +120,27 @@ if "!RUN_BACKEND!"=="1" (
 )
 
 if "!ENABLE_AUTH_DEBUG!"=="1" (
-    echo [INFO] Modo auth debug habilitado para o frontend: VITE_AUTH_DEBUG=true nesta sessao.
-    set "FRONTEND_BOOT_CMD=set VITE_AUTH_DEBUG=true && npm run dev"
+    if /I "!FRONTEND_MODE!"=="preview" (
+        echo [INFO] --auth-debug ignorado no modo preview de producao.
+    ) else (
+        echo [INFO] Modo auth debug habilitado para o frontend: VITE_AUTH_DEBUG=true nesta sessao.
+        set "FRONTEND_BOOT_CMD=set VITE_AUTH_DEBUG=true && npm run dev"
+    )
 )
 
 if "!RUN_BACKEND!"=="1" (
     echo.
     echo [3/7] Iniciando backend local...
+    if /I "!BACKEND_UV_SYNC_MODE!"=="no-sync" echo [INFO] Backend iniciado com uv --no-sync para evitar erro de permissao no .venv.
     call :stop_listener_port 8000 backend
-    start "Nesh API (Dev)" cmd /k "cd /d ""%~dp0"" && uv run Nesh.py"
+    start "Nesh API (Dev)" cmd /k "cd /d ""%~dp0."" && !BACKEND_BOOT_CMD!"
 
     echo.
     echo [4/7] Aguardando a API abrir na porta 8000...
     call :wait_port_open 8000 70
     if errorlevel 1 (
         set "CHK_BACKEND_PORT=FALHA"
-        set "FAIL_REASON=Backend nao abriu a porta 8000."
+        set "FAIL_REASON=Backend nao abriu a porta 8000. Se houver erro de permissao no .venv, rode com padrao (no-sync) ou feche processos que travam .venv."
         goto fail
     )
     set "CHK_BACKEND_PORT=OK"
@@ -132,22 +169,35 @@ if errorlevel 1 (
 set "CHK_FRONTEND_DEPS=OK"
 
 echo.
-echo [7/7] Iniciando frontend com Hot Reload...
-call :stop_listener_port 5173 frontend
-start "Nesh Client (Dev)" cmd /k "cd /d ""%~dp0client"" && !FRONTEND_BOOT_CMD!"
+if /I "!FRONTEND_MODE!"=="preview" (
+    echo [7/7] Iniciando frontend em modo PREVIEW (build de producao)...
+) else (
+    echo [7/7] Iniciando frontend com Hot Reload...
+)
+call :stop_listener_port !FRONTEND_PORT! frontend
+start "!FRONTEND_WINDOW_TITLE!" cmd /k "cd /d ""%~dp0client"" && !FRONTEND_BOOT_CMD!"
 cd /d "%~dp0"
 
 echo.
-echo [7/7] Aguardando o Vite abrir na porta 5173...
-call :wait_port_open 5173 50
+echo [7/7] Aguardando o frontend abrir na porta !FRONTEND_PORT!...
+call :wait_port_open !FRONTEND_PORT! !FRONTEND_WAIT_ATTEMPTS!
 if errorlevel 1 (
+    if /I "!FRONTEND_MODE!"=="preview" set "CHK_FRONTEND_BUILD=FALHA"
     set "CHK_FRONTEND_PORT=FALHA"
-    set "FAIL_REASON=Frontend nao abriu a porta 5173."
+    set "FAIL_REASON=Frontend nao abriu a porta !FRONTEND_PORT!."
     goto fail
 )
+if /I "!FRONTEND_MODE!"=="preview" set "CHK_FRONTEND_BUILD=OK"
 set "CHK_FRONTEND_PORT=OK"
 
-start "" "http://127.0.0.1:5173"
+call :resolve_lan_frontend_url !FRONTEND_PORT!
+if defined FRONTEND_LOCAL_URL (
+    start "" "!FRONTEND_LOCAL_URL!"
+) else (
+    if defined FRONTEND_PUBLIC_URL (
+        start "" "!FRONTEND_PUBLIC_URL!"
+    )
+)
 
 echo.
 echo Ambiente de desenvolvimento pronto.
@@ -156,7 +206,13 @@ call :write_checklist_file "SUCESSO"
 call :open_checklist_file
 echo.
 if "!RUN_BACKEND!"=="1" echo Backend Local:  http://127.0.0.1:8000/api/status
-echo Frontend Local: http://127.0.0.1:5173
+echo Frontend Local: !FRONTEND_LOCAL_URL!
+if defined FRONTEND_PUBLIC_URL echo Frontend Publico ^(rede local^): !FRONTEND_PUBLIC_URL!
+if /I "!FRONTEND_MODE!"=="preview" (
+    echo Frontend em modo PREVIEW de producao.
+) else (
+    echo Frontend em modo DEV com Hot Reload.
+)
 pause
 exit /b 0
 
@@ -232,6 +288,15 @@ if "%TARGET_PORT%"=="" exit /b 0
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$port=%TARGET_PORT%; $label='%TARGET_LABEL%'; $processIds = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; if ($processIds) { Write-Host ('[INFO] Encerrando listener existente na porta ' + $port + ' (' + $label + ')...'); foreach ($processId in $processIds) { try { Stop-Process -Id $processId -Force -ErrorAction Stop } catch {} } Start-Sleep -Milliseconds 600 }"
 exit /b 0
 
+:resolve_lan_frontend_url
+set "TARGET_PORT=%~1"
+set "FRONTEND_PUBLIC_URL="
+if "%TARGET_PORT%"=="" exit /b 0
+for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$ip = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -ne '127.0.0.1' -and $_.IPAddress -notlike '169.254*' -and $_.InterfaceAlias -notmatch 'Loopback|vEthernet|VirtualBox|VMware|Hyper-V|WSL|Tailscale|ZeroTier' } | Select-Object -First 1 -ExpandProperty IPAddress; if ($ip) { Write-Output $ip }"`) do (
+    set "FRONTEND_PUBLIC_URL=http://%%I:%TARGET_PORT%"
+)
+exit /b 0
+
 :print_checklist
 echo.
 echo =================== CHECKLIST DEV ===================
@@ -243,7 +308,8 @@ call :print_check_item "Backend ativo na porta 8000" "!CHK_BACKEND_PORT!" "Verif
 call :print_check_item "Healthcheck /api/status ok" "!CHK_BACKEND_HEALTH!" "Confirme logs do backend local."
 call :print_check_item "client/.env.local configurado" "!CHK_FRONTEND_ENV!" "Defina pelo menos VITE_CLERK_PUBLISHABLE_KEY."
 call :print_check_item "Dependencias frontend prontas" "!CHK_FRONTEND_DEPS!" "Execute npm install em client/."
-call :print_check_item "Frontend ativo na porta 5173" "!CHK_FRONTEND_PORT!" "Verifique a janela Nesh Client (Dev)."
+call :print_check_item "Build de frontend (preview)" "!CHK_FRONTEND_BUILD!" "Use --dev-hmr para voltar ao modo hot reload."
+call :print_check_item "Frontend ativo na porta !FRONTEND_PORT!" "!CHK_FRONTEND_PORT!" "Verifique a janela !FRONTEND_WINDOW_TITLE!."
 echo =====================================================
 exit /b 0
 
@@ -302,11 +368,13 @@ echo - Backend ativo na porta 8000: !CHK_BACKEND_PORT!
 echo - Healthcheck /api/status ok: !CHK_BACKEND_HEALTH!
 echo - client/.env.local configurado: !CHK_FRONTEND_ENV!
 echo - Dependencias frontend prontas: !CHK_FRONTEND_DEPS!
-echo - Frontend ativo na porta 5173: !CHK_FRONTEND_PORT!
+echo - Build de frontend (preview): !CHK_FRONTEND_BUILD!
+echo - Frontend ativo na porta !FRONTEND_PORT!: !CHK_FRONTEND_PORT!
 echo.
 echo [Links]
 echo - Backend Local:  http://127.0.0.1:8000/api/status
-echo - Frontend Local: http://127.0.0.1:5173
+echo - Frontend Local: !FRONTEND_LOCAL_URL!
+if defined FRONTEND_PUBLIC_URL echo - Frontend Publico (rede local): !FRONTEND_PUBLIC_URL!
 ) > "%CHECKLIST_FILE%"
 exit /b 0
 

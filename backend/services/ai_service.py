@@ -1,7 +1,13 @@
 import logging
 import os
 
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+    _genai_import_error: Exception | None = None
+except Exception as exc:
+    # Keep backend startup resilient when optional AI provider deps are broken.
+    genai = None
+    _genai_import_error = exc
 
 from ..config.exceptions import ServiceError
 
@@ -12,8 +18,17 @@ class AiService:
     def __init__(self):
         self.api_key = os.environ.get("GOOGLE_API_KEY")
         self.model = None
+        self.ai_disabled_reason: str | None = None
 
         if self.api_key:
+            if genai is None:
+                self.ai_disabled_reason = "Provider import failed"
+                logger.error(
+                    "AI provider unavailable: %s. AI features disabled.",
+                    _genai_import_error,
+                )
+                return
+
             try:
                 genai.configure(api_key=self.api_key)  # pyright: ignore[reportPrivateImportUsage]
                 self.model = genai.GenerativeModel(  # pyright: ignore[reportPrivateImportUsage]
@@ -21,14 +36,17 @@ class AiService:
                 )
                 logger.info("AI Service Initialized (Gemini Pro)")
             except Exception as e:
-                logger.error(f"Failed to initialize AI: {e}")
+                self.ai_disabled_reason = "Provider initialization failed"
+                logger.exception("Failed to initialize AI: %s", e)
         else:
+            self.ai_disabled_reason = "API key ausente"
             logger.warning("GOOGLE_API_KEY not found. AI features disabled.")
 
     async def get_chat_response(self, message: str) -> str:
         if not self.model:
+            reason = self.ai_disabled_reason or "AI service not configured"
             raise ServiceError(
-                "Serviço de IA não configurado (API Key ausente).", service="AI"
+                f"Serviço de IA não configurado ({reason}).", service="AI"
             )
 
         try:
