@@ -1,7 +1,13 @@
 import logging
 import os
 
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+    _genai_import_error: Exception | None = None
+except Exception as exc:
+    # Keep backend startup resilient when optional AI provider deps are broken.
+    genai = None
+    _genai_import_error = exc
 
 from ..config.exceptions import ServiceError
 
@@ -14,6 +20,13 @@ class AiService:
         self.model = None
 
         if self.api_key:
+            if genai is None:
+                logger.error(
+                    "AI provider unavailable: %s. AI features disabled.",
+                    _genai_import_error,
+                )
+                return
+
             try:
                 genai.configure(api_key=self.api_key)  # pyright: ignore[reportPrivateImportUsage]
                 self.model = genai.GenerativeModel(  # pyright: ignore[reportPrivateImportUsage]
