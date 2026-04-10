@@ -82,6 +82,23 @@ async def test_get_chat_response_requires_configured_model(monkeypatch):
         await service.get_chat_response("oi")
     assert exc.value.code == "SERVICE_ERROR"
     assert exc.value.service == "AI"
+    assert "API key ausente" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_get_chat_response_reports_provider_import_failure_reason(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "k-test")
+    monkeypatch.setattr(ai_mod, "genai", None)
+    monkeypatch.setattr(ai_mod, "_genai_import_error", ModuleNotFoundError("requests.exceptions"))
+    monkeypatch.setattr(ai_mod.logger, "error", lambda *_args, **_kwargs: None)
+
+    service = ai_mod.AiService()
+
+    with pytest.raises(ServiceError) as exc:
+        await service.get_chat_response("oi")
+
+    assert "Provider import failed" in str(exc.value)
+    assert "requests.exceptions" in str(exc.value)
 
 
 @pytest.mark.asyncio

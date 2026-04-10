@@ -133,7 +133,7 @@ if "!RUN_BACKEND!"=="1" (
     echo [3/7] Iniciando backend local...
     if /I "!BACKEND_UV_SYNC_MODE!"=="no-sync" echo [INFO] Backend iniciado com uv --no-sync para evitar erro de permissao no .venv.
     call :stop_listener_port 8000 backend
-    start "Nesh API (Dev)" cmd /k "cd /d ""%~dp0"" && !BACKEND_BOOT_CMD!"
+    start "Nesh API (Dev)" cmd /k "cd /d ""%~dp0."" && !BACKEND_BOOT_CMD!"
 
     echo.
     echo [4/7] Aguardando a API abrir na porta 8000...
@@ -191,10 +191,12 @@ if /I "!FRONTEND_MODE!"=="preview" set "CHK_FRONTEND_BUILD=OK"
 set "CHK_FRONTEND_PORT=OK"
 
 call :resolve_lan_frontend_url !FRONTEND_PORT!
-if defined FRONTEND_PUBLIC_URL (
-    start "" "!FRONTEND_PUBLIC_URL!"
-) else (
+if defined FRONTEND_LOCAL_URL (
     start "" "!FRONTEND_LOCAL_URL!"
+) else (
+    if defined FRONTEND_PUBLIC_URL (
+        start "" "!FRONTEND_PUBLIC_URL!"
+    )
 )
 
 echo.
