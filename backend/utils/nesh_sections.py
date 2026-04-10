@@ -8,15 +8,23 @@ _RE_DEF_ITEM = re.compile(r"^\d+\)")
 _RE_DEF_CONT_LOWER = re.compile(r"^[a-zà-ÿ]")
 _DEF_CONT_PREFIXES = ("-", "–", "—", "•", "(")
 
+_RE_MD_BOLD = re.compile(r"\*\*(.+?)\*\*")
+_RE_MD_ITALIC_STAR = re.compile(r"\*(.+?)\*")
+_RE_MD_ITALIC_UNDERSCORE = re.compile(r"_(.+?)_")
+_RE_MD_BOLD_EDGE = re.compile(r"(?:^\*\*)|(?:\*\*$)")
+_RE_MD_STAR_EDGE = re.compile(r"(?:^\*)|(?:\*$)")
+_RE_MULTIPLE_NEWLINES = re.compile(r"\n{3,}")
+
 
 def clean_markdown(text: str) -> str:
     """Remove formatação markdown (**, *, _) do texto."""
+    # Optimization: Use pre-compiled regex for string replacement to avoid redundant compilation
     cleaned = text
-    cleaned = re.sub(r"\*\*(.+?)\*\*", r"\1", cleaned)  # Remove **bold**
-    cleaned = re.sub(r"\*(.+?)\*", r"\1", cleaned)  # Remove *italic*
-    cleaned = re.sub(r"_(.+?)_", r"\1", cleaned)  # Remove _italic_
-    cleaned = re.sub(r"(?:^\*\*)|(?:\*\*$)", "", cleaned)  # Remove ** no início/fim
-    cleaned = re.sub(r"(?:^\*)|(?:\*$)", "", cleaned)  # Remove * solto
+    cleaned = _RE_MD_BOLD.sub(r"\1", cleaned)  # Remove **bold**
+    cleaned = _RE_MD_ITALIC_STAR.sub(r"\1", cleaned)  # Remove *italic*
+    cleaned = _RE_MD_ITALIC_UNDERSCORE.sub(r"\1", cleaned)  # Remove _italic_
+    cleaned = _RE_MD_BOLD_EDGE.sub("", cleaned)  # Remove ** no início/fim
+    cleaned = _RE_MD_STAR_EDGE.sub("", cleaned)  # Remove * solto
     return cleaned.strip()
 
 
@@ -118,7 +126,7 @@ class _ChapterSectionParser:
         sections = {"titulo": "", "notas": "", "consideracoes": "", "definicoes": ""}
         for key in sections:
             text = "\n".join(self.section_lines[key]).strip()
-            sections[key] = re.sub(r"\n{3,}", "\n\n", text)
+            sections[key] = _RE_MULTIPLE_NEWLINES.sub("\n\n", text)
         return sections
 
 
