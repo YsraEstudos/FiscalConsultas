@@ -124,14 +124,14 @@ Detalhe critico:
 - `api.ts` usa `withCredentials: false`; o browser nao deve enviar cookies ambiente para APIs cross-origin.
 - `useIsAdmin` depende de `AuthContext.isAdmin`, que hoje e derivado de `membership.role` do Clerk (nao por email hardcoded).
 - `AdminCommentModal` so e montado quando `modals.moderate=true` **e** o usuario possui role privilegiada.
-- `canAccessRestrictedUi(userEmail)` faz gating adicional de superfícies opcionais:
+- `AuthContext` expõe `canUseRestrictedUi` para gating adicional de superfícies opcionais:
   - `AIChat`
   - comentarios em `ResultDisplay`
   - aba `Contribuições` em `UserProfilePage`
 
 Importante:
 
-- `VITE_RESTRICTED_UI_EMAILS` e apenas gating de UX/frontend.
+- a UI restrita reflete capacidades vindas de `/api/auth/me`.
 - controles sensiveis continuam exigindo validacao backend.
 
 ## 9) Riscos atuais de navegacao

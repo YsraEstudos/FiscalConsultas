@@ -120,7 +120,6 @@ async def test_get_status_uses_app_state_services_when_available():
 
     assert payload["status"] == "online"
     assert payload["database"]["status"] == "online"
-    assert payload["database"]["latency_ms"] >= 0
     assert payload["tipi"]["status"] == "online"
     assert payload["nbs"]["status"] == "online"
     assert payload["nebs"]["status"] == "online"

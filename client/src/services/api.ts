@@ -8,6 +8,7 @@
  */
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import type {
+    AuthSessionResponse,
     NbsDetailResponse,
     NbsSearchResponse,
     NebsDetailResponse,
@@ -72,7 +73,9 @@ type ClerkTokenGetter = (options?: ClerkTokenGetterOptions) => Promise<string | 
 
 let clerkGetToken: ClerkTokenGetter | null = null;
 const PUBLIC_ROUTES = ['/status', '/glossary', '/services/'];
-const AUTH_DEBUG_ENABLED = String(import.meta.env.VITE_AUTH_DEBUG || '').toLowerCase() === 'true';
+const AUTH_DEBUG_ENABLED =
+    import.meta.env.DEV
+    && String(import.meta.env.VITE_AUTH_DEBUG || '').toLowerCase() === 'true';
 const CLERK_TOKEN_TEMPLATE = (import.meta.env.VITE_CLERK_TOKEN_TEMPLATE || '').trim() || undefined;
 const AUTH_REFRESH_COOLDOWN_MS = 2500;
 const REQUEST_ID_HEADER = 'X-Request-Id';
@@ -691,7 +694,7 @@ export const getNebsEntryDetail = async (code: string): Promise<NebsDetailRespon
     return response.data;
 };
 
-export const getAuthSession = async (): Promise<{ authenticated: boolean }> => {
+export const getAuthSession = async (): Promise<AuthSessionResponse> => {
     const response = await api.get(withDevCacheBust('/auth/me'));
     return response.data;
 };

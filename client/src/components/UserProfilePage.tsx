@@ -16,7 +16,6 @@ import {
     deleteMyAccount,
 } from '../services/api';
 import styles from './UserProfilePage.module.css';
-import { canAccessRestrictedUi } from '../utils/featureAccess';
 import { sanitizeImageUrl } from '../utils/contentSecurity';
 
 interface UserProfilePageProps {
@@ -167,9 +166,8 @@ function ContributionsSection({
 // ─── UserProfilePage ─────────────────────────────────────────────────────
 
 export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePageProps>) {
-    const { userName, userEmail, userImageUrl } = useAuth();
+    const { userName, userEmail, userImageUrl, canUseRestrictedUi } = useAuth();
     const isAdmin = useIsAdmin();
-    const canUseRestrictedUi = canAccessRestrictedUi(userEmail);
     const safeUserImageUrl = sanitizeImageUrl(userImageUrl);
 
     const [activeTab, setActiveTab] = useState<TabKey>('profile');
@@ -321,9 +319,9 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
         }
     };
 
-    const tabs: { key: TabKey; label: string; icon: string; adminOnly?: boolean; restrictedEmailOnly?: boolean }[] = [
+    const tabs: { key: TabKey; label: string; icon: string; adminOnly?: boolean; restrictedUiOnly?: boolean }[] = [
         { key: 'profile', label: 'Perfil', icon: '👤' },
-        { key: 'contributions', label: 'Contribuições', icon: '💬', restrictedEmailOnly: true },
+        { key: 'contributions', label: 'Contribuições', icon: '💬', restrictedUiOnly: true },
         { key: 'sessions', label: 'Sessões', icon: '🔐' },
         { key: 'organization', label: 'Organização', icon: '🏢', adminOnly: true },
     ];
@@ -352,7 +350,7 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
                 {/* Tabs */}
                 <div className={styles.tabs}>
                     {tabs
-                        .filter(t => (!t.adminOnly || isAdmin) && (!t.restrictedEmailOnly || canUseRestrictedUi))
+                        .filter(t => (!t.adminOnly || isAdmin) && (!t.restrictedUiOnly || canUseRestrictedUi))
                         .map(t => (
                             <button
                                 key={t.key}

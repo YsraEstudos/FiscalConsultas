@@ -470,14 +470,24 @@ describe('api service', () => {
     mockAxios.instance.get
       .mockResolvedValueOnce({ data: { term: 'x' } })
       .mockResolvedValueOnce({ data: { status: 'online' } })
-      .mockResolvedValueOnce({ data: { authenticated: true } })
+      .mockResolvedValueOnce({
+        data: {
+          authenticated: true,
+          can_use_ai_chat: true,
+          can_use_restricted_ui: false,
+        },
+      })
       .mockResolvedValueOnce({
         data: { success: true, capitulo: '85', notas_parseadas: { '1': 'n' }, notas_gerais: 'g' },
       });
 
     await expect(apiModule.getGlossaryTerm('aço inox')).resolves.toEqual({ term: 'x' });
     await expect(apiModule.getSystemStatus()).resolves.toEqual({ status: 'online' });
-    await expect(apiModule.getAuthSession()).resolves.toEqual({ authenticated: true });
+    await expect(apiModule.getAuthSession()).resolves.toEqual({
+      authenticated: true,
+      can_use_ai_chat: true,
+      can_use_restricted_ui: false,
+    });
     await expect(apiModule.fetchChapterNotes('85')).resolves.toEqual({
       success: true,
       capitulo: '85',

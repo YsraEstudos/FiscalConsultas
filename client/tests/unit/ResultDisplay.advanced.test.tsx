@@ -17,7 +17,7 @@ const hoisted = vi.hoisted(() => ({
       isSignedIn: true,
       isLoading: false,
       userId: 'user_test',
-      userEmail: 'allowed@example.com',
+      canUseRestrictedUi: true,
     },
   },
   commentsStateRef: {
@@ -186,7 +186,7 @@ describe('ResultDisplay advanced behavior', () => {
       isSignedIn: true,
       isLoading: false,
       userId: 'user_test',
-      userEmail: 'allowed@example.com',
+      canUseRestrictedUi: true,
     };
     hoisted.commentsStateRef.value = {
       comments: [],
@@ -204,8 +204,6 @@ describe('ResultDisplay advanced behavior', () => {
       onPopoverMouseDown: vi.fn(),
     };
     intersectionCallbacks = [];
-    vi.stubEnv('VITE_RESTRICTED_UI_EMAILS', 'allowed@example.com');
-
     // @ts-expect-error - test bridge
     globalThis.nesh = { smartLinkSearch: vi.fn(), openTextResultInNewTab: vi.fn() };
 

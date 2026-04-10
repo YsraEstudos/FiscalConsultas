@@ -72,13 +72,21 @@ Observacao:
 
 Arquivo: `backend/presentation/routes/auth.py`.
 
-- `POST /api/ai/chat` exige JWT valido.
+- `GET /api/auth/me` continua publico por design, mas agora retorna:
+  - `authenticated`
+  - `can_use_ai_chat`
+  - `can_use_restricted_ui`
+- `POST /api/ai/chat` exige JWT valido **e** allowlist server-side por email.
 - limite de tamanho de mensagem (`settings.security.ai_chat_max_message_chars`).
 - rate limit por sliding window (`backend/server/rate_limit.py`):
   - chave por usuario (`sub`) quando possivel
   - fallback por IP
   - retorna `429` com `Retry-After`.
 - limitador e in-memory por processo (nao compartilhado entre replicas/workers).
+- allowlists backend:
+  - `SECURITY__AI_CHAT_ALLOWED_EMAILS`
+  - `SECURITY__RESTRICTED_UI_ALLOWED_EMAILS` (opcional; se ausente, herda a do chat IA)
+- o template JWT do Clerk precisa incluir `email` ou `email_address` no payload para a allowlist funcionar.
 
 ## 5) Webhook Asaas
 
@@ -141,13 +149,14 @@ Fluxo recomendado:
 2. ainda nao existe middleware backend dedicado para headers de seguranca HTTP em todas as respostas de API (HSTS, X-Frame-Options, CSP por header, etc.); hoje parte do hardening esta no shell SPA do frontend.
 3. ambientes sem `AUTH__CLERK_DOMAIN` nao validam JWT e podem bloquear fluxos autenticados.
 4. `TenantMiddleware` usa task background sem observabilidade forte de falha.
-5. endpoint `/api/auth/me` e publico por design (retorna apenas `authenticated`), mas depende de contrato claro para nao crescer escopo sensivel no futuro.
+5. endpoint `/api/auth/me` e publico por design; qualquer nova capability ali precisa continuar sendo derivada de policy backend, sem expor dados sensiveis.
 
 ## 10) Checklist Operacional de Seguranca
 
 - [ ] `AUTH__CLERK_DOMAIN` configurado em producao.
 - [ ] `SERVER__ENV` diferente de development em producao.
 - [ ] `features.debug_mode=false` em producao.
+- [ ] `SECURITY__AI_CHAT_ALLOWED_EMAILS` definido quando o chat IA estiver habilitado.
 - [ ] `trusted_proxy_ips` definido quando houver proxy/LB.
 - [ ] `BILLING__ASAAS_WEBHOOK_TOKEN` configurado.
 - [ ] rotação periodica de admin token/senha/secret key.

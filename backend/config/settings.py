@@ -1,8 +1,9 @@
+import json
 import os
 import secrets
 from typing import List, Literal, Optional, Set
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import (
     BaseSettings,
     JsonConfigSettingsSource,
@@ -129,7 +130,50 @@ class SecuritySettings(BaseModel):
     services_search_requests_per_minute: int = 30
     services_detail_requests_per_minute: int = 120
     ai_chat_max_message_chars: int = 4000
+    ai_chat_allowed_emails: List[str] = Field(default_factory=list)
+    restricted_ui_allowed_emails: List[str] = Field(default_factory=list)
     trusted_proxy_ips: List[str] = Field(default_factory=list)
+
+    @field_validator(
+        "ai_chat_allowed_emails",
+        "restricted_ui_allowed_emails",
+        mode="before",
+    )
+    @classmethod
+    def _coerce_email_list(cls, value):
+        if value in (None, ""):
+            return []
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return []
+            if stripped.startswith("["):
+                try:
+                    parsed = json.loads(stripped)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, list):
+                    return parsed
+            return [part.strip() for part in stripped.split(",") if part.strip()]
+        return value
+
+    @staticmethod
+    def _normalize_email_set(values: List[str]) -> Set[str]:
+        return {
+            str(email).strip().lower()
+            for email in values
+            if str(email).strip()
+        }
+
+    @property
+    def ai_chat_allowed_email_set(self) -> Set[str]:
+        return self._normalize_email_set(self.ai_chat_allowed_emails)
+
+    @property
+    def restricted_ui_allowed_email_set(self) -> Set[str]:
+        if self.restricted_ui_allowed_emails:
+            return self._normalize_email_set(self.restricted_ui_allowed_emails)
+        return self.ai_chat_allowed_email_set
 
 
 class AppSettings(BaseSettings):

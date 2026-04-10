@@ -79,7 +79,7 @@ def test_build_public_status_payload_strips_sensitive_fields():
 
     assert payload == {
         "status": "error",
-        "database": {"status": "online", "latency_ms": 5.5},
+        "database": {"status": "online"},
         "tipi": {"status": "error"},
     }
 

@@ -59,7 +59,6 @@ def test_status_endpoint(client):
     assert data.get("status") == expected_global, (
         f"Inconsistent global status. Got: {data}"
     )
-    assert "latency_ms" in data["database"]
     assert "version" not in data
     assert "backend" not in data
     assert "chapters" not in data["database"]
