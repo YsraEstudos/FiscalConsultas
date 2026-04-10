@@ -950,7 +950,7 @@ describe('ResultDisplay advanced behavior', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Ativar comentários' }));
       expect(hoisted.toastErrorMock).toHaveBeenCalledWith(
-        'Comentários exigem token Clerk válido. Em desenvolvimento, use http://localhost:5173.',
+        'Comentários não estão disponíveis neste ambiente agora.',
       );
     } finally {
       if (originalLocationDescriptor) {

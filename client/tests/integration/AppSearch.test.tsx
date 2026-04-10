@@ -39,6 +39,11 @@ describe('App Search Integration', () => {
             nbs: { status: 'online' },
             nebs: { status: 'online' },
         });
+        api.getAuthSession.mockResolvedValue({
+            authenticated: true,
+            can_use_ai_chat: false,
+            can_use_restricted_ui: false,
+        });
     });
 
     it('displays loading spinner and then results when searching', async () => {

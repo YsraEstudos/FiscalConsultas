@@ -798,7 +798,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             const host = window.location.hostname;
             const isLanHost = host !== 'localhost' && host !== '127.0.0.1';
             if (isLanHost) {
-                toast.error('Comentários exigem token Clerk válido. Em desenvolvimento, use http://localhost:5173.');
+                toast.error('Comentários não estão disponíveis neste ambiente agora.');
                 return;
             }
         }

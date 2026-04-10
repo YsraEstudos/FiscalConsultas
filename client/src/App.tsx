@@ -69,7 +69,6 @@ function App() {
     const { history, addToHistory, removeFromHistory, clearHistory } = useHistory();
     const {
         ensureServicesSearchAccess,
-        refreshServicesStatus,
         servicesUnavailableReason,
     } = useServicesAccess();
     const { executeSearchForTab } = useSearch(tabsById, updateTab, addToHistory);
@@ -87,16 +86,11 @@ function App() {
     }, []);
     const runNonBlockingTask = useCallback((task: Promise<unknown> | void, context: string) => {
         Promise.resolve(task).catch((error) => {
-            console.error(`[App] ${context}:`, error);
+            if (import.meta.env.DEV) {
+                console.error(`[App] ${context}:`, error);
+            }
         });
     }, []);
-    const refreshServicesStatusInBackground = useCallback((doc: DocType) => {
-        if (!isServiceCatalogDoc(doc)) return;
-        runNonBlockingTask(
-            refreshServicesStatus(false),
-            `refreshServicesStatus (${doc})`
-        );
-    }, [refreshServicesStatus, runNonBlockingTask]);
 
 
     // Atalhos globais de teclado
@@ -223,7 +217,9 @@ function App() {
             try {
                 notesMap = await fetchCrossChapterNotes(targetChapter);
             } catch (error) {
-                console.error("Erro no fetchCrossChapterNotes:", error);
+                if (import.meta.env.DEV) {
+                    console.error("Erro no fetchCrossChapterNotes:", error);
+                }
                 toast.error(`Erro ao carregar notas do Capítulo ${targetChapter}.`);
                 return;
             } finally {
@@ -339,8 +335,6 @@ function App() {
     const setDoc = useCallback((doc: string) => {
         const nextDoc = doc as DocType;
 
-        refreshServicesStatusInBackground(nextDoc);
-
         const currentTab = activeTabRef.current;
         const shouldOpenNewTab = Boolean(
             currentTab?.loading ||
@@ -367,11 +361,9 @@ function App() {
             isContentReady: false,
             loadedChaptersByDoc: resetLoadedChaptersForDoc(nextDoc)
         });
-    }, [activeTabId, createTab, refreshServicesStatusInBackground, resetLoadedChaptersForDoc, updateTab]);
+    }, [activeTabId, createTab, resetLoadedChaptersForDoc, updateTab]);
 
     const switchTabDocument = useCallback(async (tabId: string, doc: DocType, query?: string) => {
-        refreshServicesStatusInBackground(doc);
-
         updateTab(tabId, {
             document: doc,
             results: null,
@@ -396,7 +388,6 @@ function App() {
     }, [
         ensureServicesSearchAccess,
         executeSearchForTab,
-        refreshServicesStatusInBackground,
         resetLoadedChaptersForDoc,
         updateTab
     ]);

@@ -3,11 +3,9 @@ import { beforeEach, describe, it, expect, vi } from "vitest";
 import { SettingsModal } from "../../src/components/SettingsModal";
 import { useSettings } from "../../src/context/SettingsContext";
 import { SIDEBAR_POSITION, VIEW_MODE, ACCENT_COLOR } from "../../src/constants";
-import { useIsAdmin } from "../../src/hooks/useIsAdmin";
 
 // Mock the context hook
 vi.mock("../../src/context/SettingsContext");
-vi.mock("../../src/hooks/useIsAdmin");
 
 describe("SettingsModal Component", () => {
   const mockSettings = {
@@ -15,14 +13,12 @@ describe("SettingsModal Component", () => {
     accentColor: ACCENT_COLOR.PURPLE,
     fontSize: 16,
     highlightEnabled: true,
-    adminMode: false,
     tipiViewMode: VIEW_MODE.CHAPTER,
     sidebarPosition: SIDEBAR_POSITION.RIGHT,
     updateTheme: vi.fn(),
     updateAccentColor: vi.fn(),
     updateFontSize: vi.fn(),
     toggleHighlight: vi.fn(),
-    toggleAdminMode: vi.fn(),
     updateTipiViewMode: vi.fn(),
     updateSidebarPosition: vi.fn(),
     restoreDefaults: vi.fn(),
@@ -31,7 +27,6 @@ describe("SettingsModal Component", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useSettings).mockReturnValue(mockSettings as any);
-    vi.mocked(useIsAdmin).mockReturnValue(true);
   });
 
   it("does not render when closed", () => {
@@ -45,7 +40,6 @@ describe("SettingsModal Component", () => {
     expect(screen.getByText("Tema")).toBeInTheDocument();
     expect(screen.getByText("Tamanho da Fonte")).toBeInTheDocument();
     expect(screen.getByText("Realçar Resultados")).toBeInTheDocument();
-    expect(screen.getByText("Modo Desenvolvedor")).toBeInTheDocument();
     expect(screen.getByText("Visualização TIPI")).toBeInTheDocument();
   });
 
@@ -101,13 +95,6 @@ describe("SettingsModal Component", () => {
     expect(mockSettings.toggleHighlight).toHaveBeenCalled();
   });
 
-  it("toggles admin mode", () => {
-    render(<SettingsModal isOpen={true} onClose={vi.fn()} />);
-    const toggle = screen.getByTestId("admin-toggle");
-    fireEvent.click(toggle);
-    expect(mockSettings.toggleAdminMode).toHaveBeenCalled();
-  });
-
   it("restores defaults", () => {
     render(<SettingsModal isOpen={true} onClose={vi.fn()} />);
     const resetBtn = screen.getByText("Restaurar Padrões");
@@ -155,13 +142,5 @@ describe("SettingsModal Component", () => {
 
     fireEvent.click(screen.getByText("Tema"));
     expect(onClose).toHaveBeenCalledTimes(2);
-  });
-
-  it("hides admin controls for non-admin users", () => {
-    vi.mocked(useIsAdmin).mockReturnValue(false);
-    render(<SettingsModal isOpen={true} onClose={vi.fn()} />);
-
-    expect(screen.queryByTestId("admin-toggle")).not.toBeInTheDocument();
-    expect(screen.queryByText("Modo Desenvolvedor")).not.toBeInTheDocument();
   });
 });

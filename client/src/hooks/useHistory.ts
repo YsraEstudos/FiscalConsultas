@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 
 const MAX_HISTORY = 10;
 const STORAGE_KEY = 'nesh_search_history';
+const historyStorage = globalThis.sessionStorage;
 
 export interface HistoryItem {
     term: string;
@@ -11,9 +12,9 @@ export interface HistoryItem {
 export function useHistory() {
     const [history, setHistory] = useState<HistoryItem[]>([]);
 
-    // Load from local storage on mount
+    // Load from session storage on mount to avoid persisting search behavior across browser sessions.
     useEffect(() => {
-        const saved = localStorage.getItem(STORAGE_KEY);
+        const saved = historyStorage.getItem(STORAGE_KEY);
         if (saved) {
             try {
                 setHistory(JSON.parse(saved));
@@ -38,20 +39,20 @@ export function useHistory() {
             const updated = [newItem, ...filtered].slice(0, MAX_HISTORY);
 
             // Persist
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+            historyStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
             return updated;
         });
     }, []);
 
     const clearHistory = useCallback(() => {
         setHistory([]);
-        localStorage.removeItem(STORAGE_KEY);
+        historyStorage.removeItem(STORAGE_KEY);
     }, []);
 
     const removeFromHistory = useCallback((termToRemove: string) => {
         setHistory(prev => {
             const updated = prev.filter(item => item.term !== termToRemove);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+            historyStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
             return updated;
         });
     }, []);

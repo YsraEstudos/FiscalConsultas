@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 
 import { getSystemStatus } from '../services/api';
@@ -44,7 +44,9 @@ export function useServicesAccess() {
         const request = getSystemStatus()
             .then((status) => commitSnapshot(buildServiceCatalogSnapshot(status)))
             .catch((error) => {
-                console.warn('[useServicesAccess] Failed to refresh /api/status:', error);
+                if (import.meta.env.DEV) {
+                    console.warn('[useServicesAccess] Failed to refresh /api/status:', error);
+                }
 
                 const previous = snapshotRef.current;
                 if (previous.availability === 'online' && isSnapshotFresh(previous)) {
@@ -64,10 +66,6 @@ export function useServicesAccess() {
         inFlightRef.current = request;
         return request;
     }, [commitSnapshot]);
-
-    useEffect(() => {
-        void refreshServicesStatus(false);
-    }, [refreshServicesStatus]);
 
     const ensureServicesAccess = useCallback(async () => {
         const current = snapshotRef.current;
@@ -98,12 +96,8 @@ export function useServicesAccess() {
             return false;
         }
 
-        if (current.availability === 'unknown' || !isSnapshotFresh(current)) {
-            void refreshServicesStatus(false);
-        }
-
         return true;
-    }, [refreshServicesStatus]);
+    }, []);
 
     return {
         ensureServicesAccess,

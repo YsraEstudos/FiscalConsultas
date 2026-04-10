@@ -56,14 +56,11 @@ describe('useServicesAccess', () => {
 
     const { result } = renderHook(() => useServicesAccess());
 
-    await waitFor(() => {
-      expect(refs.getSystemStatusMock).toHaveBeenCalledTimes(1);
-    });
-
     await act(async () => {
       await expect(result.current.ensureServicesAccess()).resolves.toBe(true);
     });
 
+    expect(refs.getSystemStatusMock).toHaveBeenCalledTimes(1);
     expect(refs.toastErrorMock).not.toHaveBeenCalled();
   });
 
@@ -74,13 +71,13 @@ describe('useServicesAccess', () => {
 
     const { result } = renderHook(() => useServicesAccess());
 
+    await act(async () => {
+      await expect(result.current.ensureServicesAccess()).resolves.toBe(false);
+    });
+
     await waitFor(() => {
       expect(refs.getSystemStatusMock).toHaveBeenCalledTimes(1);
       expect(result.current.servicesUnavailableReason).toBe('Catálogo NBS indisponível no momento.');
-    });
-
-    await act(async () => {
-      await expect(result.current.ensureServicesAccess()).resolves.toBe(false);
     });
 
     expect(refs.toastErrorMock).toHaveBeenCalledWith('Catálogo NBS indisponível no momento.');
@@ -93,16 +90,13 @@ describe('useServicesAccess', () => {
     try {
       const { result } = renderHook(() => useServicesAccess());
 
-      await waitFor(() => {
-        expect(refs.getSystemStatusMock).toHaveBeenCalledTimes(1);
-      });
-
       expect(result.current.servicesUnavailableReason).toBeNull();
 
       await act(async () => {
         await expect(result.current.ensureServicesAccess()).resolves.toBe(true);
       });
 
+      expect(refs.getSystemStatusMock).toHaveBeenCalledTimes(1);
       expect(refs.toastErrorMock).not.toHaveBeenCalled();
     } finally {
       warnSpy.mockRestore();
@@ -120,6 +114,10 @@ describe('useServicesAccess', () => {
 
     try {
       const { result } = renderHook(() => useServicesAccess());
+
+      await act(async () => {
+        await result.current.refreshServicesStatus(true);
+      });
 
       await waitFor(() => {
         expect(result.current.servicesUnavailableReason).toBe('Catálogo NBS indisponível no momento.');
@@ -154,6 +152,10 @@ describe('useServicesAccess', () => {
     try {
       const { result } = renderHook(() => useServicesAccess());
 
+      await act(async () => {
+        await result.current.refreshServicesStatus(true);
+      });
+
       await waitFor(() => {
         expect(result.current.servicesAvailability).toBe('online');
       });
@@ -184,6 +186,10 @@ describe('useServicesAccess', () => {
 
     const { result } = renderHook(() => useServicesAccess());
 
+    await act(async () => {
+      await result.current.refreshServicesStatus(true);
+    });
+
     await waitFor(() => {
       expect(result.current.servicesUnavailableReason).toBe('Catálogo NBS/NEBS indisponível no momento.');
     });
@@ -212,6 +218,7 @@ describe('useServicesAccess', () => {
       ).resolves.toBe(true);
     });
 
+    expect(refs.getSystemStatusMock).not.toHaveBeenCalled();
     expect(refs.toastErrorMock).not.toHaveBeenCalled();
   });
 });

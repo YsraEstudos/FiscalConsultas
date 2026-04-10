@@ -160,6 +160,7 @@ describe('api service', () => {
   });
 
   it('handles token getter failures and malformed absolute URLs without crashing', async () => {
+    vi.stubEnv('VITE_AUTH_DEBUG', 'true');
     const apiModule = await loadApiModule();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const getter = vi.fn().mockRejectedValue(new Error('token failed'));
@@ -177,6 +178,7 @@ describe('api service', () => {
   });
 
   it('warns in dev when no auth token is available after the fallback refresh attempt', async () => {
+    vi.stubEnv('VITE_AUTH_DEBUG', 'true');
     const apiModule = await loadApiModule();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const getter = vi.fn().mockResolvedValue(null);
@@ -202,6 +204,7 @@ describe('api service', () => {
   });
 
   it('propagates request and response interceptor errors and logs 401', async () => {
+    vi.stubEnv('VITE_AUTH_DEBUG', 'true');
     await loadApiModule();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const reqError = new Error('request-failure');
@@ -249,6 +252,7 @@ describe('api service', () => {
   });
 
   it('applies cooldown to forced refresh to avoid token storm', async () => {
+    vi.stubEnv('VITE_AUTH_DEBUG', 'true');
     const apiModule = await loadApiModule();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const getter = vi.fn().mockResolvedValue('fresh-token');
@@ -290,6 +294,7 @@ describe('api service', () => {
   });
 
   it('skips refresh for 401 with missing-token detail', async () => {
+    vi.stubEnv('VITE_AUTH_DEBUG', 'true');
     const apiModule = await loadApiModule();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const getter = vi.fn().mockResolvedValue('fresh-token');
@@ -315,6 +320,7 @@ describe('api service', () => {
   });
 
   it('logs refresh failures and still rejects the original 401 response', async () => {
+    vi.stubEnv('VITE_AUTH_DEBUG', 'true');
     const apiModule = await loadApiModule();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const getter = vi.fn().mockRejectedValue(new Error('refresh exploded'));

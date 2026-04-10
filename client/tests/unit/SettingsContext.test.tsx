@@ -20,7 +20,6 @@ function SettingsProbe() {
       <div data-testid="accent">{settings.accentColor}</div>
       <div data-testid="font">{settings.fontSize}</div>
       <div data-testid="highlight">{String(settings.highlightEnabled)}</div>
-      <div data-testid="admin">{String(settings.adminMode)}</div>
       <div data-testid="tipi">{settings.tipiViewMode}</div>
       <div data-testid="sidebar">{settings.sidebarPosition}</div>
 
@@ -32,7 +31,6 @@ function SettingsProbe() {
       <button onClick={() => settings.toggleHighlight()}>
         toggle-highlight
       </button>
-      <button onClick={() => settings.toggleAdminMode()}>toggle-admin</button>
       <button onClick={() => settings.updateTipiViewMode(VIEW_MODE.FAMILY)}>
         tipi-family
       </button>
@@ -72,7 +70,6 @@ describe("SettingsContext", () => {
     localStorage.setItem(STORAGE_KEYS.ACCENT_COLOR, ACCENT_COLOR.GREEN);
     localStorage.setItem(STORAGE_KEYS.FONT_SIZE, "18");
     localStorage.setItem(STORAGE_KEYS.HIGHLIGHT, "false");
-    localStorage.setItem(STORAGE_KEYS.ADMIN_MODE, "false");
     localStorage.setItem(STORAGE_KEYS.TIPI_VIEW_MODE, VIEW_MODE.FAMILY);
     localStorage.setItem(STORAGE_KEYS.SIDEBAR_POSITION, SIDEBAR_POSITION.RIGHT);
 
@@ -88,7 +85,6 @@ describe("SettingsContext", () => {
     expect(screen.getByTestId("accent")).toHaveTextContent(ACCENT_COLOR.GREEN);
     expect(screen.getByTestId("font")).toHaveTextContent("18");
     expect(screen.getByTestId("highlight")).toHaveTextContent("false");
-    expect(screen.getByTestId("admin")).toHaveTextContent("false");
     expect(screen.getByTestId("tipi")).toHaveTextContent(VIEW_MODE.FAMILY);
     expect(screen.getByTestId("sidebar")).toHaveTextContent(
       SIDEBAR_POSITION.RIGHT,
@@ -117,7 +113,7 @@ describe("SettingsContext", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByTestId("admin")).toHaveTextContent("true"),
+      expect(screen.getByTestId("theme")).toHaveTextContent(DEFAULTS.THEME),
     );
     expect(screen.getByTestId("tipi")).toHaveTextContent(
       DEFAULTS.TIPI_VIEW_MODE,
@@ -141,7 +137,6 @@ describe("SettingsContext", () => {
     fireEvent.click(screen.getByText("accent-pink"));
     fireEvent.click(screen.getByText("font-20"));
     fireEvent.click(screen.getByText("toggle-highlight"));
-    fireEvent.click(screen.getByText("toggle-admin"));
     fireEvent.click(screen.getByText("tipi-family"));
     fireEvent.click(screen.getByText("sidebar-right"));
 
@@ -151,7 +146,6 @@ describe("SettingsContext", () => {
     expect(screen.getByTestId("accent")).toHaveTextContent(ACCENT_COLOR.PINK);
     expect(screen.getByTestId("font")).toHaveTextContent("20");
     expect(screen.getByTestId("highlight")).toHaveTextContent("false");
-    expect(screen.getByTestId("admin")).toHaveTextContent("false");
     expect(screen.getByTestId("tipi")).toHaveTextContent(VIEW_MODE.FAMILY);
     expect(screen.getByTestId("sidebar")).toHaveTextContent(
       SIDEBAR_POSITION.RIGHT,
@@ -173,9 +167,6 @@ describe("SettingsContext", () => {
     );
     expect(screen.getByTestId("highlight")).toHaveTextContent(
       String(DEFAULTS.HIGHLIGHT),
-    );
-    expect(screen.getByTestId("admin")).toHaveTextContent(
-      String(DEFAULTS.ADMIN_MODE),
     );
     expect(screen.getByTestId("tipi")).toHaveTextContent(
       DEFAULTS.TIPI_VIEW_MODE,

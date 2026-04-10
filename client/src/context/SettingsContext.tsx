@@ -18,19 +18,19 @@ import {
   ACCENT_COLOR_VALUES,
 } from "../constants";
 
+const LEGACY_ADMIN_MODE_STORAGE_KEY = "nesh_admin_mode";
+
 interface SettingsContextType {
   theme: string;
   accentColor: AccentColor;
   fontSize: number;
   highlightEnabled: boolean;
-  adminMode: boolean;
   tipiViewMode: TipiViewMode;
   sidebarPosition: SidebarPosition;
   updateTheme: (newTheme: string) => void;
   updateAccentColor: (color: AccentColor) => void;
   updateFontSize: (newSize: number) => void;
   toggleHighlight: () => void;
-  toggleAdminMode: () => void;
   updateTipiViewMode: (mode: TipiViewMode) => void;
   updateSidebarPosition: (position: SidebarPosition) => void;
   restoreDefaults: () => void;
@@ -42,8 +42,8 @@ const SettingsContext = createContext<SettingsContextType | null>(null);
  * Provides the SettingsContext and manages persistent user preferences and UI side effects.
  *
  * Initializes settings from localStorage, persists changes back to localStorage, applies related
- * DOM attributes and classes (theme, accent color, font size, highlight visibility, admin mode,
- * tipi view mode, and sidebar position), and exposes update/restore actions to consumers.
+ * DOM attributes and classes (theme, accent color, font size, highlight visibility, tipi view
+ * mode, and sidebar position), and exposes update/restore actions to consumers.
  *
  * @param children - React nodes that will receive the settings context
  * @returns The SettingsContext provider element wrapping the given children
@@ -60,7 +60,6 @@ export function SettingsProvider({
   const [highlightEnabled, setHighlightEnabled] = useState<boolean>(
     DEFAULTS.HIGHLIGHT,
   );
-  const [adminMode, setAdminMode] = useState<boolean>(DEFAULTS.ADMIN_MODE);
   const [tipiViewMode, setTipiViewMode] = useState<TipiViewMode>(
     DEFAULTS.TIPI_VIEW_MODE,
   );
@@ -93,14 +92,6 @@ export function SettingsProvider({
       if (savedHighlight !== null)
         setHighlightEnabled(savedHighlight === "true");
 
-      const savedAdmin = localStorage.getItem(STORAGE_KEYS.ADMIN_MODE);
-      if (savedAdmin === null) {
-        // First time visit -> Default to TRUE (Admin on by default)
-        setAdminMode(true);
-      } else {
-        setAdminMode(savedAdmin === "true");
-      }
-
       const savedTipiView = localStorage.getItem(
         STORAGE_KEYS.TIPI_VIEW_MODE,
       ) as TipiViewMode | null;
@@ -118,6 +109,8 @@ export function SettingsProvider({
       ) {
         setSidebarPosition(savedSidebarPos);
       }
+
+      localStorage.removeItem(LEGACY_ADMIN_MODE_STORAGE_KEY);
     } catch (e) {
       console.error("Failed to load settings", e);
     }
@@ -155,10 +148,6 @@ export function SettingsProvider({
   }, [highlightEnabled]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.ADMIN_MODE, adminMode.toString());
-  }, [adminMode]);
-
-  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.TIPI_VIEW_MODE, tipiViewMode);
   }, [tipiViewMode]);
 
@@ -174,7 +163,6 @@ export function SettingsProvider({
   );
   const updateFontSize = useCallback((newSize: number) => setFontSize(newSize), []);
   const toggleHighlight = useCallback(() => setHighlightEnabled((prev) => !prev), []);
-  const toggleAdminMode = useCallback(() => setAdminMode((prev) => !prev), []);
   const updateTipiViewMode = useCallback(
     (mode: TipiViewMode) => setTipiViewMode(mode),
     [],
@@ -189,7 +177,6 @@ export function SettingsProvider({
     setAccentColor(DEFAULTS.ACCENT_COLOR);
     setFontSize(DEFAULTS.FONT_SIZE);
     setHighlightEnabled(DEFAULTS.HIGHLIGHT);
-    setAdminMode(DEFAULTS.ADMIN_MODE);
     setTipiViewMode(DEFAULTS.TIPI_VIEW_MODE);
     setSidebarPosition(DEFAULTS.SIDEBAR_POSITION);
   }, []);
@@ -200,14 +187,12 @@ export function SettingsProvider({
       accentColor,
       fontSize,
       highlightEnabled,
-      adminMode,
       tipiViewMode,
       sidebarPosition,
       updateTheme,
       updateAccentColor,
       updateFontSize,
       toggleHighlight,
-      toggleAdminMode,
       updateTipiViewMode,
       updateSidebarPosition,
       restoreDefaults,
@@ -217,14 +202,12 @@ export function SettingsProvider({
       accentColor,
       fontSize,
       highlightEnabled,
-      adminMode,
       tipiViewMode,
       sidebarPosition,
       updateTheme,
       updateAccentColor,
       updateFontSize,
       toggleHighlight,
-      toggleAdminMode,
       updateTipiViewMode,
       updateSidebarPosition,
       restoreDefaults,

@@ -173,10 +173,10 @@ describe('useSearch behavior', () => {
   });
 
   it.each([
-    ['404 responses', makeAxiosError(404), 'Endpoint não encontrado (404). Verifique se o backend está rodando e se a base URL está correta.'],
-    ['generic status responses', makeAxiosError(503), 'Erro 503 ao buscar dados. Verifique a API.'],
-    ['timeouts', makeAxiosError(undefined, 'ECONNABORTED'), 'Tempo limite na requisição. Verifique a conexão com o backend.'],
-    ['network failures', makeAxiosError(undefined, 'ERR_NETWORK'), 'Não foi possível conectar à API. Verifique se o backend está em execução.'],
+    ['404 responses', makeAxiosError(404), 'Conteúdo indisponível no momento.'],
+    ['generic status responses', makeAxiosError(503), 'Não foi possível carregar os dados agora. Tente novamente em instantes.'],
+    ['timeouts', makeAxiosError(undefined, 'ECONNABORTED'), 'Não foi possível carregar os dados agora. Tente novamente em instantes.'],
+    ['network failures', makeAxiosError(undefined, 'ERR_NETWORK'), 'Não foi possível carregar os dados agora. Tente novamente em instantes.'],
   ])('maps %s into toast and tab error state', async (_label, error, message) => {
     const updateTab = vi.fn();
     const addToHistory = vi.fn();

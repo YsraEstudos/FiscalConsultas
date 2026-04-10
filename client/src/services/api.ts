@@ -314,14 +314,16 @@ api.interceptors.request.use(
                         });
                     }
                     logJwtDebug('request', normalizedPath, requestId, token, usedOptions);
-                } else if (AUTH_DEBUG_ENABLED || import.meta.env.DEV) {
+                } else if (AUTH_DEBUG_ENABLED) {
                     console.warn('[API] No Clerk token available for authenticated request:', normalizedPath, {
                         requestId,
                     });
                 }
             } catch (error) {
                 // Falha silenciosa - request continua sem token
-                console.warn('[API] Failed to get auth token:', error);
+                if (AUTH_DEBUG_ENABLED) {
+                    console.warn('[API] Failed to get auth token:', error);
+                }
             }
         }
         return config;
@@ -369,12 +371,14 @@ api.interceptors.response.use(
                     }
                 } catch (refreshError) {
                     refreshMode = 'fresh';
-                    console.warn('[API] Failed to refresh token after 401:', refreshError);
+                    if (AUTH_DEBUG_ENABLED) {
+                        console.warn('[API] Failed to refresh token after 401:', refreshError);
+                    }
                 }
             }
         }
 
-        if (status === 401) {
+        if (status === 401 && AUTH_DEBUG_ENABLED) {
             console.warn('[API] 401 Unauthorized - Token missing, expired, or invalid', {
                 path: originalRequest?.url,
                 requestId,

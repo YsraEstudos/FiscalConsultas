@@ -45,7 +45,6 @@ export const STORAGE_KEYS = {
   ACCENT_COLOR: "nesh_accent_color",
   FONT_SIZE: "nesh_font_size",
   HIGHLIGHT: "nesh_highlight",
-  ADMIN_MODE: "nesh_admin_mode",
   TIPI_VIEW_MODE: "nesh_tipi_view_mode",
   SIDEBAR_POSITION: "nesh_sidebar_position",
 } as const;
@@ -56,7 +55,6 @@ export const DEFAULTS = {
   ACCENT_COLOR: ACCENT_COLOR.PURPLE,
   FONT_SIZE: 16,
   HIGHLIGHT: true,
-  ADMIN_MODE: true,
   TIPI_VIEW_MODE: VIEW_MODE.CHAPTER,
   SIDEBAR_POSITION: SIDEBAR_POSITION.LEFT,
 } as const;

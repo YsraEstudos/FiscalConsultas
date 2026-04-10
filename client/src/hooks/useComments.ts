@@ -87,7 +87,9 @@ export function useComments(): UseCommentsReturn {
                 return [...filtered, ...mapped];
             });
         } catch (error) {
-            console.error('[useComments] Failed to load comments:', error);
+            if (import.meta.env.DEV) {
+                console.error('[useComments] Failed to load comments:', error);
+            }
             // Don't toast on load failure — silent fallback
         } finally {
             setLoading(false);
@@ -135,20 +137,17 @@ export function useComments(): UseCommentsReturn {
             toast.success('Comentário salvo');
             return true;
         } catch (error) {
-            console.error('[useComments] Failed to create comment:', error);
+            if (import.meta.env.DEV) {
+                console.error('[useComments] Failed to create comment:', error);
+            }
             // Remove optimistic entry on failure
             setComments(prev => prev.filter(c => c.id !== tempId));
             if (axios.isAxiosError(error) && error.response?.status === 401) {
                 const detail = getApiErrorDetail(error);
-                if (isLanHostInDev()) {
-                    toast.error('Token do Clerk indisponível neste host de rede. Abra em http://localhost:5173 para comentar.');
-                } else if (detail === 'Token ausente') {
-                    toast.error('Token não enviado pelo Clerk. Faça logout/login e tente novamente.');
-                } else if (detail?.startsWith('Token inválido ou expirado')) {
-                    toast.error('Token inválido/expirado. Faça login novamente.');
-                } else {
-                    toast.error('Sessão expirada. Faça login novamente para comentar.');
-                }
+                const sessionMessage = isLanHostInDev() || detail
+                    ? 'Não foi possível validar sua sessão de comentários. Faça login novamente e tente de novo.'
+                    : 'Sua sessão expirou. Faça login novamente para comentar.';
+                toast.error(sessionMessage);
                 return false;
             }
             toast.error('Erro ao salvar comentário. Tente novamente.');
@@ -186,7 +185,9 @@ export function useComments(): UseCommentsReturn {
                     prev.map(c => c.id === commentId ? original : c),
                 );
             }
-            console.error('[useComments] Failed to edit comment:', error);
+            if (import.meta.env.DEV) {
+                console.error('[useComments] Failed to edit comment:', error);
+            }
             if (axios.isAxiosError(error) && error.response?.status === 403) {
                 toast.error('Sem permissão para editar este comentário.');
                 return;
@@ -214,7 +215,9 @@ export function useComments(): UseCommentsReturn {
             if (original) {
                 setComments(prev => [...prev, original]);
             }
-            console.error('[useComments] Failed to delete comment:', error);
+            if (import.meta.env.DEV) {
+                console.error('[useComments] Failed to delete comment:', error);
+            }
             if (axios.isAxiosError(error) && error.response?.status === 403) {
                 toast.error('Sem permissão para remover este comentário.');
                 return;
@@ -226,7 +229,9 @@ export function useComments(): UseCommentsReturn {
     const loadCommentedAnchors = useCallback(async (force = false): Promise<string[]> => {
         if (isLanHostInDev()) {
             if (!skippedLanAnchorFetchRef.current) {
-                console.warn('[useComments] Skipping /comments/anchors on LAN host in development (Clerk token unavailable).');
+                if (import.meta.env.DEV) {
+                    console.warn('[useComments] Skipping /comments/anchors on LAN host in development.');
+                }
                 skippedLanAnchorFetchRef.current = true;
             }
             setCommentedAnchors([]);
@@ -245,7 +250,9 @@ export function useComments(): UseCommentsReturn {
                 setCommentedAnchors(anchors);
                 return anchors;
             } catch (error) {
-                console.error('[useComments] Failed to await in-flight commented anchors request:', error);
+                if (import.meta.env.DEV) {
+                    console.error('[useComments] Failed to await in-flight commented anchors request:', error);
+                }
                 return [];
             }
         }
@@ -265,7 +272,9 @@ export function useComments(): UseCommentsReturn {
             setCommentedAnchors(anchors);
             return anchors;
         } catch (error) {
-            console.error('[useComments] Failed to load commented anchors:', error);
+            if (import.meta.env.DEV) {
+                console.error('[useComments] Failed to load commented anchors:', error);
+            }
             return [];
         } finally {
             if (commentedAnchorsInFlightPromise === requestPromise) {
