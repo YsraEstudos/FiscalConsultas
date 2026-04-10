@@ -11,8 +11,8 @@ _DEF_CONT_PREFIXES = ("-", "–", "—", "•", "(")
 _RE_MD_BOLD = re.compile(r"\*\*(.+?)\*\*")
 _RE_MD_ITALIC_STAR = re.compile(r"\*(.+?)\*")
 _RE_MD_ITALIC_UNDERSCORE = re.compile(r"_(.+?)_")
-_RE_MD_BOLD_EDGE = re.compile(r"^\*\*|\*\*$")
-_RE_MD_STAR_EDGE = re.compile(r"^\*|\*$")
+_RE_MD_BOLD_EDGE = re.compile(r"^\*\*|\*\*$")  # NOSONAR
+_RE_MD_STAR_EDGE = re.compile(r"^\*|\*$")  # NOSONAR
 _RE_MULTIPLE_NEWLINES = re.compile(r"\n{3,}")
 
 
