@@ -23,11 +23,11 @@ set "CHK_FRONTEND_BUILD=PENDENTE"
 set "CHK_FRONTEND_PORT=PENDENTE"
 
 set "FRONTEND_MODE=preview"
-set "FRONTEND_PORT=4173"
+set "FRONTEND_PORT=5173"
 set "FRONTEND_WAIT_ATTEMPTS=90"
-set "FRONTEND_BOOT_CMD=npm run build && npm run preview -- --host 0.0.0.0 --port 4173 --strictPort"
-set "FRONTEND_WINDOW_TITLE=Nesh Client (Preview)"
-set "FRONTEND_LOCAL_URL=http://127.0.0.1:4173"
+set "FRONTEND_BOOT_CMD="
+set "FRONTEND_WINDOW_TITLE="
+set "FRONTEND_LOCAL_URL="
 set "FRONTEND_PUBLIC_URL="
 
 :parse_args
@@ -41,18 +41,10 @@ if /I "%~1"=="--auth-debug" (
     set "BACKEND_BOOT_CMD=uv run Nesh.py"
 ) else if /I "%~1"=="--public-preview" (
     set "FRONTEND_MODE=preview"
-    set "FRONTEND_PORT=4173"
-    set "FRONTEND_WAIT_ATTEMPTS=90"
-    set "FRONTEND_BOOT_CMD=npm run build && npm run preview -- --host 0.0.0.0 --port 4173 --strictPort"
-    set "FRONTEND_WINDOW_TITLE=Nesh Client (Preview)"
-    set "FRONTEND_LOCAL_URL=http://127.0.0.1:4173"
+    set "FRONTEND_PORT=5173"
 ) else if /I "%~1"=="--dev-hmr" (
     set "FRONTEND_MODE=dev"
     set "FRONTEND_PORT=5173"
-    set "FRONTEND_WAIT_ATTEMPTS=50"
-    set "FRONTEND_BOOT_CMD=npm run dev"
-    set "FRONTEND_WINDOW_TITLE=Nesh Client (Dev)"
-    set "FRONTEND_LOCAL_URL=http://127.0.0.1:5173"
 ) else (
     echo [WARN] Argumento ignorado: %~1
 )
@@ -61,10 +53,18 @@ goto parse_args
 :args_done
 
 if /I "!FRONTEND_MODE!"=="preview" (
+    set "FRONTEND_WAIT_ATTEMPTS=90"
+    set "FRONTEND_WINDOW_TITLE=Nesh Client (Preview)"
+    set "FRONTEND_BOOT_CMD=npm run build && npm run preview -- --host 0.0.0.0 --port !FRONTEND_PORT! --strictPort"
     set "CHK_FRONTEND_BUILD=PENDENTE"
 ) else (
+    set "FRONTEND_WAIT_ATTEMPTS=50"
+    set "FRONTEND_WINDOW_TITLE=Nesh Client (Dev)"
+    set "FRONTEND_BOOT_CMD=npm run dev -- --host --port !FRONTEND_PORT! --strictPort"
     set "CHK_FRONTEND_BUILD=IGNORADO"
 )
+set "FRONTEND_LOCAL_URL=http://127.0.0.1:!FRONTEND_PORT!"
+set "FRONTEND_PUBLIC_URL="
 
 where node >nul 2>&1
 if errorlevel 1 (

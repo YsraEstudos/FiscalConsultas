@@ -57,10 +57,11 @@ def test_init_with_api_key_sets_model(monkeypatch):
 def test_init_with_api_key_handles_provider_error(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "k-test")
     monkeypatch.setattr(ai_mod, "genai", _ProviderModelError)
-    monkeypatch.setattr(ai_mod.logger, "error", lambda _msg: None)
+    monkeypatch.setattr(ai_mod.logger, "exception", lambda *_args, **_kwargs: None)
 
     service = ai_mod.AiService()
     assert service.model is None
+    assert service.ai_disabled_reason == "Provider initialization failed"
 
 
 def test_init_with_api_key_and_missing_provider_dependency(monkeypatch):
@@ -70,6 +71,7 @@ def test_init_with_api_key_and_missing_provider_dependency(monkeypatch):
 
     service = ai_mod.AiService()
     assert service.model is None
+    assert service.ai_disabled_reason == "Provider import failed"
 
 
 @pytest.mark.asyncio
@@ -98,7 +100,7 @@ async def test_get_chat_response_reports_provider_import_failure_reason(monkeypa
         await service.get_chat_response("oi")
 
     assert "Provider import failed" in str(exc.value)
-    assert "requests.exceptions" in str(exc.value)
+    assert "requests.exceptions" not in str(exc.value)
 
 
 @pytest.mark.asyncio

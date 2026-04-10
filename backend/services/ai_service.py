@@ -22,7 +22,7 @@ class AiService:
 
         if self.api_key:
             if genai is None:
-                self.ai_disabled_reason = f"Provider import failed: {_genai_import_error}"
+                self.ai_disabled_reason = "Provider import failed"
                 logger.error(
                     "AI provider unavailable: %s. AI features disabled.",
                     _genai_import_error,
@@ -36,15 +36,15 @@ class AiService:
                 )
                 logger.info("AI Service Initialized (Gemini Pro)")
             except Exception as e:
-                self.ai_disabled_reason = f"Provider initialization failed: {e}"
-                logger.error(f"Failed to initialize AI: {e}")
+                self.ai_disabled_reason = "Provider initialization failed"
+                logger.exception("Failed to initialize AI: %s", e)
         else:
             self.ai_disabled_reason = "API key ausente"
             logger.warning("GOOGLE_API_KEY not found. AI features disabled.")
 
     async def get_chat_response(self, message: str) -> str:
         if not self.model:
-            reason = self.ai_disabled_reason or "API key ausente"
+            reason = self.ai_disabled_reason or "AI service not configured"
             raise ServiceError(
                 f"Serviço de IA não configurado ({reason}).", service="AI"
             )
