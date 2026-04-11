@@ -4,11 +4,14 @@
  * Este contexto conecta o frontend ao sistema de autenticação Clerk,
  * expondo informações do usuário e organização atual.
  */
-import { createContext, useContext, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useUser, useAuth as useClerkAuth, useOrganization } from '@clerk/react';
-import { registerClerkTokenGetter, unregisterClerkTokenGetter } from '../services/api';
+import {
+    getAuthSession,
+    registerClerkTokenGetter,
+    unregisterClerkTokenGetter,
+} from '../services/api';
 import { hasPrivilegedRole } from '../utils/authz';
-import { activateConsoleForAdmin } from '../utils/consoleSilencer';
 
 interface AuthContextType {
     // User Info
@@ -26,6 +29,8 @@ interface AuthContextType {
 
     // Token for API calls
     getToken: () => Promise<string | null>;
+    canUseAiChat: boolean;
+    canUseRestrictedUi: boolean;
 
     // Legacy compatibility
     isAdmin: boolean;
@@ -54,10 +59,21 @@ type MembershipLike = {
     role?: string | null;
 } | null | undefined;
 
+type AuthCapabilities = {
+    canUseAiChat: boolean;
+    canUseRestrictedUi: boolean;
+};
+
+const DEFAULT_AUTH_CAPABILITIES: AuthCapabilities = {
+    canUseAiChat: false,
+    canUseRestrictedUi: false,
+};
+
 function buildContextValue(
     baseState: CommonAuthState,
     organization: OrganizationLike,
     membership: MembershipLike,
+    capabilities: AuthCapabilities,
 ): AuthContextType {
     const { user, isSignedIn, isLoading, getToken, signOut } = baseState;
 
@@ -79,6 +95,8 @@ function buildContextValue(
                 return null;
             }
         },
+        canUseAiChat: capabilities.canUseAiChat,
+        canUseRestrictedUi: capabilities.canUseRestrictedUi,
         isAdmin: hasPrivilegedRole(membership?.role),
         authToken: null,
         login: (_token?: string | null) => {
@@ -93,20 +111,22 @@ function buildContextValue(
 function SignedInAuthProvider({
     children,
     baseState,
-}: {
+    capabilities,
+}: Readonly<{
     children: ReactNode;
     baseState: CommonAuthState;
-}) {
+    capabilities: AuthCapabilities;
+}>) {
     const { organization, membership } = useOrganization();
 
     return (
-        <AuthContext.Provider value={buildContextValue(baseState, organization, membership)}>
+        <AuthContext.Provider value={buildContextValue(baseState, organization, membership, capabilities)}>
             {children}
         </AuthContext.Provider>
     );
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     const { user, isSignedIn, isLoaded: userLoaded } = useUser();
     const { getToken, signOut, isLoaded: authLoaded } = useClerkAuth();
     const isLoading = !userLoaded || !authLoaded;
@@ -117,6 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         getToken,
         signOut,
     };
+    const [capabilities, setCapabilities] = useState<AuthCapabilities>(DEFAULT_AUTH_CAPABILITIES);
 
     // Registra o getToken no módulo API para que o interceptor possa usá-lo
     useEffect(() => {
@@ -126,19 +147,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
     }, [getToken]);
 
-    // Activate/keep console silence based on the resolved user email.
     useEffect(() => {
-        if (!isLoading) {
-            activateConsoleForAdmin(user?.primaryEmailAddress?.emailAddress);
+        if (isLoading || !isSignedIn) {
+            setCapabilities(DEFAULT_AUTH_CAPABILITIES);
+            return undefined;
         }
-    }, [isLoading, user?.primaryEmailAddress?.emailAddress]);
+
+        let cancelled = false;
+
+        void getAuthSession()
+            .then((session) => {
+                if (cancelled) return;
+                setCapabilities({
+                    canUseAiChat: !!session.can_use_ai_chat,
+                    canUseRestrictedUi: !!session.can_use_restricted_ui,
+                });
+            })
+            .catch((error) => {
+                if (cancelled) return;
+                console.warn('[AuthContext] Failed to load auth session:', error);
+                setCapabilities(DEFAULT_AUTH_CAPABILITIES);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [isLoading, isSignedIn, user?.id]);
 
     if (isSignedIn) {
-        return <SignedInAuthProvider baseState={baseState}>{children}</SignedInAuthProvider>;
+        return (
+            <SignedInAuthProvider baseState={baseState} capabilities={capabilities}>
+                {children}
+            </SignedInAuthProvider>
+        );
     }
 
     return (
-        <AuthContext.Provider value={buildContextValue(baseState, null, null)}>
+        <AuthContext.Provider value={buildContextValue(baseState, null, null, capabilities)}>
             {children}
         </AuthContext.Provider>
     );

@@ -131,8 +131,10 @@ export function useSearch(
                 }
             });
         } catch (err: any) {
-            console.error(err);
-            let message = 'Erro ao buscar dados. Verifique a API.';
+            if (import.meta.env.DEV) {
+                console.error(err);
+            }
+            let message = 'Não foi possível carregar os dados agora. Tente novamente em instantes.';
 
             if (isServiceCatalogDoc(doc)) {
                 const serviceError = getServiceCatalogErrorInfo(err, doc);
@@ -141,13 +143,7 @@ export function useSearch(
             } else if (axios.isAxiosError(err)) {
                 const status = err.response?.status;
                 if (status === 404) {
-                    message = 'Endpoint não encontrado (404). Verifique se o backend está rodando e se a base URL está correta.';
-                } else if (status) {
-                    message = `Erro ${status} ao buscar dados. Verifique a API.`;
-                } else if (err.code === 'ECONNABORTED') {
-                    message = 'Tempo limite na requisição. Verifique a conexão com o backend.';
-                } else if (err.code === 'ERR_NETWORK') {
-                    message = 'Não foi possível conectar à API. Verifique se o backend está em execução.';
+                    message = 'Conteúdo indisponível no momento.';
                 }
             }
 

@@ -20,8 +20,8 @@
 ## Top 10 Risk Areas (Execution Order)
 1. Sanitização de HTML/backend-rendered content no frontend (`contentSecurity.ts`, `MarkdownPane`, `ResultDisplay`).
 2. Gating de moderação/admin por role do Clerk (`AuthContext`, `authz.ts`, `ModalManager`).
-3. Gating de UI restrita por `VITE_RESTRICTED_UI_EMAILS` sem vazar controles para usuários não autorizados.
-4. Auth enforcement on `/api/ai/chat` (401 vs 200 contract).
+3. Capacidades de UI restrita vindas de `/api/auth/me`, sem expor allowlists no bundle público.
+4. Auth enforcement on `/api/ai/chat` (`401` vs `403` vs `200` contract).
 5. AI chat rate-limit behavior (`429` + `Retry-After` header).
 6. Webhook contract for `/api/webhooks/asaas` (token validation, payload validation, event routing).
 7. Search route contract aliasing (`results` vs `resultados`) for legacy frontend compatibility.

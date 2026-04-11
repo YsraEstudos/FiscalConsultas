@@ -428,10 +428,7 @@ def _build_public_status_payload(
 
     overall_status = overall_status or "error"
     catalogs = {
-        "nesh": {
-            "status": normalized_db.get("status", "error"),
-            "latency_ms": normalized_db.get("latency_ms", 0),
-        },
+        "nesh": {"status": normalized_db.get("status", "error")},
         "tipi": {"status": normalized_tipi.get("status", "error")},
     }
     if normalized_nbs is not None:
@@ -440,10 +437,7 @@ def _build_public_status_payload(
         catalogs["nebs"] = {"status": normalized_nebs.get("status", "error")}
     payload = {
         "status": overall_status,
-        "database": {
-            "status": normalized_db.get("status", "error"),
-            "latency_ms": normalized_db.get("latency_ms", 0),
-        },
+        "database": {"status": normalized_db.get("status", "error")},
         "tipi": {
             "status": normalized_tipi.get("status", "error"),
         },

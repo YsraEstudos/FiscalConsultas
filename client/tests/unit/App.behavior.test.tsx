@@ -504,7 +504,7 @@ describe('App behavior', () => {
     expect(mocks.updateTabMock).not.toHaveBeenCalled();
   });
 
-  it('opens NBS immediately and refreshes availability in background', () => {
+  it('opens NBS immediately without forcing a background availability refresh', () => {
     render(<App />);
 
     fireEvent.click(screen.getByTestId('layout-set-doc-nbs'));
@@ -519,7 +519,7 @@ describe('App behavior', () => {
         ncm: '',
       }),
     );
-    expect(mocks.refreshServicesStatusMock).toHaveBeenCalledWith(false);
+    expect(mocks.refreshServicesStatusMock).not.toHaveBeenCalled();
     expect(mocks.ensureServicesAccessMock).not.toHaveBeenCalled();
   });
 
@@ -548,7 +548,7 @@ describe('App behavior', () => {
         isContentReady: false,
       }),
     );
-    expect(mocks.refreshServicesStatusMock).toHaveBeenCalledWith(false);
+    expect(mocks.refreshServicesStatusMock).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('tab-1', 'nebs', '1.0101.11.00', false);
     });

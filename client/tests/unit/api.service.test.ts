@@ -160,6 +160,7 @@ describe('api service', () => {
   });
 
   it('handles token getter failures and malformed absolute URLs without crashing', async () => {
+    vi.stubEnv('VITE_AUTH_DEBUG', 'true');
     const apiModule = await loadApiModule();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const getter = vi.fn().mockRejectedValue(new Error('token failed'));
@@ -177,6 +178,7 @@ describe('api service', () => {
   });
 
   it('warns in dev when no auth token is available after the fallback refresh attempt', async () => {
+    vi.stubEnv('VITE_AUTH_DEBUG', 'true');
     const apiModule = await loadApiModule();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const getter = vi.fn().mockResolvedValue(null);
@@ -202,6 +204,7 @@ describe('api service', () => {
   });
 
   it('propagates request and response interceptor errors and logs 401', async () => {
+    vi.stubEnv('VITE_AUTH_DEBUG', 'true');
     await loadApiModule();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const reqError = new Error('request-failure');
@@ -249,6 +252,7 @@ describe('api service', () => {
   });
 
   it('applies cooldown to forced refresh to avoid token storm', async () => {
+    vi.stubEnv('VITE_AUTH_DEBUG', 'true');
     const apiModule = await loadApiModule();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const getter = vi.fn().mockResolvedValue('fresh-token');
@@ -290,6 +294,7 @@ describe('api service', () => {
   });
 
   it('skips refresh for 401 with missing-token detail', async () => {
+    vi.stubEnv('VITE_AUTH_DEBUG', 'true');
     const apiModule = await loadApiModule();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const getter = vi.fn().mockResolvedValue('fresh-token');
@@ -315,6 +320,7 @@ describe('api service', () => {
   });
 
   it('logs refresh failures and still rejects the original 401 response', async () => {
+    vi.stubEnv('VITE_AUTH_DEBUG', 'true');
     const apiModule = await loadApiModule();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const getter = vi.fn().mockRejectedValue(new Error('refresh exploded'));
@@ -470,14 +476,24 @@ describe('api service', () => {
     mockAxios.instance.get
       .mockResolvedValueOnce({ data: { term: 'x' } })
       .mockResolvedValueOnce({ data: { status: 'online' } })
-      .mockResolvedValueOnce({ data: { authenticated: true } })
+      .mockResolvedValueOnce({
+        data: {
+          authenticated: true,
+          can_use_ai_chat: true,
+          can_use_restricted_ui: false,
+        },
+      })
       .mockResolvedValueOnce({
         data: { success: true, capitulo: '85', notas_parseadas: { '1': 'n' }, notas_gerais: 'g' },
       });
 
     await expect(apiModule.getGlossaryTerm('aço inox')).resolves.toEqual({ term: 'x' });
     await expect(apiModule.getSystemStatus()).resolves.toEqual({ status: 'online' });
-    await expect(apiModule.getAuthSession()).resolves.toEqual({ authenticated: true });
+    await expect(apiModule.getAuthSession()).resolves.toEqual({
+      authenticated: true,
+      can_use_ai_chat: true,
+      can_use_restricted_ui: false,
+    });
     await expect(apiModule.fetchChapterNotes('85')).resolves.toEqual({
       success: true,
       capitulo: '85',
@@ -487,7 +503,7 @@ describe('api service', () => {
 
     expect(mockAxios.instance.get).toHaveBeenNthCalledWith(1, expectDevCacheBustedPath('/glossary?term=a%C3%A7o%20inox'));
     expect(mockAxios.instance.get).toHaveBeenNthCalledWith(2, expectDevCacheBustedPath('/status'), { timeout: 4000 });
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(3, expectDevCacheBustedPath('/auth/me'));
+    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(3, expectDevCacheBustedPath('/auth/me'), { timeout: 8000 });
     expect(mockAxios.instance.get).toHaveBeenNthCalledWith(4, expectDevCacheBustedPath('/nesh/chapter/85/notes'));
   });
 

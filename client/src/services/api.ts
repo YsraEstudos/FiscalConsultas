@@ -8,6 +8,7 @@
  */
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import type {
+    AuthSessionResponse,
     NbsDetailResponse,
     NbsSearchResponse,
     NebsDetailResponse,
@@ -53,6 +54,7 @@ export const api = axios.create({
     withCredentials: false,
 });
 export const SYSTEM_STATUS_TIMEOUT_MS = 4000;
+export const AUTH_SESSION_TIMEOUT_MS = 8000;
 
 // ============================================================
 // AUTH INTERCEPTOR - Injeta o JWT do Clerk em cada request
@@ -72,7 +74,9 @@ type ClerkTokenGetter = (options?: ClerkTokenGetterOptions) => Promise<string | 
 
 let clerkGetToken: ClerkTokenGetter | null = null;
 const PUBLIC_ROUTES = ['/status', '/glossary', '/services/'];
-const AUTH_DEBUG_ENABLED = String(import.meta.env.VITE_AUTH_DEBUG || '').toLowerCase() === 'true';
+const AUTH_DEBUG_ENABLED =
+    import.meta.env.DEV
+    && String(import.meta.env.VITE_AUTH_DEBUG || '').toLowerCase() === 'true';
 const CLERK_TOKEN_TEMPLATE = (import.meta.env.VITE_CLERK_TOKEN_TEMPLATE || '').trim() || undefined;
 const AUTH_REFRESH_COOLDOWN_MS = 2500;
 const REQUEST_ID_HEADER = 'X-Request-Id';
@@ -311,14 +315,16 @@ api.interceptors.request.use(
                         });
                     }
                     logJwtDebug('request', normalizedPath, requestId, token, usedOptions);
-                } else if (AUTH_DEBUG_ENABLED || import.meta.env.DEV) {
+                } else if (AUTH_DEBUG_ENABLED) {
                     console.warn('[API] No Clerk token available for authenticated request:', normalizedPath, {
                         requestId,
                     });
                 }
             } catch (error) {
                 // Falha silenciosa - request continua sem token
-                console.warn('[API] Failed to get auth token:', error);
+                if (AUTH_DEBUG_ENABLED) {
+                    console.warn('[API] Failed to get auth token:', error);
+                }
             }
         }
         return config;
@@ -366,12 +372,14 @@ api.interceptors.response.use(
                     }
                 } catch (refreshError) {
                     refreshMode = 'fresh';
-                    console.warn('[API] Failed to refresh token after 401:', refreshError);
+                    if (AUTH_DEBUG_ENABLED) {
+                        console.warn('[API] Failed to refresh token after 401:', refreshError);
+                    }
                 }
             }
         }
 
-        if (status === 401) {
+        if (status === 401 && AUTH_DEBUG_ENABLED) {
             console.warn('[API] 401 Unauthorized - Token missing, expired, or invalid', {
                 path: originalRequest?.url,
                 requestId,
@@ -691,8 +699,10 @@ export const getNebsEntryDetail = async (code: string): Promise<NebsDetailRespon
     return response.data;
 };
 
-export const getAuthSession = async (): Promise<{ authenticated: boolean }> => {
-    const response = await api.get(withDevCacheBust('/auth/me'));
+export const getAuthSession = async (): Promise<AuthSessionResponse> => {
+    const response = await api.get(withDevCacheBust('/auth/me'), {
+        timeout: AUTH_SESSION_TIMEOUT_MS,
+    });
     return response.data;
 };
 

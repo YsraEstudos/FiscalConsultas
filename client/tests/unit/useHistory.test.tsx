@@ -6,10 +6,11 @@ import { useHistory } from '../../src/hooks/useHistory';
 describe('useHistory', () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
   });
 
-  it('loads persisted history from localStorage on mount', async () => {
-    localStorage.setItem('nesh_search_history', JSON.stringify([
+  it('loads persisted history from sessionStorage on mount', async () => {
+    sessionStorage.setItem('nesh_search_history', JSON.stringify([
       { term: '8517', timestamp: 1 },
       { term: '8471', timestamp: 2 },
     ]));
@@ -25,7 +26,7 @@ describe('useHistory', () => {
   });
 
   it('logs parse failures and keeps an empty history when persisted data is invalid', async () => {
-    localStorage.setItem('nesh_search_history', '{invalid-json');
+    sessionStorage.setItem('nesh_search_history', '{invalid-json');
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     try {
@@ -54,7 +55,7 @@ describe('useHistory', () => {
     expect(result.current.history).toHaveLength(10);
     expect(result.current.history[0].term).toBe('840');
     expect(result.current.history.map((item) => item.term)).not.toContain('8400');
-    expect(JSON.parse(localStorage.getItem('nesh_search_history') || '[]')).toHaveLength(10);
+    expect(JSON.parse(sessionStorage.getItem('nesh_search_history') || '[]')).toHaveLength(10);
   });
 
   it('removes individual terms and clears the full history', () => {
@@ -75,6 +76,6 @@ describe('useHistory', () => {
     });
 
     expect(result.current.history).toEqual([]);
-    expect(localStorage.getItem('nesh_search_history')).toBeNull();
+    expect(sessionStorage.getItem('nesh_search_history')).toBeNull();
   });
 });

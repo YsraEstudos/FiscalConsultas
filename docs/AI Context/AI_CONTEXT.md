@@ -97,8 +97,8 @@ Rotas principais:
 - `GET /api/status`
 - `GET /api/cache-metrics` (admin)
 - `GET /api/debug/anchors` (debug_mode + admin)
-- `GET /api/auth/me`
-- `POST /api/ai/chat` (Rate Limited 5req/min, Auth Required)
+- `GET /api/auth/me` (`authenticated`, `can_use_ai_chat`, `can_use_restricted_ui`)
+- `POST /api/ai/chat` (Rate Limited 5req/min, Auth Required, allowlist por email)
 - `POST /api/webhooks/asaas` (Provisiona Tenants localmente)
 
 Regras de compatibilidade importantes:
@@ -151,7 +151,8 @@ Regras de compatibilidade importantes:
 - Autorização/gating de UI no frontend:
   - `AuthContext` deriva `isAdmin` de `membership.role` do Clerk via `hasPrivilegedRole`.
   - roles reconhecidas: `admin`, `owner`, `superadmin`, inclusive formatos compostos como `org:admin`.
-  - `VITE_RESTRICTED_UI_EMAILS` controla apenas superfícies opcionais de UI (chat IA, comentários, contribuições). Não é fronteira de autorização backend.
+  - `AuthContext` também consome `/api/auth/me` para expor capacidades como `canUseAiChat` e `canUseRestrictedUi`.
+  - allowlists de chat IA/UI restrita ficam no backend (`SECURITY__AI_CHAT_ALLOWED_EMAILS` e `SECURITY__RESTRICTED_UI_ALLOWED_EMAILS`), não no bundle público.
 
 ## 8) Cache e Performance (estado atual)
 
@@ -225,7 +226,7 @@ CI adicional em `.github/workflows/megalinter.yml`:
 Status:
 
 1. README, `TESTING.md` e este contexto foram sincronizados em 2026-03-31 com o fluxo cloud-first e bootstrap frontend-only.
-2. O ponto de atencao atual e manter a parte de UI restrita (`VITE_RESTRICTED_UI_EMAILS`) claramente documentada como gating de client, nao como auth backend.
+2. O ponto de atencao atual e manter capacidades de UI restrita documentadas como derivadas de `/api/auth/me`, com allowlist real no backend.
 3. Outro ponto de atencao e manter este documento sincronizado quando o escopo do `PR Smart` ou das suites frontend mudar.
 
 ## 12) Divida Tecnica Estrutural (resumo)

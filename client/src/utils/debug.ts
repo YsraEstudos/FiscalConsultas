@@ -1,7 +1,5 @@
 /**
- * Debug utility — delegates to the global console, which is controlled by
- * consoleSilencer.ts (silenced for non-admin users in production, fully
- * active in development).
+ * Debug utility — delegates to the global console.
  *
  * In test mode all calls are suppressed to avoid noise in unit-test output.
  */

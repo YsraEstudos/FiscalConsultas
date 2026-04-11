@@ -5,7 +5,7 @@ import { ModalManager } from '../../src/components/ModalManager';
 
 const authState = {
     isSignedIn: true,
-    userEmail: 'blocked@example.com',
+    canUseAiChat: false,
     isAdmin: false,
 };
 
@@ -36,10 +36,6 @@ function renderModalManager() {
 vi.mock('../../src/context/AuthContext', () => ({
     AuthProvider: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
     useAuth: () => authState,
-}));
-
-vi.mock('../../src/utils/featureAccess', () => ({
-    canAccessRestrictedUi: (email: string | null | undefined) => (email || '').trim().toLowerCase() === 'allowed-test@example.com',
 }));
 
 vi.mock('../../src/components/AIChat', () => ({
@@ -77,7 +73,7 @@ vi.mock('../../src/components/AdminCommentModal', () => ({
 describe('ModalManager', () => {
     beforeEach(() => {
         authState.isSignedIn = true;
-        authState.userEmail = 'blocked@example.com';
+        authState.canUseAiChat = false;
         authState.isAdmin = false;
         vi.clearAllMocks();
     });
@@ -90,7 +86,7 @@ describe('ModalManager', () => {
     });
 
     it('shows AI chat for the allowed email', async () => {
-        authState.userEmail = 'allowed-test@example.com';
+        authState.canUseAiChat = true;
 
         renderModalManager();
 
@@ -100,7 +96,7 @@ describe('ModalManager', () => {
 
     it('keeps AI chat hidden when the user is signed out even with an allowed email', () => {
         authState.isSignedIn = false;
-        authState.userEmail = 'allowed-test@example.com';
+        authState.canUseAiChat = true;
 
         renderModalManager();
 

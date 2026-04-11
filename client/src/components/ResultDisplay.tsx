@@ -18,7 +18,6 @@ import type { PendingCommentEntry } from './CommentPanel';
 import { useAuth } from '../context/AuthContext';
 import { useComments } from '../hooks/useComments';
 import toast from 'react-hot-toast';
-import { canAccessRestrictedUi } from '../utils/featureAccess';
 import {
     appendTrustedHtmlToElement,
     replaceElementWithTrustedHtml,
@@ -752,9 +751,15 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     onContentReady
 }: ResultDisplayProps) {
     const { sidebarPosition } = useSettings();
-    const { userName, userImageUrl, isSignedIn, isLoading: isAuthLoading, userId, userEmail } = useAuth();
+    const {
+        userName,
+        userImageUrl,
+        isSignedIn,
+        isLoading: isAuthLoading,
+        userId,
+        canUseRestrictedUi,
+    } = useAuth();
     const containerRef = useRef<HTMLDivElement>(null);
-    const canUseRestrictedUi = canAccessRestrictedUi(userEmail);
     const latestScrollTopRef = useRef(0);
     const lastPersistedScrollRef = useRef<number | null>(null);
     const [isContentReady, setIsContentReady] = useState(false);
@@ -793,7 +798,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             const host = window.location.hostname;
             const isLanHost = host !== 'localhost' && host !== '127.0.0.1';
             if (isLanHost) {
-                toast.error('Comentários exigem token Clerk válido. Em desenvolvimento, use http://localhost:5173.');
+                toast.error('Comentários não estão disponíveis neste ambiente agora.');
                 return;
             }
         }

@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type React from 'react';
@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from '../../src/context/AuthContext';
 const refs = vi.hoisted(() => ({
   registerGetterMock: vi.fn(),
   unregisterGetterMock: vi.fn(),
+  getAuthSessionMock: vi.fn(),
   getTokenMock: vi.fn(),
   signOutMock: vi.fn(),
   userStateRef: {
@@ -50,6 +51,7 @@ vi.mock('@clerk/react', () => ({
 vi.mock('../../src/services/api', () => ({
   registerClerkTokenGetter: refs.registerGetterMock,
   unregisterClerkTokenGetter: refs.unregisterGetterMock,
+  getAuthSession: refs.getAuthSessionMock,
 }));
 
 const wrapper = ({ children }: { children: React.ReactNode }) => <AuthProvider>{children}</AuthProvider>;
@@ -59,6 +61,11 @@ describe('AuthContext', () => {
     vi.clearAllMocks();
     refs.getTokenMock.mockResolvedValue('jwt-token');
     refs.signOutMock.mockResolvedValue(undefined);
+    refs.getAuthSessionMock.mockResolvedValue({
+      authenticated: true,
+      can_use_ai_chat: true,
+      can_use_restricted_ui: true,
+    });
     refs.authStateRef.value = {
       getToken: refs.getTokenMock,
       signOut: refs.signOutMock,
@@ -89,7 +96,7 @@ describe('AuthContext', () => {
     expect(() => renderHook(() => useAuth())).toThrow('useAuth must be used within an AuthProvider');
   });
 
-  it('exposes mapped user/org fields and registers API token getter', () => {
+  it('exposes mapped user/org fields, registers API token getter, and loads backend capabilities', async () => {
     const { result, unmount } = renderHook(() => useAuth(), { wrapper });
 
     expect(refs.registerGetterMock).toHaveBeenCalledWith(refs.getTokenMock);
@@ -102,6 +109,9 @@ describe('AuthContext', () => {
     expect(result.current.orgId).toBe('org_1');
     expect(result.current.orgName).toBe('Org Demo');
     expect(result.current.orgSlug).toBe('org-demo');
+    await waitFor(() => expect(refs.getAuthSessionMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.canUseAiChat).toBe(true));
+    expect(result.current.canUseRestrictedUi).toBe(true);
 
     unmount();
     expect(refs.unregisterGetterMock).toHaveBeenCalledTimes(1);
@@ -131,6 +141,9 @@ describe('AuthContext', () => {
     expect(result.current.orgId).toBeNull();
     expect(result.current.orgName).toBeNull();
     expect(result.current.orgSlug).toBeNull();
+    expect(result.current.canUseAiChat).toBe(false);
+    expect(result.current.canUseRestrictedUi).toBe(false);
+    expect(refs.getAuthSessionMock).not.toHaveBeenCalled();
   });
 
   it('marks privileged membership roles as admin using backend-aligned role parsing', () => {
@@ -192,6 +205,23 @@ describe('AuthContext', () => {
 
     expect(warnSpy).toHaveBeenCalledWith('[AuthContext] login() is deprecated. Use Clerk components.');
     expect(refs.signOutMock).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+  });
+
+  it('falls back to disabled capabilities when auth session loading fails', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    refs.getAuthSessionMock.mockRejectedValueOnce(new Error('auth/me failed'));
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[AuthContext] Failed to load auth session:',
+        expect.any(Error),
+      );
+    });
+    expect(result.current.canUseAiChat).toBe(false);
+    expect(result.current.canUseRestrictedUi).toBe(false);
     warnSpy.mockRestore();
   });
 });

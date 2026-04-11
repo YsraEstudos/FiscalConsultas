@@ -170,7 +170,7 @@ export function getServiceCatalogErrorInfo(
         if (status === 401 || status === 403) {
             return {
                 message: appendSupportRequestId(
-                    'O catálogo de serviços respondeu com falha de autenticacao/tenant no backend. Isso costuma indicar deploy desatualizado ou configuracao inconsistente.',
+                    'Catálogo de serviços indisponível no momento. Tente novamente em instantes.',
                     requestId,
                 ),
                 status,
@@ -224,11 +224,11 @@ export function reportServiceCatalogError(
     doc: ServiceCatalogDoc,
     resolved: ServiceCatalogErrorInfo = getServiceCatalogErrorInfo(error, doc),
 ): void {
-    if (!axios.isAxiosError(error)) return;
+    if (!axios.isAxiosError(error) || !import.meta.env.DEV) return;
 
     const requestUrl = getAxiosErrorRequestUrl(error) || 'unknown';
     if (resolved.status === 401 || resolved.status === 403) {
-        console.warn('[servicesCatalog] Public catalog route failed with auth/tenant response', {
+        console.warn('[servicesCatalog] Public catalog route failed', {
             doc,
             status: resolved.status,
             requestId: resolved.requestId,

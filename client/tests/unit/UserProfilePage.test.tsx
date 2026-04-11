@@ -29,12 +29,14 @@ vi.mock('@clerk/react', () => ({
 // ─── Mocks de contexto e hooks ───────────────────────────────────────────────
 const isAdminRef = { value: false };
 const userEmailRef = { value: 'israelseja2@gmail.com' };
+const canUseRestrictedUiRef = { value: true };
 
 vi.mock('../../src/context/AuthContext', () => ({
     useAuth: () => ({
         userName: 'João Silva',
         userEmail: userEmailRef.value,
         userImageUrl: null,
+        canUseRestrictedUi: canUseRestrictedUiRef.value,
     }),
 }));
 
@@ -101,9 +103,9 @@ const MOCK_CONTRIBUTIONS = {
 
 beforeEach(async () => {
     vi.clearAllMocks();
-    vi.stubEnv('VITE_RESTRICTED_UI_EMAILS', 'israelseja2@gmail.com');
     isAdminRef.value = false;
     userEmailRef.value = 'israelseja2@gmail.com';
+    canUseRestrictedUiRef.value = true;
     ({ UserProfilePage } = await import('../../src/components/UserProfilePage'));
     mockGetMyProfile.mockResolvedValue(MOCK_PROFILE);
     mockGetMyContributions.mockResolvedValue(MOCK_CONTRIBUTIONS);
@@ -330,7 +332,7 @@ describe('UserProfilePage', () => {
     });
 
     it('não exibe aba Contribuições para usuários não autorizados', async () => {
-        userEmailRef.value = 'joao@example.com';
+        canUseRestrictedUiRef.value = false;
         render(<UserProfilePage isOpen={true} onClose={vi.fn()} />);
 
         await waitFor(() => expect(mockGetMyProfile).toHaveBeenCalled());

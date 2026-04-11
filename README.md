@@ -111,6 +111,9 @@ CACHE__REDIS_URL=rediss://default:<password>@<host>:6379
 # IA opcional (Gemini)
 # Sem GOOGLE_API_KEY, o backend sobe normal e o chat IA fica desativado
 GOOGLE_API_KEY=
+SECURITY__AI_CHAT_ALLOWED_EMAILS=["voce@empresa.com","admin@empresa.com"]
+# Opcional: se omitida, a UI restrita reutiliza a allowlist do chat IA
+SECURITY__RESTRICTED_UI_ALLOWED_EMAILS=["voce@empresa.com","admin@empresa.com"]
 ```
 
 - em `client/.env.local`, defina:
@@ -119,7 +122,6 @@ GOOGLE_API_KEY=
 VITE_API_URL=https://seu-backend.onrender.com
 VITE_CLERK_PUBLISHABLE_KEY=pk_live_sua_chave
 VITE_CLERK_TOKEN_TEMPLATE=backend_api
-VITE_RESTRICTED_UI_EMAILS=voce@empresa.com,admin@empresa.com
 ```
 
 Se voce estiver apenas desenvolvendo localmente, pode usar `pk_test_...`. Em site publicado, use `pk_live_...`.
@@ -131,7 +133,6 @@ Configuração alternativa (local-first com SQLite):
 
 ```env
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_sua_chave
-VITE_RESTRICTED_UI_EMAILS=voce@empresa.com,admin@empresa.com
 ```
 
 Sem `VITE_CLERK_PUBLISHABLE_KEY`, o frontend exibe apenas a tela de erro de configuração.
@@ -147,6 +148,8 @@ AUTH__CLERK_ISSUER=https://your-instance.clerk.accounts.dev
 AUTH__CLERK_AUDIENCE=fiscal-api
 AUTH__CLERK_AUTHORIZED_PARTIES=["http://localhost:5173","http://127.0.0.1:5173"]
 AUTH__CLERK_CLOCK_SKEW_SECONDS=120
+SECURITY__AI_CHAT_ALLOWED_EMAILS=["voce@empresa.com","admin@empresa.com"]
+SECURITY__RESTRICTED_UI_ALLOWED_EMAILS=["voce@empresa.com","admin@empresa.com"]
 ```
 
 - em `client/.env.local`:
@@ -154,7 +157,6 @@ AUTH__CLERK_CLOCK_SKEW_SECONDS=120
 ```env
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_sua_chave
 VITE_CLERK_TOKEN_TEMPLATE=backend_api
-VITE_RESTRICTED_UI_EMAILS=voce@empresa.com,admin@empresa.com
 ```
 
 Checklist rápido Clerk (dev local):
@@ -162,8 +164,10 @@ Checklist rápido Clerk (dev local):
 - `AUTH__CLERK_DOMAIN` e `AUTH__CLERK_ISSUER` devem apontar para o mesmo tenant Clerk.
 - `AUTH__CLERK_AUDIENCE` deve ser exatamente o `aud` emitido no template JWT (`backend_api`).
 - `VITE_CLERK_TOKEN_TEMPLATE` deve ter o mesmo nome do template configurado no Clerk.
+- O template JWT do Clerk precisa incluir `email` ou `email_address` no payload para permitir a allowlist server-side do chat IA/UI restrita.
 - `AUTH__CLERK_AUTHORIZED_PARTIES` deve incluir `http://localhost:5173` e `http://127.0.0.1:5173`.
-- `VITE_RESTRICTED_UI_EMAILS` é opcional e controla apenas superfícies de UI restritas no frontend (chat IA, comentários e aba de contribuições). Não substitui autorização backend.
+- `SECURITY__AI_CHAT_ALLOWED_EMAILS` controla a allowlist real do backend para `/api/ai/chat`.
+- `SECURITY__RESTRICTED_UI_ALLOWED_EMAILS` é opcional; se omitido, a UI restrita usa a mesma allowlist do chat IA.
 
 ### 3) Preparar dados locais (SQLite)
 
@@ -494,7 +498,7 @@ Mudanças de segurança documentadas no estado atual:
 - O shell SPA em `client/index.html` publica `Content-Security-Policy`, `referrer` policy e `Permissions-Policy` via meta tags.
 - O client axios opera com `withCredentials: false`; a autenticação do Clerk segue apenas pelo header `Authorization`.
 - `isAdmin` no frontend não usa mais fallback por email hardcoded; agora deriva de `membership.role` do Clerk e aceita `admin`, `owner` e `superadmin` (inclusive em formatos como `org:admin`).
-- `VITE_RESTRICTED_UI_EMAILS` controla apenas exposição de UI opcional no client. Qualquer autorização sensível continua devendo existir no backend.
+- A UI opcional restrita agora consome capacidades vindas de `/api/auth/me`; a allowlist fica no backend, não mais no bundle público.
 
 Guia curto de estratégia, marcadores e escopo de testes: `docs/TESTING.md`.
 Observação: suites legadas/diagnóstico fora do contrato oficial ficam excluídas do fluxo padrão.
@@ -624,10 +628,11 @@ Mudanças principais já aplicadas:
 | `AUTH__CLERK_CLOCK_SKEW_SECONDS` | Tolerância de clock para `exp/iat/nbf` (recomendado `120` em dev local) |
 | `BILLING__ASAAS_WEBHOOK_TOKEN` | Validação de token no webhook `/api/webhooks/asaas` |
 | `SECURITY__AI_CHAT_REQUESTS_PER_MINUTE` | Rate limit do endpoint `/api/ai/chat` |
+| `SECURITY__AI_CHAT_ALLOWED_EMAILS` | Allowlist real do backend para habilitar `/api/ai/chat` |
+| `SECURITY__RESTRICTED_UI_ALLOWED_EMAILS` | Allowlist opcional para UI restrita; se omitida, herda a do chat IA |
 | `GOOGLE_API_KEY` | Habilita integração Gemini no serviço de IA |
 | `VITE_CLERK_PUBLISHABLE_KEY` | Obrigatório para o frontend montar com Clerk |
 | `VITE_CLERK_TOKEN_TEMPLATE` | Template usado no `getToken()` do Clerk (recomendado: `backend_api`) |
-| `VITE_RESTRICTED_UI_EMAILS` | Lista CSV opcional para liberar UI restrita no frontend (chat IA, comentários, contribuições); não é controle de auth backend |
 | `VITE_AUTH_DEBUG` | (Opcional) habilita logs de diagnóstico JWT no navegador |
 | `VITE_API_URL` / `VITE_API_FILTER_URL` | Base URL de API no frontend (normalizada em runtime) |
 

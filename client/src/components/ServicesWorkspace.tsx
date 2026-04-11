@@ -1,5 +1,4 @@
-import React from 'react';
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type {
@@ -39,17 +38,53 @@ interface ServicesWorkspaceProps {
     readonly onOpenDocInNewTab?: (doc: ServiceDocType, query?: string) => void;
 }
 
-function renderNoteHtml(detail: NebsDetailResponse | null): string {
-    const noteBody = detail?.entry.body_markdown || detail?.entry.body_text || '';
-    if (!noteBody) return '';
+type NoteContent = {
+    readonly body_markdown?: string | null;
+    readonly body_text?: string | null;
+} | null | undefined;
 
-    const renderedMarkdown = marked.parse(noteBody, {
-        async: false,
-        breaks: true,
-        gfm: true,
-    }) as string;
+function escapeHtml(value: string): string {
+    return value
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
 
-    return DOMPurify.sanitize(renderedMarkdown, {
+function renderPlainTextNoteHtml(noteBody: string): string {
+    const normalizedBody = noteBody.replace(/\r\n?/g, '\n');
+
+    return normalizedBody
+        .split(/\n{2,}/)
+        .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br />')}</p>`)
+        .join('');
+}
+
+function renderNoteHtml(note: NoteContent): string {
+    const markdownBody = note?.body_markdown?.trim();
+    if (markdownBody) {
+        const renderedMarkdown = marked.parse(markdownBody, {
+            async: false,
+            breaks: true,
+            gfm: true,
+        }) as string;
+
+        const sanitizedMarkdown = DOMPurify.sanitize(renderedMarkdown, {
+            USE_PROFILES: { html: true },
+        });
+
+        if (sanitizedMarkdown.trim()) {
+            return sanitizedMarkdown;
+        }
+    }
+
+    const plainTextBody = note?.body_text?.trim();
+    if (!plainTextBody) {
+        return '<p>Sem conteudo detalhado.</p>';
+    }
+
+    return DOMPurify.sanitize(renderPlainTextNoteHtml(plainTextBody), {
         USE_PROFILES: { html: true },
     });
 }
@@ -63,7 +98,8 @@ export function ServicesWorkspace({
     onSwitchDoc,
     onOpenDocInNewTab,
 }: Readonly<ServicesWorkspaceProps>) {
-    const noteBodyHtml = useMemo(() => renderNoteHtml(nebsState.detail), [nebsState.detail]);
+    const nbsNoteBodyHtml = useMemo(() => renderNoteHtml(nbsState.detail?.nebs), [nbsState.detail?.nebs]);
+    const nebsNoteBodyHtml = useMemo(() => renderNoteHtml(nebsState.detail?.entry), [nebsState.detail?.entry]);
 
     if (doc === 'nbs') {
         return (
@@ -133,10 +169,7 @@ export function ServicesWorkspace({
                                     <div className={styles.cardLabel}>Nota Explicativa (NEBS)</div>
                                     <div
                                         className={styles.noteBody}
-                                        dangerouslySetInnerHTML={{
-                                            __html: nbsState.detail.nebs.body_text
-                                                || '<p>Sem conteudo detalhado.</p>'
-                                        }}
+                                        dangerouslySetInnerHTML={{ __html: nbsNoteBodyHtml }}
                                     />
                                 </section>
                             )}
@@ -267,7 +300,7 @@ export function ServicesWorkspace({
                             <div className={styles.cardLabel}>Conteudo da nota</div>
                             <div
                                 className={styles.noteBody}
-                                dangerouslySetInnerHTML={{ __html: noteBodyHtml }}
+                                dangerouslySetInnerHTML={{ __html: nebsNoteBodyHtml }}
                             />
                         </section>
 
