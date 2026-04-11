@@ -85,6 +85,7 @@ snapshots/
 tipi_tree_dump.html
 client/test-results/
 reports/nebs/
+.worktrees/
 
 # Coverage HTML report
 htmlcov/
