@@ -1148,32 +1148,33 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     if not commented_anchor_keys or not html:
         return html
 
-    for key in commented_anchor_keys:
-        # Escapa o key para uso em regex seguro
-        safe_key = re.escape(key)
+    # Performance optimization:
+    # Instead of iterating over each key and recompiling/running a regex over the entire HTML string,
+    # we convert the keys to an O(1) lookup set, and do a single regex pass matching any id attribute.
+    # Expected speedup: O(K*N) -> O(N+K)
+    keys_set = set(commented_anchor_keys)
 
-        # Encontra a tag com id="{key}" e adiciona has-comment à sua classe
-        # Suporta: id="key", id='key', class="..." já existente
-        def _add_class(match: re.Match) -> str:
-            tag = match.group(0)
-            if "class=" in tag:
-                # Adiciona has-comment à class existente
-                tag = re.sub(
-                    r'(class=["\'])([^"\']*?)(["\'])',
-                    lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
-                    tag,
-                    count=1,
-                )
-            else:
-                # Insere class antes do fechamento da tag de abertura
-                tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
-            return tag
+    def _add_class(match: re.Match) -> str:
+        # Extract the actual ID from the first capture group
+        tag_id = match.group(1)
+        if tag_id not in keys_set:
+            return match.group(0)
 
-        html = re.sub(
-            rf'<[a-zA-Z][^>]*\bid=["\']?{safe_key}["\']?[^>]*>',
-            _add_class,
-            html,
-            count=1,
-        )
+        tag = match.group(0)
+        if "class=" in tag:
+            # Adiciona has-comment à class existente
+            tag = re.sub(
+                r'(class=["\'])([^"\']*?)(["\'])',
+                lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
+                tag,
+                count=1,
+            )
+        else:
+            # Insere class antes do fechamento da tag de abertura
+            tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
+        return tag
 
-    return html
+    # Captures `<tag ... id="VALUE" ...>` with group(1) being the VALUE.
+    # We use a compiled regex for efficiency.
+    pattern = re.compile(r'<[a-zA-Z][^>]*\bid=["\']?([^"\'>\s]+)["\']?[^>]*>')
+    return pattern.sub(_add_class, html)
