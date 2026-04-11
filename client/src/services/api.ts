@@ -54,6 +54,7 @@ export const api = axios.create({
     withCredentials: false,
 });
 export const SYSTEM_STATUS_TIMEOUT_MS = 4000;
+export const AUTH_SESSION_TIMEOUT_MS = 8000;
 
 // ============================================================
 // AUTH INTERCEPTOR - Injeta o JWT do Clerk em cada request
@@ -699,7 +700,9 @@ export const getNebsEntryDetail = async (code: string): Promise<NebsDetailRespon
 };
 
 export const getAuthSession = async (): Promise<AuthSessionResponse> => {
-    const response = await api.get(withDevCacheBust('/auth/me'));
+    const response = await api.get(withDevCacheBust('/auth/me'), {
+        timeout: AUTH_SESSION_TIMEOUT_MS,
+    });
     return response.data;
 };
 

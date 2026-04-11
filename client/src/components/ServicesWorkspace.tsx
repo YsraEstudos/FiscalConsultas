@@ -54,7 +54,9 @@ function escapeHtml(value: string): string {
 }
 
 function renderPlainTextNoteHtml(noteBody: string): string {
-    return noteBody
+    const normalizedBody = noteBody.replace(/\r\n?/g, '\n');
+
+    return normalizedBody
         .split(/\n{2,}/)
         .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br />')}</p>`)
         .join('');

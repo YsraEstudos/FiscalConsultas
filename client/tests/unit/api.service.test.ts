@@ -503,7 +503,7 @@ describe('api service', () => {
 
     expect(mockAxios.instance.get).toHaveBeenNthCalledWith(1, expectDevCacheBustedPath('/glossary?term=a%C3%A7o%20inox'));
     expect(mockAxios.instance.get).toHaveBeenNthCalledWith(2, expectDevCacheBustedPath('/status'), { timeout: 4000 });
-    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(3, expectDevCacheBustedPath('/auth/me'));
+    expect(mockAxios.instance.get).toHaveBeenNthCalledWith(3, expectDevCacheBustedPath('/auth/me'), { timeout: 8000 });
     expect(mockAxios.instance.get).toHaveBeenNthCalledWith(4, expectDevCacheBustedPath('/nesh/chapter/85/notes'));
   });
 

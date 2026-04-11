@@ -22,7 +22,11 @@ def _cleanup_overrides():
 @pytest.fixture(autouse=True)
 def _reset_security_allowlists():
     original_ai_chat = list(settings.security.ai_chat_allowed_emails)
-    original_restricted_ui = list(settings.security.restricted_ui_allowed_emails)
+    original_restricted_ui = (
+        None
+        if settings.security.restricted_ui_allowed_emails is None
+        else list(settings.security.restricted_ui_allowed_emails)
+    )
     yield
     settings.security.ai_chat_allowed_emails = original_ai_chat
     settings.security.restricted_ui_allowed_emails = original_restricted_ui

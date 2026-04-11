@@ -25,8 +25,12 @@ export function validateProductionEnv(env = resolveBuildEnv()) {
     errors.push('VITE_ADMIN_EMAIL must not be defined for production builds.');
   }
 
-  if (publishableKey.startsWith('pk_test_')) {
-    errors.push('VITE_CLERK_PUBLISHABLE_KEY must use a live Clerk key for production builds.');
+  if (!publishableKey) {
+    errors.push('VITE_CLERK_PUBLISHABLE_KEY must be defined for production builds.');
+  } else if (publishableKey.startsWith('sk_')) {
+    errors.push('VITE_CLERK_PUBLISHABLE_KEY must use a Clerk publishable key, never a secret key.');
+  } else if (!publishableKey.startsWith('pk_live_')) {
+    errors.push('VITE_CLERK_PUBLISHABLE_KEY must use a live Clerk publishable key for production builds.');
   }
 
   if (errors.length > 0) {

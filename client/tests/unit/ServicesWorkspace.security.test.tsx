@@ -66,6 +66,52 @@ describe('ServicesWorkspace security', () => {
     expect(container.textContent).toContain('<img src=x onerror=alert(1) />');
   });
 
+  it('normalizes Windows newlines when rendering plain-text note content', () => {
+    const { container } = render(
+      <ServicesWorkspace
+        doc="nbs"
+        nbsState={{
+          ...baseNbsState,
+          detail: {
+            success: true,
+            item: {
+              code: '1.01',
+              code_clean: '101',
+              description: 'Servico teste',
+              parent_code: null,
+              level: 1,
+              has_nebs: true,
+            },
+            ancestors: [],
+            children: [],
+            nebs: {
+              code: '1.01',
+              code_clean: '101',
+              title: 'Nota teste',
+              body_text: 'Primeira linha\r\nSegunda linha\r\n\r\nNovo paragrafo',
+              body_markdown: null,
+              title_normalized: 'nota teste',
+              body_normalized: 'primeira linha segunda linha novo paragrafo',
+              section_title: 'Secao',
+              page_start: 1,
+              page_end: 1,
+            },
+          },
+        }}
+        nebsState={baseNebsState}
+        onSelectNbs={() => {}}
+        onSelectNebs={() => {}}
+        onSwitchDoc={() => {}}
+      />,
+    );
+
+    const noteBody = container.querySelector('[class*="noteBody"]');
+
+    expect(noteBody?.querySelectorAll('p')).toHaveLength(2);
+    expect(noteBody?.querySelector('br')).not.toBeNull();
+    expect(screen.getByText('Novo paragrafo')).toBeInTheDocument();
+  });
+
   it('sanitizes NEBS markdown output before rendering the note detail', () => {
     const { container } = render(
       <ServicesWorkspace

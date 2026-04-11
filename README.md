@@ -111,6 +111,9 @@ CACHE__REDIS_URL=rediss://default:<password>@<host>:6379
 # IA opcional (Gemini)
 # Sem GOOGLE_API_KEY, o backend sobe normal e o chat IA fica desativado
 GOOGLE_API_KEY=
+SECURITY__AI_CHAT_ALLOWED_EMAILS=["voce@empresa.com","admin@empresa.com"]
+# Opcional: se omitida, a UI restrita reutiliza a allowlist do chat IA
+SECURITY__RESTRICTED_UI_ALLOWED_EMAILS=["voce@empresa.com","admin@empresa.com"]
 ```
 
 - em `client/.env.local`, defina:

@@ -17,4 +17,14 @@ describe('validateProductionEnv', () => {
       VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_invalid',
     })).toThrow(/Production build blocked/);
   });
+
+  it('blocks missing or secret Clerk keys in production builds', () => {
+    expect(() => validateProductionEnv({
+      VITE_CLERK_PUBLISHABLE_KEY: '',
+    })).toThrow(/must be defined/i);
+
+    expect(() => validateProductionEnv({
+      VITE_CLERK_PUBLISHABLE_KEY: 'sk_live_secret',
+    })).toThrow(/never a secret key/i);
+  });
 });

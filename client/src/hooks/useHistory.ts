@@ -2,7 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 
 const MAX_HISTORY = 10;
 const STORAGE_KEY = 'nesh_search_history';
-const historyStorage = globalThis.sessionStorage;
+
+function getHistoryStorage(): Storage | null {
+    try {
+        if (typeof window === 'undefined') {
+            return null;
+        }
+        return window.sessionStorage;
+    } catch {
+        return null;
+    }
+}
 
 export interface HistoryItem {
     term: string;
@@ -14,7 +24,7 @@ export function useHistory() {
 
     // Load from session storage on mount to avoid persisting search behavior across browser sessions.
     useEffect(() => {
-        const saved = historyStorage.getItem(STORAGE_KEY);
+        const saved = getHistoryStorage()?.getItem(STORAGE_KEY);
         if (saved) {
             try {
                 setHistory(JSON.parse(saved));
@@ -39,20 +49,20 @@ export function useHistory() {
             const updated = [newItem, ...filtered].slice(0, MAX_HISTORY);
 
             // Persist
-            historyStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+            getHistoryStorage()?.setItem(STORAGE_KEY, JSON.stringify(updated));
             return updated;
         });
     }, []);
 
     const clearHistory = useCallback(() => {
         setHistory([]);
-        historyStorage.removeItem(STORAGE_KEY);
+        getHistoryStorage()?.removeItem(STORAGE_KEY);
     }, []);
 
     const removeFromHistory = useCallback((termToRemove: string) => {
         setHistory(prev => {
             const updated = prev.filter(item => item.term !== termToRemove);
-            historyStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+            getHistoryStorage()?.setItem(STORAGE_KEY, JSON.stringify(updated));
             return updated;
         });
     }, []);

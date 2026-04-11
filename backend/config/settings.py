@@ -131,7 +131,7 @@ class SecuritySettings(BaseModel):
     services_detail_requests_per_minute: int = 120
     ai_chat_max_message_chars: int = 4000
     ai_chat_allowed_emails: List[str] = Field(default_factory=list)
-    restricted_ui_allowed_emails: List[str] = Field(default_factory=list)
+    restricted_ui_allowed_emails: Optional[List[str]] = None
     trusted_proxy_ips: List[str] = Field(default_factory=list)
 
     @field_validator(
@@ -141,7 +141,9 @@ class SecuritySettings(BaseModel):
     )
     @classmethod
     def _coerce_email_list(cls, value):
-        if value in (None, ""):
+        if value is None:
+            return None
+        if value == "":
             return []
         if isinstance(value, str):
             stripped = value.strip()
@@ -158,7 +160,9 @@ class SecuritySettings(BaseModel):
         return value
 
     @staticmethod
-    def _normalize_email_set(values: List[str]) -> Set[str]:
+    def _normalize_email_set(values: List[str] | None) -> Set[str]:
+        if not values:
+            return set()
         return {
             str(email).strip().lower()
             for email in values
@@ -171,7 +175,7 @@ class SecuritySettings(BaseModel):
 
     @property
     def restricted_ui_allowed_email_set(self) -> Set[str]:
-        if self.restricted_ui_allowed_emails:
+        if self.restricted_ui_allowed_emails is not None:
             return self._normalize_email_set(self.restricted_ui_allowed_emails)
         return self.ai_chat_allowed_email_set
 
