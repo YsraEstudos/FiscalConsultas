@@ -10,6 +10,16 @@ describe('validateProductionEnv', () => {
     })).not.toThrow();
   });
 
+  it('accepts test Clerk keys for Cloudflare Pages preview builds', () => {
+    expect(() => validateProductionEnv({
+      CF_PAGES: '1',
+      CF_PAGES_BRANCH: 'feature/security-preview',
+      CF_PAGES_PRODUCTION_BRANCH: 'main',
+      VITE_AUTH_DEBUG: 'false',
+      VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_preview',
+    })).not.toThrow();
+  });
+
   it('blocks production builds with auth debug, hardcoded admin email, or test Clerk keys', () => {
     expect(() => validateProductionEnv({
       VITE_AUTH_DEBUG: 'true',
@@ -26,5 +36,14 @@ describe('validateProductionEnv', () => {
     expect(() => validateProductionEnv({
       VITE_CLERK_PUBLISHABLE_KEY: 'sk_live_secret',
     })).toThrow(/never a secret key/i);
+  });
+
+  it('still requires live Clerk keys on the Cloudflare Pages production branch', () => {
+    expect(() => validateProductionEnv({
+      CF_PAGES: '1',
+      CF_PAGES_BRANCH: 'main',
+      CF_PAGES_PRODUCTION_BRANCH: 'main',
+      VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_preview',
+    })).toThrow(/live Clerk publishable key/i);
   });
 });
