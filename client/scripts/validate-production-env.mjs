@@ -5,6 +5,10 @@ function isTruthyFlag(value) {
   return String(value || '').trim().toLowerCase() === 'true';
 }
 
+function isCiTestKeyOverrideEnabled(env) {
+  return isTruthyFlag(env.ALLOW_TEST_CLERK_KEY) && isTruthyFlag(env.GITHUB_ACTIONS);
+}
+
 function resolveBuildEnv(mode = 'production', shellEnv = process.env) {
   return {
     ...loadEnv(mode, process.cwd(), ''),
@@ -40,6 +44,9 @@ export function validateProductionEnv(env = resolveBuildEnv()) {
   const publishableKey = String(env.VITE_CLERK_PUBLISHABLE_KEY || '').trim();
   const adminEmail = String(env.VITE_ADMIN_EMAIL || '').trim();
   const requireLivePublishableKey = isRealProductionBuild(env);
+  const allowTestPublishableKey = isCiTestKeyOverrideEnabled(env);
+  const isLivePublishableKey = publishableKey.startsWith('pk_live_');
+  const isTestPublishableKey = publishableKey.startsWith('pk_test_');
 
   if (isTruthyFlag(env.VITE_AUTH_DEBUG)) {
     errors.push('VITE_AUTH_DEBUG must be false for production builds.');
@@ -53,7 +60,13 @@ export function validateProductionEnv(env = resolveBuildEnv()) {
     errors.push('VITE_CLERK_PUBLISHABLE_KEY must be defined for production builds.');
   } else if (publishableKey.startsWith('sk_')) {
     errors.push('VITE_CLERK_PUBLISHABLE_KEY must use a Clerk publishable key, never a secret key.');
-  } else if (requireLivePublishableKey && !publishableKey.startsWith('pk_live_')) {
+  } else if (!isLivePublishableKey && !isTestPublishableKey) {
+    errors.push('VITE_CLERK_PUBLISHABLE_KEY must start with pk_live_ or pk_test_.');
+  } else if (
+    requireLivePublishableKey
+    && !isLivePublishableKey
+    && !(allowTestPublishableKey && isTestPublishableKey)
+  ) {
     errors.push('VITE_CLERK_PUBLISHABLE_KEY must use a live Clerk publishable key for production builds.');
   }
 

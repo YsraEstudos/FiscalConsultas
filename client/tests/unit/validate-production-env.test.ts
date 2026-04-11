@@ -46,4 +46,20 @@ describe('validateProductionEnv', () => {
       VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_preview',
     })).toThrow(/live Clerk publishable key/i);
   });
+
+  it('allows pk_test temporarily when ALLOW_TEST_CLERK_KEY is explicitly enabled in CI', () => {
+    expect(() => validateProductionEnv({
+      GITHUB_ACTIONS: 'true',
+      ALLOW_TEST_CLERK_KEY: 'true',
+      VITE_AUTH_DEBUG: 'false',
+      VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_temp_override',
+    })).not.toThrow();
+  });
+
+  it('does not allow ALLOW_TEST_CLERK_KEY outside CI runners', () => {
+    expect(() => validateProductionEnv({
+      ALLOW_TEST_CLERK_KEY: 'true',
+      VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_local_attempt',
+    })).toThrow(/live Clerk publishable key/i);
+  });
 });
