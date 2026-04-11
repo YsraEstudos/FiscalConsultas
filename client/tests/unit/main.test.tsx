@@ -16,6 +16,20 @@ vi.mock('../../src/App', () => ({
   default: () => <div data-testid="app">App</div>,
 }));
 
+vi.mock('@clerk/react', () => ({
+  ClerkProvider: ({
+    children,
+    publishableKey,
+  }: {
+    children: React.ReactNode;
+    publishableKey: string;
+  }) => (
+    <div data-testid="clerk-provider" data-publishable-key={publishableKey}>
+      {children}
+    </div>
+  ),
+}));
+
 vi.mock('../../src/context/AuthContext', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="auth-provider">{children}</div>
@@ -40,6 +54,10 @@ vi.mock('../../src/context/CrossChapterNoteContext', () => ({
   ),
 }));
 
+vi.mock('../../src/config/clerkAppearance', () => ({
+  clerkTheme: { variables: {} },
+}));
+
 async function loadMainModule() {
   vi.resetModules();
   refs.capturedNode.current = null;
@@ -57,18 +75,23 @@ async function loadMainModule() {
 describe('main.tsx bootstrap', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
+    vi.unstubAllEnvs();
   });
 
   afterEach(() => {
     cleanup();
     document.body.innerHTML = '';
+    vi.unstubAllEnvs();
   });
 
   it('throws when the root element is missing', async () => {
+    vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', 'pk_test_123');
+
     await expect(loadMainModule()).rejects.toThrow('Failed to find the root element');
   });
 
-  it('renders the full provider tree when the root is available', async () => {
+  it('renders the full provider tree when the Clerk key is configured', async () => {
+    vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', 'pk_test_123');
     document.body.innerHTML = '<div id="root"></div>';
 
     await loadMainModule();
@@ -79,6 +102,7 @@ describe('main.tsx bootstrap', () => {
 
     render(<>{refs.capturedNode.current}</>);
 
+    expect(screen.getByTestId('clerk-provider')).toHaveAttribute('data-publishable-key', 'pk_test_123');
     expect(screen.getByTestId('auth-provider')).toBeInTheDocument();
     expect(screen.getByTestId('settings-provider')).toBeInTheDocument();
     expect(screen.getByTestId('glossary-provider')).toBeInTheDocument();
@@ -86,15 +110,25 @@ describe('main.tsx bootstrap', () => {
     expect(screen.getByTestId('app')).toBeInTheDocument();
   });
 
-  it('still renders the app tree even when the Clerk key is missing', async () => {
+  it('renders the configuration fallback and logs an error when the Clerk key is missing', async () => {
     document.body.innerHTML = '<div id="root"></div>';
+    vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', '');
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    await loadMainModule();
+    try {
+      await loadMainModule();
 
-    expect(refs.createRootMock).toHaveBeenCalledWith(document.getElementById('root'));
-    render(<>{refs.capturedNode.current}</>);
+      expect(refs.createRootMock).toHaveBeenCalledWith(document.getElementById('root'));
+      render(<>{refs.capturedNode.current}</>);
 
-    expect(screen.getByTestId('auth-provider')).toBeInTheDocument();
-    expect(screen.getByTestId('app')).toBeInTheDocument();
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Missing Clerk key. Configure VITE_CLERK_PUBLISHABLE_KEY in client/.env.local and restart Vite.',
+      );
+      expect(screen.getByText('Configuration Required')).toBeInTheDocument();
+      expect(screen.getAllByText(/VITE_CLERK_PUBLISHABLE_KEY/)).toHaveLength(2);
+      expect(screen.getByText(/npm run dev/)).toBeInTheDocument();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 });
