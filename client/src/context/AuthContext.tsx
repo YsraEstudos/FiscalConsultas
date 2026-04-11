@@ -112,11 +112,11 @@ function SignedInAuthProvider({
     children,
     baseState,
     capabilities,
-}: {
+}: Readonly<{
     children: ReactNode;
     baseState: CommonAuthState;
     capabilities: AuthCapabilities;
-}) {
+}>) {
     const { organization, membership } = useOrganization();
 
     return (
@@ -126,7 +126,7 @@ function SignedInAuthProvider({
     );
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     const { user, isSignedIn, isLoaded: userLoaded } = useUser();
     const { getToken, signOut, isLoaded: authLoaded } = useClerkAuth();
     const isLoading = !userLoaded || !authLoaded;

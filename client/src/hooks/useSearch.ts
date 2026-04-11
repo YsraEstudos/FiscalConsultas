@@ -144,8 +144,6 @@ export function useSearch(
                 const status = err.response?.status;
                 if (status === 404) {
                     message = 'Conteúdo indisponível no momento.';
-                } else if (status || err.code === 'ECONNABORTED' || err.code === 'ERR_NETWORK') {
-                    message = 'Não foi possível carregar os dados agora. Tente novamente em instantes.';
                 }
             }
 

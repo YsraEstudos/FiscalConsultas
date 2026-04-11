@@ -205,7 +205,7 @@ async def test_get_status_handles_db_and_tipi_exceptions(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_status_reuses_cached_snapshot_within_ttl(monkeypatch):
-    async def _noop_rate_limit(_request):
+    async def _noop_rate_limit(_request):  # NOSONAR
         return None
 
     monkeypatch.setattr(system, "_apply_status_rate_limit", _noop_rate_limit)
@@ -248,7 +248,7 @@ async def test_get_status_deduplicates_concurrent_refresh(monkeypatch):
             await asyncio.sleep(0.05)
             return self.payload
 
-    async def _noop_rate_limit(_request):
+    async def _noop_rate_limit(_request):  # NOSONAR
         return None
 
     monkeypatch.setattr(system, "_apply_status_rate_limit", _noop_rate_limit)
