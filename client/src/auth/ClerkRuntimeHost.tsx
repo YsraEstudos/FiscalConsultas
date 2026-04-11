@@ -1,9 +1,18 @@
 import { useEffect } from 'react';
 import { ClerkProvider, SignIn, useAuth, useOrganization, useUser } from '@clerk/react';
 
-import type { ClerkRuntimeSnapshot } from '../context/AuthContext';
 import { clerkTheme } from '../config/clerkAppearance';
 import { Modal } from '../components/Modal';
+
+interface ClerkRuntimeSnapshot {
+    user: ReturnType<typeof useUser>['user'] | null;
+    isSignedIn: boolean;
+    isLoaded: boolean;
+    getToken: ReturnType<typeof useAuth>['getToken'];
+    signOut: ReturnType<typeof useAuth>['signOut'];
+    organization: ReturnType<typeof useOrganization>['organization'] | null;
+    membership: ReturnType<typeof useOrganization>['membership'] | null;
+}
 
 interface ClerkStateBridgeProps {
     onStateChange: (snapshot: ClerkRuntimeSnapshot) => void;

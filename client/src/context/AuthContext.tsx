@@ -5,7 +5,7 @@
  * expondo informações do usuário e organização atual.
  */
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { useUser, useAuth as useClerkAuth, useOrganization } from '@clerk/react';
+import { useUser, useAuth as useClerkAuth, useClerk, useOrganization } from '@clerk/react';
 import {
     getAuthSession,
     registerClerkTokenGetter,
@@ -31,6 +31,8 @@ interface AuthContextType {
     getToken: () => Promise<string | null>;
     canUseAiChat: boolean;
     canUseRestrictedUi: boolean;
+    isAuthConfigured: boolean;
+    openLogin: () => void;
 
     // Legacy compatibility
     isAdmin: boolean;
@@ -47,6 +49,7 @@ type CommonAuthState = {
     isLoading: boolean;
     getToken: ReturnType<typeof useClerkAuth>['getToken'];
     signOut: ReturnType<typeof useClerkAuth>['signOut'];
+    openSignIn: ReturnType<typeof useClerk>['openSignIn'];
 };
 
 type OrganizationLike = {
@@ -75,7 +78,7 @@ function buildContextValue(
     membership: MembershipLike,
     capabilities: AuthCapabilities,
 ): AuthContextType {
-    const { user, isSignedIn, isLoading, getToken, signOut } = baseState;
+    const { user, isSignedIn, isLoading, getToken, signOut, openSignIn } = baseState;
 
     return {
         isSignedIn,
@@ -97,6 +100,10 @@ function buildContextValue(
         },
         canUseAiChat: capabilities.canUseAiChat,
         canUseRestrictedUi: capabilities.canUseRestrictedUi,
+        isAuthConfigured: true,
+        openLogin: () => {
+            openSignIn();
+        },
         isAdmin: hasPrivilegedRole(membership?.role),
         authToken: null,
         login: (_token?: string | null) => {
@@ -129,6 +136,7 @@ function SignedInAuthProvider({
 export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     const { user, isSignedIn, isLoaded: userLoaded } = useUser();
     const { getToken, signOut, isLoaded: authLoaded } = useClerkAuth();
+    const { openSignIn } = useClerk();
     const isLoading = !userLoaded || !authLoaded;
     const baseState: CommonAuthState = {
         user,
@@ -136,6 +144,7 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
         isLoading,
         getToken,
         signOut,
+        openSignIn,
     };
     const [capabilities, setCapabilities] = useState<AuthCapabilities>(DEFAULT_AUTH_CAPABILITIES);
 

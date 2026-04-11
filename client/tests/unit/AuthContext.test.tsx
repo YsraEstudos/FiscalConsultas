@@ -10,6 +10,7 @@ const refs = vi.hoisted(() => ({
   getAuthSessionMock: vi.fn(),
   getTokenMock: vi.fn(),
   signOutMock: vi.fn(),
+  openSignInMock: vi.fn(),
   userStateRef: {
     value: {
       user: {
@@ -30,6 +31,11 @@ const refs = vi.hoisted(() => ({
       isLoaded: true,
     },
   },
+  clerkStateRef: {
+    value: {
+      openSignIn: null as unknown as (() => void | Promise<void>),
+    },
+  },
   orgStateRef: {
     value: {
       organization: {
@@ -45,6 +51,7 @@ const refs = vi.hoisted(() => ({
 vi.mock('@clerk/react', () => ({
   useUser: () => refs.userStateRef.value,
   useAuth: () => refs.authStateRef.value,
+  useClerk: () => refs.clerkStateRef.value,
   useOrganization: () => refs.orgStateRef.value,
 }));
 
@@ -61,6 +68,7 @@ describe('AuthContext', () => {
     vi.clearAllMocks();
     refs.getTokenMock.mockResolvedValue('jwt-token');
     refs.signOutMock.mockResolvedValue(undefined);
+    refs.openSignInMock.mockResolvedValue(undefined);
     refs.getAuthSessionMock.mockResolvedValue({
       authenticated: true,
       can_use_ai_chat: true,
@@ -70,6 +78,9 @@ describe('AuthContext', () => {
       getToken: refs.getTokenMock,
       signOut: refs.signOutMock,
       isLoaded: true,
+    };
+    refs.clerkStateRef.value = {
+      openSignIn: refs.openSignInMock,
     };
     refs.userStateRef.value = {
       user: {

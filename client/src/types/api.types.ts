@@ -304,12 +304,6 @@ export interface SystemStatusResponse {
     };
 }
 
-export interface AuthSessionResponse {
-    authenticated: boolean;
-    can_use_ai_chat: boolean;
-    can_use_restricted_ui: boolean;
-}
-
 /** Login response */
 export interface LoginResponse extends BaseApiResponse {
     success: boolean;
