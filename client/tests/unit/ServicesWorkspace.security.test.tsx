@@ -141,4 +141,15 @@ describe('ServicesWorkspace security', () => {
     const unsafeLink = screen.getByText('unsafe');
     expect(unsafeLink).not.toHaveAttribute('href');
   });
+
+  it('falls back to plain text when markdown is fully stripped by sanitization', () => {
+    const { container } = renderNebsWorkspace({
+      body_markdown: '<script>alert(1)</script>',
+      body_text: 'fallback seguro',
+      body_normalized: 'fallback seguro',
+    });
+
+    expect(container.querySelector('script')).toBeNull();
+    expect(screen.getByText('fallback seguro')).toBeInTheDocument();
+  });
 });

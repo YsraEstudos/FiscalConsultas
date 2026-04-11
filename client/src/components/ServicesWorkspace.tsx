@@ -70,9 +70,13 @@ function renderNoteHtml(note: NoteContent): string {
             gfm: true,
         }) as string;
 
-        return DOMPurify.sanitize(renderedMarkdown, {
+        const sanitizedMarkdown = DOMPurify.sanitize(renderedMarkdown, {
             USE_PROFILES: { html: true },
         });
+
+        if (sanitizedMarkdown.trim()) {
+            return sanitizedMarkdown;
+        }
     }
 
     const plainTextBody = note?.body_text?.trim();
