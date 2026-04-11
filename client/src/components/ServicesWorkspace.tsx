@@ -98,8 +98,8 @@ export function ServicesWorkspace({
     onSwitchDoc,
     onOpenDocInNewTab,
 }: Readonly<ServicesWorkspaceProps>) {
-    const nbsNoteBodyHtml = useMemo(() => renderNoteHtml(nbsState.detail?.nebs), [nbsState.detail]);
-    const nebsNoteBodyHtml = useMemo(() => renderNoteHtml(nebsState.detail?.entry), [nebsState.detail]);
+    const nbsNoteBodyHtml = useMemo(() => renderNoteHtml(nbsState.detail?.nebs), [nbsState.detail?.nebs]);
+    const nebsNoteBodyHtml = useMemo(() => renderNoteHtml(nebsState.detail?.entry), [nebsState.detail?.entry]);
 
     if (doc === 'nbs') {
         return (
