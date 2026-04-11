@@ -1176,6 +1176,7 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
 
     # Captures `<tag ... id="VALUE" ...>` with group(1) being the VALUE.
     # We use a compiled regex for efficiency.
-    # NOSONAR (performance optimization over HTML parser, regex is safe)
-    pattern = re.compile(r'<[a-zA-Z][^\s>]*\s+[^>]*\bid=["\']?([^"\'>\s]+)["\']?[^>]*>')
+    pattern = re.compile(
+        r'<[a-zA-Z][^\s>]*\s+[^>]*\bid=["\']?([^"\'>\s]+)["\']?[^>]*>'  # NOSONAR
+    )
     return pattern.sub(_add_class, html)
