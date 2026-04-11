@@ -12,7 +12,7 @@ test('loads NBS search results and the linked detail panel', async ({ page }) =>
   await searchServices(page, '1.0101.11.00');
 
   await expect(page.getByRole('button', { name: /Serviços de construção de edificações residenciais/ })).toBeVisible();
-  await expect(page.getByText('Nota Explicativa (NEBS)')).toBeVisible();
+  await expect(page.getByText('NOTAS EXPLICATIVAS')).toBeVisible();
   // assert removed
   // assert removed
 });
@@ -49,6 +49,6 @@ test('returns from a NEBS detail to the linked NBS detail', async ({ page }) => 
   await nbsRequest;
 
   await expect(page.getByRole('heading', { name: 'Resultados NBS' })).toBeVisible();
-  await expect(page.getByText('Nota Explicativa (NEBS)')).toBeVisible();
+  await expect(page.getByText('NOTAS EXPLICATIVAS')).toBeVisible();
   // assert removed
 });

@@ -237,6 +237,12 @@ export interface NebsDetailResponse extends BaseApiResponse {
     entry: NebsEntry;
 }
 
+export interface AuthSessionResponse {
+    authenticated: boolean;
+    can_use_ai_chat?: boolean;
+    can_use_restricted_ui?: boolean;
+}
+
 // --------------------------------------------
 // Other Endpoints
 // --------------------------------------------

@@ -22,6 +22,7 @@ function SettingsProbe() {
       <div data-testid="highlight">{String(settings.highlightEnabled)}</div>
       <div data-testid="tipi">{settings.tipiViewMode}</div>
       <div data-testid="sidebar">{settings.sidebarPosition}</div>
+      <div data-testid="open-new-tab">{String(settings.openNewTab)}</div>
 
       <button onClick={() => settings.updateTheme("light")}>theme-light</button>
       <button onClick={() => settings.updateAccentColor(ACCENT_COLOR.PINK)}>
@@ -38,6 +39,9 @@ function SettingsProbe() {
         onClick={() => settings.updateSidebarPosition(SIDEBAR_POSITION.RIGHT)}
       >
         sidebar-right
+      </button>
+      <button onClick={() => settings.toggleOpenNewTab()}>
+        toggle-open-new-tab
       </button>
       <button onClick={() => settings.restoreDefaults()}>
         restore-defaults
@@ -72,6 +76,7 @@ describe("SettingsContext", () => {
     localStorage.setItem(STORAGE_KEYS.HIGHLIGHT, "false");
     localStorage.setItem(STORAGE_KEYS.TIPI_VIEW_MODE, VIEW_MODE.FAMILY);
     localStorage.setItem(STORAGE_KEYS.SIDEBAR_POSITION, SIDEBAR_POSITION.RIGHT);
+    localStorage.setItem(STORAGE_KEYS.OPEN_NEW_TAB, "true");
 
     render(
       <SettingsProvider>
@@ -89,6 +94,7 @@ describe("SettingsContext", () => {
     expect(screen.getByTestId("sidebar")).toHaveTextContent(
       SIDEBAR_POSITION.RIGHT,
     );
+    expect(screen.getByTestId("open-new-tab")).toHaveTextContent("true");
 
     expect(document.documentElement.dataset.theme).toBe("light");
     expect(document.documentElement.style.fontSize).toBe("18px");
@@ -124,6 +130,9 @@ describe("SettingsContext", () => {
     expect(screen.getByTestId("accent")).toHaveTextContent(
       DEFAULTS.ACCENT_COLOR,
     );
+    expect(screen.getByTestId("open-new-tab")).toHaveTextContent(
+      String(DEFAULTS.OPEN_NEW_TAB),
+    );
   });
 
   it("updates values and restores defaults", async () => {
@@ -139,6 +148,7 @@ describe("SettingsContext", () => {
     fireEvent.click(screen.getByText("toggle-highlight"));
     fireEvent.click(screen.getByText("tipi-family"));
     fireEvent.click(screen.getByText("sidebar-right"));
+    fireEvent.click(screen.getByText("toggle-open-new-tab"));
 
     await waitFor(() =>
       expect(screen.getByTestId("theme")).toHaveTextContent("light"),
@@ -150,6 +160,7 @@ describe("SettingsContext", () => {
     expect(screen.getByTestId("sidebar")).toHaveTextContent(
       SIDEBAR_POSITION.RIGHT,
     );
+    expect(screen.getByTestId("open-new-tab")).toHaveTextContent("true");
     expect(document.body.classList.contains("disable-unit-highlights")).toBe(
       true,
     );
@@ -173,6 +184,9 @@ describe("SettingsContext", () => {
     );
     expect(screen.getByTestId("sidebar")).toHaveTextContent(
       DEFAULTS.SIDEBAR_POSITION,
+    );
+    expect(screen.getByTestId("open-new-tab")).toHaveTextContent(
+      String(DEFAULTS.OPEN_NEW_TAB),
     );
     expect(document.body.classList.contains("disable-unit-highlights")).toBe(
       false,

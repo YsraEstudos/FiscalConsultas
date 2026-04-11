@@ -34,4 +34,12 @@
     --badge-tipi-gradient: linear-gradient(135deg, #f59e0b, #d97706);
     --badge-nbs-gradient: linear-gradient(135deg, #065f46, #0f766e);
     --badge-nebs-gradient: linear-gradient(135deg, #7c2d12, #b45309);
+
+    /* Neomorphism / New UI Design specifics */
+    --neon-green: #4ade80;
+    --neon-green-bg: rgba(74, 222, 128, 0.05);
+    --neon-green-border: rgba(74, 222, 128, 0.3);
+    --dark-card-bg: #14141e;
+    --dark-card-border: #1e1e2d;
+    --app-purple: #a855f7;
 }

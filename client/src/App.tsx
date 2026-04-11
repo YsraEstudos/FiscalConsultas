@@ -518,6 +518,13 @@ function App() {
                                             'switchTabDocument (services)'
                                         );
                                     }}
+                                    onOpenDocInNewTab={(nextDoc, query) => {
+                                        const nextTabId = createTab(nextDoc);
+                                        runNonBlockingTask(
+                                            switchTabDocument(nextTabId, nextDoc, query),
+                                            'switchTabDocument (services new tab)'
+                                        );
+                                    }}
                                     onContentReady={() => {
                                         if (!tab.isContentReady) {
                                             updateTab(tab.id, { isContentReady: true });

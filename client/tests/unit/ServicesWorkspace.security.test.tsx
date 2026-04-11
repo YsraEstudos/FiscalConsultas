@@ -1,7 +1,13 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ServicesWorkspace } from '../../src/components/ServicesWorkspace';
+
+vi.mock('../../src/context/SettingsContext', () => ({
+  useSettings: () => ({
+    openNewTab: false,
+  }),
+}));
 
 const noop = () => {};
 
@@ -119,7 +125,7 @@ describe('ServicesWorkspace security', () => {
       body_normalized: 'primeira linha segunda linha novo paragrafo',
     });
 
-    const noteBody = container.querySelector('[class*="noteBody"]');
+    const noteBody = container.querySelector('[class*="notesContent"]');
 
     expect(noteBody?.querySelectorAll('p')).toHaveLength(2);
     expect(noteBody?.querySelector('br')).not.toBeNull();

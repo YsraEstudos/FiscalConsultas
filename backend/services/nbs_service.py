@@ -12,6 +12,7 @@ import re
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from copy import deepcopy
+from html import escape
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator, cast
 
@@ -391,7 +392,35 @@ class NbsService:
     def _to_public_nebs_entry(entry: dict[str, Any] | None) -> dict[str, Any] | None:
         if not entry:
             return None
-        return {field: entry[field] for field in NEBS_PUBLIC_FIELDS}
+        return NbsService._sanitize_nebs_html_fields(
+            {field: entry[field] for field in NEBS_PUBLIC_FIELDS}
+        )
+
+    @staticmethod
+    def _sanitize_nebs_html_fields(entry: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not entry:
+            return None
+
+        sanitized = dict(entry)
+        for field in ("body_text", "body_markdown"):
+            value = sanitized.get(field)
+            if isinstance(value, str):
+                sanitized[field] = escape(value)
+
+        return sanitized
+
+    @classmethod
+    def _sanitize_detail_payload(cls, payload: dict[str, Any]) -> dict[str, Any]:
+        sanitized_payload = deepcopy(payload)
+        if isinstance(sanitized_payload.get("nebs"), dict):
+            sanitized_payload["nebs"] = cls._sanitize_nebs_html_fields(
+                cast(dict[str, Any], sanitized_payload.get("nebs"))
+            )
+        if isinstance(sanitized_payload.get("entry"), dict):
+            sanitized_payload["entry"] = cls._sanitize_nebs_html_fields(
+                cast(dict[str, Any], sanitized_payload.get("entry"))
+            )
+        return sanitized_payload
 
     @staticmethod
     def _build_nebs_fts_query(normalized_query: str) -> str:
@@ -649,6 +678,7 @@ class NbsService:
                         return cached
                 scope = scoped_key
                 payload = await repo.get_item_details(normalized_code)
+            payload = self._sanitize_detail_payload(payload)
             await self._store_detail_payload("nbs", scope, cache_key, payload)
             return deepcopy(payload)
 
@@ -919,6 +949,7 @@ class NbsService:
                         return cached
                 scope = scoped_key
                 payload = await repo.get_nebs_details(normalized_code)
+            payload = self._sanitize_detail_payload(payload)
             await self._store_detail_payload("nebs", scope, cache_key, payload)
             return deepcopy(payload)
 

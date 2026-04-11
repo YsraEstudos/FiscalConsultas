@@ -84,7 +84,7 @@ test('main surfaces render without obvious visual breakage or defacement', async
   await expect(page.getByText('Serviços de construção de edificações residenciais de um e dois pavimentos')).toBeVisible();
   await page.screenshot({ path: 'test-results/site-smoke-nbs.png', fullPage: true });
 
-  await expect(page.getByText('Nota Explicativa (NEBS)')).toBeVisible();
+  await expect(page.getByText('NOTAS EXPLICATIVAS')).toBeVisible();
   await expect(page.locator('div').filter({ hasText: 'Conteudo da nota' }).first()).toBeVisible();
   await page.screenshot({ path: 'test-results/site-smoke-nebs.png', fullPage: true });
 

@@ -6,6 +6,7 @@ import {
   ACCENT_COLOR,
   type AccentColor,
 } from "../constants";
+import { useIsAdmin } from "../hooks/useIsAdmin";
 import styles from "./SettingsModal.module.css";
 
 interface SettingsModalProps {
@@ -34,16 +35,21 @@ export function SettingsModal({
     accentColor,
     fontSize,
     highlightEnabled,
+    adminMode,
     tipiViewMode,
     sidebarPosition,
+    openNewTab,
     updateTheme,
     updateAccentColor,
     updateFontSize,
     toggleHighlight,
+    toggleAdminMode,
     updateTipiViewMode,
     updateSidebarPosition,
+    toggleOpenNewTab,
     restoreDefaults,
   } = useSettings();
+  const isAdmin = useIsAdmin();
 
   // Close on ESC
   useEffect(() => {
@@ -187,6 +193,53 @@ export function SettingsModal({
                 </label>
               </div>
 
+              <div className={styles.item}>
+                <div className={styles.label}>
+                  <span>Comportamento de Navegação</span>
+                  <span className={styles.hint}>
+                    Abrir NBS/NEBS relacionado
+                  </span>
+                </div>
+                <div className={styles.toggleGroup}>
+                  <button
+                    className={`${styles.toggleBtn} ${!openNewTab ? styles.active : ""}`}
+                    onClick={() => openNewTab && toggleOpenNewTab()}
+                  >
+                    Na mesma aba
+                  </button>
+                  <button
+                    className={`${styles.toggleBtn} ${openNewTab ? styles.active : ""}`}
+                    onClick={() => !openNewTab && toggleOpenNewTab()}
+                  >
+                    Em nova aba
+                  </button>
+                </div>
+              </div>
+
+              {isAdmin && (
+                <div className={styles.item}>
+                  <div className={styles.label}>
+                    <span>Modo Desenvolvedor</span>
+                    <span className={styles.hint}>Logs de IA e Admin</span>
+                  </div>
+                  <label
+                    className={styles.switch}
+                    aria-label="Modo Desenvolvedor"
+                    title="Modo Desenvolvedor"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={adminMode}
+                      onChange={toggleAdminMode}
+                      data-testid="admin-toggle"
+                      aria-label="Modo Desenvolvedor"
+                      title="Modo Desenvolvedor"
+                      placeholder="Modo Desenvolvedor"
+                    />
+                    <span className={styles.sliderRound}></span>
+                  </label>
+                </div>
+              )}
             </div>
 
             {/* CARD 3: NAVEGAÇÃO */}

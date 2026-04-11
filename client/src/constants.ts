@@ -47,6 +47,7 @@ export const STORAGE_KEYS = {
   HIGHLIGHT: "nesh_highlight",
   TIPI_VIEW_MODE: "nesh_tipi_view_mode",
   SIDEBAR_POSITION: "nesh_sidebar_position",
+  OPEN_NEW_TAB: "nesh_open_new_tab",
 } as const;
 
 // === Default Settings ===
@@ -57,4 +58,5 @@ export const DEFAULTS = {
   HIGHLIGHT: true,
   TIPI_VIEW_MODE: VIEW_MODE.CHAPTER,
   SIDEBAR_POSITION: SIDEBAR_POSITION.LEFT,
+  OPEN_NEW_TAB: false,
 } as const;

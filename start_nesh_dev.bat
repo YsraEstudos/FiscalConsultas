@@ -4,12 +4,13 @@ chcp 65001 >nul
 cd /d "%~dp0"
 
 set "ENABLE_AUTH_DEBUG=0"
-set "RUN_BACKEND=1"
+set "RUN_BACKEND=0"
 set "CHECKLIST_FILE=%TEMP%\nesh_dev_startup.txt"
 set "CHECKLIST_SHOWN=0"
 set "FAIL_REASON="
 set "BACKEND_UV_SYNC_MODE=no-sync"
 set "BACKEND_BOOT_CMD=uv run --no-sync Nesh.py"
+set "FRONTEND_API_TARGET="
 
 set "CHK_NODE=PENDENTE"
 set "CHK_NPM=PENDENTE"
@@ -18,6 +19,7 @@ set "CHK_BACKEND_ENV=PENDENTE"
 set "CHK_BACKEND_PORT=PENDENTE"
 set "CHK_BACKEND_HEALTH=PENDENTE"
 set "CHK_FRONTEND_ENV=PENDENTE"
+set "CHK_FRONTEND_API=PENDENTE"
 set "CHK_FRONTEND_DEPS=PENDENTE"
 set "CHK_FRONTEND_BUILD=PENDENTE"
 set "CHK_FRONTEND_PORT=PENDENTE"
@@ -34,9 +36,12 @@ set "FRONTEND_PUBLIC_URL="
 if "%~1"=="" goto args_done
 if /I "%~1"=="--auth-debug" (
     set "ENABLE_AUTH_DEBUG=1"
+) else if /I "%~1"=="--with-backend" (
+    set "RUN_BACKEND=1"
 ) else if /I "%~1"=="--frontend-only" (
     set "RUN_BACKEND=0"
 ) else if /I "%~1"=="--backend-sync" (
+    set "RUN_BACKEND=1"
     set "BACKEND_UV_SYNC_MODE=sync"
     set "BACKEND_BOOT_CMD=uv run Nesh.py"
 ) else if /I "%~1"=="--public-preview" (
@@ -90,6 +95,7 @@ if "!RUN_BACKEND!"=="1" (
         goto fail
     )
     set "CHK_UV=OK"
+    set "CHK_FRONTEND_API=IGNORADO"
 ) else (
     set "CHK_UV=IGNORADO"
     set "CHK_BACKEND_ENV=IGNORADO"
@@ -106,6 +112,18 @@ if errorlevel 1 (
     goto fail
 )
 set "CHK_FRONTEND_ENV=OK"
+
+if "!RUN_BACKEND!"=="0" (
+    echo.
+    echo [1.1/7] Validando API remota do frontend ^(modo sem backend^)...
+    call :validate_frontend_api_target
+    if errorlevel 1 (
+        set "CHK_FRONTEND_API=FALHA"
+        set "FAIL_REASON=Modo sem backend exige VITE_API_URL ou VITE_API_FILTER_URL remoto em client/.env.local."
+        goto fail
+    )
+    set "CHK_FRONTEND_API=OK"
+)
 
 if "!RUN_BACKEND!"=="1" (
     echo.
@@ -170,7 +188,7 @@ set "CHK_FRONTEND_DEPS=OK"
 
 echo.
 if /I "!FRONTEND_MODE!"=="preview" (
-    echo [7/7] Iniciando frontend em modo PREVIEW (build de producao)...
+    echo [7/7] Iniciando frontend em modo PREVIEW ^(build de producao^)...
 ) else (
     echo [7/7] Iniciando frontend com Hot Reload...
 )
@@ -206,8 +224,10 @@ call :write_checklist_file "SUCESSO"
 call :open_checklist_file
 echo.
 if "!RUN_BACKEND!"=="1" echo Backend Local:  http://127.0.0.1:8000/api/status
+if "!RUN_BACKEND!"=="0" echo Backend Local:  desativado ^(modo frontend-only^)
 echo Frontend Local: !FRONTEND_LOCAL_URL!
 if defined FRONTEND_PUBLIC_URL echo Frontend Publico ^(rede local^): !FRONTEND_PUBLIC_URL!
+if defined FRONTEND_API_TARGET echo API do Frontend: !FRONTEND_API_TARGET!
 if /I "!FRONTEND_MODE!"=="preview" (
     echo Frontend em modo PREVIEW de producao.
 ) else (
@@ -243,6 +263,17 @@ if not exist "client\.env.local" exit /b 1
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$vars = @{}; Get-Content -LiteralPath 'client/.env.local' | ForEach-Object { if ($_ -match '^\s*([^#=\s]+)\s*=\s*(.*)$') { $vars[$matches[1]] = $matches[2].Trim() } }; if (-not $vars.ContainsKey('VITE_CLERK_PUBLISHABLE_KEY') -or [string]::IsNullOrWhiteSpace($vars['VITE_CLERK_PUBLISHABLE_KEY'])) { exit 1 }; exit 0"
 if errorlevel 1 exit /b 1
+exit /b 0
+
+:validate_frontend_api_target
+set "FRONTEND_API_TARGET="
+if not exist "client\.env.local" exit /b 1
+
+for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$vars = @{}; Get-Content -LiteralPath 'client/.env.local' | ForEach-Object { if ($_ -match '^\s*([^#=\s]+)\s*=\s*(.*)$') { $vars[$matches[1]] = $matches[2].Trim() } }; $api = ''; if ($vars.ContainsKey('VITE_API_FILTER_URL') -and -not [string]::IsNullOrWhiteSpace($vars['VITE_API_FILTER_URL'])) { $api = $vars['VITE_API_FILTER_URL'] } elseif ($vars.ContainsKey('VITE_API_URL') -and -not [string]::IsNullOrWhiteSpace($vars['VITE_API_URL'])) { $api = $vars['VITE_API_URL'] }; if ([string]::IsNullOrWhiteSpace($api)) { exit 1 }; if ($api -match '^https?://(?:localhost|127\.0\.0\.1)(?::\d+)?(?:/|$)') { exit 1 }; Write-Output $api"`) do (
+    set "FRONTEND_API_TARGET=%%I"
+)
+
+if not defined FRONTEND_API_TARGET exit /b 1
 exit /b 0
 
 :ensure_frontend_dependencies
@@ -304,11 +335,12 @@ call :print_check_item "Node disponivel" "!CHK_NODE!" "Instale Node.js 22+."
 call :print_check_item "NPM disponivel" "!CHK_NPM!" "Verifique a instalacao do npm."
 call :print_check_item "uv disponivel" "!CHK_UV!" "Instale uv para rodar o backend Python."
 call :print_check_item ".env do backend valido" "!CHK_BACKEND_ENV!" "Se usar PostgreSQL, defina DATABASE__POSTGRES_URL."
-call :print_check_item "Backend ativo na porta 8000" "!CHK_BACKEND_PORT!" "Verifique a janela Nesh API (Dev)."
+call :print_check_item "Backend ativo na porta 8000" "!CHK_BACKEND_PORT!" "Verifique a janela Nesh API ^(Dev^)."
 call :print_check_item "Healthcheck /api/status ok" "!CHK_BACKEND_HEALTH!" "Confirme logs do backend local."
 call :print_check_item "client/.env.local configurado" "!CHK_FRONTEND_ENV!" "Defina pelo menos VITE_CLERK_PUBLISHABLE_KEY."
+call :print_check_item "API remota do frontend ^(sem backend^)" "!CHK_FRONTEND_API!" "Defina VITE_API_URL/VITE_API_FILTER_URL remoto no client/.env.local."
 call :print_check_item "Dependencias frontend prontas" "!CHK_FRONTEND_DEPS!" "Execute npm install em client/."
-call :print_check_item "Build de frontend (preview)" "!CHK_FRONTEND_BUILD!" "Use --dev-hmr para voltar ao modo hot reload."
+call :print_check_item "Build de frontend ^(preview^)" "!CHK_FRONTEND_BUILD!" "Use --dev-hmr para voltar ao modo hot reload."
 call :print_check_item "Frontend ativo na porta !FRONTEND_PORT!" "!CHK_FRONTEND_PORT!" "Verifique a janela !FRONTEND_WINDOW_TITLE!."
 echo =====================================================
 exit /b 0
@@ -331,6 +363,7 @@ exit /b 0
 :offer_manual_actions
 if /I "!CHK_BACKEND_ENV!"=="FALHA" call :offer_open_backend_env
 if /I "!CHK_FRONTEND_ENV!"=="FALHA" call :offer_open_frontend_env
+if /I "!CHK_FRONTEND_API!"=="FALHA" call :offer_open_frontend_env
 exit /b 0
 
 :offer_open_backend_env
@@ -367,14 +400,20 @@ echo - .env do backend valido: !CHK_BACKEND_ENV!
 echo - Backend ativo na porta 8000: !CHK_BACKEND_PORT!
 echo - Healthcheck /api/status ok: !CHK_BACKEND_HEALTH!
 echo - client/.env.local configurado: !CHK_FRONTEND_ENV!
+echo - API remota do frontend ^(sem backend^): !CHK_FRONTEND_API!
 echo - Dependencias frontend prontas: !CHK_FRONTEND_DEPS!
-echo - Build de frontend (preview): !CHK_FRONTEND_BUILD!
+echo - Build de frontend ^(preview^): !CHK_FRONTEND_BUILD!
 echo - Frontend ativo na porta !FRONTEND_PORT!: !CHK_FRONTEND_PORT!
 echo.
 echo [Links]
+if "!RUN_BACKEND!"=="1" (
 echo - Backend Local:  http://127.0.0.1:8000/api/status
+) else (
+echo - Backend Local:  desativado ^(modo frontend-only^)
+)
 echo - Frontend Local: !FRONTEND_LOCAL_URL!
-if defined FRONTEND_PUBLIC_URL echo - Frontend Publico (rede local): !FRONTEND_PUBLIC_URL!
+if defined FRONTEND_PUBLIC_URL echo - Frontend Publico ^(rede local^): !FRONTEND_PUBLIC_URL!
+if defined FRONTEND_API_TARGET echo - API do Frontend: !FRONTEND_API_TARGET!
 ) > "%CHECKLIST_FILE%"
 exit /b 0
 

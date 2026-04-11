@@ -6,26 +6,21 @@ import styles from '../../src/components/Header.module.css';
 
 
 const {
-  signOutMock,
-  openSignInMock,
+  logoutMock,
+  openLoginMock,
   isSignedInRef,
   userNameRef,
   userEmailRef,
   isAdminRef,
+  isAuthConfiguredRef,
 } = vi.hoisted(() => ({
-  signOutMock: vi.fn(),
-  openSignInMock: vi.fn(),
+  logoutMock: vi.fn(),
+  openLoginMock: vi.fn(),
   isSignedInRef: { value: true },
   userNameRef: { value: 'Usuário Teste' as string | null },
   userEmailRef: { value: 'teste@demo.com' as string | null },
   isAdminRef: { value: true },
-}));
-
-vi.mock('@clerk/react', () => ({
-  UserButton: () => <div data-testid="user-button" />,
-  OrganizationSwitcher: () => <div data-testid="org-switcher" />,
-  SignInButton: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  useClerk: () => ({ signOut: signOutMock, openSignIn: openSignInMock }),
+  isAuthConfiguredRef: { value: true },
 }));
 
 vi.mock('../../src/components/SearchBar', () => ({
@@ -41,6 +36,9 @@ vi.mock('../../src/context/AuthContext', () => ({
     isSignedIn: isSignedInRef.value,
     userName: userNameRef.value,
     userEmail: userEmailRef.value,
+    isAuthConfigured: isAuthConfiguredRef.value,
+    openLogin: openLoginMock,
+    logout: logoutMock,
   }),
 }));
 
@@ -83,12 +81,13 @@ describe('Header', () => {
   const SLOW_MENU_FLOW_TIMEOUT_MS = 7000;
 
   beforeEach(() => {
-    signOutMock.mockReset();
-    openSignInMock.mockReset();
+    logoutMock.mockReset();
+    openLoginMock.mockReset();
     isSignedInRef.value = true;
     userNameRef.value = 'Usuário Teste';
     userEmailRef.value = 'teste@demo.com';
     isAdminRef.value = true;
+    isAuthConfiguredRef.value = true;
   });
 
   it('switches document type and triggers mobile menu action', () => {
@@ -260,9 +259,19 @@ describe('Header', () => {
     expect(screen.queryByRole('button', { name: /sair da conta/i })).not.toBeInTheDocument();
   });
 
+  it('opens the lazy auth flow when the signed-out user clicks Entrar', () => {
+    isSignedInRef.value = false;
+    renderHeader();
+
+    fireEvent.click(screen.getByRole('button', { name: /menu/i }));
+    fireEvent.click(screen.getByRole('button', { name: /entrar/i }));
+
+    expect(openLoginMock).toHaveBeenCalledTimes(1);
+  });
+
   it('confirms logout, blocks duplicate requests and closes modal on completion', { timeout: 15000 }, async () => {
     let resolveSignOut: (() => void) | null = null;
-    signOutMock.mockImplementation(
+    logoutMock.mockImplementation(
       () =>
         new Promise<void>((resolve) => {
           resolveSignOut = () => queueMicrotask(resolve);
@@ -281,10 +290,7 @@ describe('Header', () => {
     const loadingButton = screen.getByRole('button', { name: 'Saindo...' });
     expect(loadingButton).toBeDisabled();
     fireEvent.click(loadingButton);
-    expect(signOutMock).toHaveBeenCalledTimes(1);
-    expect(signOutMock).toHaveBeenCalledWith({
-      redirectUrl: 'http://localhost:3000/',
-    });
+    expect(logoutMock).toHaveBeenCalledTimes(1);
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.getByText('Confirmar saída')).toBeInTheDocument();
@@ -296,6 +302,19 @@ describe('Header', () => {
     });
 
     expect(screen.queryByText('Confirmar saída')).not.toBeInTheDocument();
+  });
+
+  it('disables the sign-in action when auth is not configured', () => {
+    isSignedInRef.value = false;
+    isAuthConfiguredRef.value = false;
+    renderHeader();
+
+    fireEvent.click(screen.getByRole('button', { name: /menu/i }));
+    const loginButton = screen.getByRole('button', { name: /login indisponível/i });
+
+    expect(loginButton).toBeDisabled();
+    fireEvent.click(loginButton);
+    expect(openLoginMock).not.toHaveBeenCalled();
   });
 
   it('disables the services action when the catalog is offline', () => {

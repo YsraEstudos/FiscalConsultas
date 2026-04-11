@@ -450,6 +450,37 @@ async def test_get_nebs_details_resolves_short_nebs_code_to_canonical_nbs_entry(
 
 
 @pytest.mark.asyncio
+async def test_get_item_details_escapes_html_in_nebs_body_fields(tmp_path: Path):
+    db_path = tmp_path / "services.db"
+    _seed_services_db(db_path)
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE nebs_entries
+        SET body_text = ?, body_markdown = ?
+        WHERE code = ?
+        """,
+        (
+            "<script>alert(1)</script> conteúdo público",
+            "<img src=x onerror=alert(1)>\n# Título",
+            "1.0101.11.00",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    async with NbsService(db_path) as service:
+        payload = await service.get_item_details("1.0101.11.00")
+
+    assert "<script" not in payload["nebs"]["body_text"]
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in payload["nebs"]["body_text"]
+    assert "<img" not in payload["nebs"]["body_markdown"]
+    assert "&lt;img src=x onerror=alert(1)&gt;" in payload["nebs"]["body_markdown"]
+
+
+@pytest.mark.asyncio
 async def test_get_nebs_details_raises_not_found_for_non_trusted_entry(tmp_path: Path):
     db_path = tmp_path / "services.db"
     _seed_services_db(db_path)
@@ -559,6 +590,52 @@ async def test_repository_mode_check_connection_exposes_counts_and_metadata():
     assert payload["nbs_items"] == 12
     assert payload["nebs_entries"] == 4
     assert payload["metadata"]["nbs_updated_at"] == "2026-03-25T10:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_repository_mode_escapes_html_in_nebs_payload_fields():
+    class _MaliciousNbsRepo(_FakeNbsRepo):
+        async def get_item_details(self, _code: str):
+            return {
+                "success": True,
+                "item": {"code": "1.01"},
+                "ancestors": [],
+                "children": [],
+                "chapter_root": {"code": "1.01"},
+                "chapter_items": [{"code": "1.01"}],
+                "nebs": {
+                    "code": "1.01",
+                    "body_text": "<script>alert(1)</script>",
+                    "body_markdown": "<img src=x onerror=alert(1)>",
+                },
+            }
+
+        async def get_nebs_details(self, _code: str):
+            return {
+                "success": True,
+                "item": {"code": "1.01"},
+                "ancestors": [],
+                "entry": {
+                    "code": "1.01",
+                    "body_text": "<script>alert(1)</script>",
+                    "body_markdown": "<img src=x onerror=alert(1)>",
+                },
+            }
+
+    service = NbsService(repository=_MaliciousNbsRepo())
+
+    item_payload = await service.get_item_details("1.01")
+    nebs_payload = await service.get_nebs_details("1.01")
+
+    assert "<script" not in item_payload["nebs"]["body_text"]
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in item_payload["nebs"]["body_text"]
+    assert "<img" not in item_payload["nebs"]["body_markdown"]
+    assert "&lt;img src=x onerror=alert(1)&gt;" in item_payload["nebs"]["body_markdown"]
+
+    assert "<script" not in nebs_payload["entry"]["body_text"]
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in nebs_payload["entry"]["body_text"]
+    assert "<img" not in nebs_payload["entry"]["body_markdown"]
+    assert "&lt;img src=x onerror=alert(1)&gt;" in nebs_payload["entry"]["body_markdown"]
 
 
 @pytest.mark.asyncio

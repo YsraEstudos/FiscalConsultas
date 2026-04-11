@@ -188,13 +188,6 @@ export function ServicesTabContent({
                 <div className={styles.actions}>
                     <span className={styles.queryPill}>Consulta: {queryLabel}</span>
                     <span className={styles.countPill}>{countLabel}</span>
-                    <button
-                        type="button"
-                        className={styles.switchButton}
-                        onClick={() => onSwitchDoc(doc === 'nbs' ? 'nebs' : 'nbs', data.query)}
-                    >
-                        {doc === 'nbs' ? 'Ver NEBS →' : '← Ver NBS'}
-                    </button>
                 </div>
             </header>
 

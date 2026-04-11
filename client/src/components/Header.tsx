@@ -1,12 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { UserButton, OrganizationSwitcher, SignInButton, useClerk } from '@clerk/react';
 import { SearchBar } from './SearchBar';
 import { HistoryItem } from '../hooks/useHistory';
-import {
-    clerkOrganizationSwitcherAppearance,
-    clerkTheme,
-    clerkUserButtonAppearance
-} from '../config/clerkAppearance';
 import { useAuth } from '../context/AuthContext';
 import { useIsAdmin } from '../hooks/useIsAdmin';
 import { Modal } from './Modal';
@@ -57,12 +51,10 @@ export function Header({
     isLoading
 }: HeaderProps) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [shouldRenderClerkWidgets, setShouldRenderClerkWidgets] = useState(false);
     const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
     const [isSigningOut, setIsSigningOut] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
-    const { signOut } = useClerk();
-    const { isSignedIn, userName, userEmail } = useAuth();
+    const { isSignedIn, userName, userEmail, isAuthConfigured, openLogin, logout } = useAuth();
     const isAdmin = useIsAdmin();
     const isServiceDoc = doc === 'nbs' || doc === 'nebs';
     const titleSubtitle = DOC_SUBTITLES[doc] || DOC_SUBTITLES.tipi;
@@ -86,21 +78,14 @@ export function Header({
     };
 
     const handleToggleMenu = () => {
-        setIsMenuOpen(prev => {
-            const next = !prev;
-            if (next && !shouldRenderClerkWidgets) {
-                setShouldRenderClerkWidgets(true);
-            }
-            return next;
-        });
+        setIsMenuOpen(prev => !prev);
     };
 
     const handleConfirmLogout = async () => {
         if (isSigningOut) return;
         setIsSigningOut(true);
         try {
-            const redirectUrl = new URL(import.meta.env.BASE_URL, window.location.origin).toString();
-            await signOut({ redirectUrl });
+            await logout();
         } finally {
             setIsSigningOut(false);
             setIsLogoutConfirmOpen(false);
@@ -209,43 +194,38 @@ export function Header({
                         <div className={styles.menuDivider}></div>
 
                         {/* Clerk Auth Section */}
-                        {shouldRenderClerkWidgets && (
-                            <>
-                                {!isSignedIn && (
-                                    <SignInButton mode="modal" appearance={clerkTheme}>
-                                        <button onClick={() => setIsMenuOpen(false)}>
-                                            <span>🔐</span> Entrar
-                                        </button>
-                                    </SignInButton>
-                                )}
+                        <>
+                            {!isSignedIn && (
+                                <button
+                                    onClick={() => {
+                                        setIsMenuOpen(false);
+                                        openLogin();
+                                    }}
+                                    disabled={!isAuthConfigured}
+                                    className={!isAuthConfigured ? styles.menuButtonDisabled : ''}
+                                    title={!isAuthConfigured ? 'Login indisponível no momento.' : undefined}
+                                >
+                                    <span>🔐</span> {isAuthConfigured ? 'Entrar' : 'Login indisponível'}
+                                </button>
+                            )}
 
-                                {isSignedIn && (
-                                    <>
-                                        {/* Admin: apenas OrganizationSwitcher (dropdown já tem "Manage account") */}
-                                        {isAdmin ? (
-                                            <div className={styles.orgSwitcher}>
-                                                <OrganizationSwitcher appearance={clerkOrganizationSwitcherAppearance} />
-                                            </div>
-                                        ) : (
-                                            /* Usuário comum: apenas UserButton — sem avatar duplicado */
-                                            <div className={styles.userSection}>
-                                                <UserButton appearance={clerkUserButtonAppearance} />
-                                            </div>
-                                        )}
+                            {isSignedIn && (
+                                <>
+                                    <div className={styles.userSection}>
                                         <div className={styles.userSummary}>
                                             <strong>{userName || 'Usuário'}</strong>
                                             <span>{userEmail || 'Conta autenticada'}</span>
                                         </div>
-                                        <button onClick={() => { setIsMenuOpen(false); onOpenProfile(); }}>
-                                            <span>👤</span> Meu Perfil
-                                        </button>
-                                        <button className={styles.logoutMenuButton} onClick={handleLogoutClick}>
-                                            <span>🚪</span> Sair da conta
-                                        </button>
-                                    </>
-                                )}
-                            </>
-                        )}
+                                    </div>
+                                    <button onClick={() => { setIsMenuOpen(false); onOpenProfile(); }}>
+                                        <span>👤</span> Meu Perfil
+                                    </button>
+                                    <button className={styles.logoutMenuButton} onClick={handleLogoutClick}>
+                                        <span>🚪</span> Sair da conta
+                                    </button>
+                                </>
+                            )}
+                        </>
                     </div>
                 </div>
             </div>
