@@ -11,9 +11,25 @@ describe('serviceCodes', () => {
         const html = '<p>6 - Serviços que se classificam na subposição 1.0503.21.</p><p><strong>1.0602</strong></p>';
 
         const linked = injectServiceLinks(html);
+        const documentNode = new DOMParser().parseFromString(`<div>${linked}</div>`, 'text/html');
 
-        expect(linked).toContain('data-service-code="1.0503.21"');
-        expect(linked).toContain('class="service-smart-link service-code-target"');
-        expect(linked).toContain('<strong><span class="service-smart-link service-code-target" data-service-code="1.0602">1.0602</span></strong>');
+        const firstCode = documentNode.querySelector('[data-service-code="1.0503.21"]');
+        expect(firstCode).not.toBeNull();
+        expect(firstCode?.classList.contains('service-smart-link')).toBe(true);
+        expect(firstCode?.classList.contains('service-code-target')).toBe(true);
+
+        const strongWrappedCode = documentNode.querySelector('strong > [data-service-code="1.0602"]');
+        expect(strongWrappedCode).not.toBeNull();
+        expect(strongWrappedCode?.textContent).toBe('1.0602');
+    });
+
+    it('does not inject nested smart links inside anchors or existing service links', () => {
+        const html = '<p><a href="#">1.0503.21</a> <span class="service-smart-link">1.0602</span></p>';
+
+        const linked = injectServiceLinks(html);
+        const documentNode = new DOMParser().parseFromString(`<div>${linked}</div>`, 'text/html');
+
+        expect(documentNode.querySelectorAll('a .service-smart-link')).toHaveLength(0);
+        expect(documentNode.querySelectorAll('.service-smart-link .service-smart-link')).toHaveLength(0);
     });
 });

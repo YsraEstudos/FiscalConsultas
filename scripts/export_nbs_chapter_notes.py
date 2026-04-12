@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from collections import OrderedDict
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from pypdf import PdfReader
 
 
 FOOTER_RE = re.compile(r"\(Fl\.\s*\d+[^\n]*\)\s*")
-CHAPTER_RE = re.compile(r"^Capítulo\s+(\d+)\s*-\s*(.*)$")
+CHAPTER_RE = re.compile(r"^Capítulo\s+(\d+)\s*-\s*(.+?)\s*$")
 NUMBERED_NOTE_RE = re.compile(r"^(\d+)\)\s*(.*)$")
 LETTERED_NOTE_RE = re.compile(r"^([a-z])\)\s*(.*)$")
 
@@ -42,11 +43,15 @@ def parse_note_items(raw_lines: list[str]) -> list[dict[str, object]]:
             if current_item is not None:
                 items.append(current_item)
 
-            current_item = {
-                "label": numbered_match.group(1),
-                "text": numbered_match.group(2).strip(),
-                "subitems": [],
-            }
+            note_text = numbered_match.group(2).strip()
+            if note_text in {"", "."} and current_item is not None:
+                if current_subitem is not None:
+                    current_subitem["text"] = f"{current_subitem['text']} {line.strip()}".strip()
+                else:
+                    current_item["text"] = f"{current_item['text']} {line.strip()}".strip()
+                continue
+
+            current_item = {"label": numbered_match.group(1), "text": note_text, "subitems": []}
             current_subitem = None
             continue
 
@@ -75,6 +80,21 @@ def parse_note_items(raw_lines: list[str]) -> list[dict[str, object]]:
     return items
 
 
+def dedupe_notes(note_items: list[dict[str, object]]) -> list[dict[str, object]]:
+    seen: set[str] = set()
+    deduped_items: list[dict[str, object]] = []
+
+    for item in note_items:
+        fingerprint = json.dumps(item, ensure_ascii=False, sort_keys=True)
+        if fingerprint in seen:
+            continue
+
+        seen.add(fingerprint)
+        deduped_items.append(item)
+
+    return deduped_items
+
+
 def extract_chapter_notes(lines: list[str]) -> OrderedDict[str, dict[str, object]]:
     chapters: OrderedDict[str, dict[str, object]] = OrderedDict()
     current_chapter: str | None = None
@@ -99,7 +119,7 @@ def extract_chapter_notes(lines: list[str]) -> OrderedDict[str, dict[str, object
             continue
 
         if collecting_title:
-            if line == "Notas":
+            if line.startswith("Notas"):
                 collecting_title = False
                 collecting_notes = True
                 continue
@@ -132,7 +152,7 @@ def extract_chapter_notes(lines: list[str]) -> OrderedDict[str, dict[str, object
             "chapter": chapter_number,
             "title": " ".join(title_parts).strip(),
             "hasOfficialNotes": len(raw_notes) > 0,
-            "notes": parse_note_items(raw_notes),
+            "notes": dedupe_notes(parse_note_items(raw_notes)),
         }
 
     return exported
@@ -148,6 +168,16 @@ def main() -> None:
 
     normalized_lines = normalize_lines(args.pdf)
     chapter_notes = extract_chapter_notes(normalized_lines)
+    expected_chapters = {f"{number:02d}" for number in range(1, 27)}
+    exported_chapters = set(chapter_notes.keys())
+    missing_chapters = sorted(expected_chapters - exported_chapters)
+
+    if missing_chapters:
+        print(
+            f"Missing chapters in extracted notes: {', '.join(missing_chapters)}",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(

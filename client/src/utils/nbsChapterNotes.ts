@@ -71,8 +71,10 @@ export function renderNbsChapterNotesHtml(entry: NbsChapterNotesEntry): string {
 export function getNbsChapterNumber(code: string | null | undefined): string | null {
     if (!code) return null;
 
-    const match = code.trim().match(/^\d\.(\d{2})/);
-    return match?.[1] ?? null;
+    const digits = code.replace(/\D/g, '');
+    if (digits.length < 3) return null;
+
+    return digits.slice(1, 3);
 }
 
 export function getNbsChapterNotesEntry(code: string | null | undefined): NbsChapterNotesEntry | null {

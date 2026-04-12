@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { STORAGE_KEYS } from '../constants';
 import { SettingsProvider } from '../context/SettingsContext';
@@ -42,6 +42,10 @@ function renderWorkspace(nbsState: ServicesWorkspaceNbsState) {
 }
 
 describe('ServicesWorkspace prefix expansion', () => {
+    afterEach(() => {
+        localStorage.removeItem(STORAGE_KEYS.NBS_PREFIX_AUTO_EXPAND);
+    });
+
     it('shows the full branch for code-like prefix searches when the setting is enabled', () => {
         localStorage.setItem(STORAGE_KEYS.NBS_PREFIX_AUTO_EXPAND, 'true');
 

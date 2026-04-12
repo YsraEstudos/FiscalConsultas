@@ -256,12 +256,14 @@ export function SettingsModal({
                   <button
                     className={`${styles.toggleBtn} ${!nbsChapterNotesNewTab ? styles.active : ""}`}
                     onClick={() => nbsChapterNotesNewTab && toggleNbsChapterNotesNewTab()}
+                    aria-pressed={!nbsChapterNotesNewTab}
                   >
                     Na tela
                   </button>
                   <button
                     className={`${styles.toggleBtn} ${nbsChapterNotesNewTab ? styles.active : ""}`}
                     onClick={() => !nbsChapterNotesNewTab && toggleNbsChapterNotesNewTab()}
+                    aria-pressed={nbsChapterNotesNewTab}
                   >
                     Nova aba
                   </button>

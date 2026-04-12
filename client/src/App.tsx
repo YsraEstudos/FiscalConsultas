@@ -273,12 +273,12 @@ function App() {
 
             const serviceLink = target.closest('.service-smart-link');
             if (serviceLink instanceof HTMLElement) {
-                event.preventDefault();
                 const serviceCode = serviceLink.dataset.serviceCode;
                 if (serviceCode) {
+                    event.preventDefault();
                     handleSearchRef.current(serviceCode);
+                    return;
                 }
-                return;
             }
 
             const noteRef = target.closest('.note-ref');

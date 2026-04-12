@@ -98,28 +98,22 @@
   font-weight: 700;
 }
 
-.chapterNotesOverlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
+.chapterNotesDialog {
+  width: min(960px, calc(100vw - 3rem));
+  max-height: min(88vh, 920px);
+  padding: 0;
+  border: none;
+  background: transparent;
+  overflow: visible;
 }
 
-.chapterNotesBackdrop {
-  position: absolute;
-  inset: 0;
-  border: none;
+.chapterNotesDialog::backdrop {
   background: rgb(0 0 0 / 72%);
   backdrop-filter: blur(8px);
 }
 
 .chapterNotesSheet {
-  position: relative;
-  z-index: 1;
-  width: min(960px, 100%);
+  width: 100%;
   max-height: min(88vh, 920px);
   display: flex;
   flex-direction: column;

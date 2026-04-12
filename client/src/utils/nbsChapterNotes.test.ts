@@ -9,6 +9,7 @@ describe('nbsChapterNotes', () => {
     it('extracts the chapter number from NBS codes', () => {
         expect(getNbsChapterNumber('1.0602.22.00')).toBe('06');
         expect(getNbsChapterNumber('1.1703')).toBe('17');
+        expect(getNbsChapterNumber('101022290')).toBe('01');
         expect(getNbsChapterNumber('texto livre')).toBeNull();
     });
 

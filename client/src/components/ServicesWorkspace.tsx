@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type {
@@ -17,7 +17,6 @@ import {
     getNbsChapterNumber,
     openNbsChapterNotesTab,
     renderNbsChapterNotesHtml,
-    type NbsChapterNotesEntry,
 } from '../utils/nbsChapterNotes';
 import { injectServiceLinks } from '../utils/serviceCodes';
 
@@ -136,7 +135,18 @@ export function ServicesWorkspace({
     const nbsNoteBodyHtml = useMemo(() => renderNoteHtml(nbsState.detail?.nebs), [nbsState.detail]);
     const nebsNoteBodyHtml = useMemo(() => renderNoteHtml(nebsState.detail?.entry), [nebsState.detail]);
     const { openNewTab, nbsPrefixAutoExpand, nbsChapterNotesNewTab } = useSettings();
-    const [chapterNotesEntry, setChapterNotesEntry] = useState<NbsChapterNotesEntry | null>(null);
+    const [isChapterNotesOpen, setIsChapterNotesOpen] = useState(false);
+    const chapterNotesDialogRef = useRef<HTMLDialogElement | null>(null);
+    const chapterCodeSource = doc === 'nbs'
+        ? (nbsState.detail?.item.code || nbsState.selectedCode || (
+            isCodeLikeNbsQuery(nbsState.query) ? nbsState.query : null
+        ))
+        : null;
+    const activeChapterNumber = getNbsChapterNumber(chapterCodeSource);
+    const currentChapterNotesEntry = getNbsChapterNotesEntry(chapterCodeSource);
+    const chapterNotesHtml = currentChapterNotesEntry
+        ? renderNbsChapterNotesHtml(currentChapterNotesEntry)
+        : '';
 
     const openCatalogDoc = (targetDoc: ServiceDocType, query?: string) => {
         if (!query) return;
@@ -150,42 +160,48 @@ export function ServicesWorkspace({
     };
 
     useEffect(() => {
-        if (!chapterNotesEntry) return;
-
-        const handleEscape = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                setChapterNotesEntry(null);
+        if (!isChapterNotesOpen || !currentChapterNotesEntry) {
+            if (chapterNotesDialogRef.current?.open) {
+                chapterNotesDialogRef.current.close();
             }
-        };
+            return;
+        }
 
-        globalThis.addEventListener('keydown', handleEscape);
-        return () => globalThis.removeEventListener('keydown', handleEscape);
-    }, [chapterNotesEntry]);
+        const dialog = chapterNotesDialogRef.current;
+        if (!dialog) return;
+
+        if (!dialog.open) {
+            dialog.showModal();
+        }
+    }, [currentChapterNotesEntry, isChapterNotesOpen]);
+
+    useEffect(() => {
+        if (isChapterNotesOpen && !currentChapterNotesEntry) {
+            setIsChapterNotesOpen(false);
+        }
+    }, [currentChapterNotesEntry, isChapterNotesOpen]);
 
     if (doc === 'nbs') {
-        const chapterCodeSource = nbsState.detail?.item.code || nbsState.selectedCode || (
-            isCodeLikeNbsQuery(nbsState.query) ? nbsState.query : null
-        );
-        const activeChapterNumber = getNbsChapterNumber(chapterCodeSource);
-        const activeChapterNotes = getNbsChapterNotesEntry(chapterCodeSource);
         const chapterButtonLabel = activeChapterNumber
             ? `Capítulo ${activeChapterNumber}`
             : 'Explicações do capítulo';
-        const chapterButtonHint = activeChapterNotes?.hasOfficialNotes
+        const chapterButtonHint = currentChapterNotesEntry?.hasOfficialNotes
             ? 'Abrir explicações oficiais do capítulo'
             : 'Abrir resumo do capítulo';
+
+        const closeChapterNotes = () => {
+            setIsChapterNotesOpen(false);
+        };
+
         const handleOpenChapterNotes = () => {
-            if (!activeChapterNotes) return;
+            if (!currentChapterNotesEntry) return;
             if (nbsChapterNotesNewTab) {
-                openNbsChapterNotesTab(activeChapterNotes);
+                openNbsChapterNotesTab(currentChapterNotesEntry);
                 return;
             }
 
-            setChapterNotesEntry(activeChapterNotes);
+            setIsChapterNotesOpen(true);
         };
-        const chapterNotesHtml = chapterNotesEntry
-            ? renderNbsChapterNotesHtml(chapterNotesEntry)
-            : '';
         const autoExpandedDescendants = (
             nbsPrefixAutoExpand
             && isCodeLikeNbsQuery(nbsState.query)
@@ -210,7 +226,7 @@ export function ServicesWorkspace({
                                 type="button"
                                 className={styles.chapterNotesButton}
                                 onClick={handleOpenChapterNotes}
-                                disabled={!activeChapterNotes}
+                                disabled={!currentChapterNotesEntry}
                                 title={chapterButtonHint}
                             >
                                 <span className={styles.chapterNotesEyebrow}>Explicações</span>
@@ -356,20 +372,25 @@ export function ServicesWorkspace({
                     )}
                 </section>
 
-                {chapterNotesEntry && (
-                    <div className={styles.chapterNotesOverlay} role="dialog" aria-modal="true" aria-labelledby="nbs-chapter-notes-title">
-                        <button
-                            type="button"
-                            className={styles.chapterNotesBackdrop}
-                            aria-label="Fechar explicações do capítulo"
-                            onClick={() => setChapterNotesEntry(null)}
-                        />
+                <dialog
+                    ref={chapterNotesDialogRef}
+                    className={styles.chapterNotesDialog}
+                    aria-labelledby="nbs-chapter-notes-title"
+                    onClose={closeChapterNotes}
+                    onCancel={closeChapterNotes}
+                    onClick={(event) => {
+                        if (event.target === event.currentTarget) {
+                            closeChapterNotes();
+                        }
+                    }}
+                >
+                    {currentChapterNotesEntry && (
                         <section className={styles.chapterNotesSheet}>
                             <div className={styles.chapterNotesSheetHeader}>
                                 <div className={styles.chapterNotesSheetCopy}>
                                     <span className={styles.chapterNotesSheetEyebrow}>NBS • Explicações do capítulo</span>
                                     <h3 id="nbs-chapter-notes-title">
-                                        Capítulo {chapterNotesEntry.chapter} - {chapterNotesEntry.title}
+                                        Capítulo {currentChapterNotesEntry.chapter} - {currentChapterNotesEntry.title}
                                     </h3>
                                     <p>
                                         Notas oficiais extraídas do Anexo I da Portaria Conjunta RFB/SCS nº 1.429, de 12 de setembro de 2018.
@@ -379,7 +400,7 @@ export function ServicesWorkspace({
                                     type="button"
                                     className={styles.chapterNotesClose}
                                     aria-label="Fechar explicações do capítulo"
-                                    onClick={() => setChapterNotesEntry(null)}
+                                    onClick={closeChapterNotes}
                                 >
                                     ×
                                 </button>
@@ -398,8 +419,8 @@ export function ServicesWorkspace({
                                 </section>
                             </div>
                         </section>
-                    </div>
-                )}
+                    )}
+                </dialog>
             </div>
         );
     }

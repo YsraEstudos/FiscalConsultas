@@ -2,9 +2,6 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const useE2eMockAuth = typeof process !== 'undefined' && process.env.VITE_E2E_MOCK_AUTH === 'true';
-const rawPublicBasePath = typeof process !== 'undefined' ? (process.env.VITE_PUBLIC_BASE_PATH || '/') : '/';
-const normalizedPublicBasePath = rawPublicBasePath.endsWith('/') ? rawPublicBasePath : `${rawPublicBasePath}/`;
 const clerkMockPath = fileURLToPath(
   new URL('./tests/playwright/mocks/clerk.tsx', import.meta.url)
 );
@@ -12,6 +9,9 @@ const clerkMockPath = fileURLToPath(
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const useE2eMockAuth = env.VITE_E2E_MOCK_AUTH === 'true';
+  const rawPublicBasePath = env.VITE_PUBLIC_BASE_PATH || '/';
+  const normalizedPublicBasePath = rawPublicBasePath.endsWith('/') ? rawPublicBasePath : `${rawPublicBasePath}/`;
   const rawApiBaseUrl = env.VITE_API_FILTER_URL || env.VITE_API_URL || 'http://127.0.0.1:8000';
   const normalizedApiBaseUrl = rawApiBaseUrl.replace(/\/$/, '');
   const proxyTarget = normalizedApiBaseUrl.endsWith('/api')

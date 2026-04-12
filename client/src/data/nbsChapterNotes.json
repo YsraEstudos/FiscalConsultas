@@ -286,14 +286,9 @@
           },
           {
             "label": "b",
-            "text": "Locação de navios e outras embarcações, sem tripulação (afr etamento a casco nu), na qual o afretador passa a ter a posse, o uso e o controle da embarc ação, por tempo determinado, incluindo o direito de designar o comandante e a tripulação, que se classificam na subposição 1.1101.15 (Capítulo"
+            "text": "Locação de navios e outras embarcações, sem tripulação (afr etamento a casco nu), na qual o afretador passa a ter a posse, o uso e o controle da embarc ação, por tempo determinado, incluindo o direito de designar o comandante e a tripulação, que se classificam na subposição 1.1101.15 (Capítulo 11)."
           }
         ]
-      },
-      {
-        "label": "11",
-        "text": ".",
-        "subitems": []
       }
     ]
   },
@@ -1136,9 +1131,77 @@
   },
   "24": {
     "chapter": "24",
-    "title": "Serviços de coleta, tratamento e eliminação de esgoto e resíduos e outros serviços de proteção ambiental. Notas: 1) No presente Capítulo, considera-se que: a) Resíduo: é o material, substância, objeto ou bem descartado resultante de atividades humanas em sociedade, a cuja destinação final se procede, se propõe proceder ou se está obrigado a proceder. Os resíduos podem ser provenientes de serviços de saúde, ter orig em industrial ou doméstica, e podem se caracterizar como perigosos, não perigosos, recicláveis ou não recicláveis. b) Periculosidade de um resíduo: é a característica apresen tada por um resíduo que, em função de suas propriedades físicas, químicas ou infectocontagiosas, pode apre sentar riscos (i) à saúde pública, provocando mortalidade, incidência de doenças ou acentuando seus índices, ou (ii) ao meio ambiente. c) Resíduos perigosos: são aqueles que apresentam periculosidade, conforme definida no item b, e que possuem, entre outras, uma das seguintes característica s: inflamabilidade, corrosividade, reatividade, toxicidade, patogenicidade, carcinogenicidade, teratogenicidade e mutagenicidade. d) Resíduos não perigosos: são aqueles que não se enquadram nos quesitos estabelecidos para os resíduos perigosos. e) Resíduos de serviços de saúde: são aqueles resultantes dos s erviços relacionados com o atendimento à saúde humana ou animal, inclusive os serviços de as sistência domiciliar e de trabalhos de campo; laboratórios analíticos de produtos para saúde; necrotér ios, funerárias e serviços onde se realizem atividades de embalsamamento; serviços de medicina legal; drogarias e farmácias inclusive as de manipulação; estabelecimentos de ensino e pesquisa na área de s aúde; centros de controle de zoonoses; distribuidores de produtos farmacêuticos, importadores, dis tribuidores e produtores de materiais e controles para diagnóstico in vitro; unidades móvei s de atendimento à saúde; serviços de acupuntura; serviços de tatuagem, dentre outros similares. f) Resíduo reciclável: é aquele resíduo passível de retorno ao ciclo produtivo, após ter sofrido alteração de suas propriedades físicas, físico-químicas ou biológicas, t al como ocorre com papelão, papel, plástico, vidro e metal. 2) O tratamento para redução ou eliminação de produtos perigosos por pr ocesso de incineração está classificado na subposição 1.2404.21, enquanto a incineração de produtos não perigosos classifica-se na subposição 1.2404.33. 3) Na posição 1.2405, entende-se por: a) Serviços de remediação: a aplicação de uma ou mais técnica s numa área contaminada ou degradada, com o intuito de restaurá-la de tal maneira a permit ir sua reutilização dentro de patamares de segurança adequados à preservação da saúde humana e do meio ambiente. b) Área contaminada: um terreno, local, instalação, edificação ou benfeitoria onde for constatada a presença de substância(s) química(s) no ar, água ou solo, decorrente de atividades antrópicas, em concentrações tais que restrinjam a utilização dessa área para os usos atual ou pretendido. 4) Para os fins da posição 1.2406, o serviço de limpeza urbana e similares compreende: a) A coleta, transbordo e transporte dos resíduos originários da var rição e limpeza de logradouros e vias públicas. b) A triagem para fins de reúso ou reciclagem, de tratament o, inclusive por compostagem, e de disposição final dos resíduos originários da varrição e limpeza de logradouros e vias públicas. c) A varrição, capina e poda de árvores em vias e logradouros públ icos e outros eventuais serviços pertinentes à limpeza pública urbana.",
-    "hasOfficialNotes": false,
-    "notes": []
+    "title": "Serviços de coleta, tratamento e eliminação de esgoto e resíduos e outros serviços de proteção ambiental.",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "No presente Capítulo, considera-se que:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Resíduo: é o material, substância, objeto ou bem descartado resultante de atividades humanas em sociedade, a cuja destinação final se procede, se propõe proceder ou se está obrigado a proceder. Os resíduos podem ser provenientes de serviços de saúde, ter orig em industrial ou doméstica, e podem se caracterizar como perigosos, não perigosos, recicláveis ou não recicláveis."
+          },
+          {
+            "label": "b",
+            "text": "Periculosidade de um resíduo: é a característica apresen tada por um resíduo que, em função de suas propriedades físicas, químicas ou infectocontagiosas, pode apre sentar riscos (i) à saúde pública, provocando mortalidade, incidência de doenças ou acentuando seus índices, ou (ii) ao meio ambiente."
+          },
+          {
+            "label": "c",
+            "text": "Resíduos perigosos: são aqueles que apresentam periculosidade, conforme definida no item b, e que possuem, entre outras, uma das seguintes característica s: inflamabilidade, corrosividade, reatividade, toxicidade, patogenicidade, carcinogenicidade, teratogenicidade e mutagenicidade."
+          },
+          {
+            "label": "d",
+            "text": "Resíduos não perigosos: são aqueles que não se enquadram nos quesitos estabelecidos para os resíduos perigosos."
+          },
+          {
+            "label": "e",
+            "text": "Resíduos de serviços de saúde: são aqueles resultantes dos s erviços relacionados com o atendimento à saúde humana ou animal, inclusive os serviços de as sistência domiciliar e de trabalhos de campo; laboratórios analíticos de produtos para saúde; necrotér ios, funerárias e serviços onde se realizem atividades de embalsamamento; serviços de medicina legal; drogarias e farmácias inclusive as de manipulação; estabelecimentos de ensino e pesquisa na área de s aúde; centros de controle de zoonoses; distribuidores de produtos farmacêuticos, importadores, dis tribuidores e produtores de materiais e controles para diagnóstico in vitro; unidades móvei s de atendimento à saúde; serviços de acupuntura; serviços de tatuagem, dentre outros similares."
+          },
+          {
+            "label": "f",
+            "text": "Resíduo reciclável: é aquele resíduo passível de retorno ao ciclo produtivo, após ter sofrido alteração de suas propriedades físicas, físico-químicas ou biológicas, t al como ocorre com papelão, papel, plástico, vidro e metal."
+          }
+        ]
+      },
+      {
+        "label": "2",
+        "text": "O tratamento para redução ou eliminação de produtos perigosos por pr ocesso de incineração está classificado na subposição 1.2404.21, enquanto a incineração de produtos não perigosos classifica-se na subposição 1.2404.33.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "Na posição 1.2405, entende-se por:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Serviços de remediação: a aplicação de uma ou mais técnica s numa área contaminada ou degradada, com o intuito de restaurá-la de tal maneira a permit ir sua reutilização dentro de patamares de segurança adequados à preservação da saúde humana e do meio ambiente."
+          },
+          {
+            "label": "b",
+            "text": "Área contaminada: um terreno, local, instalação, edificação ou benfeitoria onde for constatada a presença de substância(s) química(s) no ar, água ou solo, decorrente de atividades antrópicas, em concentrações tais que restrinjam a utilização dessa área para os usos atual ou pretendido."
+          }
+        ]
+      },
+      {
+        "label": "4",
+        "text": "Para os fins da posição 1.2406, o serviço de limpeza urbana e similares compreende:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "A coleta, transbordo e transporte dos resíduos originários da var rição e limpeza de logradouros e vias públicas."
+          },
+          {
+            "label": "b",
+            "text": "A triagem para fins de reúso ou reciclagem, de tratament o, inclusive por compostagem, e de disposição final dos resíduos originários da varrição e limpeza de logradouros e vias públicas."
+          },
+          {
+            "label": "c",
+            "text": "A varrição, capina e poda de árvores em vias e logradouros públ icos e outros eventuais serviços pertinentes à limpeza pública urbana."
+          }
+        ]
+      }
+    ]
   },
   "25": {
     "chapter": "25",
