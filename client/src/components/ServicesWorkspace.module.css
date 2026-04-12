@@ -187,6 +187,7 @@
   padding: 1.5rem 1.8rem 1.8rem;
 }
 
+/* stylelint-disable selector-pseudo-class-no-unknown -- CSS Modules :global(...) */
 .chapterNotesContent :global(.chapter-note-list),
 .chapterNotesContent :global(.chapter-note-sublist) {
   display: grid;
@@ -198,6 +199,7 @@
 .chapterNotesContent :global(.chapter-note-sublist) {
   margin-top: 0.6rem;
 }
+/* stylelint-enable selector-pseudo-class-no-unknown */
 
 .sectionBadge {
   background: var(--neon-green-bg, rgba(74, 222, 128, 0.1));
@@ -545,6 +547,7 @@
   gap: 0.75rem;
 }
 
+/* stylelint-disable selector-pseudo-class-no-unknown -- CSS Modules :global(...) */
 .notesContent :global(p),
 .noteBody :global(p) {
   margin: 0;
@@ -637,6 +640,7 @@
   padding: 0 0.25rem;
   font-weight: 600;
 }
+/* stylelint-enable selector-pseudo-class-no-unknown */
 
 .metadataTags {
   display: flex;

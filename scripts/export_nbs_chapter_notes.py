@@ -46,12 +46,20 @@ def parse_note_items(raw_lines: list[str]) -> list[dict[str, object]]:
             note_text = numbered_match.group(2).strip()
             if note_text in {"", "."} and current_item is not None:
                 if current_subitem is not None:
-                    current_subitem["text"] = f"{current_subitem['text']} {line.strip()}".strip()
+                    current_subitem["text"] = (
+                        f"{current_subitem['text']} {line.strip()}".strip()
+                    )
                 else:
-                    current_item["text"] = f"{current_item['text']} {line.strip()}".strip()
+                    current_item["text"] = (
+                        f"{current_item['text']} {line.strip()}".strip()
+                    )
                 continue
 
-            current_item = {"label": numbered_match.group(1), "text": note_text, "subitems": []}
+            current_item = {
+                "label": numbered_match.group(1),
+                "text": note_text,
+                "subitems": [],
+            }
             current_subitem = None
             continue
 
@@ -70,7 +78,9 @@ def parse_note_items(raw_lines: list[str]) -> list[dict[str, object]]:
             continue
 
         if current_subitem is not None:
-            current_subitem["text"] = f"{current_subitem['text']} {line.strip()}".strip()
+            current_subitem["text"] = (
+                f"{current_subitem['text']} {line.strip()}".strip()
+            )
         else:
             current_item["text"] = f"{current_item['text']} {line.strip()}".strip()
 
@@ -108,7 +118,9 @@ def extract_chapter_notes(lines: list[str]) -> OrderedDict[str, dict[str, object
             current_chapter = chapter_number
             chapters[chapter_number] = {
                 "chapter": chapter_number,
-                "title_parts": [chapter_match.group(2).strip()] if chapter_match.group(2).strip() else [],
+                "title_parts": [chapter_match.group(2).strip()]
+                if chapter_match.group(2).strip()
+                else [],
                 "raw_notes": [],
             }
             collecting_title = True

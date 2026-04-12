@@ -12,11 +12,15 @@ export default defineConfig(({ mode }) => {
   const useE2eMockAuth = env.VITE_E2E_MOCK_AUTH === 'true';
   const rawPublicBasePath = env.VITE_PUBLIC_BASE_PATH || '/';
   const normalizedPublicBasePath = rawPublicBasePath.endsWith('/') ? rawPublicBasePath : `${rawPublicBasePath}/`;
+  const defaultApiBaseUrl = 'http://127.0.0.1:8000';
   const rawApiBaseUrl = env.VITE_API_FILTER_URL || env.VITE_API_URL || 'http://127.0.0.1:8000';
   const normalizedApiBaseUrl = rawApiBaseUrl.replace(/\/$/, '');
-  const proxyTarget = normalizedApiBaseUrl.endsWith('/api')
+  const candidateProxyTarget = normalizedApiBaseUrl.endsWith('/api')
     ? normalizedApiBaseUrl.slice(0, -4)
     : normalizedApiBaseUrl;
+  const proxyTarget = /^(https?:)?\/\//.test(candidateProxyTarget)
+    ? candidateProxyTarget
+    : defaultApiBaseUrl;
 
   return {
     base: normalizedPublicBasePath,
