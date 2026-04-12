@@ -148,6 +148,12 @@ class RedisCache:
         return "v1"
 
     async def bump_catalog_version(self, catalog: str, scope: str = "public") -> str:
+        """Bump and return the cache version as ``vN``.
+
+        Redis ``INCR`` returns ``1`` when the version key does not exist yet, so the
+        first bump creates the version and returns ``v1`` rather than advancing to
+        ``v2``.
+        """
         key = f"{self._cache_version_prefix}:{catalog}:{scope}"
         if self._client is None:
             return "v1"
@@ -328,6 +334,16 @@ class RedisCache:
             )
             if retry_stats is not None:
                 return cached_retry, retry_stats
+
+        if not lock_acquired:
+            # When stale serving and retry-after-wait both miss, we fall back to the
+            # loader without the Redis lock, which can duplicate work under contention.
+            logger.debug(
+                "Redis cached_json falling back to unlocked loader (%s); allow_stale=%s; lock_wait_seconds=%s",
+                key,
+                allow_stale,
+                lock_wait_seconds,
+            )
 
         try:
             value = await loader()

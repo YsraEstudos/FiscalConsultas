@@ -5,7 +5,11 @@ Revises: 012_services_catalog_postgres
 Create Date: 2026-04-12
 """
 
+import logging
+
 from alembic import op
+
+logger = logging.getLogger(__name__)
 
 revision = "013_search_resource_optimizations"
 down_revision = "012_services_catalog_postgres"
@@ -25,7 +29,13 @@ def upgrade() -> None:
     if conn.dialect.name != "postgresql":
         return
 
-    op.execute("CREATE EXTENSION IF NOT EXISTS pg_stat_statements")
+    try:
+        op.execute("CREATE EXTENSION IF NOT EXISTS pg_stat_statements")
+    except Exception as exc:
+        logger.warning(
+            "Could not create pg_stat_statements extension during migration: %s",
+            exc,
+        )
 
     # Keep one GIN index per search_vector and remove overlapping duplicates.
     _execute_concurrently(

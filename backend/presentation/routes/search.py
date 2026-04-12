@@ -488,10 +488,9 @@ async def get_chapter_body(
 
     sections = data.get("sections") or {}
     has_sections = any((sections.get(key) or "").strip() for key in sections)
+    raw_content = data.get("content", "")
     content = (
-        service.strip_chapter_preamble(data["content"])
-        if has_sections
-        else data["content"]
+        service.strip_chapter_preamble(raw_content) if has_sections else raw_content
     )
 
     return {
