@@ -22,6 +22,8 @@ htmlcov/
 
 # Data and Heavy Files
 data/
+!client/src/data/
+!client/src/data/*.json
 raw_data/
 *.zip
 *.xlsx

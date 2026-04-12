@@ -2,17 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import styles from './CrossNavContextMenu.module.css';
 import { formatNcmTipi } from '../utils/id_utils';
+import { extractServiceCode } from '../utils/serviceCodes';
 
-type DocType = 'nesh' | 'tipi';
+type DocType = 'nesh' | 'tipi' | 'nbs' | 'nebs';
 
 type MenuState = {
     open: boolean;
     x: number;
     y: number;
-    ncm: string;
+    code: string;
 };
 
-const initialState: MenuState = { open: false, x: 0, y: 0, ncm: '' };
+const initialState: MenuState = { open: false, x: 0, y: 0, code: '' };
 
 function extractNcm(raw: string): string | null {
     const text = raw.trim();
@@ -43,7 +44,12 @@ export function CrossNavContextMenu({ currentDoc, onOpenInDoc, onOpenInNewTab }:
     const [state, setState] = useState<MenuState>(initialState);
     const menuRef = useRef<HTMLDivElement>(null);
 
-    const otherDoc: DocType = useMemo(() => (currentDoc === 'nesh' ? 'tipi' : 'nesh'), [currentDoc]);
+    const isServiceDoc = currentDoc === 'nbs' || currentDoc === 'nebs';
+    const otherDoc: DocType = useMemo(() => {
+        if (currentDoc === 'nesh') return 'tipi';
+        if (currentDoc === 'tipi') return 'nesh';
+        return currentDoc === 'nbs' ? 'nebs' : 'nbs';
+    }, [currentDoc]);
 
     const hide = useCallback(() => setState(initialState), []);
 
@@ -54,12 +60,14 @@ export function CrossNavContextMenu({ currentDoc, onOpenInDoc, onOpenInNewTab }:
             if (!target) return;
 
             const hit = target.closest(
-                '.smart-link, .tipi-ncm, .tipi-result-ncm, .ncm-target, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6'
+                '.smart-link, .tipi-ncm, .tipi-result-ncm, .ncm-target, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6, .service-smart-link, .service-code-target'
             ) as HTMLElement | null;
             if (!hit) return;
 
-            const ncm = hit.dataset.ncm || extractNcm(hit.textContent || '');
-            if (!ncm) return;
+            const code = isServiceDoc
+                ? (hit.dataset.serviceCode || extractServiceCode(hit.textContent || ''))
+                : (hit.dataset.ncm || extractNcm(hit.textContent || ''));
+            if (!code) return;
 
             e.preventDefault();
 
@@ -73,12 +81,12 @@ export function CrossNavContextMenu({ currentDoc, onOpenInDoc, onOpenInNewTab }:
             const x = Math.min(e.clientX, window.innerWidth - menuWidth - padding);
             const y = Math.min(e.clientY, window.innerHeight - menuHeight - padding);
 
-            setState({ open: true, x, y, ncm });
+            setState({ open: true, x, y, code });
         };
 
         document.addEventListener('contextmenu', onContextMenu);
         return () => document.removeEventListener('contextmenu', onContextMenu);
-    }, []);
+    }, [isServiceDoc]);
 
     // Close on click/scroll/escape
     useEffect(() => {
@@ -115,39 +123,39 @@ export function CrossNavContextMenu({ currentDoc, onOpenInDoc, onOpenInNewTab }:
 
     const onCopy = useCallback(async () => {
         try {
-            await navigator.clipboard.writeText(state.ncm);
-            toast.success('NCM copiado!');
+            await navigator.clipboard.writeText(state.code);
+            toast.success(isServiceDoc ? 'Código NBS copiado!' : 'NCM copiado!');
         } catch {
             toast.error('Não foi possível copiar.');
         } finally {
             hide();
         }
-    }, [hide, state.ncm]);
+    }, [hide, isServiceDoc, state.code]);
 
     const onCrossNavigate = useCallback(() => {
-        const targetNcm = otherDoc === 'tipi' ? formatNcmTipi(state.ncm) : state.ncm;
-        onOpenInDoc(otherDoc, targetNcm);
+        const targetCode = otherDoc === 'tipi' ? formatNcmTipi(state.code) : state.code;
+        onOpenInDoc(otherDoc, targetCode);
         hide();
-    }, [hide, onOpenInDoc, otherDoc, state.ncm]);
+    }, [hide, onOpenInDoc, otherDoc, state.code]);
 
     const onOpenNewTabHere = useCallback(() => {
-        const targetNcm = currentDoc === 'tipi' ? formatNcmTipi(state.ncm) : state.ncm;
-        onOpenInNewTab(currentDoc, targetNcm);
+        const targetCode = currentDoc === 'tipi' ? formatNcmTipi(state.code) : state.code;
+        onOpenInNewTab(currentDoc, targetCode);
         hide();
-    }, [currentDoc, hide, onOpenInNewTab, state.ncm]);
+    }, [currentDoc, hide, onOpenInNewTab, state.code]);
 
     if (!state.open) return null;
 
     return (
         <div ref={menuRef} className={styles.menu} data-context-menu="true">
             <button className={styles.item} onClick={onCrossNavigate}>
-                <span className={styles.icon}>{currentDoc === 'nesh' ? '📊' : '📖'}</span>
+                <span className={styles.icon}>{currentDoc === 'nesh' || currentDoc === 'nbs' ? '📊' : '📖'}</span>
                 Ver na {otherDoc.toUpperCase()}
             </button>
             <div className={styles.divider} />
             <button className={styles.item} onClick={onCopy}>
                 <span className={styles.icon}>📋</span>
-                Copiar NCM
+                {isServiceDoc ? 'Copiar código NBS' : 'Copiar NCM'}
             </button>
             <button className={styles.item} onClick={onOpenNewTabHere}>
                 <span className={styles.icon}>➕</span>

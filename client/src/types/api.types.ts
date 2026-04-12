@@ -219,6 +219,8 @@ export interface NbsDetailResponse extends BaseApiResponse {
     item: NbsServiceItem;
     ancestors: NbsServiceItem[];
     children: NbsServiceItem[];
+    chapter_root?: NbsServiceItem;
+    chapter_items?: NbsServiceItem[];
     nebs: NebsEntry | null;
 }
 

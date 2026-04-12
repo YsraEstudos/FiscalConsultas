@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type {
@@ -12,6 +12,14 @@ import { Loading } from './Loading';
 import styles from './ServicesWorkspace.module.css';
 
 import { useSettings } from '../context/SettingsContext';
+import {
+    getNbsChapterNotesEntry,
+    getNbsChapterNumber,
+    openNbsChapterNotesTab,
+    renderNbsChapterNotesHtml,
+    type NbsChapterNotesEntry,
+} from '../utils/nbsChapterNotes';
+import { injectServiceLinks } from '../utils/serviceCodes';
 
 export interface ServicesWorkspaceNbsState {
     readonly results: readonly NbsServiceItem[];
@@ -19,6 +27,7 @@ export interface ServicesWorkspaceNbsState {
     readonly detail: NbsDetailResponse | null;
     readonly isSearching: boolean;
     readonly isLoadingDetail: boolean;
+    readonly query: string;
 }
 
 export interface ServicesWorkspaceNebsState {
@@ -77,7 +86,7 @@ function renderNoteHtml(note: NoteContent): string {
         });
 
         if (sanitizedMarkdown.trim()) {
-            return sanitizedMarkdown;
+            return injectServiceLinks(sanitizedMarkdown);
         }
     }
 
@@ -86,9 +95,33 @@ function renderNoteHtml(note: NoteContent): string {
         return '<p>Sem conteudo detalhado.</p>';
     }
 
-    return DOMPurify.sanitize(renderPlainTextNoteHtml(plainTextBody), {
+    return injectServiceLinks(DOMPurify.sanitize(renderPlainTextNoteHtml(plainTextBody), {
         USE_PROFILES: { html: true },
-    });
+    }));
+}
+
+function isCodeLikeNbsQuery(query: string): boolean {
+    const rawQuery = query.trim();
+    if (!rawQuery) return false;
+
+    const cleanQuery = rawQuery.replaceAll(/[^0-9.]/g, '');
+    return Boolean(cleanQuery) && [...rawQuery].every(
+        (character) => (character >= '0' && character <= '9') || character === '.',
+    );
+}
+
+function getExpandedPrefixBranch(
+    results: readonly NbsServiceItem[],
+    query: string,
+    activeCode: string,
+): NbsServiceItem[] {
+    const cleanQuery = query.replaceAll(/[^0-9]/g, '');
+    if (!cleanQuery) return [];
+
+    return results.filter((item) => (
+        item.code !== activeCode
+        && item.code_clean.startsWith(cleanQuery)
+    ));
 }
 
 export function ServicesWorkspace({
@@ -102,7 +135,8 @@ export function ServicesWorkspace({
 }: Readonly<ServicesWorkspaceProps>) {
     const nbsNoteBodyHtml = useMemo(() => renderNoteHtml(nbsState.detail?.nebs), [nbsState.detail]);
     const nebsNoteBodyHtml = useMemo(() => renderNoteHtml(nebsState.detail?.entry), [nebsState.detail]);
-    const { openNewTab } = useSettings();
+    const { openNewTab, nbsPrefixAutoExpand, nbsChapterNotesNewTab } = useSettings();
+    const [chapterNotesEntry, setChapterNotesEntry] = useState<NbsChapterNotesEntry | null>(null);
 
     const openCatalogDoc = (targetDoc: ServiceDocType, query?: string) => {
         if (!query) return;
@@ -115,16 +149,78 @@ export function ServicesWorkspace({
         onSwitchDoc(targetDoc, query);
     };
 
+    useEffect(() => {
+        if (!chapterNotesEntry) return;
+
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setChapterNotesEntry(null);
+            }
+        };
+
+        globalThis.addEventListener('keydown', handleEscape);
+        return () => globalThis.removeEventListener('keydown', handleEscape);
+    }, [chapterNotesEntry]);
+
     if (doc === 'nbs') {
+        const chapterCodeSource = nbsState.detail?.item.code || nbsState.selectedCode || (
+            isCodeLikeNbsQuery(nbsState.query) ? nbsState.query : null
+        );
+        const activeChapterNumber = getNbsChapterNumber(chapterCodeSource);
+        const activeChapterNotes = getNbsChapterNotesEntry(chapterCodeSource);
+        const chapterButtonLabel = activeChapterNumber
+            ? `Capítulo ${activeChapterNumber}`
+            : 'Explicações do capítulo';
+        const chapterButtonHint = activeChapterNotes?.hasOfficialNotes
+            ? 'Abrir explicações oficiais do capítulo'
+            : 'Abrir resumo do capítulo';
+        const handleOpenChapterNotes = () => {
+            if (!activeChapterNotes) return;
+            if (nbsChapterNotesNewTab) {
+                openNbsChapterNotesTab(activeChapterNotes);
+                return;
+            }
+
+            setChapterNotesEntry(activeChapterNotes);
+        };
+        const chapterNotesHtml = chapterNotesEntry
+            ? renderNbsChapterNotesHtml(chapterNotesEntry)
+            : '';
+        const autoExpandedDescendants = (
+            nbsPrefixAutoExpand
+            && isCodeLikeNbsQuery(nbsState.query)
+            && nbsState.detail
+        )
+            ? getExpandedPrefixBranch(
+                nbsState.detail.chapter_items || nbsState.results,
+                nbsState.query,
+                nbsState.detail.item.code,
+            )
+            : [];
+        const visibleChildren = autoExpandedDescendants.length > 0
+            ? autoExpandedDescendants
+            : nbsState.detail?.children || [];
+
         return (
             <div className={styles.body}>
                 <aside className={styles.leftPanel}>
                     <div className={styles.leftPanelHeader}>
                         <div className={styles.leftPanelTitle}>
-                            <div className={styles.breadcrumbs}>Seção I &gt; Capítulo 1</div>
+                            <button
+                                type="button"
+                                className={styles.chapterNotesButton}
+                                onClick={handleOpenChapterNotes}
+                                disabled={!activeChapterNotes}
+                                title={chapterButtonHint}
+                            >
+                                <span className={styles.chapterNotesEyebrow}>Explicações</span>
+                                <span>{chapterButtonLabel}</span>
+                            </button>
                             Hierarquia NBS
                         </div>
-                        <span className={styles.sectionBadge}>Seção I Ativa</span>
+                        <span className={styles.sectionBadge}>
+                            {activeChapterNumber ? `Capítulo ${activeChapterNumber} ativo` : 'Capítulo ativo'}
+                        </span>
                     </div>
 
                     {nbsState.isSearching ? (
@@ -139,7 +235,7 @@ export function ServicesWorkspace({
                                         </div>
                                         <div className={styles.nodeContent}>
                                             <span className={styles.nodeLabel}>Nível {item.level}</span>
-                                            <strong className={styles.nodeTitle}>{item.code} - {item.description}</strong>
+                                            <strong className={`${styles.nodeTitle} ${styles.interactiveCode} service-code-target`} data-service-code={item.code}>{item.code} - {item.description}</strong>
                                         </div>
                                     </button>
                                 </div>
@@ -151,15 +247,23 @@ export function ServicesWorkspace({
                                     </div>
                                     <div className={styles.nodeContent}>
                                         <span className={styles.nodeLabel}>Item Ativo</span>
-                                        <strong className={styles.nodeTitle}>{nbsState.detail.item.code} - {nbsState.detail.item.description}</strong>
+                                        <strong className={`${styles.nodeTitle} ${styles.interactiveCode} service-code-target`} data-service-code={nbsState.detail.item.code}>{nbsState.detail.item.code} - {nbsState.detail.item.description}</strong>
                                     </div>
                                 </div>
-                                {nbsState.detail.children.length > 0 && (
+                                {visibleChildren.length > 0 && (
                                     <div className={styles.peerList} style={{ paddingLeft: '3.5rem' }}>
-                                        {nbsState.detail.children.map((child) => (
-                                            <button type="button" key={child.code} className={styles.peerCard} onClick={() => onSelectNbs(child.code)}>
+                                        {visibleChildren.map((child) => (
+                                            <button
+                                                type="button"
+                                                key={child.code}
+                                                className={styles.peerCard}
+                                                onClick={() => onSelectNbs(child.code)}
+                                                style={{
+                                                    marginLeft: `${Math.max(0, child.level - nbsState.detail!.item.level - 1) * 1.25}rem`,
+                                                }}
+                                            >
                                                 <div className={styles.peerIcon}></div>
-                                                <span className={styles.nodeTitle}>{child.code} - {child.description}</span>
+                                                <span className={`${styles.nodeTitle} ${styles.interactiveCode} service-code-target`} data-service-code={child.code}>{child.code} - {child.description}</span>
                                             </button>
                                         ))}
                                     </div>
@@ -176,10 +280,10 @@ export function ServicesWorkspace({
                                     onClick={() => onSelectNbs(item.code)}
                                 >
                                     <div className={styles.resultMeta}>
-                                        <span className={styles.codeBadge}>{item.code}</span>
+                                        <span className={`${styles.codeBadge} ${styles.interactiveCode} service-code-target`} data-service-code={item.code}>{item.code}</span>
                                         {item.has_nebs && <span className={styles.noteBadge}>NEBS</span>}
                                     </div>
-                                    <strong>{item.description}</strong>
+                                    <strong className={`${styles.interactiveCode} service-code-target`} data-service-code={item.code}>{item.description}</strong>
                                     <span className={styles.levelHint}>Nivel {item.level}</span>
                                 </button>
                             ))}
@@ -198,6 +302,15 @@ export function ServicesWorkspace({
                     ) : nbsState.detail ? (
                         <>
                             <h3 className={styles.rightPanelTitle}>Detalhamento Técnico</h3>
+
+                            <section className={styles.card}>
+                                <div className={styles.cardLabel}>Descrição</div>
+                                <p>
+                                    <strong className={`${styles.interactiveCode} service-code-target`} data-service-code={nbsState.detail.item.code}>{nbsState.detail.item.code}</strong>
+                                    {' - '}
+                                    {nbsState.detail.item.description}
+                                </p>
+                            </section>
 
                             <section className={styles.codeComposition}>
                                 <span className={styles.codeLabel}>COMPOSIÇÃO DO CÓDIGO</span>
@@ -242,6 +355,51 @@ export function ServicesWorkspace({
                         </div>
                     )}
                 </section>
+
+                {chapterNotesEntry && (
+                    <div className={styles.chapterNotesOverlay} role="dialog" aria-modal="true" aria-labelledby="nbs-chapter-notes-title">
+                        <button
+                            type="button"
+                            className={styles.chapterNotesBackdrop}
+                            aria-label="Fechar explicações do capítulo"
+                            onClick={() => setChapterNotesEntry(null)}
+                        />
+                        <section className={styles.chapterNotesSheet}>
+                            <div className={styles.chapterNotesSheetHeader}>
+                                <div className={styles.chapterNotesSheetCopy}>
+                                    <span className={styles.chapterNotesSheetEyebrow}>NBS • Explicações do capítulo</span>
+                                    <h3 id="nbs-chapter-notes-title">
+                                        Capítulo {chapterNotesEntry.chapter} - {chapterNotesEntry.title}
+                                    </h3>
+                                    <p>
+                                        Notas oficiais extraídas do Anexo I da Portaria Conjunta RFB/SCS nº 1.429, de 12 de setembro de 2018.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    className={styles.chapterNotesClose}
+                                    aria-label="Fechar explicações do capítulo"
+                                    onClick={() => setChapterNotesEntry(null)}
+                                >
+                                    ×
+                                </button>
+                            </div>
+
+                            <div className={styles.chapterNotesSheetBody}>
+                                <section className={styles.notesCard}>
+                                    <div className={styles.notesHeader}>
+                                        <span className={styles.notesIcon}>i</span>
+                                        <span>NOTAS DO CAPÍTULO</span>
+                                    </div>
+                                    <div
+                                        className={`${styles.notesContent} ${styles.chapterNotesContent}`}
+                                        dangerouslySetInnerHTML={{ __html: chapterNotesHtml }}
+                                    />
+                                </section>
+                            </div>
+                        </section>
+                    </div>
+                )}
             </div>
         );
     }
@@ -271,10 +429,10 @@ export function ServicesWorkspace({
                                 onClick={() => onSelectNebs(item.code)}
                             >
                                 <div className={styles.resultMeta}>
-                                    <span className={styles.codeBadge}>{item.code}</span>
+                                    <span className={`${styles.codeBadge} ${styles.interactiveCode} service-code-target`} data-service-code={item.code}>{item.code}</span>
                                     <span className={styles.noteBadge}>NEBS</span>
                                 </div>
-                                <strong>{item.title}</strong>
+                                <strong className={`${styles.interactiveCode} service-code-target`} data-service-code={item.code}>{item.code} - {item.title}</strong>
                                 <span className={styles.resultExcerpt}>{item.excerpt}</span>
                                 <span className={styles.levelHint}>Paginas {item.page_start} a {item.page_end}</span>
                             </button>
@@ -294,7 +452,7 @@ export function ServicesWorkspace({
                 ) : nebsState.detail ? (
                     <>
                         <div className={styles.detailHero}>
-                            <div className={styles.detailCode}>{nebsState.detail.entry.code}</div>
+                            <div className={`${styles.detailCode} ${styles.interactiveCode} service-code-target`} data-service-code={nebsState.detail.entry.code}>{nebsState.detail.entry.code}</div>
                             <h3>{nebsState.detail.entry.title}</h3>
                             <p className={styles.heroMeta}>
                                 {nebsState.detail.entry.section_title || 'Secao nao informada'} • Paginas {nebsState.detail.entry.page_start} a {nebsState.detail.entry.page_end}
@@ -306,7 +464,8 @@ export function ServicesWorkspace({
                                 <button
                                     key={ancestor.code}
                                     type="button"
-                                    className={styles.crumb}
+                                    className={`${styles.crumb} ${styles.interactiveCode} service-code-target`}
+                                    data-service-code={ancestor.code}
                                     onClick={() => openCatalogDoc('nbs', ancestor.code)}
                                 >
                                     {ancestor.code}
@@ -314,7 +473,8 @@ export function ServicesWorkspace({
                             ))}
                             <button
                                 type="button"
-                                className={styles.crumbCurrentButton}
+                                className={`${styles.crumbCurrentButton} ${styles.interactiveCode} service-code-target`}
+                                data-service-code={nebsState.detail?.item.code}
                                 onClick={() => openCatalogDoc('nbs', nebsState.detail?.item.code)}
                             >
                                 {nebsState.detail.item.code}

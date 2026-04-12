@@ -21,8 +21,7 @@ const isLocalHost = (host: string) => host === 'localhost' || host === '127.0.0.
 const isExplicitLocalApi =
     !!explicitBaseUrl &&
     /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$)/i.test(explicitBaseUrl);
-const shouldUseDevProxyApi =
-    import.meta.env.DEV && isExplicitLocalApi;
+const shouldUseDevProxyApi = import.meta.env.DEV;
 const shouldUseProxyApi =
     shouldUseDevProxyApi
     || (typeof window !== 'undefined' && isExplicitLocalApi && !isLocalHost(window.location.hostname));
