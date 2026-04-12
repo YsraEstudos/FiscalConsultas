@@ -19,7 +19,15 @@ class _FakeServicesCatalog:
             "total": 1,
         }
 
-    async def get_item_details(self, code: str):
+    async def get_item_details(
+        self,
+        code: str,
+        *,
+        include_tree: bool = True,
+        page: int = 1,
+        page_size: int = 50,
+    ):
+        del page, page_size
         item = {
             "code": code,
             "code_clean": "101",
@@ -42,7 +50,7 @@ class _FakeServicesCatalog:
             "ancestors": [],
             "children": [child],
             "chapter_root": item,
-            "chapter_items": [item, child],
+            "chapter_items": [item, child] if include_tree else [],
             "nebs": None,
         }
 

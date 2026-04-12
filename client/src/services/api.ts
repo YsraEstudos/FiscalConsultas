@@ -9,6 +9,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import type {
     AuthSessionResponse,
+    ChapterBodyResponse,
     NbsDetailResponse,
     NbsSearchResponse,
     NebsDetailResponse,
@@ -22,9 +23,10 @@ const isExplicitLocalApi =
     !!explicitBaseUrl &&
     /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$)/i.test(explicitBaseUrl);
 const shouldUseDevProxyApi = import.meta.env.DEV;
+const hasGlobalLocation = typeof globalThis.location !== 'undefined';
 const shouldUseProxyApi =
     shouldUseDevProxyApi
-    || (typeof window !== 'undefined' && isExplicitLocalApi && !isLocalHost(window.location.hostname));
+    || (hasGlobalLocation && isExplicitLocalApi && !isLocalHost(globalThis.location.hostname));
 
 const rawBaseUrl = shouldUseProxyApi ? '/api' : (explicitBaseUrl || '/api');
 
@@ -94,6 +96,193 @@ function getRequestPath(url?: string): string {
     } catch {
         return url;
     }
+}
+
+function normalizeRequestPath(path: string): string {
+    return path.startsWith('/') ? path : `/${path}`;
+}
+
+function isPublicRoutePath(path: string): boolean {
+    return PUBLIC_ROUTES.some(route => path.startsWith(route));
+}
+
+function logRequestPrepared(requestId: string, path: string, isPublicRoute: boolean) {
+    if (!AUTH_DEBUG_ENABLED) return;
+    console.info('[AUTH DEBUG] request prepared', {
+        requestId,
+        path,
+        publicRoute: isPublicRoute,
+        authGetterRegistered: !!clerkGetToken,
+    });
+}
+
+function logAuthorizationAttached(requestId: string, path: string) {
+    if (!AUTH_DEBUG_ENABLED) return;
+    console.info('[AUTH DEBUG] authorization header attached', {
+        requestId,
+        path,
+        hasAuthorization: true,
+    });
+}
+
+function logMissingRequestToken(path: string, requestId: string) {
+    if (!AUTH_DEBUG_ENABLED) return;
+    console.warn('[API] No Clerk token available for authenticated request:', path, {
+        requestId,
+    });
+}
+
+function logRequestTokenFailure(error: unknown) {
+    if (!AUTH_DEBUG_ENABLED) return;
+    console.warn('[API] Failed to get auth token:', error);
+}
+
+function shouldAuthenticateRequest(isPublicRoute: boolean): boolean {
+    return !!clerkGetToken && !isPublicRoute;
+}
+
+async function resolveRequestAuthorization(path: string): Promise<{
+    token: string | null;
+    options: ClerkTokenGetterOptions;
+}> {
+    const primaryOptions = buildTokenGetterOptions(false);
+    if (!clerkGetToken) {
+        return { token: null, options: primaryOptions };
+    }
+
+    let token = await clerkGetToken(primaryOptions);
+    let options = primaryOptions;
+    if (!token) {
+        const fallback = await getForcedRefreshToken(
+            path,
+            'missing_token_in_request_interceptor',
+        );
+        token = fallback.token;
+        options = fallback.options;
+    }
+
+    return { token, options };
+}
+
+async function attachAuthorizationHeader(
+    config: InternalAxiosRequestConfig,
+    normalizedPath: string,
+    requestId: string,
+): Promise<void> {
+    try {
+        const { token, options } = await resolveRequestAuthorization(normalizedPath);
+        if (!token) {
+            logMissingRequestToken(normalizedPath, requestId);
+            return;
+        }
+
+        config.headers.set('Authorization', `Bearer ${token}`);
+        logAuthorizationAttached(requestId, normalizedPath);
+        logJwtDebug('request', normalizedPath, requestId, token, options);
+    } catch (error) {
+        // Falha silenciosa - request continua sem token
+        logRequestTokenFailure(error);
+    }
+}
+
+function getResponseRequestId(
+    originalRequest: InternalAxiosRequestConfig | undefined,
+): string | undefined {
+    const requestIdHeader = originalRequest?.headers?.get?.(REQUEST_ID_HEADER)
+        || originalRequest?.headers?.get?.('x-request-id');
+    return typeof requestIdHeader === 'string' ? requestIdHeader : undefined;
+}
+
+function shouldRetryUnauthorizedRequest(
+    status: number | undefined,
+    originalRequest: (InternalAxiosRequestConfig & { _retryAuth?: boolean }) | undefined,
+    detailText: string | undefined,
+): originalRequest is InternalAxiosRequestConfig & { _retryAuth?: boolean } {
+    return (
+        status === 401
+        && !!originalRequest
+        && !originalRequest._retryAuth
+        && !!clerkGetToken
+        && shouldAttemptAuthRefresh(detailText)
+    );
+}
+
+type RetryUnauthorizedResult = {
+    response: Awaited<ReturnType<typeof api.request>> | null;
+    refreshAttempt: 'skipped' | 'attempted';
+    refreshMode: 'fresh' | 'in_flight' | 'cooldown' | 'not_applicable';
+};
+
+async function retryUnauthorizedRequest(
+    originalRequest: InternalAxiosRequestConfig & { _retryAuth?: boolean },
+    detailText: string | undefined,
+    requestId: string | undefined,
+): Promise<RetryUnauthorizedResult> {
+    const normalizedPath = normalizeRequestPath(getRequestPath(originalRequest.url));
+    if (isPublicRoutePath(normalizedPath)) {
+        return {
+            response: null,
+            refreshAttempt: 'skipped',
+            refreshMode: 'not_applicable',
+        };
+    }
+
+    originalRequest._retryAuth = true;
+
+    try {
+        const refresh = await getForcedRefreshToken(
+            normalizedPath,
+            detailText || '401_without_detail',
+        );
+        if (!refresh.token) {
+            return {
+                response: null,
+                refreshAttempt: 'attempted',
+                refreshMode: refresh.mode,
+            };
+        }
+
+        originalRequest.headers.set('Authorization', `Bearer ${refresh.token}`);
+        logJwtDebug(
+            'retry',
+            normalizedPath,
+            requestId || 'unknown',
+            refresh.token,
+            refresh.options,
+        );
+        return {
+            response: await api.request(originalRequest),
+            refreshAttempt: 'attempted',
+            refreshMode: refresh.mode,
+        };
+    } catch (refreshError) {
+        if (AUTH_DEBUG_ENABLED) {
+            console.warn('[API] Failed to refresh token after 401:', refreshError);
+        }
+        return {
+            response: null,
+            refreshAttempt: 'attempted',
+            refreshMode: 'fresh',
+        };
+    }
+}
+
+function logUnauthorizedResponse(
+    status: number | undefined,
+    path: string | undefined,
+    requestId: string | undefined,
+    detailText: string | undefined,
+    refreshAttempt: 'skipped' | 'attempted',
+    refreshMode: 'fresh' | 'in_flight' | 'cooldown' | 'not_applicable',
+) {
+    if (status !== 401 || !AUTH_DEBUG_ENABLED) return;
+    console.warn('[API] 401 Unauthorized - Token missing, expired, or invalid', {
+        path,
+        requestId,
+        detail: detailText,
+        refreshAttempt,
+        refreshMode,
+    });
 }
 
 /**
@@ -277,54 +466,15 @@ function logJwtDebug(
 // Request interceptor para adicionar o token JWT
 api.interceptors.request.use(
     async (config: InternalAxiosRequestConfig) => {
-        const path = getRequestPath(config.url);
-        const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-        const isPublicRoute = PUBLIC_ROUTES.some(route => normalizedPath.startsWith(route));
+        const normalizedPath = normalizeRequestPath(getRequestPath(config.url));
+        const isPublicRoute = isPublicRoutePath(normalizedPath);
         const requestId = getOrCreateRequestId();
 
         config.headers.set(REQUEST_ID_HEADER, requestId);
+        logRequestPrepared(requestId, normalizedPath, isPublicRoute);
 
-        if (AUTH_DEBUG_ENABLED) {
-            console.info('[AUTH DEBUG] request prepared', {
-                requestId,
-                path: normalizedPath,
-                publicRoute: isPublicRoute,
-                authGetterRegistered: !!clerkGetToken,
-            });
-        }
-
-        // Se temos um getter de token registrado, busca o token
-        if (clerkGetToken && !isPublicRoute) {
-            try {
-                const primaryOptions = buildTokenGetterOptions(false);
-                let token = await clerkGetToken(primaryOptions);
-                let usedOptions = primaryOptions;
-                if (!token) {
-                    const fallback = await getForcedRefreshToken(normalizedPath, 'missing_token_in_request_interceptor');
-                    token = fallback.token;
-                    usedOptions = fallback.options;
-                }
-                if (token) {
-                    config.headers.set('Authorization', `Bearer ${token}`);
-                    if (AUTH_DEBUG_ENABLED) {
-                        console.info('[AUTH DEBUG] authorization header attached', {
-                            requestId,
-                            path: normalizedPath,
-                            hasAuthorization: true,
-                        });
-                    }
-                    logJwtDebug('request', normalizedPath, requestId, token, usedOptions);
-                } else if (AUTH_DEBUG_ENABLED) {
-                    console.warn('[API] No Clerk token available for authenticated request:', normalizedPath, {
-                        requestId,
-                    });
-                }
-            } catch (error) {
-                // Falha silenciosa - request continua sem token
-                if (AUTH_DEBUG_ENABLED) {
-                    console.warn('[API] Failed to get auth token:', error);
-                }
-            }
+        if (shouldAuthenticateRequest(isPublicRoute)) {
+            await attachAuthorizationHeader(config, normalizedPath, requestId);
         }
         return config;
     },
@@ -341,52 +491,31 @@ api.interceptors.response.use(
         const originalRequest = error.config as (InternalAxiosRequestConfig & { _retryAuth?: boolean }) | undefined;
         const detail = (error.response?.data as { detail?: unknown } | undefined)?.detail;
         const detailText = typeof detail === 'string' ? detail : undefined;
-        const requestIdHeader = originalRequest?.headers?.get?.(REQUEST_ID_HEADER) || originalRequest?.headers?.get?.('x-request-id');
-        const requestId = typeof requestIdHeader === 'string' ? requestIdHeader : undefined;
+        const requestId = getResponseRequestId(originalRequest);
         let refreshAttempt: 'skipped' | 'attempted' = 'skipped';
         let refreshMode: 'fresh' | 'in_flight' | 'cooldown' | 'not_applicable' = 'not_applicable';
 
-        if (
-            status === 401
-            && originalRequest
-            && !originalRequest._retryAuth
-            && clerkGetToken
-            && shouldAttemptAuthRefresh(detailText)
-        ) {
-            const path = getRequestPath(originalRequest.url);
-            const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-            const isPublicRoute = PUBLIC_ROUTES.some(route => normalizedPath.startsWith(route));
-
-            if (!isPublicRoute) {
-                originalRequest._retryAuth = true;
-                refreshAttempt = 'attempted';
-                try {
-                    const refresh = await getForcedRefreshToken(normalizedPath, detailText || '401_without_detail');
-                    refreshMode = refresh.mode;
-                    const freshToken = refresh.token;
-                    if (freshToken) {
-                        originalRequest.headers.set('Authorization', `Bearer ${freshToken}`);
-                        logJwtDebug('retry', normalizedPath, requestId || 'unknown', freshToken, refresh.options);
-                        return api.request(originalRequest);
-                    }
-                } catch (refreshError) {
-                    refreshMode = 'fresh';
-                    if (AUTH_DEBUG_ENABLED) {
-                        console.warn('[API] Failed to refresh token after 401:', refreshError);
-                    }
-                }
+        if (shouldRetryUnauthorizedRequest(status, originalRequest, detailText)) {
+            const retryResult = await retryUnauthorizedRequest(
+                originalRequest,
+                detailText,
+                requestId,
+            );
+            refreshAttempt = retryResult.refreshAttempt;
+            refreshMode = retryResult.refreshMode;
+            if (retryResult.response) {
+                return retryResult.response;
             }
         }
 
-        if (status === 401 && AUTH_DEBUG_ENABLED) {
-            console.warn('[API] 401 Unauthorized - Token missing, expired, or invalid', {
-                path: originalRequest?.url,
-                requestId,
-                detail: detailText,
-                refreshAttempt,
-                refreshMode,
-            });
-        }
+        logUnauthorizedResponse(
+            status,
+            originalRequest?.url,
+            requestId,
+            detailText,
+            refreshAttempt,
+            refreshMode,
+        );
         return Promise.reject(error);
     }
 );
@@ -626,16 +755,18 @@ function withDevCacheBust(path: string): string {
 }
 
 export const searchNCM = async (query: string): Promise<any> => {
-    // Performance: Check cache for code queries (chapter data is static)
-    const cacheKey = `nesh:${query}`;
+    // Keep the initial search payload intentionally small.
+    const cacheKey = `nesh:v2:${query}:summary`;
     const cached = getCached<any>(cacheKey);
     if (cached) return cached;
 
     return withInFlightDedup(`ncm:${query}`, async () => {
-        const response = await api.get(withDevCacheBust(`/search?ncm=${encodeURIComponent(query)}`));
+        const response = await api.get(
+            withDevCacheBust(`/search?ncm=${encodeURIComponent(query)}&shape=summary`),
+        );
         const data = normalizeCodeResponseAliases(response.data);
 
-        // Cache code search results (chapter data). Text search is not cached.
+        // Cache only the compact summary response. Full chapter bodies are fetched on demand.
         if (data?.type === 'code' && data?.success) {
             setCache(cacheKey, data);
         }
@@ -688,6 +819,50 @@ export const getNbsServiceDetail = async (code: string): Promise<NbsDetailRespon
     return response.data;
 };
 
+export const getNbsServiceDetailPage = async (
+    code: string,
+    options: {
+        includeTree?: boolean;
+        page?: number;
+        pageSize?: number;
+    } = {},
+): Promise<NbsDetailResponse> => {
+    const {
+        includeTree = true,
+        page = 1,
+        pageSize = 50,
+    } = options;
+    const params = new URLSearchParams({
+        include_tree: String(includeTree),
+        page: String(page),
+        page_size: String(pageSize),
+    });
+    const response = await api.get(
+        withDevCacheBust(`/services/nbs/${encodeURIComponent(code)}?${params.toString()}`),
+    );
+    return response.data;
+};
+
+export const getNbsServiceTreePage = async (
+    code: string,
+    page = 1,
+    pageSize = 50,
+): Promise<{
+    success: true;
+    item: NbsDetailResponse['item'];
+    chapter_root?: NbsDetailResponse['chapter_root'];
+    chapter_page: NonNullable<NbsDetailResponse['chapter_page']>;
+}> => {
+    const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+    });
+    const response = await api.get(
+        withDevCacheBust(`/services/nbs/${encodeURIComponent(code)}/tree?${params.toString()}`),
+    );
+    return response.data;
+};
+
 export const searchNebsEntries = async (query: string): Promise<NebsSearchResponse> => {
     const response = await api.get(withDevCacheBust(`/services/nebs/search?q=${encodeURIComponent(query)}`));
     return response.data;
@@ -696,6 +871,20 @@ export const searchNebsEntries = async (query: string): Promise<NebsSearchRespon
 export const getNebsEntryDetail = async (code: string): Promise<NebsDetailResponse> => {
     const response = await api.get(withDevCacheBust(`/services/nebs/${encodeURIComponent(code)}`));
     return response.data;
+};
+
+export const getNeshChapterBody = async (chapter: string): Promise<ChapterBodyResponse> => {
+    const cacheKey = `nesh:chapter-body:${chapter}`;
+    const cached = getCached<ChapterBodyResponse>(cacheKey);
+    if (cached) return cached;
+
+    return withInFlightDedup(`nesh:chapter-body:${chapter}`, async () => {
+        const response = await api.get(
+            withDevCacheBust(`/search/chapter/${encodeURIComponent(chapter)}/body`),
+        );
+        setCache(cacheKey, response.data);
+        return response.data;
+    });
 };
 
 export const getAuthSession = async (): Promise<AuthSessionResponse> => {

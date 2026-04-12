@@ -1,9 +1,13 @@
 import gzip
 import threading
 from collections import OrderedDict
+from time import perf_counter
 from typing import Annotated, Any, Mapping, cast
 
 import orjson as _orjson  # pyright: ignore[reportMissingImports]
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from starlette.responses import Response
+
 from backend.config.constants import SearchConfig
 from backend.config.exceptions import ValidationError
 from backend.config.logging_config import server_logger as logger
@@ -11,15 +15,13 @@ from backend.config.settings import settings
 from backend.data.glossary_manager import glossary_manager
 from backend.presentation.renderer import HtmlRenderer
 from backend.server.dependencies import get_nesh_service
-from backend.server.rate_limit import public_search_rate_limiter
 from backend.server.middleware import get_current_request_id, get_current_tenant
+from backend.server.rate_limit import public_search_rate_limiter
 from backend.services import NeshService
-from backend.utils.auth import extract_client_ip
 from backend.utils import ncm_utils
+from backend.utils.auth import extract_client_ip
 from backend.utils.cache import cache_scope_key, weak_etag
 from backend.utils.payload_cache_metrics import search_payload_cache_metrics
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from starlette.responses import Response
 
 JSON_MEDIA_TYPE = "application/json"
 
@@ -218,6 +220,13 @@ async def search(
     ncm: Annotated[
         str, Query(..., description="Código NCM ou termo textual para busca")
     ],
+    shape: Annotated[
+        str,
+        Query(
+            description="Payload shape for code searches",
+            pattern="^(full|summary)$",
+        ),
+    ] = "full",
 ):
     """
     Busca Principal (NCM/NESH).
@@ -274,7 +283,7 @@ async def search(
     cached_payload: tuple[bytes, bytes] | None = None
     cache_checked = False
     if is_code_query:
-        payload_key = f"{cache_key}:{ncm_normalized}"
+        payload_key = f"{cache_key}:{ncm_normalized}:{shape}"
         cached_payload = _code_payload_cache_get(payload_key)
         cache_checked = True
         if cached_payload is not None:
@@ -304,6 +313,10 @@ async def search(
             status_code=500, detail="Formato de resposta inválido do serviço"
         )
     response_data = cast(dict[str, Any], result)
+    serialization_ms = 0.0
+    gzip_ms = 0.0
+    response_bytes = 0
+    compressed_bytes = 0
 
     # Compatibilidade de contrato / performance:
     # - manter 'results' como chave canônica e alias legado 'resultados'
@@ -311,7 +324,8 @@ async def search(
     # - remover campos brutos pesados da serialização
     if response_data.get("type") == "code":
         results = _extract_code_results(response_data)
-        response_data["markdown"] = HtmlRenderer.render_full_response(results)
+        if shape == "full":
+            response_data["markdown"] = HtmlRenderer.render_full_response(results)
         for chapter_data in results.values():
             if isinstance(chapter_data, dict):
                 chapter_data.pop("conteudo", None)
@@ -331,17 +345,33 @@ async def search(
     # `payload_key=f"{cache_key}:{ncm_normalized}"` and guard with `cache_checked`.
     if response_data.get("type") == "code":
         if not cache_checked:
-            payload_key = f"{cache_key}:{ncm_normalized}"
+            payload_key = f"{cache_key}:{ncm_normalized}:{shape}"
             cached_payload = _code_payload_cache_get(payload_key)
             cache_checked = True
 
         cache_status = "HIT" if cached_payload is not None else "MISS"
         if cached_payload is None:
+            serialization_started = perf_counter()
             raw_body = _orjson.dumps(response_data)
+            serialization_ms = round((perf_counter() - serialization_started) * 1000, 2)
+            gzip_started = perf_counter()
             gzip_body = gzip.compress(raw_body, compresslevel=1, mtime=0)
+            gzip_ms = round((perf_counter() - gzip_started) * 1000, 2)
+            response_bytes = len(raw_body)
+            compressed_bytes = len(gzip_body)
             cached_payload = (raw_body, gzip_body)
             if payload_key is not None:
                 _code_payload_cache_set(payload_key, cached_payload)
+        else:
+            response_bytes = len(cached_payload[0])
+            compressed_bytes = len(cached_payload[1])
+        metric_headers = {
+            "X-Response-Bytes": str(response_bytes),
+            "X-Compressed-Bytes": str(compressed_bytes),
+            "X-Serialize-Ms": str(serialization_ms),
+            "X-Gzip-Ms": str(gzip_ms),
+            "X-Response-Shape": shape,
+        }
 
         logger.info(
             "search_request_finished request_id=%s path=%s outcome=success type=code cache_status=%s",
@@ -352,7 +382,7 @@ async def search(
         return _build_payload_response(
             request,
             cached_payload,
-            headers=headers,
+            headers={**headers, **metric_headers},
             cache_status=cache_status,
         )
 
@@ -361,7 +391,19 @@ async def search(
         request_id,
         request.url.path,
     )
-    return _orjson_response(response_data, headers=headers)
+    serialization_started = perf_counter()
+    raw_body = _orjson.dumps(response_data)
+    serialization_ms = round((perf_counter() - serialization_started) * 1000, 2)
+    return Response(
+        content=raw_body,
+        media_type=JSON_MEDIA_TYPE,
+        headers={
+            **headers,
+            "X-Response-Bytes": str(len(raw_body)),
+            "X-Serialize-Ms": str(serialization_ms),
+            "X-Response-Shape": shape,
+        },
+    )
 
 
 @router.get("/chapters")
@@ -427,6 +469,37 @@ async def get_chapter_notes(
         "capitulo": chapter,
         "notas_parseadas": data.get("parsed_notes", {}),
         "notas_gerais": data.get("notes", None),
+    }
+
+
+@router.get(
+    "/search/chapter/{chapter}/body",
+    responses={404: {"description": "Capítulo não encontrado"}},
+)
+async def get_chapter_body(
+    chapter: str,
+    service: Annotated[NeshService, Depends(get_nesh_service)],
+):
+    data = await service.fetch_chapter_data(chapter)
+    if not data:
+        raise HTTPException(
+            status_code=404, detail=f"Capítulo {chapter} não encontrado"
+        )
+
+    sections = data.get("sections") or {}
+    has_sections = any((sections.get(key) or "").strip() for key in sections)
+    raw_content = data.get("content", "")
+    content = (
+        service.strip_chapter_preamble(raw_content) if has_sections else raw_content
+    )
+
+    return {
+        "success": True,
+        "capitulo": chapter,
+        "conteudo": content,
+        "notas_parseadas": data.get("parsed_notes", {}),
+        "notas_gerais": data.get("notes", None),
+        "secoes": sections if has_sections else None,
     }
 
 

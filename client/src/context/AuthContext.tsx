@@ -32,6 +32,7 @@ interface AuthContextType {
     canUseAiChat: boolean;
     canUseRestrictedUi: boolean;
     isAuthConfigured: boolean;
+    authUnavailableReason: string | null;
     openLogin: () => void;
 
     // Legacy compatibility
@@ -77,6 +78,7 @@ function buildContextValue(
     organization: OrganizationLike,
     membership: MembershipLike,
     capabilities: AuthCapabilities,
+    authUnavailableReason: string | null = null,
 ): AuthContextType {
     const { user, isSignedIn, isLoading, getToken, signOut, openSignIn } = baseState;
 
@@ -100,9 +102,12 @@ function buildContextValue(
         },
         canUseAiChat: capabilities.canUseAiChat,
         canUseRestrictedUi: capabilities.canUseRestrictedUi,
-        isAuthConfigured: true,
+        isAuthConfigured: !authUnavailableReason,
+        authUnavailableReason,
         openLogin: () => {
-            openSignIn();
+            if (!authUnavailableReason) {
+                openSignIn();
+            }
         },
         isAdmin: hasPrivilegedRole(membership?.role),
         authToken: null,
@@ -131,6 +136,32 @@ function SignedInAuthProvider({
             {children}
         </AuthContext.Provider>
     );
+}
+
+function createUnavailableContextValue(reason: string | null): AuthContextType {
+    return {
+        isSignedIn: false,
+        isLoading: false,
+        userId: null,
+        userName: null,
+        userEmail: null,
+        userImageUrl: null,
+        orgId: null,
+        orgName: null,
+        orgSlug: null,
+        getToken: async () => null,
+        canUseAiChat: false,
+        canUseRestrictedUi: false,
+        isAuthConfigured: false,
+        authUnavailableReason: reason,
+        openLogin: () => { },
+        isAdmin: false,
+        authToken: null,
+        login: () => {
+            console.warn('[AuthContext] login() unavailable while auth fallback mode is active.');
+        },
+        logout: () => { },
+    };
 }
 
 export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
@@ -193,6 +224,20 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
 
     return (
         <AuthContext.Provider value={buildContextValue(baseState, null, null, capabilities)}>
+            {children}
+        </AuthContext.Provider>
+    );
+}
+
+export function AnonymousAuthProvider({
+    children,
+    reason = null,
+}: Readonly<{
+    children: ReactNode;
+    reason?: string | null;
+}>) {
+    return (
+        <AuthContext.Provider value={createUnavailableContextValue(reason)}>
             {children}
         </AuthContext.Provider>
     );

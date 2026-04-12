@@ -10,6 +10,7 @@ const hoisted = vi.hoisted(() => ({
   robustCallsRef: { value: [] as any[] },
   debugWarnMock: vi.fn(),
   toastErrorMock: vi.fn(),
+  getNeshChapterBodyMock: vi.fn(),
   authStateRef: {
     value: {
       userName: 'Teste',
@@ -39,6 +40,10 @@ const hoisted = vi.hoisted(() => ({
       onPopoverMouseDown: vi.fn(),
     },
   },
+}));
+
+vi.mock('../../src/services/api', () => ({
+  getNeshChapterBody: hoisted.getNeshChapterBodyMock,
 }));
 
 vi.mock('../../src/context/SettingsContext', () => ({
@@ -179,6 +184,15 @@ describe('ResultDisplay advanced behavior', () => {
     hoisted.robustCallsRef.value = [];
     hoisted.debugWarnMock.mockReset();
     hoisted.toastErrorMock.mockReset();
+    hoisted.getNeshChapterBodyMock.mockReset();
+    hoisted.getNeshChapterBodyMock.mockResolvedValue({
+      success: true,
+      capitulo: '84',
+      conteudo: 'Conteudo hidratado',
+      notas_parseadas: {},
+      notas_gerais: null,
+      secoes: null,
+    });
     hoisted.sidebarPositionRef.value = 'right';
     hoisted.authStateRef.value = {
       userName: 'Teste',
@@ -345,6 +359,9 @@ describe('ResultDisplay advanced behavior', () => {
   });
 
   it('uses NeshRenderer fallback and resolves sidebar navigation ids', async () => {
+    hoisted.getNeshChapterBodyMock.mockImplementation(
+      () => new Promise<never>(() => undefined),
+    );
     const renderFallbackSpy = vi
       .spyOn(NeshRenderer, 'renderFullResponse')
       .mockReturnValue('<div class="section-consideracoes">Bloco sem id</div><h3 id="pos-84-13">Bombas</h3>');
@@ -504,6 +521,67 @@ describe('ResultDisplay advanced behavior', () => {
         ),
       ).toBe(true);
     });
+  });
+
+  it('keeps successful chapter hydration when another chapter body fetch fails', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    hoisted.getNeshChapterBodyMock.mockImplementation(async (chapter: string) => {
+      if (chapter === '84') {
+        return {
+          success: true,
+          capitulo: '84',
+          conteudo: 'Conteudo hidratado 84',
+          notas_parseadas: {},
+          notas_gerais: null,
+          secoes: null,
+        };
+      }
+
+      throw new Error(`Falha ao hidratar ${chapter}`);
+    });
+
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '8413',
+          resultados: {
+            '84': {
+              capitulo: '84',
+              titulo: 'Capitulo 84',
+              posicoes: [{ codigo: '84.13', anchor_id: 'pos-84-13', descricao: 'Bombas' }],
+            },
+            '85': {
+              capitulo: '85',
+              titulo: 'Capitulo 85',
+              posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Telefones' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-partial-hydration"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(hoisted.getNeshChapterBodyMock).toHaveBeenCalledWith('84');
+      expect(hoisted.getNeshChapterBodyMock).toHaveBeenCalledWith('85');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Conteudo hidratado 84')).toBeInTheDocument();
+    });
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[ResultDisplay] Failed to fetch chapter body',
+      expect.objectContaining({ chapter: '85' }),
+    );
+
+    errorSpy.mockRestore();
   });
 
   it('keeps robust auto-scroll enabled as a fallback when a text query also activates SearchHighlighter', async () => {

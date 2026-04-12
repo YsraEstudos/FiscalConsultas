@@ -1,5 +1,5 @@
 import { TextSearchResults } from './TextSearchResults';
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { startTransition, useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { marked } from 'marked';
 import { useRobustScroll } from '../hooks/useRobustScroll';
 import { generateAnchorId } from '../utils/id_utils';
@@ -23,6 +23,8 @@ import {
     replaceElementWithTrustedHtml,
     sanitizeRichHtml,
 } from '../utils/contentSecurity';
+import { getNeshChapterBody } from '../services/api';
+import type { ChapterBodyResponse } from '../types/api.types';
 
 const LEGACY_MARKDOWN_PATTERN = /(^|\n)\s{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+\.\s|---+\s*$)|\*\*[^*\n]+?\*\*/m;
 
@@ -422,6 +424,84 @@ function resolveMarkupToRender(
     return NeshRenderer.renderFullResponse(codeResults);
 }
 
+function chapterHasRenderableContent(chapter: any): boolean {
+    const content = chapter?.conteudo;
+    return typeof content === 'string' && content.trim().length > 0;
+}
+
+function getSectionContent(sectionValue: unknown): string {
+    if (typeof sectionValue === 'string') {
+        return sectionValue.trim();
+    }
+    if (typeof sectionValue === 'number') {
+        return String(sectionValue).trim();
+    }
+    return '';
+}
+
+function getAnchorCodeFromNcmValue(value: string): string {
+    if (value.includes('.') || value.length !== 4) {
+        return value;
+    }
+    return `${value.slice(0, 2)}.${value.slice(2, 4)}`;
+}
+
+function resolveChapterResultKey(
+    results: Record<string, any>,
+    chapterNumber: string,
+): string {
+    return Object.keys(results).find((key) => {
+        const existingChapter = results[key];
+        return existingChapter?.capitulo === chapterNumber;
+    }) ?? chapterNumber;
+}
+
+function mergeHydratedChapterBodies(
+    baseResults: Record<string, any>,
+    chapterBodies: ChapterBodyResponse[],
+): Record<string, any> {
+    const nextResults = { ...baseResults };
+
+    for (const chapterBody of chapterBodies) {
+        const chapterKey = resolveChapterResultKey(nextResults, chapterBody.capitulo);
+        const existingChapter = nextResults[chapterKey];
+        if (!existingChapter || typeof existingChapter !== 'object') {
+            continue;
+        }
+
+        nextResults[chapterKey] = {
+            ...existingChapter,
+            conteudo: chapterBody.conteudo,
+            notas_parseadas: chapterBody.notas_parseadas ?? existingChapter.notas_parseadas ?? {},
+            notas_gerais: chapterBody.notas_gerais ?? existingChapter.notas_gerais ?? null,
+            secoes: chapterBody.secoes ?? existingChapter.secoes,
+        };
+    }
+
+    return nextResults;
+}
+
+async function fetchChapterBodies(chapters: string[]): Promise<ChapterBodyResponse[]> {
+    const settledBodies = await Promise.allSettled(
+        chapters.map((chapter) => getNeshChapterBody(chapter)),
+    );
+    const fulfilledBodies: ChapterBodyResponse[] = [];
+
+    settledBodies.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+            fulfilledBodies.push(result.value);
+            return;
+        }
+
+        console.error('[ResultDisplay] Failed to fetch chapter body', {
+            chapter: chapters[index],
+            error: result.reason,
+        });
+    });
+
+    return fulfilledBodies;
+}
+
 function getCachedRawMarkup(
     cacheKey: string,
     shouldParseMarkdown: boolean,
@@ -637,9 +717,7 @@ function getStructuredSectionIds(capitulo: string, secoes: Record<string, unknow
     const ids: string[] = [];
     for (const sectionType of SECTION_TYPES) {
         const sectionValue = secoes[sectionType];
-        const sectionContent = typeof sectionValue === 'string'
-            ? sectionValue.trim()
-            : (typeof sectionValue === 'number' ? String(sectionValue).trim() : '');
+        const sectionContent = getSectionContent(sectionValue);
         if (!sectionContent) continue;
         ids.push(`chapter-${capitulo}-${sectionType}`);
     }
@@ -699,9 +777,7 @@ function ensureTargetAnchorFromDataNcm(
         const element = container.querySelector(`[data-ncm="${value}"]`) as HTMLElement | null;
         if (!element) continue;
 
-        const anchorCode = value.includes('.')
-            ? value
-            : (value.length === 4 ? `${value.slice(0, 2)}.${value.slice(2, 4)}` : value);
+        const anchorCode = getAnchorCodeFromNcmValue(value);
         if (!element.id) {
             element.id = generateAnchorId(anchorCode);
         }
@@ -824,6 +900,8 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     // Drawer state for responsive screens < 1280px
     const [drawerOpen, setDrawerOpen] = useState(false);
     const toggleDrawer = useCallback(() => setDrawerOpen(prev => !prev), []);
+    const [hydratedCodeResults, setHydratedCodeResults] = useState<Record<string, any> | null>(null);
+    const [isHydratingCodeResults, setIsHydratingCodeResults] = useState(false);
 
     /** Abre o formulário no painel direito ancorado ao trecho selecionado. */
     const handleOpenComment = useCallback(() => {
@@ -938,7 +1016,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     // ── Reset ao mudar de conteúdo ────────────────────────────────────────
     useEffect(() => {
         resetFetchedAnchors();
-    }, [data?.markdown, resetFetchedAnchors]);
+    }, [data?.markdown, data?.ncm, data?.query, resetFetchedAnchors]);
 
     // ───────────────────────────────────────────────────────────────────────
     const codeResults = useMemo(() => {
@@ -951,6 +1029,74 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         }
         return null;
     }, [data?.type, data?.resultados, data?.results]);
+
+    useEffect(() => {
+        startTransition(() => {
+            setHydratedCodeResults(null);
+            setIsHydratingCodeResults(false);
+        });
+    }, [data?.markdown, data?.ncm, data?.query, tabId]);
+
+    const shouldHydrateCodeResults = useMemo(() => {
+        return !!codeResults
+            && data?.type === 'code'
+            && !data?.markdown
+            && !isTipiResults(codeResults);
+    }, [codeResults, data?.markdown, data?.type]);
+
+    const renderableCodeResults = useMemo(() => {
+        return hydratedCodeResults ?? codeResults;
+    }, [codeResults, hydratedCodeResults]);
+
+    const missingChapterBodies = useMemo(() => {
+        if (!shouldHydrateCodeResults || !renderableCodeResults) return [] as string[];
+
+        return Object.entries(renderableCodeResults)
+            .filter(([, chapter]) => !chapterHasRenderableContent(chapter))
+            .map(([chapterKey, chapter]) => {
+                const capitulo = (chapter as { capitulo?: unknown })?.capitulo;
+                return typeof capitulo === 'string' && capitulo.trim()
+                    ? capitulo.trim()
+                    : chapterKey;
+            });
+    }, [renderableCodeResults, shouldHydrateCodeResults]);
+
+    useEffect(() => {
+        if (!isActive || !shouldHydrateCodeResults || !codeResults || missingChapterBodies.length === 0) {
+            return;
+        }
+
+        let cancelled = false;
+        setIsHydratingCodeResults(true);
+
+        void fetchChapterBodies(missingChapterBodies)
+            .then((chapterBodies) => {
+                if (cancelled || chapterBodies.length === 0) return;
+                startTransition(() => {
+                    setHydratedCodeResults((current) => {
+                        const baseResults = current ?? codeResults;
+                        return mergeHydratedChapterBodies(baseResults, chapterBodies);
+                    });
+                });
+            })
+            .catch((error) => {
+                console.error('[ResultDisplay] Failed to hydrate chapter bodies', error);
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setIsHydratingCodeResults(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        codeResults,
+        isActive,
+        missingChapterBodies,
+        shouldHydrateCodeResults,
+    ]);
 
     const findAnchorIdForQuery = useCallback((resultados: any, query: string) => {
         if (!resultados || typeof resultados !== 'object') return null;
@@ -1079,15 +1225,15 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
         return resolveAutoScrollCandidates(
             ncmToScroll,
-            codeResults,
+            renderableCodeResults,
             findAnchorIdForQuery,
             getPosicaoAlvoFromResultados,
         );
-    }, [codeResults, data, findAnchorIdForQuery, getPosicaoAlvoFromResultados]);
+    }, [data, findAnchorIdForQuery, getPosicaoAlvoFromResultados, renderableCodeResults]);
 
     const resolveAutoScrollTargetReadiness = useCallback((container: HTMLElement) => {
-        if (codeResults) {
-            ensureSectionAnchors(codeResults, container);
+        if (renderableCodeResults) {
+            ensureSectionAnchors(renderableCodeResults, container);
         }
 
         if (!targetCandidates || targetCandidates.length === 0) {
@@ -1098,7 +1244,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             return true;
         }
 
-        const posicaoAlvo = codeResults ? getPosicaoAlvoFromResultados(codeResults) : null;
+        const posicaoAlvo = renderableCodeResults ? getPosicaoAlvoFromResultados(renderableCodeResults) : null;
         const candidateNcm = posicaoAlvo || (data?.ncm || data?.query || '');
         if (!candidateNcm) {
             return false;
@@ -1111,7 +1257,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
         return !!findExistingTargetElement(container, targetCandidates);
     }, [
-        codeResults,
+        renderableCodeResults,
         data?.ncm,
         data?.query,
         ensureSectionAnchors,
@@ -1210,7 +1356,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
         element.addEventListener('scroll', handleScroll, { passive: true });
         return () => element.removeEventListener('scroll', handleScroll);
-    }, [codeResults, data?.type, data?.markdown]);
+    }, [data?.type, data?.markdown, renderableCodeResults]);
 
     // Persist scroll when tab becomes inactive
     useEffect(() => {
@@ -1269,9 +1415,15 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         if (!contentRef.current) return;
 
         const rawMarkdown = typeof data?.markdown === 'string' ? data.markdown.trim() : '';
-        const markupToRender = resolveMarkupToRender(rawMarkdown, codeResults);
+        const markupToRender = resolveMarkupToRender(rawMarkdown, renderableCodeResults);
 
         if (!markupToRender) {
+            if (shouldHydrateCodeResults && missingChapterBodies.length > 0) {
+                renderedMarkupKeyRef.current = null;
+                setIsContentReady(true);
+                setIsFullyRendered(false);
+                return;
+            }
             contentRef.current.textContent = '';
             renderedMarkupKeyRef.current = null;
             setIsContentReady(true);
@@ -1301,7 +1453,14 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             setIsContentReady(true);
             setIsFullyRendered(true);
         }
-    }, [codeResults, data?.type, data?.markdown, isActive]);
+    }, [
+        data?.markdown,
+        data?.type,
+        isActive,
+        missingChapterBodies.length,
+        renderableCodeResults,
+        shouldHydrateCodeResults,
+    ]);
 
     useEffect(() => {
         if (!isContentReady || !containerRef.current || !targetCandidates?.length) {
@@ -1353,9 +1512,9 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
     // Ensure structured section anchors exist for sidebar navigation/highlight syncing.
     useEffect(() => {
-        if (!isContentReady || !codeResults || !containerRef.current) return;
-        ensureSectionAnchors(codeResults, containerRef.current);
-    }, [codeResults, ensureSectionAnchors, isContentReady]);
+        if (!isContentReady || !renderableCodeResults || !containerRef.current) return;
+        ensureSectionAnchors(renderableCodeResults, containerRef.current);
+    }, [ensureSectionAnchors, isContentReady, renderableCodeResults]);
 
     // Query-term highlighting for code results.
     // Always clean previous wrappers first to avoid nested/duplicated marks after query changes.
@@ -1382,9 +1541,9 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
     // Sync Sidebar to current visible anchor
     useEffect(() => {
-        if (!isActive || !isContentReady || !codeResults || !containerRef.current) return;
+        if (!isActive || !isContentReady || !renderableCodeResults || !containerRef.current) return;
 
-        const ids = getAnchorIdsFromResultados(codeResults);
+        const ids = getAnchorIdsFromResultados(renderableCodeResults);
         if (ids.length === 0) return;
 
         const elements = ids
@@ -1409,7 +1568,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         elements.forEach(el => observer.observe(el));
 
         return () => observer.disconnect();
-    }, [codeResults, getAnchorIdsFromResultados, isActive, isContentReady]);
+    }, [getAnchorIdsFromResultados, isActive, isContentReady, renderableCodeResults]);
 
 
     if (!data) {
@@ -1438,7 +1597,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     const contentVisibilityClass = getContentVisibilityClass(styles, isContentReady);
     const commentToggleLabel = getCommentToggleLabel(commentsEnabled);
     const commentToggleClasses = getCommentToggleClassName(styles, commentsEnabled);
-    const shouldRenderSidebar = isContentReady && isActive && !!codeResults;
+    const shouldRenderSidebar = isContentReady && isActive && !!renderableCodeResults;
 
     return (
         <div className={wrapperClasses}>
@@ -1467,7 +1626,12 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                         (contentRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
                     }}
                 >
-                    {!data.markdown && !isTipiResults(codeResults || null) && <p>Sem resultados para exibir.</p>}
+                    {shouldHydrateCodeResults && (isHydratingCodeResults || missingChapterBodies.length > 0) && (
+                        <p>Carregando conteúdo detalhado do capítulo...</p>
+                    )}
+                    {!shouldHydrateCodeResults && !data.markdown && !isTipiResults(renderableCodeResults || null) && (
+                        <p>Sem resultados para exibir.</p>
+                    )}
                 </div>
 
                 {/* Painel de Comentários (Google Docs style) — só exibido quando ativado */}
@@ -1534,7 +1698,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             {shouldRenderSidebar && (
                 <div className={styles.sidebarContainer}>
                     <Sidebar
-                        results={codeResults}
+                        results={renderableCodeResults}
                         onNavigate={handleNavigate}
                         isOpen={mobileMenuOpen}
                         onClose={onCloseMobileMenu}

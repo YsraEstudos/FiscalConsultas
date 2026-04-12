@@ -193,14 +193,29 @@ class _FakeNbsRepo:
             }
         ]
 
-    async def get_item_details(self, _code: str):
+    async def get_item_details(
+        self,
+        _code: str,
+        *,
+        include_tree: bool = True,
+        page: int = 1,
+        page_size: int = 50,
+    ):
+        chapter_items = [{"code": "1.01"}] if include_tree else []
         return {
             "success": True,
             "item": {"code": "1.01"},
             "ancestors": [],
             "children": [],
             "chapter_root": {"code": "1.01"},
-            "chapter_items": [{"code": "1.01"}],
+            "chapter_items": chapter_items,
+            "chapter_page": {
+                "items": chapter_items,
+                "page": page,
+                "page_size": page_size,
+                "total": len(chapter_items),
+                "has_more": False,
+            },
             "nebs": None,
         }
 
@@ -240,9 +255,9 @@ class _CountingNbsRepo(_FakeNbsRepo):
         self.calls["search"] += 1
         return await super().search(query, limit=limit)
 
-    async def get_item_details(self, code: str):
+    async def get_item_details(self, code: str, **kwargs):
         self.calls["get_item_details"] += 1
-        return await super().get_item_details(code)
+        return await super().get_item_details(code, **kwargs)
 
     async def search_nebs(self, query: str, limit: int = 50):
         self.calls["search_nebs"] += 1
@@ -404,7 +419,7 @@ async def test_search_nebs_returns_only_trusted_entries_and_prioritizes_exact_co
     assert payload["success"] is True
     assert payload["total"] == 2
     assert payload["results"][0]["code"] == "1.0101"
-    assert "busca pública" in payload["results"][0]["excerpt"]
+    assert payload["results"][0]["excerpt"] == ""
 
 
 @pytest.mark.asyncio
@@ -595,7 +610,7 @@ async def test_repository_mode_check_connection_exposes_counts_and_metadata():
 @pytest.mark.asyncio
 async def test_repository_mode_escapes_html_in_nebs_payload_fields():
     class _MaliciousNbsRepo(_FakeNbsRepo):
-        async def get_item_details(self, _code: str):
+        async def get_item_details(self, _code: str, **_kwargs):
             return {
                 "success": True,
                 "item": {"code": "1.01"},
@@ -603,6 +618,13 @@ async def test_repository_mode_escapes_html_in_nebs_payload_fields():
                 "children": [],
                 "chapter_root": {"code": "1.01"},
                 "chapter_items": [{"code": "1.01"}],
+                "chapter_page": {
+                    "items": [{"code": "1.01"}],
+                    "page": 1,
+                    "page_size": 50,
+                    "total": 1,
+                    "has_more": False,
+                },
                 "nebs": {
                     "code": "1.01",
                     "body_text": "<script>alert(1)</script>",

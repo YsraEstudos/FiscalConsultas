@@ -25,6 +25,12 @@ class _FakeRowsResult:
     def __iter__(self):
         return iter(self._rows)
 
+    def scalar(self):
+        if not self._rows:
+            return None
+        first = self._rows[0]
+        return getattr(first, "total", first)
+
 
 class _FakeSession:
     def __init__(self, results):
@@ -96,6 +102,7 @@ async def test_get_item_details_public_scope_filters_to_null_tenant():
                 ]
             ),
             _FakeRowsResult([]),
+            _FakeScalarResult(1),
             _FakeRowsResult([]),
             _FakeRowsResult([]),
         ]
@@ -107,8 +114,9 @@ async def test_get_item_details_public_scope_filters_to_null_tenant():
     assert details["success"] is True
     assert details["item"]["code"] == "1.01"
     assert details["nebs"] is None
+    assert details["chapter_page"]["page"] == 1
 
-    assert len(session.calls) == 4
+    assert len(session.calls) == 5
     for stmt, params in session.calls:
         assert "tenant_id IS NULL" in str(stmt)
         assert "tenant_id" not in params
