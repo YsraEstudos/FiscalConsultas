@@ -397,7 +397,9 @@ class NbsService:
         )
 
     @staticmethod
-    def _sanitize_nebs_html_fields(entry: dict[str, Any] | None) -> dict[str, Any] | None:
+    def _sanitize_nebs_html_fields(
+        entry: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
         if not entry:
             return None
 
