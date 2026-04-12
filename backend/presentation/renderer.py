@@ -1174,7 +1174,7 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
 
     # Encontra as tags de abertura e verifica se precisamos adicionar a classe
     html = re.sub(
-        r'<[a-zA-Z][^>]*>',
+        r"<[a-zA-Z][^>]*>",
         _add_class_if_match,
         html,
     )
