@@ -581,6 +581,50 @@ describe('ResultDisplay advanced behavior', () => {
       expect.objectContaining({ chapter: '85' }),
     );
 
+    await waitFor(() => {
+      expect(screen.queryByText('Carregando conteúdo detalhado do capítulo...')).not.toBeInTheDocument();
+    });
+
+    errorSpy.mockRestore();
+  });
+
+  it('stops showing the chapter hydration loading state when all chapter body requests fail', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    hoisted.getNeshChapterBodyMock.mockRejectedValue(new Error('Falha 401'));
+
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '8413',
+          resultados: {
+            '84': {
+              capitulo: '84',
+              titulo: 'Capitulo 84',
+              posicoes: [{ codigo: '84.13', anchor_id: 'pos-84-13', descricao: 'Bombas' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-all-hydration-fail"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Carregando conteúdo detalhado do capítulo...')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.queryByText('Carregando conteúdo detalhado do capítulo...')).not.toBeInTheDocument();
+    });
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[ResultDisplay] Failed to fetch chapter body',
+      expect.objectContaining({ chapter: '84' }),
+    );
+
     errorSpy.mockRestore();
   });
 

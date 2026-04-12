@@ -481,11 +481,17 @@ function mergeHydratedChapterBodies(
     return nextResults;
 }
 
-async function fetchChapterBodies(chapters: string[]): Promise<ChapterBodyResponse[]> {
+type ChapterHydrationResult = {
+    chapterBodies: ChapterBodyResponse[];
+    failedChapters: string[];
+};
+
+async function fetchChapterBodies(chapters: string[]): Promise<ChapterHydrationResult> {
     const settledBodies = await Promise.allSettled(
         chapters.map((chapter) => getNeshChapterBody(chapter)),
     );
     const fulfilledBodies: ChapterBodyResponse[] = [];
+    const failedChapters: string[] = [];
 
     settledBodies.forEach((result, index) => {
         if (result.status === 'fulfilled') {
@@ -493,13 +499,17 @@ async function fetchChapterBodies(chapters: string[]): Promise<ChapterBodyRespon
             return;
         }
 
+        failedChapters.push(chapters[index]);
         console.error('[ResultDisplay] Failed to fetch chapter body', {
             chapter: chapters[index],
             error: result.reason,
         });
     });
 
-    return fulfilledBodies;
+    return {
+        chapterBodies: fulfilledBodies,
+        failedChapters,
+    };
 }
 
 function getCachedRawMarkup(
@@ -902,6 +912,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     const toggleDrawer = useCallback(() => setDrawerOpen(prev => !prev), []);
     const [hydratedCodeResults, setHydratedCodeResults] = useState<Record<string, any> | null>(null);
     const [isHydratingCodeResults, setIsHydratingCodeResults] = useState(false);
+    const [failedChapterBodies, setFailedChapterBodies] = useState<string[]>([]);
 
     /** Abre o formulário no painel direito ancorado ao trecho selecionado. */
     const handleOpenComment = useCallback(() => {
@@ -1034,6 +1045,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         startTransition(() => {
             setHydratedCodeResults(null);
             setIsHydratingCodeResults(false);
+            setFailedChapterBodies([]);
         });
     }, [data?.markdown, data?.ncm, data?.query, tabId]);
 
@@ -1058,8 +1070,9 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                 return typeof capitulo === 'string' && capitulo.trim()
                     ? capitulo.trim()
                     : chapterKey;
-            });
-    }, [renderableCodeResults, shouldHydrateCodeResults]);
+            })
+            .filter((chapter) => !failedChapterBodies.includes(chapter));
+    }, [failedChapterBodies, renderableCodeResults, shouldHydrateCodeResults]);
 
     useEffect(() => {
         if (!isActive || !shouldHydrateCodeResults || !codeResults || missingChapterBodies.length === 0) {
@@ -1070,13 +1083,27 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         setIsHydratingCodeResults(true);
 
         void fetchChapterBodies(missingChapterBodies)
-            .then((chapterBodies) => {
-                if (cancelled || chapterBodies.length === 0) return;
+            .then(({ chapterBodies, failedChapters }) => {
+                if (cancelled) return;
+                if (failedChapters.length > 0) {
+                    startTransition(() => {
+                        setFailedChapterBodies((current) => Array.from(new Set([...current, ...failedChapters])));
+                    });
+                }
+                if (chapterBodies.length === 0) return;
                 startTransition(() => {
                     setHydratedCodeResults((current) => {
                         const baseResults = current ?? codeResults;
                         return mergeHydratedChapterBodies(baseResults, chapterBodies);
                     });
+                    setFailedChapterBodies((current) =>
+                        current.filter(
+                            (chapter) =>
+                                !chapterBodies.some(
+                                    (body: ChapterBodyResponse) => body.capitulo === chapter,
+                                ),
+                        ),
+                    );
                 });
             })
             .catch((error) => {
@@ -1619,20 +1646,19 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                 }}
                 id={containerId}
             >
+                {shouldHydrateCodeResults && (isHydratingCodeResults || missingChapterBodies.length > 0) && (
+                    <p>Carregando conteúdo detalhado do capítulo...</p>
+                )}
+                {!shouldHydrateCodeResults && !data.markdown && !isTipiResults(renderableCodeResults || null) && (
+                    <p>Sem resultados para exibir.</p>
+                )}
                 {/* Texto renderizado via fragmentos HTML sanitizados */}
                 <div
                     className={styles.contentText}
                     ref={(el) => {
                         (contentRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
                     }}
-                >
-                    {shouldHydrateCodeResults && (isHydratingCodeResults || missingChapterBodies.length > 0) && (
-                        <p>Carregando conteúdo detalhado do capítulo...</p>
-                    )}
-                    {!shouldHydrateCodeResults && !data.markdown && !isTipiResults(renderableCodeResults || null) && (
-                        <p>Sem resultados para exibir.</p>
-                    )}
-                </div>
+                />
 
                 {/* Painel de Comentários (Google Docs style) — só exibido quando ativado */}
                 {canUseRestrictedUi && commentsEnabled && (

@@ -43,6 +43,20 @@ class _FakeNeshServiceInvalid:
         return []
 
 
+class _FakeNeshChapterService:
+    async def fetch_chapter_data(self, chapter: str):
+        await asyncio.sleep(0)
+        return {
+            "content": f"CAPITULO {chapter}\nConteudo detalhado",
+            "parsed_notes": {"N1": "Nota"},
+            "notes": "Notas gerais",
+            "sections": {"titulo": "Capitulo 84"},
+        }
+
+    def strip_chapter_preamble(self, content: str) -> str:
+        return content.split("\n", 1)[1] if "\n" in content else content
+
+
 class _FakeNeshServiceCodeEmptyResults:
     async def process_request(self, query: str):
         await asyncio.sleep(0)
@@ -147,6 +161,20 @@ def test_search_invalid_service_response_returns_500_with_cors_header(client):
     assert (
         response.headers.get("Access-Control-Allow-Origin") == "http://127.0.0.1:5173"
     )
+
+
+def test_search_chapter_body_allows_anonymous_access(client):
+    app.dependency_overrides[get_nesh_service] = lambda: _FakeNeshChapterService()
+
+    response = client.get("/api/search/chapter/84/body")
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["success"] is True
+    assert payload["capitulo"] == "84"
+    assert payload["conteudo"] == "Conteudo detalhado"
+    assert payload["notas_parseadas"] == {"N1": "Nota"}
+    assert payload["notas_gerais"] == "Notas gerais"
 
 
 def test_tipi_code_response_enforces_compatibility_fields(client):

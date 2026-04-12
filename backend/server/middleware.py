@@ -869,6 +869,7 @@ class TenantMiddleware:
     PUBLIC_PREFIX_PATHS = (
         "/api/webhooks/",
         "/api/nesh/chapter/",
+        "/api/search/chapter/",
         "/api/services/nbs/",
         "/api/services/nebs/",
     )
