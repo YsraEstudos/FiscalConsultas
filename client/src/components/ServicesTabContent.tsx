@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import {
-    getNbsServiceDetail,
+    getNbsServiceDetailPage,
+    getNbsServiceTreePage,
     getNebsEntryDetail,
 } from '../services/api';
 import type {
@@ -51,6 +52,24 @@ const EMPTY_NEBS_STATE: ServicesWorkspaceNebsState = {
     hasSearched: false,
 };
 
+const DEFAULT_NBS_TREE_PAGE_SIZE = 50;
+
+function mergeNbsChapterItems(
+    existingItems: readonly NbsDetailResponse['item'][],
+    incomingItems: readonly NbsDetailResponse['item'][],
+): NbsDetailResponse['item'][] {
+    const mergedItems = [...existingItems];
+    const seenCodes = new Set(existingItems.map((item) => item.code));
+
+    for (const item of incomingItems) {
+        if (seenCodes.has(item.code)) continue;
+        seenCodes.add(item.code);
+        mergedItems.push(item);
+    }
+
+    return mergedItems;
+}
+
 export function ServicesTabContent({
     doc,
     data,
@@ -73,11 +92,61 @@ export function ServicesTabContent({
         setDetailStatus('loading');
 
         try {
-            const response = await getNbsServiceDetail(code);
+            const response = await getNbsServiceDetailPage(code, {
+                includeTree: true,
+                page: 1,
+                pageSize: DEFAULT_NBS_TREE_PAGE_SIZE,
+            });
             if (detailRequestRef.current !== requestId) return;
-            setNbsDetail(response);
+
+            const firstPage = response.chapter_page;
+            let hydratedResponse = response;
+
+            if (firstPage?.has_more) {
+                let mergedItems = mergeNbsChapterItems(
+                    response.chapter_items ?? firstPage.items,
+                    [],
+                );
+                let currentPage = firstPage.page;
+                let lastPage = firstPage;
+                let chapterRoot = response.chapter_root;
+
+                while (lastPage.has_more) {
+                    const nextPageNumber = currentPage + 1;
+                    const nextPageResponse = await getNbsServiceTreePage(
+                        code,
+                        nextPageNumber,
+                        firstPage.page_size,
+                    );
+                    if (detailRequestRef.current !== requestId) return;
+
+                    mergedItems = mergeNbsChapterItems(
+                        mergedItems,
+                        nextPageResponse.chapter_page.items,
+                    );
+                    chapterRoot = chapterRoot ?? nextPageResponse.chapter_root;
+                    currentPage = nextPageNumber;
+                    lastPage = nextPageResponse.chapter_page;
+                }
+
+                hydratedResponse = {
+                    ...response,
+                    chapter_root: chapterRoot,
+                    chapter_items: mergedItems,
+                    chapter_page: {
+                        ...lastPage,
+                        items: mergedItems,
+                        page: currentPage,
+                        page_size: firstPage.page_size,
+                        total: firstPage.total,
+                        has_more: false,
+                    },
+                };
+            }
+
+            setNbsDetail(hydratedResponse);
             setNebsDetail(null);
-            setSelectedCode(response.item.code);
+            setSelectedCode(hydratedResponse.item.code);
             setDetailStatus('ready');
         } catch (error) {
             console.error(error);
