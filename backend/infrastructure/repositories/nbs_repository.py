@@ -35,6 +35,8 @@ NEBS_PUBLIC_FIELDS = (
     "page_start",
     "page_end",
 )
+DEFAULT_TREE_PAGE_SIZE = 50
+MAX_TREE_PAGE_SIZE = 200
 
 
 class NbsRepository:
@@ -172,32 +174,79 @@ class NbsRepository:
         tsquery = build_postgres_tsquery(normalized_query or raw_query)
         fts_predicate = f"(n.search_vector @@ {tsquery.sql})"
         sql = f"""
-            SELECT
-                n.code,
-                n.code_clean,
-                n.description,
-                n.parent_code,
-                n.level,
-                n.has_nebs,
-                CASE
-                    WHEN n.code_clean = :clean_query THEN 500
-                    WHEN n.code = :raw_query THEN 480
-                    WHEN n.code_clean LIKE :clean_prefix THEN 420
-                    WHEN n.description_normalized = :normalized_query THEN 360
-                    WHEN n.description_normalized LIKE :normalized_prefix THEN 320
-                    WHEN {fts_predicate} THEN 220
-                    ELSE 200
-                END AS match_score
-            FROM nbs_items AS n
-            WHERE (
-                (:clean_query <> '' AND n.code_clean = :clean_query)
-                OR (:clean_query <> '' AND n.code_clean LIKE :clean_prefix)
-                OR (:raw_query <> '' AND n.code LIKE :raw_prefix)
-                OR (:normalized_query <> '' AND n.description_normalized LIKE :normalized_like)
-                OR {fts_predicate}
+            WITH ranked AS (
+                SELECT
+                    n.code,
+                    n.code_clean,
+                    n.description,
+                    n.parent_code,
+                    n.level,
+                    n.has_nebs,
+                    500 AS match_score,
+                    0::float AS fts_rank
+                FROM nbs_items AS n
+                WHERE :clean_query <> ''
+                  AND n.code_clean = :clean_query
+                  {self._tenant_predicate_sql("n")}
+                UNION ALL
+                SELECT
+                    n.code,
+                    n.code_clean,
+                    n.description,
+                    n.parent_code,
+                    n.level,
+                    n.has_nebs,
+                    CASE
+                        WHEN n.code = :raw_query THEN 480
+                        WHEN n.code_clean LIKE :clean_prefix THEN 420
+                        WHEN n.description_normalized = :normalized_query THEN 360
+                        WHEN n.description_normalized LIKE :normalized_prefix THEN 320
+                        ELSE 280
+                    END AS match_score,
+                    0::float AS fts_rank
+                FROM nbs_items AS n
+                WHERE (
+                    (:clean_query <> '' AND n.code_clean LIKE :clean_prefix)
+                    OR (:raw_query <> '' AND n.code LIKE :raw_prefix)
+                    OR (:normalized_query <> '' AND n.description_normalized = :normalized_query)
+                    OR (:normalized_query <> '' AND n.description_normalized LIKE :normalized_prefix)
+                )
+                {self._tenant_predicate_sql("n")}
+                UNION ALL
+                SELECT
+                    n.code,
+                    n.code_clean,
+                    n.description,
+                    n.parent_code,
+                    n.level,
+                    n.has_nebs,
+                    220 AS match_score,
+                    ts_rank(n.search_vector, {tsquery.sql}) AS fts_rank
+                FROM nbs_items AS n
+                WHERE {fts_predicate}
+                {self._tenant_predicate_sql("n")}
             )
-            {self._tenant_predicate_sql("n")}
-            ORDER BY match_score DESC, LENGTH(n.code_clean) ASC, n.source_order ASC
+            SELECT DISTINCT ON (code)
+                code,
+                code_clean,
+                description,
+                parent_code,
+                level,
+                has_nebs,
+                match_score
+            FROM ranked
+            ORDER BY code, match_score DESC, fts_rank DESC
+        """
+        wrapped_sql = f"""
+            SELECT
+                code,
+                code_clean,
+                description,
+                parent_code,
+                level,
+                has_nebs
+            FROM ({sql}) AS deduped
+            ORDER BY match_score DESC, LENGTH(code_clean) ASC, code ASC
             LIMIT :limit
         """
         params = {
@@ -212,7 +261,7 @@ class NbsRepository:
             **tsquery.params,
             **self._tenant_params(),
         }
-        result = await self.session.execute(text(sql), params)
+        result = await self.session.execute(text(wrapped_sql), params)
         return [self._row_to_item(row) for row in result]
 
     async def _fetch_item_by_code(self, code: str) -> dict[str, Any]:
@@ -270,7 +319,9 @@ class NbsRepository:
         ancestors.reverse()
         return ancestors
 
-    async def _fetch_items_by_prefix(self, root_code: str) -> list[dict[str, Any]]:
+    async def _fetch_items_by_prefix(
+        self, root_code: str, *, limit: int | None = None, offset: int = 0
+    ) -> list[dict[str, Any]]:
         sql = f"""
             SELECT code, code_clean, description, parent_code, level, has_nebs
             FROM nbs_items
@@ -278,15 +329,57 @@ class NbsRepository:
             {self._tenant_predicate_sql("nbs_items")}
             ORDER BY source_order ASC
         """
-        result = await self.session.execute(
-            text(sql),
-            {
-                "root_code": root_code,
-                "root_prefix": f"{root_code}%",
-                **self._tenant_params(),
-            },
-        )
+        params = {
+            "root_code": root_code,
+            "root_prefix": f"{root_code}%",
+            **self._tenant_params(),
+        }
+        if limit is not None:
+            sql = f"{sql}\n LIMIT :limit OFFSET :offset"
+            params["limit"] = limit
+            params["offset"] = max(offset, 0)
+        result = await self.session.execute(text(sql), params)
         return [self._row_to_item(row) for row in result]
+
+    async def get_tree_page(
+        self, root_code: str, *, page: int = 1, page_size: int = DEFAULT_TREE_PAGE_SIZE
+    ) -> dict[str, Any]:
+        normalized_page = max(page, 1)
+        normalized_size = min(max(page_size, 1), MAX_TREE_PAGE_SIZE)
+        offset = (normalized_page - 1) * normalized_size
+
+        count_sql = f"""
+            SELECT COUNT(*) AS total
+            FROM nbs_items
+            WHERE (code = :root_code OR code LIKE :root_prefix)
+            {self._tenant_predicate_sql("nbs_items")}
+        """
+        params = {
+            "root_code": root_code,
+            "root_prefix": f"{root_code}%",
+            **self._tenant_params(),
+        }
+        total_rows = int(
+            (
+                await self.session.execute(
+                    text(count_sql),
+                    params,
+                )
+            ).scalar()
+            or 0
+        )
+        items = await self._fetch_items_by_prefix(
+            root_code,
+            limit=normalized_size,
+            offset=offset,
+        )
+        return {
+            "items": items,
+            "page": normalized_page,
+            "page_size": normalized_size,
+            "total": total_rows,
+            "has_more": (offset + len(items)) < total_rows,
+        }
 
     @staticmethod
     def _resolve_hierarchy_root(
@@ -352,7 +445,14 @@ class NbsRepository:
             return None
         return self._row_to_nebs_entry_internal(row)
 
-    async def get_item_details(self, code: str) -> dict[str, Any]:
+    async def get_item_details(
+        self,
+        code: str,
+        *,
+        include_tree: bool = True,
+        page: int = 1,
+        page_size: int = DEFAULT_TREE_PAGE_SIZE,
+    ) -> dict[str, Any]:
         item = await self._fetch_item_by_code(code)
         ancestors = await self._fetch_ancestors(item)
         chapter_root = self._resolve_hierarchy_root(item, ancestors)
@@ -367,20 +467,31 @@ class NbsRepository:
         child_rows = await self.session.execute(
             text(children_sql), {"code": item["code"], **self._tenant_params()}
         )
-        chapter_items = await self._fetch_items_by_prefix(chapter_root["code"])
+        tree_page = (
+            await self.get_tree_page(
+                chapter_root["code"],
+                page=page,
+                page_size=page_size,
+            )
+            if include_tree
+            else None
+        )
         nebs_payload = self._to_public_nebs_entry(
             await self._fetch_trusted_nebs_entry(item["code"], allow_aliases=False)
         )
 
-        return {
+        payload = {
             "success": True,
             "item": item,
             "ancestors": ancestors,
             "children": [self._row_to_item(row) for row in child_rows],
             "chapter_root": chapter_root,
-            "chapter_items": chapter_items,
             "nebs": nebs_payload,
         }
+        if tree_page is not None:
+            payload["chapter_items"] = tree_page["items"]
+            payload["chapter_page"] = tree_page
+        return payload
 
     async def search_nebs(self, query: str, limit: int = 50) -> list[dict[str, Any]]:
         raw_query = (query or "").strip()
@@ -392,37 +503,82 @@ class NbsRepository:
         tsquery = build_postgres_tsquery(normalized_query or raw_query)
         fts_predicate = f"(e.search_vector @@ {tsquery.sql})"
         sql = f"""
+            WITH ranked AS (
+                SELECT
+                    e.code,
+                    e.code_clean,
+                    e.title,
+                    e.page_start,
+                    e.page_end,
+                    e.section_title,
+                    500 AS match_score,
+                    0::float AS fts_rank
+                FROM nebs_entries AS e
+                WHERE e.parser_status = 'trusted'
+                  AND :clean_query <> ''
+                  AND e.code_clean = :clean_query
+                  {self._tenant_predicate_sql("e")}
+                UNION ALL
+                SELECT
+                    e.code,
+                    e.code_clean,
+                    e.title,
+                    e.page_start,
+                    e.page_end,
+                    e.section_title,
+                    CASE
+                        WHEN e.code = :raw_query THEN 480
+                        WHEN e.code_clean LIKE :clean_prefix THEN 430
+                        WHEN e.title_normalized = :normalized_query THEN 380
+                        WHEN e.title_normalized LIKE :normalized_prefix THEN 340
+                        ELSE 300
+                    END AS match_score,
+                    0::float AS fts_rank
+                FROM nebs_entries AS e
+                WHERE e.parser_status = 'trusted'
+                  AND (
+                        (:clean_query <> '' AND e.code_clean LIKE :clean_prefix)
+                        OR (:raw_query <> '' AND e.code LIKE :raw_prefix)
+                        OR (:normalized_query <> '' AND e.title_normalized = :normalized_query)
+                        OR (:normalized_query <> '' AND e.title_normalized LIKE :normalized_prefix)
+                  )
+                  {self._tenant_predicate_sql("e")}
+                UNION ALL
+                SELECT
+                    e.code,
+                    e.code_clean,
+                    e.title,
+                    e.page_start,
+                    e.page_end,
+                    e.section_title,
+                    220 AS match_score,
+                    ts_rank(e.search_vector, {tsquery.sql}) AS fts_rank
+                FROM nebs_entries AS e
+                WHERE e.parser_status = 'trusted'
+                  AND {fts_predicate}
+                  {self._tenant_predicate_sql("e")}
+            )
+            SELECT DISTINCT ON (code)
+                code,
+                title,
+                page_start,
+                page_end,
+                section_title,
+                match_score,
+                fts_rank,
+                code_clean
+            FROM ranked
+            ORDER BY code, match_score DESC, fts_rank DESC
+        """
+        wrapped_sql = f"""
             SELECT
-                e.code,
-                e.title,
-                e.body_text,
-                e.page_start,
-                e.page_end,
-                e.section_title,
-                CASE
-                    WHEN e.code_clean = :clean_query THEN 500
-                    WHEN e.code = :raw_query THEN 480
-                    WHEN e.code_clean LIKE :clean_prefix THEN 430
-                    WHEN e.title_normalized = :normalized_query THEN 380
-                    WHEN e.title_normalized LIKE :normalized_prefix THEN 340
-                    WHEN {fts_predicate} THEN 220
-                    ELSE 180
-                END AS match_score,
-                CASE
-                    WHEN {fts_predicate} THEN ts_rank(e.search_vector, {tsquery.sql})
-                    ELSE 0
-                END AS fts_rank
-            FROM nebs_entries AS e
-            WHERE e.parser_status = 'trusted'
-              AND (
-                    (:clean_query <> '' AND e.code_clean = :clean_query)
-                    OR (:clean_query <> '' AND e.code_clean LIKE :clean_prefix)
-                    OR (:raw_query <> '' AND e.code LIKE :raw_prefix)
-                    OR (:normalized_query <> '' AND e.title_normalized LIKE :normalized_prefix)
-                    OR {fts_predicate}
-              )
-              {self._tenant_predicate_sql("e")}
-            ORDER BY match_score DESC, fts_rank DESC, LENGTH(e.code_clean) ASC, e.page_start ASC
+                code,
+                title,
+                page_start,
+                page_end,
+                section_title
+            FROM ({sql}) AS deduped
+            ORDER BY match_score DESC, fts_rank DESC, LENGTH(code_clean) ASC, page_start ASC
             LIMIT :limit
         """
         params = {
@@ -436,12 +592,12 @@ class NbsRepository:
             **tsquery.params,
             **self._tenant_params(),
         }
-        result = await self.session.execute(text(sql), params)
+        result = await self.session.execute(text(wrapped_sql), params)
         return [
             {
                 "code": row.code,
                 "title": row.title,
-                "excerpt": self._build_excerpt(row.body_text),
+                "excerpt": "",
                 "page_start": row.page_start,
                 "page_end": row.page_end,
                 "section_title": row.section_title,

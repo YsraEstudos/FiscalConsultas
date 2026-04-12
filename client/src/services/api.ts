@@ -9,6 +9,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import type {
     AuthSessionResponse,
+    ChapterBodyResponse,
     NbsDetailResponse,
     NbsSearchResponse,
     NebsDetailResponse,
@@ -626,16 +627,18 @@ function withDevCacheBust(path: string): string {
 }
 
 export const searchNCM = async (query: string): Promise<any> => {
-    // Performance: Check cache for code queries (chapter data is static)
-    const cacheKey = `nesh:${query}`;
+    // Keep the initial search payload intentionally small.
+    const cacheKey = `nesh:v2:${query}:summary`;
     const cached = getCached<any>(cacheKey);
     if (cached) return cached;
 
     return withInFlightDedup(`ncm:${query}`, async () => {
-        const response = await api.get(withDevCacheBust(`/search?ncm=${encodeURIComponent(query)}`));
+        const response = await api.get(
+            withDevCacheBust(`/search?ncm=${encodeURIComponent(query)}&shape=summary`),
+        );
         const data = normalizeCodeResponseAliases(response.data);
 
-        // Cache code search results (chapter data). Text search is not cached.
+        // Cache only the compact summary response. Full chapter bodies are fetched on demand.
         if (data?.type === 'code' && data?.success) {
             setCache(cacheKey, data);
         }
@@ -688,6 +691,50 @@ export const getNbsServiceDetail = async (code: string): Promise<NbsDetailRespon
     return response.data;
 };
 
+export const getNbsServiceDetailPage = async (
+    code: string,
+    options: {
+        includeTree?: boolean;
+        page?: number;
+        pageSize?: number;
+    } = {},
+): Promise<NbsDetailResponse> => {
+    const {
+        includeTree = true,
+        page = 1,
+        pageSize = 50,
+    } = options;
+    const params = new URLSearchParams({
+        include_tree: String(includeTree),
+        page: String(page),
+        page_size: String(pageSize),
+    });
+    const response = await api.get(
+        withDevCacheBust(`/services/nbs/${encodeURIComponent(code)}?${params.toString()}`),
+    );
+    return response.data;
+};
+
+export const getNbsServiceTreePage = async (
+    code: string,
+    page = 1,
+    pageSize = 50,
+): Promise<{
+    success: true;
+    item: NbsDetailResponse['item'];
+    chapter_root?: NbsDetailResponse['chapter_root'];
+    chapter_page: NonNullable<NbsDetailResponse['chapter_page']>;
+}> => {
+    const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+    });
+    const response = await api.get(
+        withDevCacheBust(`/services/nbs/${encodeURIComponent(code)}/tree?${params.toString()}`),
+    );
+    return response.data;
+};
+
 export const searchNebsEntries = async (query: string): Promise<NebsSearchResponse> => {
     const response = await api.get(withDevCacheBust(`/services/nebs/search?q=${encodeURIComponent(query)}`));
     return response.data;
@@ -696,6 +743,20 @@ export const searchNebsEntries = async (query: string): Promise<NebsSearchRespon
 export const getNebsEntryDetail = async (code: string): Promise<NebsDetailResponse> => {
     const response = await api.get(withDevCacheBust(`/services/nebs/${encodeURIComponent(code)}`));
     return response.data;
+};
+
+export const getNeshChapterBody = async (chapter: string): Promise<ChapterBodyResponse> => {
+    const cacheKey = `nesh:chapter-body:${chapter}`;
+    const cached = getCached<ChapterBodyResponse>(cacheKey);
+    if (cached) return cached;
+
+    return withInFlightDedup(`nesh:chapter-body:${chapter}`, async () => {
+        const response = await api.get(
+            withDevCacheBust(`/search/chapter/${encodeURIComponent(chapter)}/body`),
+        );
+        setCache(cacheKey, response.data);
+        return response.data;
+    });
 };
 
 export const getAuthSession = async (): Promise<AuthSessionResponse> => {

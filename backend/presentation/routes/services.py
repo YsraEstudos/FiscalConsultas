@@ -99,10 +99,41 @@ async def get_nbs_detail(
     request: Request,
     code: str,
     service: Annotated[NbsService, Depends(get_nbs_service)],
+    include_tree: Annotated[
+        bool, Query(description="Include chapter subtree payload")
+    ] = True,
+    page: Annotated[int, Query(ge=1, description="Tree page number")] = 1,
+    page_size: Annotated[
+        int, Query(ge=1, le=200, description="Tree page size")
+    ] = 50,
 ):
     await _apply_detail_rate_limit(request)
     normalized_code = _validate_service_code(code)
-    return await service.get_item_details(normalized_code)
+    return await service.get_item_details(
+        normalized_code,
+        include_tree=include_tree,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/nbs/{code}/tree", responses=SERVICE_DETAIL_RESPONSES)
+async def get_nbs_detail_tree(
+    request: Request,
+    code: str,
+    service: Annotated[NbsService, Depends(get_nbs_service)],
+    page: Annotated[int, Query(ge=1, description="Tree page number")] = 1,
+    page_size: Annotated[
+        int, Query(ge=1, le=200, description="Tree page size")
+    ] = 50,
+):
+    await _apply_detail_rate_limit(request)
+    normalized_code = _validate_service_code(code)
+    return await service.get_item_tree_page(
+        normalized_code,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/nebs/search", responses=SERVICE_SEARCH_RESPONSES)

@@ -11,12 +11,12 @@ import hashlib
 import re
 from collections import OrderedDict
 from contextlib import asynccontextmanager
-from copy import deepcopy
-from html import escape
+from html import escape, unescape
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator, cast
 
 import aiosqlite
+import orjson
 
 from backend.config.exceptions import (
     DatabaseError,
@@ -51,7 +51,9 @@ if TYPE_CHECKING:
 NBS_ALLOWED_TABLES = {"nbs_items", "nebs_entries", "catalog_metadata"}
 MAX_ANCESTOR_DEPTH = 64
 SERVICE_SEARCH_CACHE_SIZE = 64
-SERVICE_DETAIL_CACHE_SIZE = 64
+SERVICE_DETAIL_CACHE_SIZE = 24
+DEFAULT_TREE_PAGE_SIZE = 50
+MAX_TREE_PAGE_SIZE = 200
 NEBS_PUBLIC_FIELDS = (
     "code",
     "code_clean",
@@ -84,8 +86,8 @@ class NbsService:
         self._repository = repository
         self._repository_factory = repository_factory
         self._use_repository = repository is not None or repository_factory is not None
-        self._search_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
-        self._detail_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self._search_cache: OrderedDict[str, bytes] = OrderedDict()
+        self._detail_cache: OrderedDict[str, bytes] = OrderedDict()
         self._cache_lock: asyncio.Lock | None = None
 
         mode = "Repository" if self._use_repository else "aiosqlite"
@@ -130,6 +132,15 @@ class NbsService:
         return self._cache_lock
 
     @staticmethod
+    def _normalize_page(page: int) -> int:
+        return max(int(page or 1), 1)
+
+    @staticmethod
+    def _normalize_page_size(page_size: int) -> int:
+        normalized = int(page_size or DEFAULT_TREE_PAGE_SIZE)
+        return min(max(normalized, 1), MAX_TREE_PAGE_SIZE)
+
+    @staticmethod
     def _build_cache_key(*parts: Any) -> str:
         serialized = "|".join(str(part) for part in parts)
         return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
@@ -143,7 +154,7 @@ class NbsService:
 
     async def _get_l1_cached_payload(
         self,
-        cache: OrderedDict[str, dict[str, Any]],
+        cache: OrderedDict[str, bytes],
         key: str,
     ) -> dict[str, Any] | None:
         async with self._get_cache_lock():
@@ -151,18 +162,19 @@ class NbsService:
             if cached is None:
                 return None
             cache.move_to_end(key)
-            return deepcopy(cached)
+        return orjson.loads(cached)
 
     async def _store_l1_payload(
         self,
-        cache: OrderedDict[str, dict[str, Any]],
+        cache: OrderedDict[str, bytes],
         key: str,
         payload: dict[str, Any],
         *,
         max_size: int,
     ) -> None:
+        encoded = orjson.dumps(payload)
         async with self._get_cache_lock():
-            cache[key] = deepcopy(payload)
+            cache[key] = encoded
             cache.move_to_end(key)
             while len(cache) > max_size:
                 cache.popitem(last=False)
@@ -185,7 +197,7 @@ class NbsService:
             cached,
             max_size=SERVICE_SEARCH_CACHE_SIZE,
         )
-        return deepcopy(cached)
+        return cached
 
     async def _store_search_payload(
         self, namespace: str, scope: str, key: str, payload: dict[str, Any]
@@ -218,7 +230,7 @@ class NbsService:
             cached,
             max_size=SERVICE_DETAIL_CACHE_SIZE,
         )
-        return deepcopy(cached)
+        return cached
 
     async def _store_detail_payload(
         self, namespace: str, scope: str, key: str, payload: dict[str, Any]
@@ -407,13 +419,13 @@ class NbsService:
         for field in ("body_text", "body_markdown"):
             value = sanitized.get(field)
             if isinstance(value, str):
-                sanitized[field] = escape(value)
+                sanitized[field] = escape(unescape(value))
 
         return sanitized
 
     @classmethod
     def _sanitize_detail_payload(cls, payload: dict[str, Any]) -> dict[str, Any]:
-        sanitized_payload = deepcopy(payload)
+        sanitized_payload = orjson.loads(orjson.dumps(payload))
         if isinstance(sanitized_payload.get("nebs"), dict):
             sanitized_payload["nebs"] = cls._sanitize_nebs_html_fields(
                 cast(dict[str, Any], sanitized_payload.get("nebs"))
@@ -460,19 +472,62 @@ class NbsService:
         return ancestors[0] if ancestors else item
 
     async def _fetch_items_by_prefix(
-        self, conn: aiosqlite.Connection, root_code: str
+        self,
+        conn: aiosqlite.Connection,
+        root_code: str,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
-        cursor = await conn.execute(
-            """
+        sql = """
             SELECT code, code_clean, description, parent_code, level, has_nebs
             FROM nbs_items
             WHERE code = ? OR code LIKE ?
             ORDER BY source_order ASC
+            """
+        params: list[Any] = [root_code, f"{root_code}%"]
+        if limit is not None:
+            sql = f"{sql}\n LIMIT ? OFFSET ?"
+            params.extend([limit, max(offset, 0)])
+        cursor = await conn.execute(sql, params)
+        rows = await cursor.fetchall()
+        return [self._row_to_item(row) for row in rows]
+
+    async def _get_tree_page_sqlite(
+        self,
+        conn: aiosqlite.Connection,
+        root_code: str,
+        *,
+        page: int,
+        page_size: int,
+    ) -> dict[str, Any]:
+        normalized_page = self._normalize_page(page)
+        normalized_page_size = self._normalize_page_size(page_size)
+        offset = (normalized_page - 1) * normalized_page_size
+
+        count_cursor = await conn.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM nbs_items
+            WHERE code = ? OR code LIKE ?
             """,
             (root_code, f"{root_code}%"),
         )
-        rows = await cursor.fetchall()
-        return [self._row_to_item(row) for row in rows]
+        count_row = await count_cursor.fetchone()
+        total = int(count_row[0] if count_row else 0)
+        items = await self._fetch_items_by_prefix(
+            conn,
+            root_code,
+            limit=normalized_page_size,
+            offset=offset,
+        )
+        return {
+            "items": items,
+            "page": normalized_page,
+            "page_size": normalized_page_size,
+            "total": total,
+            "has_more": (offset + len(items)) < total,
+        }
 
     async def _fetch_item_by_code(
         self, conn: aiosqlite.Connection, code: str
@@ -582,7 +637,7 @@ class NbsService:
                 "total": len(results),
             }
             await self._store_search_payload("nbs", scope, cache_key, payload)
-            return deepcopy(payload)
+            return payload
 
         conn = await self._get_connection()
         try:
@@ -655,13 +710,28 @@ class NbsService:
                 "total": len(rows),
             }
             await self._store_search_payload("nbs", scope, cache_key, payload)
-            return deepcopy(payload)
+            return payload
         finally:
             await self._release_connection(conn)
 
-    async def get_item_details(self, code: str) -> dict[str, Any]:
+    async def get_item_details(
+        self,
+        code: str,
+        *,
+        include_tree: bool = True,
+        page: int = 1,
+        page_size: int = DEFAULT_TREE_PAGE_SIZE,
+    ) -> dict[str, Any]:
         normalized_code = (code or "").strip()
-        cache_key = self._build_cache_key("nbs-detail", normalized_code)
+        normalized_page = self._normalize_page(page)
+        normalized_page_size = self._normalize_page_size(page_size)
+        cache_key = self._build_cache_key(
+            "nbs-detail",
+            normalized_code,
+            include_tree,
+            normalized_page,
+            normalized_page_size,
+        )
         scope = self._resolve_cache_scope(self._repository)
         cached = await self._get_cached_detail_payload("nbs", scope, cache_key)
         if cached is not None:
@@ -679,10 +749,15 @@ class NbsService:
                     if cached is not None:
                         return cached
                 scope = scoped_key
-                payload = await repo.get_item_details(normalized_code)
+                payload = await repo.get_item_details(
+                    normalized_code,
+                    include_tree=include_tree,
+                    page=normalized_page,
+                    page_size=normalized_page_size,
+                )
             payload = self._sanitize_detail_payload(payload)
             await self._store_detail_payload("nbs", scope, cache_key, payload)
-            return deepcopy(payload)
+            return payload
 
         conn = await self._get_connection()
         try:
@@ -700,8 +775,15 @@ class NbsService:
                 (item["code"],),
             )
             child_rows = await children_cursor.fetchall()
-            chapter_items = await self._fetch_items_by_prefix(
-                conn, chapter_root["code"]
+            tree_page = (
+                await self._get_tree_page_sqlite(
+                    conn,
+                    chapter_root["code"],
+                    page=normalized_page,
+                    page_size=normalized_page_size,
+                )
+                if include_tree
+                else None
             )
 
             nebs_cursor = await conn.execute(
@@ -742,13 +824,43 @@ class NbsService:
                 "ancestors": ancestors,
                 "children": [self._row_to_item(row) for row in child_rows],
                 "chapter_root": chapter_root,
-                "chapter_items": chapter_items,
                 "nebs": nebs_payload,
             }
+            if tree_page is not None:
+                payload["chapter_items"] = tree_page["items"]
+                payload["chapter_page"] = tree_page
+            payload = self._sanitize_detail_payload(payload)
             await self._store_detail_payload("nbs", scope, cache_key, payload)
-            return deepcopy(payload)
+            return payload
         finally:
             await self._release_connection(conn)
+
+    async def get_item_tree_page(
+        self,
+        code: str,
+        *,
+        page: int = 1,
+        page_size: int = DEFAULT_TREE_PAGE_SIZE,
+    ) -> dict[str, Any]:
+        detail = await self.get_item_details(
+            code,
+            include_tree=True,
+            page=page,
+            page_size=page_size,
+        )
+        return {
+            "success": True,
+            "item": detail["item"],
+            "chapter_root": detail.get("chapter_root"),
+            "chapter_page": detail.get("chapter_page")
+            or {
+                "items": detail.get("chapter_items", []),
+                "page": self._normalize_page(page),
+                "page_size": self._normalize_page_size(page_size),
+                "total": len(detail.get("chapter_items", [])),
+                "has_more": False,
+            },
+        }
 
     async def search_nebs(self, query: str, *, limit: int = 50) -> dict[str, Any]:
         raw_query = (query or "").strip()
@@ -782,7 +894,7 @@ class NbsService:
                 "total": len(results),
             }
             await self._store_search_payload("nebs", scope, cache_key, payload)
-            return deepcopy(payload)
+            return payload
 
         conn = await self._get_connection()
         try:
@@ -802,7 +914,6 @@ class NbsService:
                         section_title,
                         page_start,
                         page_end,
-                        body_text,
                         CASE
                             WHEN code_clean = ? THEN 500
                             WHEN code = ? THEN 480
@@ -862,7 +973,6 @@ class NbsService:
                         e.section_title,
                         e.page_start,
                         e.page_end,
-                        e.body_text,
                         CASE
                             WHEN e.code_clean = ? THEN 500
                             WHEN e.code = ? THEN 480
@@ -911,7 +1021,7 @@ class NbsService:
                 {
                     "code": row["code"],
                     "title": row["title"],
-                    "excerpt": self._build_excerpt(row["body_text"]),
+                    "excerpt": "",
                     "page_start": row["page_start"],
                     "page_end": row["page_end"],
                     "section_title": row["section_title"],
@@ -926,7 +1036,7 @@ class NbsService:
                 "total": len(results),
             }
             await self._store_search_payload("nebs", scope, cache_key, payload)
-            return deepcopy(payload)
+            return payload
         finally:
             await self._release_connection(conn)
 
@@ -953,7 +1063,7 @@ class NbsService:
                 payload = await repo.get_nebs_details(normalized_code)
             payload = self._sanitize_detail_payload(payload)
             await self._store_detail_payload("nebs", scope, cache_key, payload)
-            return deepcopy(payload)
+            return payload
 
         conn = await self._get_connection()
         try:
@@ -1009,7 +1119,8 @@ class NbsService:
                     self._row_to_nebs_entry_internal(entry_row)
                 ),
             }
+            payload = self._sanitize_detail_payload(payload)
             await self._store_detail_payload("nebs", scope, cache_key, payload)
-            return deepcopy(payload)
+            return payload
         finally:
             await self._release_connection(conn)

@@ -104,6 +104,15 @@ export interface CodeSearchResponse extends BaseApiResponse {
     markdown?: string; // Rendered HTML
 }
 
+export interface ChapterBodyResponse extends BaseApiResponse {
+    success: true;
+    capitulo: string;
+    conteudo: string;
+    notas_parseadas: Record<string, string>;
+    notas_gerais: string | null;
+    secoes?: ChapterSections | null;
+}
+
 /** Union type para resposta de busca NESH */
 export type NeshSearchResponse = TextSearchResponse | CodeSearchResponse;
 
@@ -221,6 +230,13 @@ export interface NbsDetailResponse extends BaseApiResponse {
     children: NbsServiceItem[];
     chapter_root?: NbsServiceItem;
     chapter_items?: NbsServiceItem[];
+    chapter_page?: {
+        items: NbsServiceItem[];
+        page: number;
+        page_size: number;
+        total: number;
+        has_more: boolean;
+    };
     nebs: NebsEntry | null;
 }
 
