@@ -39,6 +39,7 @@ const EMPTY_NBS_STATE: ServicesWorkspaceNbsState = {
     detail: null,
     isSearching: false,
     isLoadingDetail: false,
+    query: '',
 };
 
 const EMPTY_NEBS_STATE: ServicesWorkspaceNebsState = {
@@ -114,6 +115,29 @@ export function ServicesTabContent({
     }, []);
 
     const firstResultCode = data.results[0]?.code || null;
+    const preferredNbsCode = useMemo(() => {
+        if (doc !== 'nbs') return null;
+
+        const rawQuery = data.query.trim();
+        if (!rawQuery) {
+            return firstResultCode;
+        }
+
+        const cleanQuery = rawQuery.replaceAll(/[^0-9.]/g, '');
+        const isCodeLike = Boolean(cleanQuery) && [...rawQuery].every(
+            (character) => (character >= '0' && character <= '9') || character === '.',
+        );
+
+        if (!isCodeLike) {
+            return firstResultCode;
+        }
+
+        const exactMatch = (data.results as NbsSearchResponse['results']).find(
+            (item) => item.code === rawQuery || item.code_clean === cleanQuery.replaceAll('.', ''),
+        );
+
+        return exactMatch?.code || firstResultCode;
+    }, [data.query, data.results, doc, firstResultCode]);
 
     useEffect(() => {
         detailRequestRef.current += 1;
@@ -129,11 +153,15 @@ export function ServicesTabContent({
         }
 
         if (doc === 'nbs') {
-            void loadNbsDetail(firstResultCode);
+            if (!preferredNbsCode) {
+                setDetailStatus('idle');
+                return;
+            }
+            void loadNbsDetail(preferredNbsCode);
         } else {
             void loadNebsDetail(firstResultCode);
         }
-    }, [doc, firstResultCode, loadNbsDetail, loadNebsDetail]);
+    }, [doc, firstResultCode, loadNbsDetail, loadNebsDetail, preferredNbsCode]);
 
     useEffect(() => {
         if (readySignalRef.current) return;
@@ -155,9 +183,10 @@ export function ServicesTabContent({
                 detail: nbsDetail,
                 isSearching: false,
                 isLoadingDetail: detailStatus === 'loading',
+                query: data.query,
             }
             : EMPTY_NBS_STATE
-    ), [data.results, detailStatus, doc, nbsDetail, selectedCode]);
+    ), [data.query, data.results, detailStatus, doc, nbsDetail, selectedCode]);
 
     const nebsState = useMemo<ServicesWorkspaceNebsState>(() => (
         doc === 'nebs'

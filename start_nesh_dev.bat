@@ -24,7 +24,7 @@ set "CHK_FRONTEND_DEPS=PENDENTE"
 set "CHK_FRONTEND_BUILD=PENDENTE"
 set "CHK_FRONTEND_PORT=PENDENTE"
 
-set "FRONTEND_MODE=preview"
+set "FRONTEND_MODE=dev"
 set "FRONTEND_PORT=5173"
 set "FRONTEND_WAIT_ATTEMPTS=90"
 set "FRONTEND_BOOT_CMD="
@@ -65,7 +65,7 @@ if /I "!FRONTEND_MODE!"=="preview" (
 ) else (
     set "FRONTEND_WAIT_ATTEMPTS=50"
     set "FRONTEND_WINDOW_TITLE=Nesh Client (Dev)"
-    set "FRONTEND_BOOT_CMD=npm run dev -- --host --port !FRONTEND_PORT! --strictPort"
+    set "FRONTEND_BOOT_CMD=npm run dev"
     set "CHK_FRONTEND_BUILD=IGNORADO"
 )
 set "FRONTEND_LOCAL_URL=http://127.0.0.1:!FRONTEND_PORT!"

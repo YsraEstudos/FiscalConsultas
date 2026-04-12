@@ -91,7 +91,9 @@ async def test_get_chat_response_requires_configured_model(monkeypatch):
 async def test_get_chat_response_reports_provider_import_failure_reason(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "k-test")
     monkeypatch.setattr(ai_mod, "genai", None)
-    monkeypatch.setattr(ai_mod, "_genai_import_error", ModuleNotFoundError("requests.exceptions"))
+    monkeypatch.setattr(
+        ai_mod, "_genai_import_error", ModuleNotFoundError("requests.exceptions")
+    )
     monkeypatch.setattr(ai_mod.logger, "error", lambda *_args, **_kwargs: None)
 
     service = ai_mod.AiService()

@@ -20,6 +20,10 @@ function isCloudflarePagesBuild(env) {
   return String(env.CF_PAGES || '').trim() === '1';
 }
 
+function isCiBuild(env) {
+  return isTruthyFlag(env.CI) || isTruthyFlag(env.GITHUB_ACTIONS);
+}
+
 function resolveProductionBranch(env) {
   return String(
     env.CF_PAGES_PRODUCTION_BRANCH
@@ -30,6 +34,10 @@ function resolveProductionBranch(env) {
 }
 
 function isRealProductionBuild(env) {
+  if (!isCiBuild(env) && !isCloudflarePagesBuild(env)) {
+    return false;
+  }
+
   if (!isCloudflarePagesBuild(env)) {
     return true;
   }

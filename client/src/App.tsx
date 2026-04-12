@@ -271,6 +271,16 @@ function App() {
                 return;
             }
 
+            const serviceLink = target.closest('.service-smart-link');
+            if (serviceLink instanceof HTMLElement) {
+                const serviceCode = serviceLink.dataset.serviceCode;
+                if (serviceCode) {
+                    event.preventDefault();
+                    handleSearchRef.current(serviceCode);
+                    return;
+                }
+            }
+
             const noteRef = target.closest('.note-ref');
             if (!(noteRef instanceof HTMLElement)) return;
 
@@ -435,7 +445,7 @@ function App() {
                         comparator: () => setIsComparatorOpen(false),
                         moderate: () => setIsModerateOpen(false),
                     }}
-                    currentDoc={(activeTab?.document || 'nesh') === 'tipi' ? 'tipi' : 'nesh'}
+                    currentDoc={activeTab?.document || 'nesh'}
                     onOpenInDoc={openInDocCurrentTab}
                     onOpenInNewTab={openInDocNewTab}
                 />

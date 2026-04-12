@@ -63,6 +63,144 @@
   margin-bottom: 0.5rem;
 }
 
+.chapterNotesButton {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  width: fit-content;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  color: var(--text-primary);
+  border-radius: 12px;
+  padding: 0.65rem 0.9rem;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.chapterNotesButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent-primary) 70%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
+}
+
+.chapterNotesButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.chapterNotesEyebrow {
+  font-size: 0.68rem;
+  color: var(--accent-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+}
+
+.chapterNotesDialog {
+  width: min(960px, calc(100vw - 3rem));
+  max-height: min(88vh, 920px);
+  padding: 0;
+  border: none;
+  background: transparent;
+  overflow: visible;
+}
+
+.chapterNotesDialog::backdrop {
+  background: rgb(0 0 0 / 72%);
+  backdrop-filter: blur(8px);
+}
+
+.chapterNotesSheet {
+  width: 100%;
+  max-height: min(88vh, 920px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid var(--border-color);
+  background: var(--dark-card-bg, #14141e);
+  box-shadow: 0 30px 80px rgb(0 0 0 / 35%);
+}
+
+.chapterNotesSheetHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.6rem 1.8rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-primary) 18%, transparent),
+    color-mix(in srgb, var(--accent-secondary) 12%, transparent)
+  );
+}
+
+.chapterNotesSheetCopy {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.chapterNotesSheetEyebrow {
+  font-size: 0.72rem;
+  color: var(--accent-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+}
+
+.chapterNotesSheetCopy h3 {
+  margin: 0;
+  font-size: clamp(1.35rem, 2vw, 2rem);
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.chapterNotesSheetCopy p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.chapterNotesClose {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 999px;
+  font-size: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.chapterNotesClose:hover {
+  background: rgb(255 255 255 / 8%);
+  color: var(--text-primary);
+}
+
+.chapterNotesSheetBody {
+  overflow-y: auto;
+  padding: 1.5rem 1.8rem 1.8rem;
+}
+
+/* stylelint-disable selector-pseudo-class-no-unknown -- CSS Modules :global(...) */
+.chapterNotesContent :global(.chapter-note-list),
+.chapterNotesContent :global(.chapter-note-sublist) {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0;
+  padding-left: 1.4rem;
+}
+
+.chapterNotesContent :global(.chapter-note-sublist) {
+  margin-top: 0.6rem;
+}
+/* stylelint-enable selector-pseudo-class-no-unknown */
+
 .sectionBadge {
   background: var(--neon-green-bg, rgba(74, 222, 128, 0.1));
   color: var(--success, #4ade80);
@@ -148,6 +286,14 @@
   font-size: 1rem;
   color: var(--text-secondary);
   line-height: 1.4;
+}
+
+.interactiveCode {
+  cursor: pointer;
+}
+
+.interactiveCode:hover {
+  color: var(--accent-secondary);
 }
 
 .nodeCard.active .nodeTitle {
@@ -395,17 +541,22 @@
   line-height: 1.6;
 }
 
+.notesContent,
 .noteBody {
   display: grid;
   gap: 0.75rem;
 }
 
+/* stylelint-disable selector-pseudo-class-no-unknown -- CSS Modules :global(...) */
+.notesContent :global(p),
 .noteBody :global(p) {
   margin: 0;
   color: var(--text-secondary);
   line-height: 1.75;
 }
 
+.notesContent :global(ul),
+.notesContent :global(ol),
 .noteBody :global(ul),
 .noteBody :global(ol) {
   display: grid;
@@ -414,14 +565,82 @@
   padding-left: 1.5rem;
 }
 
+.notesContent :global(li),
 .noteBody :global(li) {
   color: var(--text-secondary);
   line-height: 1.7;
 }
 
+.notesContent :global(li::marker),
 .noteBody :global(li::marker) {
-  color: var(--success, #4ade80);
+  color: var(--accent-secondary);
 }
+
+.notesContent :global(strong),
+.noteBody :global(strong) {
+  color: var(--accent-secondary);
+  font-weight: 700;
+}
+
+.notesContent :global(a),
+.noteBody :global(a) {
+  color: var(--accent-primary);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  transition: color 0.2s ease;
+}
+
+.notesContent :global(a:hover),
+.noteBody :global(a:hover) {
+  color: var(--accent-secondary);
+  text-decoration-style: solid;
+}
+
+.notesContent :global(.service-smart-link),
+.noteBody :global(.service-smart-link) {
+  color: var(--accent-primary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  transition: color 0.2s ease;
+}
+
+.notesContent :global(.service-smart-link:hover),
+.noteBody :global(.service-smart-link:hover) {
+  color: var(--accent-secondary);
+  text-decoration-style: solid;
+}
+
+.notesContent :global(em),
+.noteBody :global(em) {
+  color: var(--accent-secondary);
+}
+
+.notesContent :global(mark),
+.noteBody :global(mark) {
+  background: color-mix(in srgb, var(--accent-primary) 22%, transparent);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 0 0.25rem;
+}
+
+.notesContent :global(.highlight-exclusion),
+.noteBody :global(.highlight-exclusion) {
+  color: var(--accent-secondary);
+  font-weight: 700;
+}
+
+.notesContent :global(.highlight-unit),
+.noteBody :global(.highlight-unit) {
+  background: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 0 0.25rem;
+  font-weight: 600;
+}
+/* stylelint-enable selector-pseudo-class-no-unknown */
 
 .metadataTags {
   display: flex;

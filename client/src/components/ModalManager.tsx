@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useIsAdmin } from '../hooks/useIsAdmin';
+import type { DocType } from '../hooks/useTabs';
 
 // Lazy load modals
 const SettingsModal = lazy(() => import('./SettingsModal').then(module => ({ default: module.SettingsModal })));
@@ -10,8 +11,6 @@ const AIChat = lazy(() => import('./AIChat').then(module => ({ default: module.A
 const ComparatorModal = lazy(() => import('./ComparatorModal').then(module => ({ default: module.ComparatorModal })));
 const CrossNavContextMenu = lazy(() => import('./CrossNavContextMenu').then(module => ({ default: module.CrossNavContextMenu })));
 const AdminCommentModal = lazy(() => import('./AdminCommentModal').then(module => ({ default: module.AdminCommentModal })));
-
-type DocType = 'nesh' | 'tipi';
 
 interface ModalManagerProps {
     modals: {
@@ -29,8 +28,8 @@ interface ModalManagerProps {
         moderate: () => void;
     };
     currentDoc: DocType;
-    onOpenInDoc: (doc: DocType, ncm: string) => void;
-    onOpenInNewTab: (doc: DocType, ncm: string) => void;
+    onOpenInDoc: (doc: DocType, query: string) => void;
+    onOpenInNewTab: (doc: DocType, query: string) => void;
 }
 
 export const ModalManager: React.FC<ModalManagerProps> = ({
@@ -53,7 +52,7 @@ export const ModalManager: React.FC<ModalManagerProps> = ({
                 <ComparatorModal
                     isOpen
                     onClose={onClose.comparator}
-                    defaultDoc={currentDoc}
+                    defaultDoc={currentDoc === 'tipi' ? 'tipi' : 'nesh'}
                 />
             )}
 
