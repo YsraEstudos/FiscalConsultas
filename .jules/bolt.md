@@ -1,0 +1,3 @@
+## 2025-04-12 - O(N*K) DOM String Manipulation Bottleneck
+**Learning:** In string-processing utilities like `inject_comment_marks`, iterating over a list of keys and performing a full string regex substitution per key leads to O(N*K) complexity. This becomes extremely slow when there are hundreds of keys and a large HTML string.
+**Action:** Replace sequential per-key regex replacements with a single-pass regex (`re.sub` over all tags) and use an O(1) set lookup to check if the tag matches. Use strict explicit character classes (e.g. `[^"']*`) instead of lazy matchers `*?` to prevent SonarQube ReDoS warnings, reducing execution time from ~8.30s to ~0.63s for 100 iterations of 1000 tags.

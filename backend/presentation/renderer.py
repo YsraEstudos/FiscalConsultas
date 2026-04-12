@@ -1148,18 +1148,21 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     if not commented_anchor_keys or not html:
         return html
 
-    for key in commented_anchor_keys:
-        # Escapa o key para uso em regex seguro
-        safe_key = re.escape(key)
+    keys_set = set(commented_anchor_keys)
 
-        # Encontra a tag com id="{key}" e adiciona has-comment à sua classe
-        # Suporta: id="key", id='key', class="..." já existente
-        def _add_class(match: re.Match) -> str:
-            tag = match.group(0)
+    def _add_class_if_match(match: re.Match) -> str:
+        tag = match.group(0)
+
+        # Fast path
+        if "id=" not in tag:
+            return tag
+
+        id_match = re.search(r'\bid=(?:["\'])?([^"\'\s>]+)(?:["\'])?', tag)
+        if id_match and id_match.group(1) in keys_set:
             if "class=" in tag:
-                # Adiciona has-comment à class existente
+                # Adiciona has-comment à class existente, evitando ReDoS com [*]
                 tag = re.sub(
-                    r'(class=["\'])([^"\']*?)(["\'])',
+                    r'(class=["\'])([^"\']*)(["\'])',
                     lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
                     tag,
                     count=1,
@@ -1167,13 +1170,13 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
             else:
                 # Insere class antes do fechamento da tag de abertura
                 tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
-            return tag
+        return tag
 
-        html = re.sub(
-            rf'<[a-zA-Z][^>]*\bid=["\']?{safe_key}["\']?[^>]*>',
-            _add_class,
-            html,
-            count=1,
-        )
+    # Encontra as tags de abertura e verifica se precisamos adicionar a classe
+    html = re.sub(
+        r'<[a-zA-Z][^>]*>',
+        _add_class_if_match,
+        html,
+    )
 
     return html
