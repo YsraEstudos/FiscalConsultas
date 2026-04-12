@@ -42,12 +42,33 @@
     gap: 0.15rem;
 }
 
+.logoTitleRow {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
 .logoText h1 {
     font-size: 1.25rem;
     font-weight: 700;
     background: var(--accent-gradient);
     -webkit-text-fill-color: transparent;
     background-clip: text;
+}
+
+.versionBadge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.16rem 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    background: rgb(255 255 255 / 4%);
+    white-space: nowrap;
 }
 
 .logoSubtitle {

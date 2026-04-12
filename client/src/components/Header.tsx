@@ -114,7 +114,10 @@ export function Header({
                     </button>
                     <div className={styles.logoIcon}>📦</div>
                     <div className={styles.logoText}>
-                        <h1>Busca NCM</h1>
+                        <div className={styles.logoTitleRow}>
+                            <h1>Busca NCM</h1>
+                            <span className={styles.versionBadge}>1.0.0</span>
+                        </div>
                         <span className={styles.logoSubtitle}>{titleSubtitle}</span>
                     </div>
                 </div>
