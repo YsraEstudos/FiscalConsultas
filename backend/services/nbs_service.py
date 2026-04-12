@@ -54,6 +54,7 @@ SERVICE_SEARCH_CACHE_SIZE = 64
 SERVICE_DETAIL_CACHE_SIZE = 24
 DEFAULT_TREE_PAGE_SIZE = 50
 MAX_TREE_PAGE_SIZE = 200
+REPOSITORY_UNAVAILABLE_ERROR = "NBS repository unavailable"
 NEBS_PUBLIC_FIELDS = (
     "code",
     "code_clean",
@@ -280,25 +281,63 @@ class NbsService:
             self._search_cache.clear()
             self._detail_cache.clear()
 
+    @staticmethod
+    def _build_health_payload(
+        nbs_items: int,
+        nebs_entries: int,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        status = "online" if nbs_items > 0 and nebs_entries > 0 else "error"
+        return {
+            "status": status,
+            "nbs_items": nbs_items,
+            "nebs_entries": nebs_entries,
+            "metadata": metadata,
+        }
+
+    @staticmethod
+    def _require_repository(repo: "_NbsRepository | None") -> "_NbsRepository":
+        if repo is None:
+            raise RuntimeError(REPOSITORY_UNAVAILABLE_ERROR)
+        return repo
+
+    async def _check_repository_connection(self) -> dict[str, Any]:
+        async with self._get_repo() as repo:
+            repository = self._require_repository(repo)
+            counts = await repository.get_catalog_counts()
+            metadata = await repository.get_catalog_metadata()
+
+        return self._build_health_payload(
+            int(counts.get("nbs_items", 0)),
+            int(counts.get("nebs_entries", 0)),
+            metadata,
+        )
+
+    async def _get_sqlite_count(
+        self,
+        conn: aiosqlite.Connection,
+        table: str,
+        query: str,
+    ) -> int:
+        if not await self._table_exists(conn, table):
+            return 0
+        cursor = await conn.execute(query)
+        row = await cursor.fetchone()
+        return int(row[0] if row else 0)
+
+    async def _get_sqlite_catalog_metadata(
+        self, conn: aiosqlite.Connection
+    ) -> dict[str, str]:
+        if not await self._table_exists(conn, "catalog_metadata"):
+            return {}
+        cursor = await conn.execute("SELECT key, value FROM catalog_metadata")
+        return {row["key"]: row["value"] for row in await cursor.fetchall()}
+
     async def check_connection(self) -> dict[str, Any]:
         """Return readiness, counts and metadata for the services catalog."""
         if self._use_repository:
             try:
-                async with self._get_repo() as repo:
-                    if repo is None:
-                        raise RuntimeError("NBS repository unavailable")
-                    counts = await repo.get_catalog_counts()
-                    metadata = await repo.get_catalog_metadata()
-                nbs_items = int(counts.get("nbs_items", 0))
-                nebs_entries = int(counts.get("nebs_entries", 0))
-                return {
-                    "status": (
-                        "online" if nbs_items > 0 and nebs_entries > 0 else "error"
-                    ),
-                    "nbs_items": nbs_items,
-                    "nebs_entries": nebs_entries,
-                    "metadata": metadata,
-                }
+                return await self._check_repository_connection()
             except Exception as exc:
                 logger.error("NBS repository healthcheck failed: %s", exc)
                 return {"status": "error", "error": str(exc)}
@@ -311,32 +350,18 @@ class NbsService:
 
         conn = await self._get_connection()
         try:
-            nbs_count = 0
-            nebs_count = 0
-            metadata: dict[str, str] = {}
-
-            if await self._table_exists(conn, "nbs_items"):
-                cursor = await conn.execute("SELECT COUNT(*) FROM nbs_items")
-                row = await cursor.fetchone()
-                nbs_count = int(row[0] if row else 0)
-
-            if await self._table_exists(conn, "nebs_entries"):
-                cursor = await conn.execute(
-                    "SELECT COUNT(*) FROM nebs_entries WHERE parser_status = 'trusted'"
-                )
-                row = await cursor.fetchone()
-                nebs_count = int(row[0] if row else 0)
-
-            if await self._table_exists(conn, "catalog_metadata"):
-                cursor = await conn.execute("SELECT key, value FROM catalog_metadata")
-                metadata = {row["key"]: row["value"] for row in await cursor.fetchall()}
-
-            return {
-                "status": "online" if nbs_count > 0 and nebs_count > 0 else "error",
-                "nbs_items": nbs_count,
-                "nebs_entries": nebs_count,
-                "metadata": metadata,
-            }
+            nbs_count = await self._get_sqlite_count(
+                conn,
+                "nbs_items",
+                "SELECT COUNT(*) FROM nbs_items",
+            )
+            nebs_count = await self._get_sqlite_count(
+                conn,
+                "nebs_entries",
+                "SELECT COUNT(*) FROM nebs_entries WHERE parser_status = 'trusted'",
+            )
+            metadata = await self._get_sqlite_catalog_metadata(conn)
+            return self._build_health_payload(nbs_count, nebs_count, metadata)
         except Exception as exc:
             logger.error("NBS SQLite healthcheck failed: %s", exc)
             return {"status": "error", "error": str(exc)}
@@ -618,9 +643,8 @@ class NbsService:
 
         if self._use_repository:
             async with self._get_repo() as repo:
-                if repo is None:
-                    raise RuntimeError("NBS repository unavailable")
-                scoped_key = self._resolve_cache_scope(repo)
+                repository = self._require_repository(repo)
+                scoped_key = self._resolve_cache_scope(repository)
                 if scoped_key != scope:
                     cached = await self._get_cached_search_payload(
                         "nbs", scoped_key, cache_key
@@ -628,7 +652,7 @@ class NbsService:
                     if cached is not None:
                         return cached
                 scope = scoped_key
-                results = await repo.search(raw_query, limit=limit)
+                results = await repository.search(raw_query, limit=limit)
             payload = {
                 "success": True,
                 "query": raw_query,
@@ -739,9 +763,8 @@ class NbsService:
 
         if self._use_repository:
             async with self._get_repo() as repo:
-                if repo is None:
-                    raise RuntimeError("NBS repository unavailable")
-                scoped_key = self._resolve_cache_scope(repo)
+                repository = self._require_repository(repo)
+                scoped_key = self._resolve_cache_scope(repository)
                 if scoped_key != scope:
                     cached = await self._get_cached_detail_payload(
                         "nbs", scoped_key, cache_key
@@ -749,7 +772,7 @@ class NbsService:
                     if cached is not None:
                         return cached
                 scope = scoped_key
-                payload = await repo.get_item_details(
+                payload = await repository.get_item_details(
                     normalized_code,
                     include_tree=include_tree,
                     page=normalized_page,
@@ -875,9 +898,8 @@ class NbsService:
 
         if self._use_repository:
             async with self._get_repo() as repo:
-                if repo is None:
-                    raise RuntimeError("NBS repository unavailable")
-                scoped_key = self._resolve_cache_scope(repo)
+                repository = self._require_repository(repo)
+                scoped_key = self._resolve_cache_scope(repository)
                 if scoped_key != scope:
                     cached = await self._get_cached_search_payload(
                         "nebs", scoped_key, cache_key
@@ -885,7 +907,7 @@ class NbsService:
                     if cached is not None:
                         return cached
                 scope = scoped_key
-                results = await repo.search_nebs(raw_query, limit=limit)
+                results = await repository.search_nebs(raw_query, limit=limit)
             payload = {
                 "success": True,
                 "query": raw_query,
@@ -1050,9 +1072,8 @@ class NbsService:
 
         if self._use_repository:
             async with self._get_repo() as repo:
-                if repo is None:
-                    raise RuntimeError("NBS repository unavailable")
-                scoped_key = self._resolve_cache_scope(repo)
+                repository = self._require_repository(repo)
+                scoped_key = self._resolve_cache_scope(repository)
                 if scoped_key != scope:
                     cached = await self._get_cached_detail_payload(
                         "nebs", scoped_key, cache_key
@@ -1060,7 +1081,7 @@ class NbsService:
                     if cached is not None:
                         return cached
                 scope = scoped_key
-                payload = await repo.get_nebs_details(normalized_code)
+                payload = await repository.get_nebs_details(normalized_code)
             payload = self._sanitize_detail_payload(payload)
             await self._store_detail_payload("nebs", scope, cache_key, payload)
             return payload

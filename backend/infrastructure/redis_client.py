@@ -185,6 +185,86 @@ class RedisCache:
         if not future.done():
             future.set_result(result)
 
+    @staticmethod
+    def _build_cache_stats() -> dict[str, float | str | bool]:
+        return {
+            "cache_status": "miss",
+            "stale_served": False,
+            "coalesced": False,
+            "lock_acquired": False,
+            "elapsed_ms": 0.0,
+        }
+
+    @staticmethod
+    def _finish_cache_stats(
+        stats: dict[str, float | str | bool],
+        started: float,
+        *,
+        status: str,
+        stale_served: bool = False,
+        coalesced: bool = False,
+    ) -> dict[str, float | str | bool]:
+        stats["cache_status"] = status
+        stats["stale_served"] = stale_served
+        stats["coalesced"] = coalesced
+        stats["elapsed_ms"] = round((perf_counter() - started) * 1000, 2)
+        return stats
+
+    async def _await_existing_inflight(
+        self,
+        future: asyncio.Future[Any],
+        stats: dict[str, float | str | bool],
+        started: float,
+    ) -> tuple[Any | None, dict[str, float | str | bool] | None]:
+        try:
+            shared = await future
+        except Exception:
+            return None, None
+        return shared, self._finish_cache_stats(
+            stats,
+            started,
+            status="coalesced",
+            coalesced=True,
+        )
+
+    async def _get_stale_value(
+        self,
+        key: str,
+        stale_key: str,
+        inflight_future: asyncio.Future[Any],
+        stats: dict[str, float | str | bool],
+        started: float,
+    ) -> tuple[Any | None, dict[str, float | str | bool] | None]:
+        stale_value = await self.get_json(stale_key)
+        if stale_value is None:
+            return None, None
+        await self._resolve_inflight_future(key, inflight_future, result=stale_value)
+        return stale_value, self._finish_cache_stats(
+            stats,
+            started,
+            status="stale",
+            stale_served=True,
+        )
+
+    async def _retry_after_lock_wait(
+        self,
+        key: str,
+        inflight_future: asyncio.Future[Any],
+        wait_seconds: float,
+        stats: dict[str, float | str | bool],
+        started: float,
+    ) -> tuple[Any | None, dict[str, float | str | bool] | None]:
+        await asyncio.sleep(wait_seconds)
+        cached_retry = await self.get_json(key)
+        if cached_retry is None:
+            return None, None
+        await self._resolve_inflight_future(key, inflight_future, result=cached_retry)
+        return cached_retry, self._finish_cache_stats(
+            stats,
+            started,
+            status="retry-hit",
+        )
+
     async def cached_json(
         self,
         key: str,
@@ -202,32 +282,22 @@ class RedisCache:
         stale_ttl = (
             self._default_stale_ttl if stale_ttl_seconds is None else stale_ttl_seconds
         )
-        stats: dict[str, float | str | bool] = {
-            "cache_status": "miss",
-            "stale_served": False,
-            "coalesced": False,
-            "lock_acquired": False,
-            "elapsed_ms": 0.0,
-        }
+        stats = self._build_cache_stats()
         started = perf_counter()
 
         cached = await self.get_json(key)
         if cached is not None:
-            stats["cache_status"] = "hit"
-            stats["elapsed_ms"] = round((perf_counter() - started) * 1000, 2)
-            return cached, stats
+            return cached, self._finish_cache_stats(stats, started, status="hit")
 
         inflight_future, is_owner = await self._get_or_create_inflight_future(key)
         if not is_owner:
-            try:
-                shared = await inflight_future
-                stats["cache_status"] = "coalesced"
-                stats["coalesced"] = True
-                stats["elapsed_ms"] = round((perf_counter() - started) * 1000, 2)
-                return shared, stats
-            except Exception:
-                # If the owner failed, continue with a direct load path.
-                pass
+            shared, shared_stats = await self._await_existing_inflight(
+                inflight_future,
+                stats,
+                started,
+            )
+            if shared_stats is not None:
+                return shared, shared_stats
 
         lock_key = f"lock:{key}"
         stale_key = f"stale:{key}"
@@ -235,32 +305,34 @@ class RedisCache:
         stats["lock_acquired"] = lock_acquired
 
         if not lock_acquired and allow_stale:
-            stale_value = await self.get_json(stale_key)
-            if stale_value is not None:
-                stats["cache_status"] = "stale"
-                stats["stale_served"] = True
-                stats["elapsed_ms"] = round((perf_counter() - started) * 1000, 2)
-                await self._resolve_inflight_future(key, inflight_future, result=stale_value)
-                return stale_value, stats
+            stale_value, stale_stats = await self._get_stale_value(
+                key,
+                stale_key,
+                inflight_future,
+                stats,
+                started,
+            )
+            if stale_stats is not None:
+                return stale_value, stale_stats
 
         if not lock_acquired and lock_wait_seconds > 0:
-            await asyncio.sleep(lock_wait_seconds)
-            cached_retry = await self.get_json(key)
-            if cached_retry is not None:
-                stats["cache_status"] = "retry-hit"
-                stats["elapsed_ms"] = round((perf_counter() - started) * 1000, 2)
-                await self._resolve_inflight_future(key, inflight_future, result=cached_retry)
-                return cached_retry, stats
+            cached_retry, retry_stats = await self._retry_after_lock_wait(
+                key,
+                inflight_future,
+                lock_wait_seconds,
+                stats,
+                started,
+            )
+            if retry_stats is not None:
+                return cached_retry, retry_stats
 
         try:
             value = await loader()
             await self.set_json(key, value, ttl_seconds)
             if allow_stale:
                 await self.set_json(stale_key, value, ttl_seconds + stale_ttl)
-            stats["cache_status"] = "fill"
-            stats["elapsed_ms"] = round((perf_counter() - started) * 1000, 2)
             await self._resolve_inflight_future(key, inflight_future, result=value)
-            return value, stats
+            return value, self._finish_cache_stats(stats, started, status="fill")
         except Exception as exc:
             await self._resolve_inflight_future(key, inflight_future, error=exc)
             raise

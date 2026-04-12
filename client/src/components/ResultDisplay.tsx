@@ -24,6 +24,7 @@ import {
     sanitizeRichHtml,
 } from '../utils/contentSecurity';
 import { getNeshChapterBody } from '../services/api';
+import type { ChapterBodyResponse } from '../types/api.types';
 
 const LEGACY_MARKDOWN_PATTERN = /(^|\n)\s{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+\.\s|---+\s*$)|\*\*[^*\n]+?\*\*/m;
 
@@ -428,6 +429,62 @@ function chapterHasRenderableContent(chapter: any): boolean {
     return typeof content === 'string' && content.trim().length > 0;
 }
 
+function getSectionContent(sectionValue: unknown): string {
+    if (typeof sectionValue === 'string') {
+        return sectionValue.trim();
+    }
+    if (typeof sectionValue === 'number') {
+        return String(sectionValue).trim();
+    }
+    return '';
+}
+
+function getAnchorCodeFromNcmValue(value: string): string {
+    if (value.includes('.') || value.length !== 4) {
+        return value;
+    }
+    return `${value.slice(0, 2)}.${value.slice(2, 4)}`;
+}
+
+function resolveChapterResultKey(
+    results: Record<string, any>,
+    chapterNumber: string,
+): string {
+    return Object.keys(results).find((key) => {
+        const existingChapter = results[key];
+        return existingChapter?.capitulo === chapterNumber;
+    }) ?? chapterNumber;
+}
+
+function mergeHydratedChapterBodies(
+    baseResults: Record<string, any>,
+    chapterBodies: ChapterBodyResponse[],
+): Record<string, any> {
+    const nextResults = { ...baseResults };
+
+    for (const chapterBody of chapterBodies) {
+        const chapterKey = resolveChapterResultKey(nextResults, chapterBody.capitulo);
+        const existingChapter = nextResults[chapterKey];
+        if (!existingChapter || typeof existingChapter !== 'object') {
+            continue;
+        }
+
+        nextResults[chapterKey] = {
+            ...existingChapter,
+            conteudo: chapterBody.conteudo,
+            notas_parseadas: chapterBody.notas_parseadas ?? existingChapter.notas_parseadas ?? {},
+            notas_gerais: chapterBody.notas_gerais ?? existingChapter.notas_gerais ?? null,
+            secoes: chapterBody.secoes ?? existingChapter.secoes,
+        };
+    }
+
+    return nextResults;
+}
+
+async function fetchChapterBodies(chapters: string[]): Promise<ChapterBodyResponse[]> {
+    return Promise.all(chapters.map((chapter) => getNeshChapterBody(chapter)));
+}
+
 function getCachedRawMarkup(
     cacheKey: string,
     shouldParseMarkdown: boolean,
@@ -643,9 +700,7 @@ function getStructuredSectionIds(capitulo: string, secoes: Record<string, unknow
     const ids: string[] = [];
     for (const sectionType of SECTION_TYPES) {
         const sectionValue = secoes[sectionType];
-        const sectionContent = typeof sectionValue === 'string'
-            ? sectionValue.trim()
-            : (typeof sectionValue === 'number' ? String(sectionValue).trim() : '');
+        const sectionContent = getSectionContent(sectionValue);
         if (!sectionContent) continue;
         ids.push(`chapter-${capitulo}-${sectionType}`);
     }
@@ -705,9 +760,7 @@ function ensureTargetAnchorFromDataNcm(
         const element = container.querySelector(`[data-ncm="${value}"]`) as HTMLElement | null;
         if (!element) continue;
 
-        const anchorCode = value.includes('.')
-            ? value
-            : (value.length === 4 ? `${value.slice(0, 2)}.${value.slice(2, 4)}` : value);
+        const anchorCode = getAnchorCodeFromNcmValue(value);
         if (!element.id) {
             element.id = generateAnchorId(anchorCode);
         }
@@ -998,55 +1051,35 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
         let cancelled = false;
         setIsHydratingCodeResults(true);
+        const baseResults = hydratedCodeResults ?? codeResults;
 
-        void (async () => {
-            try {
-                const chapterBodies = await Promise.all(
-                    missingChapterBodies.map((chapter) => getNeshChapterBody(chapter)),
-                );
-
+        void fetchChapterBodies(missingChapterBodies)
+            .then((chapterBodies) => {
                 if (cancelled || chapterBodies.length === 0) return;
-
+                const nextResults = mergeHydratedChapterBodies(baseResults, chapterBodies);
                 startTransition(() => {
-                    setHydratedCodeResults((current) => {
-                        const baseResults = { ...(current ?? codeResults) };
-
-                        for (const chapterBody of chapterBodies) {
-                            const chapterKey = Object.keys(baseResults).find((key) => {
-                                const existingChapter = baseResults[key];
-                                return existingChapter?.capitulo === chapterBody.capitulo;
-                            }) ?? chapterBody.capitulo;
-
-                            const existingChapter = baseResults[chapterKey];
-                            if (!existingChapter || typeof existingChapter !== 'object') {
-                                continue;
-                            }
-
-                            baseResults[chapterKey] = {
-                                ...existingChapter,
-                                conteudo: chapterBody.conteudo,
-                                notas_parseadas: chapterBody.notas_parseadas ?? existingChapter.notas_parseadas ?? {},
-                                notas_gerais: chapterBody.notas_gerais ?? existingChapter.notas_gerais ?? null,
-                                secoes: chapterBody.secoes ?? existingChapter.secoes,
-                            };
-                        }
-
-                        return baseResults;
-                    });
+                    setHydratedCodeResults(nextResults);
                 });
-            } catch (error) {
+            })
+            .catch((error) => {
                 console.error('[ResultDisplay] Failed to hydrate chapter bodies', error);
-            } finally {
+            })
+            .finally(() => {
                 if (!cancelled) {
                     setIsHydratingCodeResults(false);
                 }
-            }
-        })();
+            });
 
         return () => {
             cancelled = true;
         };
-    }, [codeResults, isActive, missingChapterBodies, shouldHydrateCodeResults]);
+    }, [
+        codeResults,
+        hydratedCodeResults,
+        isActive,
+        missingChapterBodies,
+        shouldHydrateCodeResults,
+    ]);
 
     const findAnchorIdForQuery = useCallback((resultados: any, query: string) => {
         if (!resultados || typeof resultados !== 'object') return null;

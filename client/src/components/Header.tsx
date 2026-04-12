@@ -169,16 +169,14 @@ export function Header({
                             <span>⚖️</span> Comparar NCMs
                         </button>
                         {!isServiceDoc && (
-                            <>
-                                <button 
-                                    onClick={() => { setIsMenuOpen(false); setDoc('nbs'); }}
-                                    disabled={Boolean(servicesUnavailableReason)}
-                                    className={servicesUnavailableReason ? styles.menuButtonDisabled : ''}
-                                    title={servicesUnavailableReason ?? undefined}
-                                >
-                                    <span>🧭</span> {servicesUnavailableReason ? 'Serviços (NBS) indisponível' : 'Serviços (NBS)'}
-                                </button>
-                            </>
+                            <button 
+                                onClick={() => { setIsMenuOpen(false); setDoc('nbs'); }}
+                                disabled={Boolean(servicesUnavailableReason)}
+                                className={servicesUnavailableReason ? styles.menuButtonDisabled : ''}
+                                title={servicesUnavailableReason ?? undefined}
+                            >
+                                <span>🧭</span> {servicesUnavailableReason ? 'Serviços (NBS) indisponível' : 'Serviços (NBS)'}
+                            </button>
                         )}
                         <div className={styles.menuDivider}></div>
                         <button onClick={() => { setIsMenuOpen(false); onOpenSettings(); }}>
@@ -202,38 +200,36 @@ export function Header({
                         <div className={styles.menuDivider}></div>
 
                         {/* Clerk Auth Section */}
-                        <>
-                            {!isSignedIn && (
-                                <button
-                                    onClick={() => {
-                                        setIsMenuOpen(false);
-                                        openLogin();
-                                    }}
-                                    disabled={!isAuthConfigured}
-                                    className={!isAuthConfigured ? styles.menuButtonDisabled : ''}
-                                    title={!isAuthConfigured ? (authUnavailableReason || 'Login indisponível no momento.') : undefined}
-                                >
-                                    <span>🔐</span> {isAuthConfigured ? 'Entrar' : 'Login indisponível'}
-                                </button>
-                            )}
+                        {!isSignedIn && (
+                            <button
+                                onClick={() => {
+                                    setIsMenuOpen(false);
+                                    openLogin();
+                                }}
+                                disabled={!isAuthConfigured}
+                                className={!isAuthConfigured ? styles.menuButtonDisabled : ''}
+                                title={!isAuthConfigured ? (authUnavailableReason || 'Login indisponível no momento.') : undefined}
+                            >
+                                <span>🔐</span> {isAuthConfigured ? 'Entrar' : 'Login indisponível'}
+                            </button>
+                        )}
 
-                            {isSignedIn && (
-                                <>
-                                    <div className={styles.userSection}>
-                                        <div className={styles.userSummary}>
-                                            <strong>{userName || 'Usuário'}</strong>
-                                            <span>{userEmail || 'Conta autenticada'}</span>
-                                        </div>
+                        {isSignedIn && (
+                            <>
+                                <div className={styles.userSection}>
+                                    <div className={styles.userSummary}>
+                                        <strong>{userName || 'Usuário'}</strong>
+                                        <span>{userEmail || 'Conta autenticada'}</span>
                                     </div>
-                                    <button onClick={() => { setIsMenuOpen(false); onOpenProfile(); }}>
-                                        <span>👤</span> Meu Perfil
-                                    </button>
-                                    <button className={styles.logoutMenuButton} onClick={handleLogoutClick}>
-                                        <span>🚪</span> Sair da conta
-                                    </button>
-                                </>
-                            )}
-                        </>
+                                </div>
+                                <button onClick={() => { setIsMenuOpen(false); onOpenProfile(); }}>
+                                    <span>👤</span> Meu Perfil
+                                </button>
+                                <button className={styles.logoutMenuButton} onClick={handleLogoutClick}>
+                                    <span>🚪</span> Sair da conta
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
