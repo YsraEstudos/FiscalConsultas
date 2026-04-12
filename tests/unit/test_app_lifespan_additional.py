@@ -254,7 +254,9 @@ async def test_lifespan_records_release_metadata(monkeypatch, core_mocks):
         assert app.state.release_metadata["render_service_id"] == "srv-test"
         assert app.state.release_metadata["git_commit"] == "commit-test"
         assert app.state.release_metadata["git_branch"] == "main"
-        assert app.state.release_metadata["server_env"] == app_module.settings.server.env
+        assert (
+            app.state.release_metadata["server_env"] == app_module.settings.server.env
+        )
 
     assert fake_db.closed is True
     assert app.state.nbs_service.closed is True

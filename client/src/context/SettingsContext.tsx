@@ -27,6 +27,8 @@ interface SettingsContextType {
   tipiViewMode: TipiViewMode;
   sidebarPosition: SidebarPosition;
   openNewTab: boolean;
+  nbsPrefixAutoExpand: boolean;
+  nbsChapterNotesNewTab: boolean;
   updateTheme: (newTheme: string) => void;
   updateAccentColor: (color: AccentColor) => void;
   updateFontSize: (newSize: number) => void;
@@ -35,6 +37,8 @@ interface SettingsContextType {
   updateTipiViewMode: (mode: TipiViewMode) => void;
   updateSidebarPosition: (position: SidebarPosition) => void;
   toggleOpenNewTab: () => void;
+  toggleNbsPrefixAutoExpand: () => void;
+  toggleNbsChapterNotesNewTab: () => void;
   restoreDefaults: () => void;
 }
 
@@ -70,6 +74,12 @@ export function SettingsProvider({
     DEFAULTS.SIDEBAR_POSITION,
   );
   const [openNewTab, setOpenNewTab] = useState<boolean>(DEFAULTS.OPEN_NEW_TAB);
+  const [nbsPrefixAutoExpand, setNbsPrefixAutoExpand] = useState<boolean>(
+    DEFAULTS.NBS_PREFIX_AUTO_EXPAND,
+  );
+  const [nbsChapterNotesNewTab, setNbsChapterNotesNewTab] = useState<boolean>(
+    DEFAULTS.NBS_CHAPTER_NOTES_NEW_TAB,
+  );
 
   // Initialization (Load from LocalStorage)
   useEffect(() => {
@@ -126,6 +136,20 @@ export function SettingsProvider({
       if (savedOpenNewTab !== null) {
         setOpenNewTab(savedOpenNewTab === "true");
       }
+
+      const savedNbsPrefixAutoExpand = localStorage.getItem(
+        STORAGE_KEYS.NBS_PREFIX_AUTO_EXPAND,
+      );
+      if (savedNbsPrefixAutoExpand !== null) {
+        setNbsPrefixAutoExpand(savedNbsPrefixAutoExpand === "true");
+      }
+
+      const savedNbsChapterNotesNewTab = localStorage.getItem(
+        STORAGE_KEYS.NBS_CHAPTER_NOTES_NEW_TAB,
+      );
+      if (savedNbsChapterNotesNewTab !== null) {
+        setNbsChapterNotesNewTab(savedNbsChapterNotesNewTab === "true");
+      }
     } catch (e) {
       console.error("Failed to load settings", e);
     }
@@ -178,6 +202,20 @@ export function SettingsProvider({
     localStorage.setItem(STORAGE_KEYS.OPEN_NEW_TAB, openNewTab.toString());
   }, [openNewTab]);
 
+  useEffect(() => {
+    localStorage.setItem(
+      STORAGE_KEYS.NBS_PREFIX_AUTO_EXPAND,
+      nbsPrefixAutoExpand.toString(),
+    );
+  }, [nbsPrefixAutoExpand]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      STORAGE_KEYS.NBS_CHAPTER_NOTES_NEW_TAB,
+      nbsChapterNotesNewTab.toString(),
+    );
+  }, [nbsChapterNotesNewTab]);
+
   // Actions
   const updateTheme = useCallback((newTheme: string) => setTheme(newTheme), []);
   const updateAccentColor = useCallback(
@@ -196,6 +234,14 @@ export function SettingsProvider({
     [],
   );
   const toggleOpenNewTab = useCallback(() => setOpenNewTab((prev) => !prev), []);
+  const toggleNbsPrefixAutoExpand = useCallback(
+    () => setNbsPrefixAutoExpand((prev) => !prev),
+    [],
+  );
+  const toggleNbsChapterNotesNewTab = useCallback(
+    () => setNbsChapterNotesNewTab((prev) => !prev),
+    [],
+  );
 
   const restoreDefaults = useCallback(() => {
     setTheme(DEFAULTS.THEME);
@@ -206,6 +252,8 @@ export function SettingsProvider({
     setTipiViewMode(DEFAULTS.TIPI_VIEW_MODE);
     setSidebarPosition(DEFAULTS.SIDEBAR_POSITION);
     setOpenNewTab(DEFAULTS.OPEN_NEW_TAB);
+    setNbsPrefixAutoExpand(DEFAULTS.NBS_PREFIX_AUTO_EXPAND);
+    setNbsChapterNotesNewTab(DEFAULTS.NBS_CHAPTER_NOTES_NEW_TAB);
   }, []);
 
   const contextValue = useMemo(
@@ -218,6 +266,8 @@ export function SettingsProvider({
       tipiViewMode,
       sidebarPosition,
       openNewTab,
+      nbsPrefixAutoExpand,
+      nbsChapterNotesNewTab,
       updateTheme,
       updateAccentColor,
       updateFontSize,
@@ -226,6 +276,8 @@ export function SettingsProvider({
       updateTipiViewMode,
       updateSidebarPosition,
       toggleOpenNewTab,
+      toggleNbsPrefixAutoExpand,
+      toggleNbsChapterNotesNewTab,
       restoreDefaults,
     }),
     [
@@ -237,6 +289,8 @@ export function SettingsProvider({
       tipiViewMode,
       sidebarPosition,
       openNewTab,
+      nbsPrefixAutoExpand,
+      nbsChapterNotesNewTab,
       updateTheme,
       updateAccentColor,
       updateFontSize,
@@ -245,6 +299,8 @@ export function SettingsProvider({
       updateTipiViewMode,
       updateSidebarPosition,
       toggleOpenNewTab,
+      toggleNbsPrefixAutoExpand,
+      toggleNbsChapterNotesNewTab,
       restoreDefaults,
     ],
   );

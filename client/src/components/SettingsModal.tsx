@@ -39,6 +39,8 @@ export function SettingsModal({
     tipiViewMode,
     sidebarPosition,
     openNewTab,
+    nbsPrefixAutoExpand,
+    nbsChapterNotesNewTab,
     updateTheme,
     updateAccentColor,
     updateFontSize,
@@ -47,6 +49,8 @@ export function SettingsModal({
     updateTipiViewMode,
     updateSidebarPosition,
     toggleOpenNewTab,
+    toggleNbsPrefixAutoExpand,
+    toggleNbsChapterNotesNewTab,
     restoreDefaults,
   } = useSettings();
   const isAdmin = useIsAdmin();
@@ -212,6 +216,56 @@ export function SettingsModal({
                     onClick={() => !openNewTab && toggleOpenNewTab()}
                   >
                     Em nova aba
+                  </button>
+                </div>
+              </div>
+
+              <div className={styles.item}>
+                <div className={styles.label}>
+                  <span>Expandir prefixos NBS</span>
+                  <span className={styles.hint}>
+                    Mostrar descendentes automaticamente ao buscar códigos como 1.0601
+                  </span>
+                </div>
+                <label
+                  className={styles.switch}
+                  aria-label="Expandir prefixos NBS"
+                  title="Expandir prefixos NBS"
+                >
+                  <input
+                    type="checkbox"
+                    checked={nbsPrefixAutoExpand}
+                    onChange={toggleNbsPrefixAutoExpand}
+                    data-testid="nbs-prefix-auto-expand-toggle"
+                    aria-label="Expandir prefixos NBS"
+                    title="Expandir prefixos NBS"
+                    placeholder="Expandir prefixos NBS"
+                  />
+                  <span className={styles.sliderRound}></span>
+                </label>
+              </div>
+
+              <div className={styles.item}>
+                <div className={styles.label}>
+                  <span>Explicações de capítulo NBS</span>
+                  <span className={styles.hint}>
+                    Abrir na tela atual por padrão ou em nova aba
+                  </span>
+                </div>
+                <div className={styles.toggleGroup}>
+                  <button
+                    className={`${styles.toggleBtn} ${!nbsChapterNotesNewTab ? styles.active : ""}`}
+                    onClick={() => nbsChapterNotesNewTab && toggleNbsChapterNotesNewTab()}
+                    aria-pressed={!nbsChapterNotesNewTab}
+                  >
+                    Na tela
+                  </button>
+                  <button
+                    className={`${styles.toggleBtn} ${nbsChapterNotesNewTab ? styles.active : ""}`}
+                    onClick={() => !nbsChapterNotesNewTab && toggleNbsChapterNotesNewTab()}
+                    aria-pressed={nbsChapterNotesNewTab}
+                  >
+                    Nova aba
                   </button>
                 </div>
               </div>

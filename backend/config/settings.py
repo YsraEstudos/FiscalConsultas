@@ -163,11 +163,7 @@ class SecuritySettings(BaseModel):
     def _normalize_email_set(values: List[str] | None) -> Set[str]:
         if not values:
             return set()
-        return {
-            str(email).strip().lower()
-            for email in values
-            if str(email).strip()
-        }
+        return {str(email).strip().lower() for email in values if str(email).strip()}
 
     @property
     def ai_chat_allowed_email_set(self) -> Set[str]:

@@ -3,6 +3,7 @@ import os
 
 try:
     import google.generativeai as genai
+
     _genai_import_error: Exception | None = None
 except Exception as exc:
     # Keep backend startup resilient when optional AI provider deps are broken.

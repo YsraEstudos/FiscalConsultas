@@ -635,7 +635,9 @@ async def test_repository_mode_escapes_html_in_nebs_payload_fields():
     assert "<script" not in nebs_payload["entry"]["body_text"]
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in nebs_payload["entry"]["body_text"]
     assert "<img" not in nebs_payload["entry"]["body_markdown"]
-    assert "&lt;img src=x onerror=alert(1)&gt;" in nebs_payload["entry"]["body_markdown"]
+    assert (
+        "&lt;img src=x onerror=alert(1)&gt;" in nebs_payload["entry"]["body_markdown"]
+    )
 
 
 @pytest.mark.asyncio
