@@ -169,7 +169,7 @@ export function Header({
                             </>
                         )}
                         <button onClick={() => { setIsMenuOpen(false); onOpenComparator(); }}>
-                            <span>⚖️</span> Comparar NCMs
+                            <span>⚖️</span> {isServiceDoc ? 'Comparar NBS' : 'Comparar NCMs'}
                         </button>
                         {!isServiceDoc && (
                             <button 

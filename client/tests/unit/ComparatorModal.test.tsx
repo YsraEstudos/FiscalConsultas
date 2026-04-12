@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ComparatorModal } from '../../src/components/ComparatorModal';
 import styles from '../../src/components/ComparatorModal.module.css';
-import { searchNCM, searchTipi } from '../../src/services/api';
+import { searchNCM, searchTipi, searchNbsServices, searchNebsEntries } from '../../src/services/api';
 
 const refs = vi.hoisted(() => ({
   toastErrorMock: vi.fn(),
@@ -12,6 +12,8 @@ const refs = vi.hoisted(() => ({
 vi.mock('../../src/services/api', () => ({
   searchNCM: vi.fn(),
   searchTipi: vi.fn(),
+  searchNbsServices: vi.fn(),
+  searchNebsEntries: vi.fn(),
 }));
 
 vi.mock('../../src/context/SettingsContext', () => ({
@@ -34,6 +36,8 @@ describe('ComparatorModal', () => {
   beforeEach(() => {
     vi.mocked(searchNCM).mockReset();
     vi.mocked(searchTipi).mockReset();
+    vi.mocked(searchNbsServices).mockReset();
+    vi.mocked(searchNebsEntries).mockReset();
     refs.toastErrorMock.mockReset();
     document.body.style.overflow = '';
   });
@@ -41,7 +45,7 @@ describe('ComparatorModal', () => {
   it('renders nothing while closed', () => {
     render(<ComparatorModal isOpen={false} onClose={vi.fn()} />);
 
-    expect(screen.queryByText(/Comparar NCMs/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Comparar NCMs|Comparar NBS/i)).not.toBeInTheDocument();
   });
 
   it('locks body scroll while open, resets form state on reopen, and closes on escape/backdrop', () => {
@@ -130,5 +134,41 @@ describe('ComparatorModal', () => {
     } finally {
       consoleErrorSpy.mockRestore();
     }
+  });
+
+  it('compares both sides using NBS when defaultDoc is nbs and renders structured results', async () => {
+    vi.mocked(searchNbsServices)
+      .mockResolvedValueOnce({
+        success: true,
+        query: '1.01',
+        normalized: '101',
+        total: 1,
+        results: [{ code: '1.0101.0.00', code_clean: '1010100', description: 'Serviços de teste A', parent_code: null, level: 1, has_nebs: false }],
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        query: '1.02',
+        normalized: '102',
+        total: 1,
+        results: [{ code: '1.0201.0.00', code_clean: '1020100', description: 'Serviços de teste B', parent_code: null, level: 1, has_nebs: false }],
+      });
+
+    render(<ComparatorModal isOpen={true} onClose={vi.fn()} defaultDoc="nbs" />);
+
+    expect(screen.getByText('⚖️ Comparar NBS')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'NBS' })).toHaveClass(styles.docButtonActive);
+
+    fireEvent.change(screen.getByLabelText('Código Esquerda'), { target: { value: '1.01' } });
+    fireEvent.change(screen.getByLabelText('Código Direita'), { target: { value: '1.02' } });
+    fireEvent.click(screen.getByRole('button', { name: /Comparar$/i }));
+
+    await waitFor(() => {
+      expect(searchNbsServices).toHaveBeenNthCalledWith(1, '1.01');
+      expect(searchNbsServices).toHaveBeenNthCalledWith(2, '1.02');
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Serviços de teste A')).toBeInTheDocument();
+      expect(screen.getByText('Serviços de teste B')).toBeInTheDocument();
+    });
   });
 });

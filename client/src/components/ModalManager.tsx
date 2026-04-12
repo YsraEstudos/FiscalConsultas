@@ -52,7 +52,7 @@ export const ModalManager: React.FC<ModalManagerProps> = ({
                 <ComparatorModal
                     isOpen
                     onClose={onClose.comparator}
-                    defaultDoc={currentDoc === 'tipi' ? 'tipi' : 'nesh'}
+                    defaultDoc={currentDoc === 'tipi' ? 'tipi' : currentDoc === 'nbs' || currentDoc === 'nebs' ? 'nbs' : 'nesh'}
                 />
             )}
 

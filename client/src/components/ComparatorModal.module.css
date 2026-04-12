@@ -231,3 +231,51 @@
         min-height: 300px;
     }
 }
+
+/* NBS / NEBS result styles */
+
+.nbsResultList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.nbsResultItem {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    transition: background 0.15s ease;
+    border-left: 3px solid transparent;
+}
+
+.nbsResultItem:hover {
+    background: rgb(255 255 255 / 4%);
+    border-left-color: var(--accent-primary, #6366f1);
+}
+
+.nbsCode {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--accent-secondary, #a78bfa);
+    background: rgb(139 92 246 / 10%);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.nbsDescription {
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    line-height: 1.45;
+}
+
+.nbsEmpty {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-style: italic;
+}
