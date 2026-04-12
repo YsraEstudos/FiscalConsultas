@@ -54,7 +54,15 @@ export function Header({
     const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
     const [isSigningOut, setIsSigningOut] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
-    const { isSignedIn, userName, userEmail, isAuthConfigured, openLogin, logout } = useAuth();
+    const {
+        isSignedIn,
+        userName,
+        userEmail,
+        isAuthConfigured,
+        authUnavailableReason,
+        openLogin,
+        logout
+    } = useAuth();
     const isAdmin = useIsAdmin();
     const isServiceDoc = doc === 'nbs' || doc === 'nebs';
     const titleSubtitle = DOC_SUBTITLES[doc] || DOC_SUBTITLES.tipi;
@@ -203,7 +211,7 @@ export function Header({
                                     }}
                                     disabled={!isAuthConfigured}
                                     className={!isAuthConfigured ? styles.menuButtonDisabled : ''}
-                                    title={!isAuthConfigured ? 'Login indisponível no momento.' : undefined}
+                                    title={!isAuthConfigured ? (authUnavailableReason || 'Login indisponível no momento.') : undefined}
                                 >
                                     <span>🔐</span> {isAuthConfigured ? 'Entrar' : 'Login indisponível'}
                                 </button>
