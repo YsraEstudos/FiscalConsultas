@@ -87,22 +87,26 @@ async def test_catalog_counts_and_metadata_public_scope_filter_to_null_tenant():
 
 @pytest.mark.asyncio
 async def test_get_item_details_public_scope_filters_to_null_tenant():
-    session = _FakeSession([
-        _FakeRowsResult([
-            SimpleNamespace(
-                code="1.01",
-                code_clean="101",
-                description="Serviços de construção",
-                parent_code=None,
-                level=0,
-                has_nebs=True,
-            )
-        ]),
-        _FakeRowsResult([]),
-        _FakeScalarResult(1),
-        _FakeRowsResult([]),
-        _FakeRowsResult([]),
-    ])
+    session = _FakeSession(
+        [
+            _FakeRowsResult(
+                [
+                    SimpleNamespace(
+                        code="1.01",
+                        code_clean="101",
+                        description="Serviços de construção",
+                        parent_code=None,
+                        level=0,
+                        has_nebs=True,
+                    )
+                ]
+            ),
+            _FakeRowsResult([]),
+            _FakeScalarResult(1),
+            _FakeRowsResult([]),
+            _FakeRowsResult([]),
+        ]
+    )
     repo = NbsRepository(session)
 
     details = await repo.get_item_details("1.01")

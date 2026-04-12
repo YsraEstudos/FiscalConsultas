@@ -1,4 +1,5 @@
 import pytest
+
 from backend.infrastructure import redis_client as redis_mod
 
 pytestmark = pytest.mark.unit
@@ -243,7 +244,13 @@ async def test_services_and_status_helpers_use_expected_keys(monkeypatch):
 
     monkeypatch.setattr(cache, "get_json", _fake_get)
     monkeypatch.setattr(cache, "set_json", _fake_set)
-    monkeypatch.setattr(cache, "get_catalog_version", lambda catalog, scope="public": _fake_get_version(f"meta:catalog-version:{catalog}:{scope}"))
+    monkeypatch.setattr(
+        cache,
+        "get_catalog_version",
+        lambda catalog, scope="public": _fake_get_version(
+            f"meta:catalog-version:{catalog}:{scope}"
+        ),
+    )
 
     got_search = await cache.get_services_search("nbs", "tenant-a", "search-key")
     assert got_search == {"ok": True}
@@ -285,7 +292,10 @@ async def test_catalog_version_helpers_and_token_normalization():
     fake = _FakeRedis()
     cache._client = fake
 
-    assert redis_mod.RedisCache.normalize_cache_token("  Motor   Eletrico ") == "motor eletrico"
+    assert (
+        redis_mod.RedisCache.normalize_cache_token("  Motor   Eletrico ")
+        == "motor eletrico"
+    )
     assert len(redis_mod.RedisCache.hash_cache_token("Motor")) == 64
 
     assert await cache.get_catalog_version("nbs") == "v1"

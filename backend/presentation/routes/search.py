@@ -5,6 +5,9 @@ from time import perf_counter
 from typing import Annotated, Any, Mapping, cast
 
 import orjson as _orjson  # pyright: ignore[reportMissingImports]
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from starlette.responses import Response
+
 from backend.config.constants import SearchConfig
 from backend.config.exceptions import ValidationError
 from backend.config.logging_config import server_logger as logger
@@ -12,15 +15,13 @@ from backend.config.settings import settings
 from backend.data.glossary_manager import glossary_manager
 from backend.presentation.renderer import HtmlRenderer
 from backend.server.dependencies import get_nesh_service
-from backend.server.rate_limit import public_search_rate_limiter
 from backend.server.middleware import get_current_request_id, get_current_tenant
+from backend.server.rate_limit import public_search_rate_limiter
 from backend.services import NeshService
-from backend.utils.auth import extract_client_ip
 from backend.utils import ncm_utils
+from backend.utils.auth import extract_client_ip
 from backend.utils.cache import cache_scope_key, weak_etag
 from backend.utils.payload_cache_metrics import search_payload_cache_metrics
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from starlette.responses import Response
 
 JSON_MEDIA_TYPE = "application/json"
 
@@ -312,7 +313,6 @@ async def search(
             status_code=500, detail="Formato de resposta inválido do serviço"
         )
     response_data = cast(dict[str, Any], result)
-    serialization_started = perf_counter()
     serialization_ms = 0.0
     gzip_ms = 0.0
     response_bytes = 0
@@ -351,9 +351,9 @@ async def search(
 
         cache_status = "HIT" if cached_payload is not None else "MISS"
         if cached_payload is None:
-            serialize_started = perf_counter()
+            serialization_started = perf_counter()
             raw_body = _orjson.dumps(response_data)
-            serialization_ms = round((perf_counter() - serialize_started) * 1000, 2)
+            serialization_ms = round((perf_counter() - serialization_started) * 1000, 2)
             gzip_started = perf_counter()
             gzip_body = gzip.compress(raw_body, compresslevel=1, mtime=0)
             gzip_ms = round((perf_counter() - gzip_started) * 1000, 2)
@@ -391,6 +391,7 @@ async def search(
         request_id,
         request.url.path,
     )
+    serialization_started = perf_counter()
     raw_body = _orjson.dumps(response_data)
     serialization_ms = round((perf_counter() - serialization_started) * 1000, 2)
     return Response(
@@ -488,7 +489,7 @@ async def get_chapter_body(
     sections = data.get("sections") or {}
     has_sections = any((sections.get(key) or "").strip() for key in sections)
     content = (
-        service._strip_chapter_preamble(data["content"])
+        service.strip_chapter_preamble(data["content"])
         if has_sections
         else data["content"]
     )

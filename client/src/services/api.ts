@@ -207,15 +207,17 @@ function shouldRetryUnauthorizedRequest(
     );
 }
 
+type RetryUnauthorizedResult = {
+    response: Awaited<ReturnType<typeof api.request>> | null;
+    refreshAttempt: 'skipped' | 'attempted';
+    refreshMode: 'fresh' | 'in_flight' | 'cooldown' | 'not_applicable';
+};
+
 async function retryUnauthorizedRequest(
     originalRequest: InternalAxiosRequestConfig & { _retryAuth?: boolean },
     detailText: string | undefined,
     requestId: string | undefined,
-): Promise<{
-    response: Awaited<ReturnType<typeof api.request>> | null;
-    refreshAttempt: 'skipped' | 'attempted';
-    refreshMode: 'fresh' | 'in_flight' | 'cooldown' | 'not_applicable';
-}> {
+): Promise<RetryUnauthorizedResult> {
     const normalizedPath = normalizeRequestPath(getRequestPath(originalRequest.url));
     if (isPublicRoutePath(normalizedPath)) {
         return {

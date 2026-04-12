@@ -17,7 +17,12 @@ function extractErrorMessage(value: unknown): string {
 
         if (typeof candidate.message === 'string') return candidate.message;
         if (typeof candidate.code === 'string') return candidate.code;
-        if (typeof candidate.toString === 'function') return candidate.toString();
+        if (
+            typeof candidate.toString === 'function'
+            && candidate.toString !== Object.prototype.toString
+        ) {
+            return candidate.toString();
+        }
     }
 
     return '';

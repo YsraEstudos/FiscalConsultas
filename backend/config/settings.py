@@ -91,7 +91,7 @@ class FeatureSettings(BaseModel):
 class CacheSettings(BaseModel):
     enable_redis: bool = False
     redis_url: str = "redis://localhost:6379/0"
-    max_payload_bytes: int = 32_768
+    max_payload_bytes: int = Field(default=32_768, ge=0)
     chapter_cache_ttl: int = 3600
     fts_cache_ttl: int = 600
     services_search_ttl: int = 600

@@ -166,6 +166,9 @@ class NeshService:
             return content
         return content[match.start() :].lstrip()
 
+    def strip_chapter_preamble(self, content: str) -> str:
+        return self._strip_chapter_preamble(content)
+
     def parse_chapter_notes(self, notes_content: str) -> Dict[str, str]:
         """
         Parseia notas de capítulo em dicionário estruturado.

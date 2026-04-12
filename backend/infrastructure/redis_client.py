@@ -39,9 +39,7 @@ class RedisCache:
     _local_inflight: dict[str, asyncio.Future[Any]] = field(
         default_factory=dict, repr=False
     )
-    _inflight_lock: asyncio.Lock = field(
-        default_factory=asyncio.Lock, repr=False
-    )
+    _inflight_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _cache_version_prefix: str = field(default="meta:catalog-version", repr=False)
     _default_stale_ttl: int = field(default=60, repr=False)
 
@@ -120,9 +118,7 @@ class RedisCache:
         except Exception as exc:
             logger.debug("Redis delete failed (%s): %s", key, exc)
 
-    async def set_if_not_exists(
-        self, key: str, value: bytes, *, ttl_ms: int
-    ) -> bool:
+    async def set_if_not_exists(self, key: str, value: bytes, *, ttl_ms: int) -> bool:
         if self._client is None:
             return False
         try:
@@ -162,7 +158,9 @@ class RedisCache:
             logger.debug("Redis version bump failed (%s): %s", key, exc)
             return "v1"
 
-    async def _get_or_create_inflight_future(self, key: str) -> tuple[asyncio.Future[Any], bool]:
+    async def _get_or_create_inflight_future(
+        self, key: str
+    ) -> tuple[asyncio.Future[Any], bool]:
         async with self._inflight_lock:
             existing = self._local_inflight.get(key)
             if existing is not None:
@@ -172,7 +170,12 @@ class RedisCache:
             return future, True
 
     async def _resolve_inflight_future(
-        self, key: str, future: asyncio.Future[Any], *, result: Any = None, error: Exception | None = None
+        self,
+        key: str,
+        future: asyncio.Future[Any],
+        *,
+        result: Any = None,
+        error: Exception | None = None,
     ) -> None:
         async with self._inflight_lock:
             stored = self._local_inflight.get(key)
@@ -356,7 +359,9 @@ class RedisCache:
         ttl_seconds: int,
     ) -> None:
         version = await self.get_catalog_version(catalog, scope)
-        await self.set_json(f"{namespace}:{version}:{scope}:{suffix}", value, ttl_seconds)
+        await self.set_json(
+            f"{namespace}:{version}:{scope}:{suffix}", value, ttl_seconds
+        )
 
     async def get_chapter(self, chapter_num: str) -> Optional[Dict[str, Any]]:
         return await self.get_json(f"nesh:chapter:{chapter_num}")

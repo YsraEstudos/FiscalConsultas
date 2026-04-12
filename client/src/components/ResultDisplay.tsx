@@ -482,7 +482,24 @@ function mergeHydratedChapterBodies(
 }
 
 async function fetchChapterBodies(chapters: string[]): Promise<ChapterBodyResponse[]> {
-    return Promise.all(chapters.map((chapter) => getNeshChapterBody(chapter)));
+    const settledBodies = await Promise.allSettled(
+        chapters.map((chapter) => getNeshChapterBody(chapter)),
+    );
+    const fulfilledBodies: ChapterBodyResponse[] = [];
+
+    settledBodies.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+            fulfilledBodies.push(result.value);
+            return;
+        }
+
+        console.error('[ResultDisplay] Failed to fetch chapter body', {
+            chapter: chapters[index],
+            error: result.reason,
+        });
+    });
+
+    return fulfilledBodies;
 }
 
 function getCachedRawMarkup(
@@ -1051,14 +1068,15 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
         let cancelled = false;
         setIsHydratingCodeResults(true);
-        const baseResults = hydratedCodeResults ?? codeResults;
 
         void fetchChapterBodies(missingChapterBodies)
             .then((chapterBodies) => {
                 if (cancelled || chapterBodies.length === 0) return;
-                const nextResults = mergeHydratedChapterBodies(baseResults, chapterBodies);
                 startTransition(() => {
-                    setHydratedCodeResults(nextResults);
+                    setHydratedCodeResults((current) => {
+                        const baseResults = current ?? codeResults;
+                        return mergeHydratedChapterBodies(baseResults, chapterBodies);
+                    });
                 });
             })
             .catch((error) => {
@@ -1075,7 +1093,6 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         };
     }, [
         codeResults,
-        hydratedCodeResults,
         isActive,
         missingChapterBodies,
         shouldHydrateCodeResults,

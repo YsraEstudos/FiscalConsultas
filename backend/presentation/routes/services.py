@@ -10,7 +10,12 @@ from backend.server.rate_limit import (
     services_detail_rate_limiter,
     services_search_rate_limiter,
 )
-from backend.services.nbs_service import NbsService
+from backend.services.nbs_service import (
+    DEFAULT_TREE_PAGE,
+    DEFAULT_TREE_PAGE_SIZE,
+    MAX_TREE_PAGE_SIZE,
+    NbsService,
+)
 from backend.utils.auth import extract_client_ip
 
 router = APIRouter()
@@ -102,10 +107,17 @@ async def get_nbs_detail(
     include_tree: Annotated[
         bool, Query(description="Include chapter subtree payload")
     ] = True,
-    page: Annotated[int, Query(ge=1, description="Tree page number")] = 1,
+    page: Annotated[
+        int, Query(ge=1, description="Tree page number")
+    ] = DEFAULT_TREE_PAGE,
     page_size: Annotated[
-        int, Query(ge=1, le=200, description="Tree page size")
-    ] = 50,
+        int,
+        Query(
+            ge=1,
+            le=MAX_TREE_PAGE_SIZE,
+            description="Tree page size",
+        ),
+    ] = DEFAULT_TREE_PAGE_SIZE,
 ):
     await _apply_detail_rate_limit(request)
     normalized_code = _validate_service_code(code)
@@ -122,10 +134,17 @@ async def get_nbs_detail_tree(
     request: Request,
     code: str,
     service: Annotated[NbsService, Depends(get_nbs_service)],
-    page: Annotated[int, Query(ge=1, description="Tree page number")] = 1,
+    page: Annotated[
+        int, Query(ge=1, description="Tree page number")
+    ] = DEFAULT_TREE_PAGE,
     page_size: Annotated[
-        int, Query(ge=1, le=200, description="Tree page size")
-    ] = 50,
+        int,
+        Query(
+            ge=1,
+            le=MAX_TREE_PAGE_SIZE,
+            description="Tree page size",
+        ),
+    ] = DEFAULT_TREE_PAGE_SIZE,
 ):
     await _apply_detail_rate_limit(request)
     normalized_code = _validate_service_code(code)
