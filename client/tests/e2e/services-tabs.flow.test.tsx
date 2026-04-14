@@ -16,14 +16,14 @@ import type {
 } from '../../src/types/api.types';
 
 const refs = vi.hoisted(() => ({
-  getNbsServiceDetailMock: vi.fn(),
+  getNbsServiceDetailPageMock: vi.fn(),
   getNebsEntryDetailMock: vi.fn(),
   toastErrorMock: vi.fn(),
   openNewTab: false,
 }));
 
 vi.mock('../../src/services/api', () => ({
-  getNbsServiceDetail: refs.getNbsServiceDetailMock,
+  getNbsServiceDetailPage: refs.getNbsServiceDetailPageMock,
   getNebsEntryDetail: refs.getNebsEntryDetailMock,
 }));
 
@@ -112,11 +112,11 @@ function ServicesTabsHarness({
 
 describe('services tabs flow', () => {
   beforeEach(() => {
-    refs.getNbsServiceDetailMock.mockReset();
+    refs.getNbsServiceDetailPageMock.mockReset();
     refs.getNebsEntryDetailMock.mockReset();
     refs.toastErrorMock.mockReset();
     refs.openNewTab = false;
-    refs.getNbsServiceDetailMock.mockResolvedValue(makeNbsDetail());
+    refs.getNbsServiceDetailPageMock.mockResolvedValue(makeNbsDetail());
     refs.getNebsEntryDetailMock.mockResolvedValue(makeNebsDetail());
   });
 
@@ -132,7 +132,7 @@ describe('services tabs flow', () => {
     );
 
     await waitFor(() => {
-      expect(refs.getNbsServiceDetailMock).toHaveBeenCalledWith('1.0101.11.00');
+      expect(refs.getNbsServiceDetailPageMock).toHaveBeenCalledWith('1.0101.11.00', expect.any(Object));
     });
 
     expect(await screen.findByText('NOTAS EXPLICATIVAS')).toBeInTheDocument();
@@ -252,7 +252,7 @@ describe('services tabs flow', () => {
   });
 
   it('maps detail failures with the shared catalog copy instead of a generic toast', async () => {
-    refs.getNbsServiceDetailMock.mockRejectedValueOnce({
+    refs.getNbsServiceDetailPageMock.mockRejectedValueOnce({
       isAxiosError: true,
       response: { status: 503 },
     });

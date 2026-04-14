@@ -21,6 +21,7 @@ class _FakeNeshServiceCode:
             "success": True,
             "type": "code",
             "query": query,
+            "match_type": "fts",
             "results": {"85": {"capitulo": "85"}},
             "total_capitulos": 1,
         }
@@ -32,6 +33,7 @@ class _FakeNeshServiceText:
             "success": True,
             "type": "text",
             "query": query,
+            "match_type": "fts",
             "results": [],
             "total_capitulos": 0,
         }
@@ -47,7 +49,7 @@ class _FakeNeshChapterService:
     async def fetch_chapter_data(self, chapter: str):
         await asyncio.sleep(0)
         return {
-            "content": f"CAPITULO {chapter}\nConteudo detalhado",
+            "content": "Conteudo detalhado",
             "parsed_notes": {"N1": "Nota"},
             "notes": "Notas gerais",
             "sections": {"titulo": "Capitulo 84"},
@@ -64,6 +66,7 @@ class _FakeNeshServiceCodeEmptyResults:
             "success": True,
             "type": "code",
             "query": query,
+            "match_type": "fts",
             "results": {},
             "resultados": {"85": {"capitulo": "85"}},
             "total_capitulos": 0,
@@ -92,6 +95,7 @@ class _FakeTipiServiceText:
             "success": True,
             "type": "text",
             "query": query,
+            "match_type": "fts",
             "results": [],
         }
 
@@ -203,7 +207,7 @@ def test_tipi_text_response_sets_route_defaults(client):
     assert payload["type"] == "text"
     assert payload["normalized"] == "motor"
     assert payload["warning"] is None
-    assert payload["match_type"] == "text"
+    assert payload["match_type"] == "fts"
 
 
 def test_search_returns_retry_after_when_rate_limited(client, monkeypatch):
