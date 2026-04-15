@@ -1148,32 +1148,30 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     if not commented_anchor_keys or not html:
         return html
 
-    for key in commented_anchor_keys:
-        # Escapa o key para uso em regex seguro
-        safe_key = re.escape(key)
+    keys_set = set(commented_anchor_keys)
 
-        # Encontra a tag com id="{key}" e adiciona has-comment à sua classe
-        # Suporta: id="key", id='key', class="..." já existente
-        def _add_class(match: re.Match) -> str:
-            tag = match.group(0)
-            if "class=" in tag:
-                # Adiciona has-comment à class existente
-                tag = re.sub(
-                    r'(class=["\'])([^"\']*?)(["\'])',
-                    lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
-                    tag,
-                    count=1,
-                )
-            else:
-                # Insere class antes do fechamento da tag de abertura
-                tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
+    # Pre-compile regex for performance
+    # Encontra qualquer tag de abertura que tenha um atributo id
+    pattern = re.compile(r'<[a-zA-Z][^>]*\bid=(["\']?)([^"\'\s>]+)\1[^>]*>')
+    class_pattern = re.compile(r'(class=(["\']))([^"\']*)(\2)')
+
+    def _process_tag(match: re.Match) -> str:
+        tag = match.group(0)
+        tag_id = match.group(2)
+
+        if tag_id not in keys_set:
             return tag
 
-        html = re.sub(
-            rf'<[a-zA-Z][^>]*\bid=["\']?{safe_key}["\']?[^>]*>',
-            _add_class,
-            html,
-            count=1,
-        )
+        if "class=" in tag:
+            # Adiciona has-comment à class existente
+            tag = class_pattern.sub(
+                lambda m: f"{m.group(1)}{m.group(3)} has-comment{m.group(4)}",
+                tag,
+                count=1,
+            )
+        else:
+            # Insere class antes do fechamento da tag de abertura
+            tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
+        return tag
 
-    return html
+    return pattern.sub(_process_tag, html)
