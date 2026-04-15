@@ -49,13 +49,19 @@ jobs:
               Path("database/tipi.db"),
               Path("database/services.db"),
           ]
+          existing_source_dbs = [path for path in source_dbs if path.exists()]
 
           if enc.exists() != meta.exists():
               raise SystemExit(
                   "Offline bundle contract broken: fiscal_offline.enc and fiscal_offline.meta must exist together."
               )
 
-          if all(path.exists() for path in source_dbs):
+          if existing_source_dbs and len(existing_source_dbs) != len(source_dbs):
+              raise SystemExit(
+                  "Offline bundle sources are partially present. Either provide all source databases or none."
+              )
+
+          if len(existing_source_dbs) == len(source_dbs):
               print("Source databases detected. Validating offline bundle build script...")
           else:
               print("Source databases not present in CI checkout. Skipping bundle generation, keeping contract check only.")

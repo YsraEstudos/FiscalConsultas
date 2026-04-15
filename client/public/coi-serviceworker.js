@@ -1,8 +1,12 @@
 /* coi-serviceworker + offline shell cache */
 let coepCredentialless = false;
-const APP_SHELL_CACHE = "app-shell-v2";
-const RUNTIME_CACHE = "runtime-assets-v2";
+const APP_SHELL_CACHE = "app-shell-v3";
+const RUNTIME_CACHE = "runtime-assets-v3";
 const CORE_URLS = ["./", "./index.html", "./coi-serviceworker.js", "./vite.svg"];
+
+function resolveCredentiallessValue(payload) {
+  return Boolean(payload?.credentialless);
+}
 
 function withCoiHeaders(response) {
   if (!response || response.status === 0) {
@@ -86,6 +90,11 @@ if (typeof window === "undefined") {
             client.navigate(client.url);
           }
         });
+      return;
+    }
+
+    if (message.type === "SET_COEP_MODE") {
+      coepCredentialless = resolveCredentiallessValue(message.payload);
       return;
     }
 
@@ -204,6 +213,16 @@ if (typeof window === "undefined") {
       coepCredentialless = true;
     }
 
+    const notifyCoiMode = (registration) => {
+      const message = {
+        type: "SET_COEP_MODE",
+        payload: { credentialless: coepCredentialless },
+      };
+      registration.installing?.postMessage(message);
+      registration.waiting?.postMessage(message);
+      registration.active?.postMessage(message);
+    };
+
     if (!window.isSecureContext) {
       console.info(
         "[coi] SharedArrayBuffer requires secure context (HTTPS). Offline search will use API fallback."
@@ -216,10 +235,14 @@ if (typeof window === "undefined") {
         .register(new URL("coi-serviceworker.js", window.location.href).href)
         .then(
           (registration) => {
+            notifyCoiMode(registration);
             registration.addEventListener("updatefound", () => {
               const newSW = registration.installing;
               if (!newSW) return;
               newSW.addEventListener("statechange", () => {
+                if (newSW.state === "installed" || newSW.state === "activating") {
+                  notifyCoiMode(registration);
+                }
                 if (newSW.state === "activated" && !window.SharedArrayBuffer) {
                   window.sessionStorage.setItem("coiReloadedBySelf", "reload");
                   window.location.reload();

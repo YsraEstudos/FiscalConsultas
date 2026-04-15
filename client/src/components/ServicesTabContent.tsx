@@ -141,7 +141,7 @@ export function ServicesTabContent({
 
                 while (lastPage.has_more) {
                     const nextPageNumber = currentPage + 1;
-                    const nextPageResponse = preferLocal
+                    let nextPageResponse = preferLocal
                         ? await getNbsDetailLocal(code, {
                             page: nextPageNumber,
                             pageSize: firstPage.page_size,
@@ -151,6 +151,13 @@ export function ServicesTabContent({
                             nextPageNumber,
                             firstPage.page_size,
                         );
+                    if (!nextPageResponse && preferLocal) {
+                        nextPageResponse = await getNbsServiceTreePage(
+                            code,
+                            nextPageNumber,
+                            firstPage.page_size,
+                        );
+                    }
                     if (!nextPageResponse) {
                         break;
                     }

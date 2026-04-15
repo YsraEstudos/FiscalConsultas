@@ -67,11 +67,14 @@ export function formatNcmTipi(ncm) {
  * @returns {string}
  */
 export function generateAnchorId(ncmCode) {
-  if (!ncmCode) return "";
-  if (ncmCode.startsWith("pos-")) return ncmCode;
-  const safeChars = ncmCode.replace(/[^a-zA-Z0-9.-]/g, "");
-  const cleanCode = safeChars.trim().replace(/\./g, "-");
-  return `pos-${cleanCode}`;
+  const rawCode = String(ncmCode || "").trim();
+  if (!rawCode) return "";
+
+  const candidate = rawCode.startsWith("pos-") ? rawCode.slice(4) : rawCode;
+  const safeChars = candidate.replace(/[^a-zA-Z0-9.-]/g, "");
+  const cleanCode = safeChars.replace(/\./g, "-");
+
+  return cleanCode ? `pos-${cleanCode}` : "";
 }
 
 /**

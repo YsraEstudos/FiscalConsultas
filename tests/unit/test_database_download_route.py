@@ -117,7 +117,9 @@ async def test_download_requires_same_ip_that_requested_token(offline_bundle):
 
 
 @pytest.mark.asyncio
-async def test_https_is_required_in_production_for_non_local_requests(offline_bundle, monkeypatch: pytest.MonkeyPatch):
+async def test_https_is_required_in_production_for_non_local_requests(
+    offline_bundle, monkeypatch: pytest.MonkeyPatch
+):
     monkeypatch.setattr(database_download.settings.server, "env", "production")
     request = _build_request(
         "/api/database/token",
@@ -130,3 +132,47 @@ async def test_https_is_required_in_production_for_non_local_requests(offline_bu
 
     assert exc.value.status_code == 400
     assert "HTTPS" in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_untrusted_forwarded_proto_does_not_bypass_https_requirement(
+    offline_bundle, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(database_download.settings.server, "env", "production")
+    request = _build_request(
+        "/api/database/token",
+        headers={
+            "host": "fiscal.example.com",
+            "x-forwarded-proto": "https",
+        },
+        client_host="203.0.113.10",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await database_download.create_download_token(request)
+
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_trusted_forwarded_proto_is_accepted_in_production(
+    offline_bundle, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(database_download.settings.server, "env", "production")
+    monkeypatch.setattr(
+        database_download.settings.security,
+        "trusted_proxy_ips",
+        ["203.0.113.10/32"],
+    )
+    request = _build_request(
+        "/api/database/token",
+        headers={
+            "host": "fiscal.example.com",
+            "x-forwarded-proto": "https",
+        },
+        client_host="203.0.113.10",
+    )
+
+    payload = await database_download.create_download_token(request)
+
+    assert payload["token"]

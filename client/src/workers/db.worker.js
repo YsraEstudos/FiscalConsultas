@@ -9,7 +9,7 @@
  * 2. PBKDF2 key derivation with domain binding
  * 3. HMAC-SHA256 integrity verification
  * 4. Decrypt-to-memory-only (WASM heap)
- * 5. Anti-debugging measures
+ * 5. Encrypted-at-rest local storage (OPFS)
  */
 
 // ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ let _currentVersion = null;
 let _status = "checking";
 
 // ---------------------------------------------------------------------------
-// Anti-debugging (lightweight — no heavy obfuscator cost)
+// Logging controls (avoid noisy worker logs in production builds)
 // ---------------------------------------------------------------------------
 const _c = self.console;
 // In production, suppress worker console to reduce info leakage
@@ -61,7 +61,7 @@ if (
   self.console = /** @type {Console} */ ({
     log: () => {},
     warn: () => {},
-    error: () => {},
+    error: _c.error.bind(_c),
     info: () => {},
     debug: () => {},
     dir: () => {},
@@ -135,7 +135,6 @@ async function deriveKey(salt, iterations) {
  * Verify HMAC-SHA256 integrity.
  * @param {Uint8Array} data
  * @param {Uint8Array} expectedHmac
- * @param {CryptoKey} aesKey - We derive HMAC key from AES key material via SHA-256
  * @param {Uint8Array} salt
  * @param {number} iterations
  * @returns {Promise<boolean>}
@@ -1056,27 +1055,6 @@ function searchNeshByCode(query) {
     success: true,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Anti-debugging (timing-based)
-// ---------------------------------------------------------------------------
-let _lastTick = performance.now();
-setInterval(() => {
-  const now = performance.now();
-  // If interval drifted >2s, a debugger breakpoint was likely hit
-  if (now - _lastTick > 2000) {
-    if (_db) {
-      try {
-        _db.close();
-      } catch {
-        /* ignore */
-      }
-      _db = null;
-    }
-    _status = "error";
-  }
-  _lastTick = now;
-}, 500);
 
 // ---------------------------------------------------------------------------
 // Message handler

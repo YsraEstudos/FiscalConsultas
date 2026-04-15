@@ -236,6 +236,9 @@ export function LocalDatabaseProvider({
     reject: (reason: Error) => void;
     timeout: ReturnType<typeof setTimeout>;
   } | null>(null);
+  const remoteCheckRef = useRef<Promise<OfflineDatabaseMetadata | null> | null>(
+    null
+  );
   const remoteMetaRef = useRef<OfflineDatabaseMetadata | null>(readStoredMetadata());
 
   const [status, setStatus] = useState<DbStatus>(
@@ -352,31 +355,44 @@ export function LocalDatabaseProvider({
   const refreshAvailability = useCallback(
     async (force = false): Promise<OfflineDatabaseMetadata | null> => {
       if (!isSupported) return null;
-      if (!force && remoteMetaRef.current) {
-        return remoteMetaRef.current;
+      if (!force && remoteCheckRef.current) {
+        return remoteCheckRef.current;
       }
 
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 4000);
-        const response = await fetch("/api/database/version", {
-          method: "GET",
-          headers: { Accept: "application/json" },
-          signal: controller.signal,
-        });
-        clearTimeout(timer);
+      const request = (async () => {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 4000);
+          try {
+            const response = await fetch("/api/database/version", {
+              method: "GET",
+              headers: { Accept: "application/json" },
+              signal: controller.signal,
+            });
 
-        if (!response.ok) {
-          throw new Error(`Version check failed (${response.status})`);
+            if (!response.ok) {
+              throw new Error(`Version check failed (${response.status})`);
+            }
+
+            const metadata = sanitizeOfflineMetadata(await response.json());
+            remoteMetaRef.current = metadata;
+            setRemoteVersion(metadata?.version || null);
+            setDbSizeBytes((current) => current ?? metadata?.size_bytes ?? null);
+            return metadata;
+          } finally {
+            clearTimeout(timer);
+          }
+        } catch {
+          return remoteMetaRef.current;
         }
+      })();
 
-        const metadata = sanitizeOfflineMetadata(await response.json());
-        remoteMetaRef.current = metadata;
-        setRemoteVersion(metadata?.version || null);
-        return metadata;
-      } catch {
-        return remoteMetaRef.current;
+      remoteCheckRef.current = request;
+      const metadata = await request;
+      if (remoteCheckRef.current === request) {
+        remoteCheckRef.current = null;
       }
+      return metadata;
     },
     [isSupported]
   );
@@ -589,7 +605,7 @@ export function LocalDatabaseProvider({
       }
 
       await primeOfflineShellCache();
-      const response = await sendToWorker(
+      await sendToWorker(
         "INSTALL",
         {
           apiBase: "/api",
@@ -610,8 +626,6 @@ export function LocalDatabaseProvider({
         source: lockOwner,
         payload: { metadata: effectiveMetadata },
       });
-
-      return response as unknown as void;
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Installation failed unexpectedly";

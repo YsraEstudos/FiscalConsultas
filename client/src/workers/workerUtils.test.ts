@@ -122,6 +122,10 @@ describe("generateAnchorId", () => {
     expect(generateAnchorId("pos-85-17")).toBe("pos-85-17");
   });
 
+  it("re-sanitizes prefixed values instead of trusting them blindly", () => {
+    expect(generateAnchorId("pos-85-17<script>")).toBe("pos-85-17script");
+  });
+
   it("returns empty for falsy input", () => {
     expect(generateAnchorId("")).toBe("");
     expect(generateAnchorId(null)).toBe("");

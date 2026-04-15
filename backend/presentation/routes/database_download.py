@@ -15,6 +15,7 @@ import os
 import secrets
 import time
 from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -22,7 +23,7 @@ from pydantic import BaseModel, Field
 from backend.config.settings import settings
 from backend.infrastructure.redis_client import redis_cache
 from backend.server.rate_limit import SlidingWindowRateLimiter
-from backend.utils.auth import extract_client_ip
+from backend.utils.auth import _is_trusted_proxy, extract_client_ip
 
 logger = logging.getLogger("routes.database_download")
 
@@ -73,10 +74,13 @@ def _generate_token_jti() -> str:
 
 
 def _is_local_request(request: Request) -> bool:
-    forwarded_for = request.headers.get("x-forwarded-host", "")
-    host_header = forwarded_for or request.headers.get("host", "")
+    direct_ip = request.client.host if request.client else None
+    forwarded_host = request.headers.get("x-forwarded-host", "").strip()
+    host_header = (
+        forwarded_host if forwarded_host and _is_trusted_proxy(direct_ip) else ""
+    ) or request.headers.get("host", "")
     host = host_header.split(":", maxsplit=1)[0].strip().lower()
-    client_host = (request.client.host if request.client else "").strip().lower()
+    client_host = (direct_ip or "").strip().lower()
     return host in {"127.0.0.1", "localhost"} or client_host in {
         "127.0.0.1",
         "::1",
@@ -85,8 +89,9 @@ def _is_local_request(request: Request) -> bool:
 
 
 def _resolve_request_scheme(request: Request) -> str:
+    direct_ip = request.client.host if request.client else None
     forwarded_proto = request.headers.get("x-forwarded-proto", "").strip()
-    if forwarded_proto:
+    if forwarded_proto and _is_trusted_proxy(direct_ip):
         return forwarded_proto.split(",", maxsplit=1)[0].strip().lower()
     return request.url.scheme.lower()
 
@@ -117,7 +122,11 @@ async def _store_token(jti: str, client_ip: str) -> None:
     # Memory fallback
     now = time.monotonic()
     # Cleanup expired tokens
-    expired = [k for k, (created, _) in _memory_tokens.items() if now - created > _TOKEN_TTL_SECONDS]
+    expired = [
+        k
+        for k, (created, _) in _memory_tokens.items()
+        if now - created > _TOKEN_TTL_SECONDS
+    ]
     for k in expired:
         del _memory_tokens[k]
     # Evict oldest if full
@@ -260,7 +269,7 @@ async def download_database(
         data = ENCRYPTED_DB.read_bytes()
     except OSError as exc:
         logger.error("Failed to read encrypted DB: %s", exc)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
     return Response(
         content=data,

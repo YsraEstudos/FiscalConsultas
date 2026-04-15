@@ -244,7 +244,7 @@
   border-radius: 8px;
   border: 1px solid rgb(239 68 68 / 15%);
   margin-top: 0.75rem;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 /* ━━━ Unsupported Banner ━━━ */

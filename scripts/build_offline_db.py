@@ -26,9 +26,9 @@ import time
 from pathlib import Path
 
 try:
+    from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-    from cryptography.hazmat.primitives import hashes
 except ImportError:
     print("ERRO: cryptography não instalado. Execute: uv add cryptography")
     sys.exit(1)
@@ -57,14 +57,30 @@ MAGIC = b"FCDB"  # File magic bytes
 FORMAT_VERSION = 1
 # The app seed is combined with location.origin on the client for domain binding.
 # This seed MUST match the one in the frontend worker.
-APP_SEED = os.environ.get(
-    "OFFLINE_DB_APP_SEED",
-    "fiscal-consultas-offline-2026",
-)
+DEFAULT_APP_SEED = "fiscal-consultas-offline-2026"
 
 
 def _log(msg: str) -> None:
     print(f"  [offline-db] {msg}")
+
+
+def _resolve_app_seed() -> str:
+    seed = (os.environ.get("OFFLINE_DB_APP_SEED") or "").strip()
+    if seed:
+        return seed
+
+    if os.environ.get("CI"):
+        raise RuntimeError(
+            "OFFLINE_DB_APP_SEED must be configured in CI/release builds."
+        )
+
+    _log(
+        "WARNING: OFFLINE_DB_APP_SEED not set. Falling back to the local-only default seed."
+    )
+    return DEFAULT_APP_SEED
+
+
+APP_SEED = _resolve_app_seed()
 
 
 # ---------------------------------------------------------------------------
@@ -404,6 +420,7 @@ def _derive_key(salt: bytes) -> bytes:
 def _compute_hmac(data: bytes, key: bytes) -> bytes:
     """Compute HMAC-SHA256 for integrity verification."""
     import hmac as hmac_mod
+
     return hmac_mod.new(key, data, hashlib.sha256).digest()
 
 
@@ -413,7 +430,7 @@ def _encrypt_database(plaintext_path: Path, encrypted_path: Path) -> dict:
 
     File format:
         [MAGIC 4B] [VERSION 2B] [SALT 32B] [HMAC 32B] [CHUNK...]
-        Each chunk: [IV 12B] [TAG 16B] [CIPHERTEXT ≤64KB]
+        Each chunk: [IV 12B] [CIPHERTEXT+TAG <= 64KB + 16B]
     """
     plaintext = plaintext_path.read_bytes()
     plaintext_sha256 = hashlib.sha256(plaintext).hexdigest()
@@ -484,7 +501,11 @@ def main() -> int:
 
     cursor.execute("SELECT value FROM db_metadata WHERE key = 'built_at'")
     built_row = cursor.fetchone()
-    built_at = built_row[0] if built_row else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    built_at = (
+        built_row[0]
+        if built_row
+        else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    )
     conn.close()
 
     # Clean up plaintext DB (keep only encrypted version)
