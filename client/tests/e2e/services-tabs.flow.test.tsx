@@ -16,14 +16,16 @@ import type {
 } from '../../src/types/api.types';
 
 const refs = vi.hoisted(() => ({
-  getNbsServiceDetailMock: vi.fn(),
+  getNbsServiceDetailPageMock: vi.fn(),
+  getNbsServiceTreePageMock: vi.fn(),
   getNebsEntryDetailMock: vi.fn(),
   toastErrorMock: vi.fn(),
   openNewTab: false,
 }));
 
 vi.mock('../../src/services/api', () => ({
-  getNbsServiceDetail: refs.getNbsServiceDetailMock,
+  getNbsServiceDetailPage: refs.getNbsServiceDetailPageMock,
+  getNbsServiceTreePage: refs.getNbsServiceTreePageMock,
   getNebsEntryDetail: refs.getNebsEntryDetailMock,
 }));
 
@@ -37,6 +39,26 @@ vi.mock('react-hot-toast', () => ({
   toast: {
     error: refs.toastErrorMock,
   },
+}));
+
+vi.mock('../../src/context/LocalDatabaseContext', () => ({
+  useLocalDatabase: () => ({
+    status: 'not_installed',
+    searchLocal: vi.fn().mockResolvedValue(null),
+    getNbsDetailLocal: vi.fn().mockResolvedValue(null),
+    getNebsDetailLocal: vi.fn().mockResolvedValue(null),
+    progress: 0,
+    progressStep: '',
+    localVersion: null,
+    remoteVersion: null,
+    updateAvailable: false,
+    error: null,
+    dbSizeBytes: null,
+    isSupported: false,
+    install: vi.fn(),
+    remove: vi.fn(),
+    refreshAvailability: vi.fn().mockResolvedValue(null),
+  }),
 }));
 
 type HarnessTab = {
@@ -112,11 +134,24 @@ function ServicesTabsHarness({
 
 describe('services tabs flow', () => {
   beforeEach(() => {
-    refs.getNbsServiceDetailMock.mockReset();
+    refs.getNbsServiceDetailPageMock.mockReset();
+    refs.getNbsServiceTreePageMock.mockReset();
     refs.getNebsEntryDetailMock.mockReset();
     refs.toastErrorMock.mockReset();
     refs.openNewTab = false;
-    refs.getNbsServiceDetailMock.mockResolvedValue(makeNbsDetail());
+    refs.getNbsServiceDetailPageMock.mockResolvedValue(makeNbsDetail());
+    refs.getNbsServiceTreePageMock.mockResolvedValue({
+      success: true,
+      item: makeNbsDetail().item,
+      chapter_root: makeNbsDetail().chapter_root,
+      chapter_page: {
+        items: makeNbsDetail().chapter_items || [],
+        page: 1,
+        page_size: 50,
+        total: makeNbsDetail().chapter_items?.length || 0,
+        has_more: false,
+      },
+    });
     refs.getNebsEntryDetailMock.mockResolvedValue(makeNebsDetail());
   });
 
@@ -132,7 +167,11 @@ describe('services tabs flow', () => {
     );
 
     await waitFor(() => {
-      expect(refs.getNbsServiceDetailMock).toHaveBeenCalledWith('1.0101.11.00');
+      expect(refs.getNbsServiceDetailPageMock).toHaveBeenCalledWith('1.0101.11.00', {
+        includeTree: true,
+        page: 1,
+        pageSize: 50,
+      });
     });
 
     expect(await screen.findByText('NOTAS EXPLICATIVAS')).toBeInTheDocument();
@@ -252,7 +291,7 @@ describe('services tabs flow', () => {
   });
 
   it('maps detail failures with the shared catalog copy instead of a generic toast', async () => {
-    refs.getNbsServiceDetailMock.mockRejectedValueOnce({
+    refs.getNbsServiceDetailPageMock.mockRejectedValue({
       isAxiosError: true,
       response: { status: 503 },
     });

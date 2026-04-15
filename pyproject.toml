@@ -21,6 +21,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0",
     "sqlmodel>=0.0.14",
     "uvicorn>=0.27.0",
+    "cryptography>=44.0",
 ]
 
 [dependency-groups]

@@ -1,6 +1,6 @@
-# Navegacao, Context Menu e Interacoes Cruzadas (estado real 2026-02-17)
+# Navegacao, Context Menu e Interacoes Cruzadas (estado real 2026-04-12)
 
-Este documento registra como a navegacao entre NESH/TIPI funciona hoje no frontend.
+Este documento registra como a navegacao entre NESH/TIPI/NBS/NEBS funciona hoje no frontend.
 
 ## 1) Componentes-chave
 
@@ -10,6 +10,9 @@ Este documento registra como a navegacao entre NESH/TIPI funciona hoje no fronte
 - `client/src/components/ResultDisplay.tsx`
 - `client/src/components/Sidebar.tsx`
 - `client/src/context/CrossChapterNoteContext.tsx`
+- `client/src/components/ServicesWorkspace.tsx`
+- `client/src/components/ServicesTabContent.tsx`
+- `client/src/components/SettingsModal.tsx`
 
 ## 2) Context Menu Cross-Doc
 
@@ -18,6 +21,7 @@ Este documento registra como a navegacao entre NESH/TIPI funciona hoje no fronte
 - listener global de `contextmenu` por delegacao.
 - somente abre se alvo estiver na allowlist:
   - `.smart-link`
+  - `.service-smart-link`
   - `.tipi-ncm`
   - `.tipi-result-ncm`
   - `.ncm-target`
@@ -32,6 +36,7 @@ Ordem de heuristica:
 3. `\d{2,8}`
 
 Tambem usa `data-ncm` quando existir.
+Para NBS/NEBS, o menu tambem usa `data-service-code` quando o alvo vier de um `service-smart-link` ou de um badge/codigo destacado.
 
 ### 2.3 Acoes do menu
 
@@ -58,6 +63,7 @@ Tambem usa `data-ncm` quando existir.
 `App.tsx` registra click handler global:
 
 - clique em `a.smart-link` -> `handleSearch(ncm)`.
+- clique em `.service-smart-link` -> `handleSearch(serviceCode)`.
 - clique em `.note-ref` -> `handleOpenNote(note, chapter?)`.
 
 Vantagem: evita listeners individuais por item renderizado.
@@ -77,7 +83,21 @@ Contexto: `CrossChapterNoteContext`.
   - senao faz fetch via `/api/nesh/chapter/{chapter}/notes`
   - abre modal (`NotePanel`) quando encontra conteudo
 
-## 6) Navegacao Lateral (Sidebar)
+## 6) NBS / NEBS
+
+### 6.1 Busca por prefixo
+
+- `ServicesTabContent` resolve o codigo preferido do ramo NBS ativo antes de abrir o detalhe.
+- quando a configuracao `nbsPrefixAutoExpand` esta ligada, `ServicesWorkspace` expande automaticamente os descendentes do prefixo pesquisado.
+- isso permite que uma busca como `1.06` mostre o ramo inteiro do capitulo/posicao, incluindo itens como `1.0601`, `1.0602` e subposicoes filhas.
+
+### 6.2 Explicacoes do capitulo
+
+- o botao de explicacoes da NBS abre um painel interno por padrao.
+- se `nbsChapterNotesNewTab` estiver ligado em `SettingsContext`, o mesmo conteudo pode abrir em nova aba.
+- os trechos destacados dentro das notas usam `service-smart-link` e continuam navegaveis pela mesma infraestrutura de smart-links.
+
+## 7) Navegacao Lateral (Sidebar)
 
 ### 6.1 Estrutura
 
@@ -99,7 +119,7 @@ Contexto: `CrossChapterNoteContext`.
 - sidebar tenta achar indice por match exato, normalizado, prefixo e fallback startsWith.
 - destaca item por tempo curto apos scroll programatico.
 
-## 7) Estado de abas e navegacao
+## 8) Estado de abas e navegacao
 
 `useTabs` guarda por aba:
 
@@ -116,7 +136,7 @@ Detalhe critico:
 
 - quando ocorre skip fetch, `useSearch` atualiza `results.query` para manter `targetId` sincronizado no `ResultDisplay`.
 
-## 8) Integracao com Auth e API
+## 9) Integracao com Auth e API
 
 - `AuthProvider` registra `getToken` no interceptor axios.
 - chamadas de API enviam Bearer automaticamente quando rota nao e publica.
@@ -134,18 +154,20 @@ Importante:
 - a UI restrita reflete capacidades vindas de `/api/auth/me`.
 - controles sensiveis continuam exigindo validacao backend.
 
-## 9) Riscos atuais de navegacao
+## 10) Riscos atuais de navegacao
 
 1. concorrencia entre highlight de busca e highlight por `activeAnchorId` na sidebar (estado unico de highlight).
 2. dependencia de IDs de secao (`chapter-{cap}-...`) que nem sempre existem no HTML NESH backend.
 3. bug de callback de consumo de nova busca em `App` afeta ciclo de scroll/navegacao entre abas.
 4. pivot de documento abre nova aba quando a atual esta ocupada; sem UX clara, usuario pode achar que "sumiu" da aba original.
 
-## 10) Contrato de estabilidade
+## 11) Contrato de estabilidade
 
 Nao quebrar sem migracao coordenada:
 
 - classes `.smart-link` e `.note-ref`
-- atributos `data-ncm`, `data-note`, `data-chapter`
+- classes `.service-smart-link`
+- atributos `data-ncm`, `data-note`, `data-chapter`, `data-service-code`
 - formato de IDs `pos-...` e `chapter-{cap}-{secao}`
 - shape de resposta com `results` + `resultados`
+- a arvore NBS/NEBS espera que a hierarquia por prefixo continue consistente com os codigos retornados pelo backend

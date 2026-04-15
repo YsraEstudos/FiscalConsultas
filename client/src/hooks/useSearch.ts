@@ -5,8 +5,9 @@ import { searchNCM, searchNbsServices, searchNebsEntries, searchTipi } from '../
 import { useTabs, type DocType } from './useTabs';
 import { useHistory } from './useHistory';
 import { useSettings } from '../context/SettingsContext';
+import { useLocalDatabase } from '../context/LocalDatabaseContext';
 import { extractChapter, isSameChapter } from '../utils/chapterDetection';
-import type { SearchResponse } from '../types/api.types';
+import type { SearchResponse, NbsSearchResponse, NebsSearchResponse, TipiTextSearchResponse, TextSearchResponse, TipiCodeSearchResponse, CodeSearchResponse } from '../types/api.types';
 import { isCodeSearchResponse } from '../types/api.types';
 import {
     getServiceCatalogErrorInfo,
@@ -21,12 +22,120 @@ const buildLoadedChaptersByDoc = (value?: Record<DocType, string[]>): Record<Doc
     nebs: value?.nebs ?? [],
 });
 
+/**
+ * Normalize local Worker search results into the SearchResponse format.
+ */
+function normalizeLocalResults(
+    doc: DocType,
+    query: string,
+    results: Record<string, unknown>[]
+): SearchResponse | null {
+    const safeResults = Array.isArray(results) ? results : [];
+
+    switch (doc) {
+        case 'nbs': {
+            const response: NbsSearchResponse = {
+                success: true, query, normalized: query,
+                results: safeResults.map((r) => ({
+                    code: String(r.code || ''), code_clean: String(r.code_clean || ''),
+                    description: String(r.description || ''),
+                    parent_code: r.parent_code ? String(r.parent_code) : null,
+                    level: Number(r.level || 0), has_nebs: Boolean(r.has_nebs),
+                })),
+                total: safeResults.length,
+            };
+            return response;
+        }
+        case 'nebs': {
+            const response: NebsSearchResponse = {
+                success: true, query, normalized: query,
+                results: safeResults.map((r) => ({
+                    code: String(r.code || ''),
+                    title: String(r.title || ''),
+                    excerpt: String(r.body_text || '').slice(0, 200),
+                    page_start: Number(r.page_start || 0),
+                    page_end: Number(r.page_end || 0),
+                    section_title: r.section_title ? String(r.section_title) : null,
+                })),
+                total: safeResults.length,
+            };
+            return response;
+        }
+        case 'tipi': {
+            const response: TipiTextSearchResponse = {
+                success: true, type: 'text', query: query,
+                normalized: query, match_type: 'fts',
+                warning: null, total: safeResults.length,
+                results: safeResults.map((r) => ({
+                    ncm: String(r.ncm || ''),
+                    capitulo: String(r.capitulo || ''),
+                    descricao: String(r.descricao || ''),
+                    aliquota: String(r.aliquota || ''),
+                })),
+            };
+            return response;
+        }
+        case 'nesh': {
+            // NESH local FTS returns flat items → build TextSearchResponse
+            const response: TextSearchResponse = {
+                success: true, type: 'text', query,
+                normalized: query, match_type: 'all_words',
+                warning: null, total_capitulos: safeResults.length,
+                results: safeResults.map((r) => ({
+                    ncm: String(r.codigo || ''),
+                    descricao: String(r.descricao || ''),
+                    tipo: 'position' as const,
+                    relevancia: 1,
+                    score: 1,
+                    tier: 1 as const,
+                    tier_label: 'Exato' as const,
+                })),
+            };
+            return response;
+        }
+        default:
+            return null;
+    }
+}
+
+/**
+ * Normalize local Worker CODE search results (hierarchical) into API response format.
+ * Used when the Worker reconstructs chapter hierarchy for TIPI/NESH code queries.
+ */
+function normalizeLocalCodeResults(
+    doc: DocType,
+    query: string,
+    results: Record<string, any>
+): SearchResponse | null {
+    const safeResults = results && typeof results === 'object' ? results : {};
+
+    if (doc === 'tipi') {
+        return {
+            success: true, type: 'code', query,
+            results: safeResults, resultados: safeResults,
+            total: Object.values(safeResults).reduce((s: number, c: any) => s + (c.posicoes?.length || 0), 0),
+            total_capitulos: Object.keys(safeResults).length,
+        } as TipiCodeSearchResponse;
+    }
+
+    if (doc === 'nesh') {
+        return {
+            success: true, type: 'code', query,
+            normalized: null, results: safeResults, resultados: safeResults,
+            total_capitulos: Object.keys(safeResults).length,
+        } as CodeSearchResponse;
+    }
+
+    return null;
+}
+
 export function useSearch(
     tabsById: ReturnType<typeof useTabs>['tabsById'],
     updateTab: ReturnType<typeof useTabs>['updateTab'],
     addToHistory: ReturnType<typeof useHistory>['addToHistory']
 ) {
     const { tipiViewMode } = useSettings();
+    const { status: dbStatus, searchLocal } = useLocalDatabase();
     const tabsByIdRef = useRef(tabsById);
     const tipiViewModeRef = useRef(tipiViewMode);
 
@@ -93,19 +202,37 @@ export function useSearch(
         });
 
         try {
-            const searchHandlers: Record<DocType, () => Promise<SearchResponse>> = {
-                nesh: () => searchNCM(query),
-                tipi: () => searchTipi(query, tipiViewModeRef.current),
-                nbs: () => searchNbsServices(query),
-                nebs: () => searchNebsEntries(query),
-            };
-            const handler = searchHandlers[doc];
+            let data: SearchResponse | null = null;
+            const isOfflineScopedDoc = doc === 'nesh' || doc === 'tipi' || doc === 'nbs' || doc === 'nebs';
 
-            if (!handler) {
-                throw new Error(`Unknown document type: ${doc}`);
+            // === HYBRID SEARCH: Local DB first, API fallback ===
+            if (dbStatus === 'ready' && isOfflineScopedDoc) {
+                try {
+                    const localResponse = await searchLocal(doc as any, query, tipiViewModeRef.current);
+                    if (localResponse) {
+                        if (localResponse.searchType === 'code') {
+                            data = normalizeLocalCodeResults(doc, query, localResponse.results as Record<string, any>);
+                        } else if (Array.isArray(localResponse.results)) {
+                            data = normalizeLocalResults(doc, query, localResponse.results as Record<string, unknown>[]);
+                        }
+                    }
+                } catch { /* silent fallback to API */ }
             }
 
-            const data = await handler();
+            // Fallback to API if local returned nothing
+            if (!data) {
+                const searchHandlers: Record<DocType, () => Promise<SearchResponse>> = {
+                    nesh: () => searchNCM(query),
+                    tipi: () => searchTipi(query, tipiViewModeRef.current),
+                    nbs: () => searchNbsServices(query),
+                    nebs: () => searchNebsEntries(query),
+                };
+                const handler = searchHandlers[doc];
+                if (!handler) {
+                    throw new Error(`Unknown document type: ${doc}`);
+                }
+                data = await handler();
+            }
 
             // Extrai capitulos apenas para respostas do tipo code
             const codeResults = isCodeSearchResponse(data)
@@ -153,7 +280,7 @@ export function useSearch(
                 loading: false
             });
         }
-    }, [addToHistory, updateResultsQuery, updateTab]);
+    }, [addToHistory, updateResultsQuery, updateTab, dbStatus, searchLocal]);
 
     return { executeSearchForTab };
 }

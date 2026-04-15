@@ -27,6 +27,26 @@ vi.mock('react-hot-toast', () => ({
   },
 }));
 
+vi.mock('../../src/context/LocalDatabaseContext', () => ({
+  useLocalDatabase: () => ({
+    status: 'not_installed',
+    searchLocal: vi.fn().mockResolvedValue(null),
+    getNbsDetailLocal: vi.fn().mockResolvedValue(null),
+    getNebsDetailLocal: vi.fn().mockResolvedValue(null),
+    progress: 0,
+    progressStep: '',
+    localVersion: null,
+    remoteVersion: null,
+    updateAvailable: false,
+    error: null,
+    dbSizeBytes: null,
+    isSupported: false,
+    install: vi.fn(),
+    remove: vi.fn(),
+    refreshAvailability: vi.fn().mockResolvedValue(null),
+  }),
+}));
+
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <SettingsProvider>{children}</SettingsProvider>
 );

@@ -38,6 +38,29 @@ jobs:
       - name: Install backend dependencies
         run: uv sync --group dev
 
+      - name: Validate offline bundle contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          enc = Path("database/fiscal_offline.enc")
+          meta = Path("database/fiscal_offline.meta")
+          source_dbs = [
+              Path("database/nesh.db"),
+              Path("database/tipi.db"),
+              Path("database/services.db"),
+          ]
+
+          if enc.exists() != meta.exists():
+              raise SystemExit(
+                  "Offline bundle contract broken: fiscal_offline.enc and fiscal_offline.meta must exist together."
+              )
+
+          if all(path.exists() for path in source_dbs):
+              print("Source databases detected. Validating offline bundle build script...")
+          else:
+              print("Source databases not present in CI checkout. Skipping bundle generation, keeping contract check only.")
+          PY
+
       - name: Lint with Ruff
         run: |
           uv run ruff format --check

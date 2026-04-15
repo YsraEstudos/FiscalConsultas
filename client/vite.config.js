@@ -33,12 +33,22 @@ export default defineConfig(({ mode }) => {
         : {},
     },
     server: {
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'require-corp',
+      },
       proxy: {
         '/api': {
           target: proxyTarget, // NOSONAR: dev proxy target comes from local env or local backend
           changeOrigin: true
         }
       }
+    },
+    optimizeDeps: {
+      exclude: ['@sqlite.org/sqlite-wasm'],
+    },
+    worker: {
+      format: 'es',
     },
     test: {
       globals: true,

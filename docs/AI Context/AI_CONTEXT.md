@@ -1,7 +1,7 @@
 # Nesh / Fiscal - AI_CONTEXT
 
-Atualizado em: 2026-04-09
-Base desta revisao: README, `start_nesh_dev.bat`, `client/package.json`, `docs/TESTING.md` e workflows atuais de CI/MegaLinter/Pages.
+Atualizado em: 2026-04-12
+Base desta revisao: README, PR 184, `start_nesh_dev.bat`, `client/package.json`, `docs/TESTING.md` e workflows atuais de CI/MegaLinter/Pages.
 
 ## 1) Proposito
 
@@ -9,6 +9,7 @@ Nesh/Fiscal e uma aplicacao de consulta fiscal com dois domínios principais:
 
 - NESH: busca por codigo e por texto em capitulos/notas/posicoes.
 - TIPI: busca por codigo e texto com foco em arvore de NCM e aliquotas.
+- NBS/NEBS: busca por codigo e detalhe de catalogo de servicos, com arvore por prefixo, smart-links e painel de explicacoes por capitulo da NBS.
 
 A UX e orientada por navegacao rapida (abas, smart-links, menu contextual, autoscroll, sidebar virtualizada).
 
@@ -178,6 +179,8 @@ Notas:
   - TIPI fallback em `renderTipiFallback`.
 - Sidebar virtualizada (`react-virtuoso`) usa anchors e codigos normalizados.
 - Notas cross-chapter usam cache dedicado (`CrossChapterNoteContext`).
+- NBS usa `service-smart-link` para códigos destacados, navegação por prefixo na busca e um painel interno de explicações do capítulo, com preferência de abrir em nova aba controlada por `SettingsContext`.
+- As notas oficiais da NBS usadas no painel de explicações sao extraidas do PDF oficial e materializadas em `client/src/data/nbsChapterNotes.json`.
 
 ## 10) Testes e CI (estado real)
 
@@ -239,6 +242,7 @@ Status:
 6. `sys.path.append/insert` em scripts e imports de fallback.
 7. Contrato de callback de autoscroll desalinhado entre `App.tsx` e `ResultDisplay.tsx`.
 8. Endpoint `/api/debug/anchors` tenta ler `markdown` direto do service, mas renderer principal roda na rota `/api/search`.
+9. NBS/NEBS ainda compartilham parte do fluxo de renderizacao, mas a interface ganhou um painel dedicado de explicacoes por capitulo e expande prefixos NBS quando a configuracao esta ligada.
 
 ## 13) Setup / Comandos Recomendados
 

@@ -7,6 +7,7 @@ import { AuthProvider, AnonymousAuthProvider } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
 import { GlossaryProvider } from './context/GlossaryContext';
 import { CrossChapterNoteProvider } from './context/CrossChapterNoteContext';
+import { LocalDatabaseProvider } from './context/LocalDatabaseContext';
 import { clerkTheme } from './config/clerkAppearance';
 import {
     getClerkUnavailableMessage,
@@ -21,11 +22,13 @@ const PUBLISHABLE_KEY = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '').trim(
 function AppProviders({ children }: Readonly<{ children: ReactNode }>) {
     return (
         <SettingsProvider>
-            <GlossaryProvider>
-                <CrossChapterNoteProvider>
-                    {children}
-                </CrossChapterNoteProvider>
-            </GlossaryProvider>
+            <LocalDatabaseProvider>
+                <GlossaryProvider>
+                    <CrossChapterNoteProvider>
+                        {children}
+                    </CrossChapterNoteProvider>
+                </GlossaryProvider>
+            </LocalDatabaseProvider>
         </SettingsProvider>
     );
 }

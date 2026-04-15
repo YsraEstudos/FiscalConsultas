@@ -7,6 +7,7 @@ import {
   type AccentColor,
 } from "../constants";
 import { useIsAdmin } from "../hooks/useIsAdmin";
+import DatabaseInstaller from "./DatabaseInstaller";
 import styles from "./SettingsModal.module.css";
 
 interface SettingsModalProps {
@@ -323,6 +324,9 @@ export function SettingsModal({
                 </div>
               </div>
             </div>
+
+            {/* CARD: BUSCA OFFLINE */}
+            <DatabaseInstaller />
 
             {/* CARD 4: TIPI (Full width) */}
             <div className={`${styles.card} ${styles.fullWidthCard}`}>

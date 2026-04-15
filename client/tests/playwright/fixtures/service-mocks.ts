@@ -144,6 +144,15 @@ export function makeNbsDetail(code = '1.0101.11.00'): NbsDetailResponse {
       parent,
     ],
     children: [],
+    chapter_root: root,
+    chapter_items: [root, parent, leaf],
+    chapter_page: {
+      items: [root, parent, leaf],
+      page: 1,
+      page_size: 50,
+      total: 3,
+      has_more: false,
+    },
     nebs: makeNebsEntry(leaf.code),
   };
 }

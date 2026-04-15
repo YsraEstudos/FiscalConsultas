@@ -31,6 +31,12 @@ Formato pratico:
 - `backend/data/glossary_db.json`
 - carga via `backend/data/glossary_manager.py`
 
+### 1.4 NBS Chapter Notes
+
+- `client/src/data/nbsChapterNotes.json`
+- gerado a partir do PDF oficial da NBS (`nbs.pdf`) por `scripts/export_nbs_chapter_notes.py`
+- usado pelo frontend para abrir um painel interno de explicacoes do capitulo ativo da NBS
+
 ## 2) Bancos e Tabelas
 
 ### 2.1 SQLite NESH (`database/nesh.db`)
@@ -65,6 +71,7 @@ Tabelas principais:
 | `scripts/migrate_to_postgres.py` | migracao SQLite -> PostgreSQL | necessario quando muda para engine postgres |
 | `scripts/rebuild_index.py` | rebuild alternativo NESH | usa fonte `data/debug_nesh/Nesh.txt`; nao necessariamente igual ao setup principal |
 | `scripts/ingest_markdown.py` | fluxo alternativo/legado | usa `raw_data/nesh.md`; regex e regras proprias; reescreve chapters/positions por heuristica |
+| `scripts/export_nbs_chapter_notes.py` | Exporta as notas oficiais da NBS | extrai o texto do PDF oficial e gera o JSON consumido pelo frontend |
 
 ## 4) Risco Principal: Divergencia de Parser
 
@@ -108,6 +115,7 @@ Nota:
 2. Busca de codigo NESH (`/api/search?ncm=8517`) deve retornar `type=code` e `total_capitulos>0`.
 3. Busca textual NESH (`/api/search?ncm=bomba`) deve retornar `type=text`.
 4. Busca TIPI (`/api/tipi/search?ncm=8413`) deve retornar estrutura com `results/resultados`.
+5. A NBS no frontend deve conseguir abrir a arvore do ramo e o painel de explicacoes sem depender de uma nova aba do navegador, salvo quando o usuario ativar essa opcao nas configuracoes.
 
 ## 8) Decisoes de Governanca de Dados
 

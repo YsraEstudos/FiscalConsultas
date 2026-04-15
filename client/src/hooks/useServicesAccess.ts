@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 
+import { useLocalDatabase } from '../context/LocalDatabaseContext';
 import { getSystemStatus } from '../services/api';
 import {
     buildServiceCatalogSnapshot,
@@ -15,6 +16,7 @@ function isSnapshotFresh(snapshot: ServiceCatalogSnapshot): boolean {
 }
 
 export function useServicesAccess() {
+    const { status: offlineDbStatus } = useLocalDatabase();
     const [snapshot, setSnapshot] = useState<ServiceCatalogSnapshot>(
         UNKNOWN_SERVICE_CATALOG_SNAPSHOT,
     );
@@ -68,6 +70,10 @@ export function useServicesAccess() {
     }, [commitSnapshot]);
 
     const ensureServicesAccess = useCallback(async () => {
+        if (offlineDbStatus === 'ready') {
+            return true;
+        }
+
         const current = snapshotRef.current;
         if (current.availability === 'offline' && isSnapshotFresh(current)) {
             toast.error(current.message || 'Catálogo de serviços indisponível no momento.');
@@ -86,9 +92,13 @@ export function useServicesAccess() {
         }
 
         return true;
-    }, [refreshServicesStatus]);
+    }, [offlineDbStatus, refreshServicesStatus]);
 
     const ensureServicesSearchAccess = useCallback(async () => {
+        if (offlineDbStatus === 'ready') {
+            return true;
+        }
+
         const current = snapshotRef.current;
         const isOfflineAndFresh = current.availability === 'offline' && isSnapshotFresh(current);
         if (isOfflineAndFresh) {
@@ -97,14 +107,16 @@ export function useServicesAccess() {
         }
 
         return true;
-    }, []);
+    }, [offlineDbStatus]);
 
     return {
         ensureServicesAccess,
         ensureServicesSearchAccess,
         refreshServicesStatus,
         servicesAvailability: snapshot.availability,
-        servicesUnavailableReason: snapshot.availability === 'offline' && isSnapshotFresh(snapshot)
+        servicesUnavailableReason: offlineDbStatus === 'ready'
+            ? null
+            : snapshot.availability === 'offline' && isSnapshotFresh(snapshot)
             ? snapshot.message
             : null,
     };

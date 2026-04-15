@@ -183,28 +183,20 @@ Observações:
 
 ### 4) Subir aplicação
 
-Fluxo recomendado (cloud-first): frontend local consumindo API em produção.
+Fluxo recomendado para teste local completo: backend + frontend com API local.
 
 Comando único (Windows):
 
 ```powershell
-.\start_nesh_dev.bat
+.\testar_tudo_local.bat
 ```
 
-Para diagnóstico de autenticação Clerk no frontend:
+Esse script:
 
-```powershell
-.\start_nesh_dev.bat --auth-debug
-```
-
-O script `start_nesh_dev.bat` atual é **frontend-only**:
-
-- valida Node/npm e `client/.env.local`
-- instala dependências frontend quando necessário
-- inicia o Vite na porta `5173`
-- abre `http://127.0.0.1:5173`
-
-Ele **não** inicia backend, **não** executa `docker compose up -d` e **não** valida saúde de API.
+- sobe o backend FastAPI na porta `8000`
+- sobe o frontend Vite na porta `5173`
+- cria `client/.env.development.local` apontando o frontend para a API local
+- abre o navegador quando os dois serviços estão prontos
 
 Se você precisar rodar backend localmente (modo de desenvolvimento de API):
 
@@ -230,6 +222,21 @@ Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/status"
 ```
 
 Resposta esperada: JSON com `status`, `database` e `tipi`.
+
+### 5) Gerar o pacote offline do navegador
+
+Depois de preparar os bancos locais (`nesh.db`, `tipi.db` e `services.db`), gere o pacote distribuível do modo offline:
+
+```powershell
+python scripts/build_offline_db.py
+```
+
+Arquivos gerados:
+
+- `database/fiscal_offline.enc`
+- `database/fiscal_offline.meta`
+
+Esses dois arquivos são o pacote offline usado pelo botão de instalação no navegador.
 
 ## Deploy no Cloudflare
 

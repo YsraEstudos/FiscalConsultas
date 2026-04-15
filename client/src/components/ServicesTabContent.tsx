@@ -5,6 +5,7 @@ import {
     getNbsServiceTreePage,
     getNebsEntryDetail,
 } from '../services/api';
+import { useLocalDatabase } from '../context/LocalDatabaseContext';
 import type {
     NbsDetailResponse,
     NbsSearchResponse,
@@ -84,6 +85,11 @@ export function ServicesTabContent({
     const [isWorkspaceReady, setIsWorkspaceReady] = useState(false);
     const detailRequestRef = useRef(0);
     const readySignalRef = useRef(false);
+    const {
+        status: localDbStatus,
+        getNbsDetailLocal,
+        getNebsDetailLocal,
+    } = useLocalDatabase();
 
     const loadNbsDetail = useCallback(async (code: string) => {
         const requestId = detailRequestRef.current + 1;
@@ -92,11 +98,33 @@ export function ServicesTabContent({
         setDetailStatus('loading');
 
         try {
-            const response = await getNbsServiceDetailPage(code, {
-                includeTree: true,
-                page: 1,
-                pageSize: DEFAULT_NBS_TREE_PAGE_SIZE,
-            });
+            const preferLocal = localDbStatus === 'ready';
+            const fetchDetailPage = async (page: number) => {
+                if (preferLocal) {
+                    return getNbsDetailLocal(code, {
+                        page,
+                        pageSize: DEFAULT_NBS_TREE_PAGE_SIZE,
+                    });
+                }
+
+                return getNbsServiceDetailPage(code, {
+                    includeTree: true,
+                    page,
+                    pageSize: DEFAULT_NBS_TREE_PAGE_SIZE,
+                });
+            };
+
+            let response = await fetchDetailPage(1);
+            if (!response && preferLocal) {
+                response = await getNbsServiceDetailPage(code, {
+                    includeTree: true,
+                    page: 1,
+                    pageSize: DEFAULT_NBS_TREE_PAGE_SIZE,
+                });
+            }
+            if (!response) {
+                throw new Error('NBS detail unavailable');
+            }
             if (detailRequestRef.current !== requestId) return;
 
             const firstPage = response.chapter_page;
@@ -113,20 +141,32 @@ export function ServicesTabContent({
 
                 while (lastPage.has_more) {
                     const nextPageNumber = currentPage + 1;
-                    const nextPageResponse = await getNbsServiceTreePage(
-                        code,
-                        nextPageNumber,
-                        firstPage.page_size,
-                    );
+                    const nextPageResponse = preferLocal
+                        ? await getNbsDetailLocal(code, {
+                            page: nextPageNumber,
+                            pageSize: firstPage.page_size,
+                        })
+                        : await getNbsServiceTreePage(
+                            code,
+                            nextPageNumber,
+                            firstPage.page_size,
+                        );
+                    if (!nextPageResponse) {
+                        break;
+                    }
                     if (detailRequestRef.current !== requestId) return;
+                    const nextPage = nextPageResponse.chapter_page;
+                    if (!nextPage) {
+                        break;
+                    }
 
                     mergedItems = mergeNbsChapterItems(
                         mergedItems,
-                        nextPageResponse.chapter_page.items,
+                        nextPage.items,
                     );
-                    chapterRoot = chapterRoot ?? nextPageResponse.chapter_root;
+                    chapterRoot = chapterRoot ?? nextPageResponse.chapter_root ?? undefined;
                     currentPage = nextPageNumber;
-                    lastPage = nextPageResponse.chapter_page;
+                    lastPage = nextPage;
                 }
 
                 hydratedResponse = {
@@ -157,7 +197,7 @@ export function ServicesTabContent({
             reportServiceCatalogError(error, 'nbs', serviceError);
             toast.error(serviceError.message);
         }
-    }, []);
+    }, [getNbsDetailLocal, localDbStatus]);
 
     const loadNebsDetail = useCallback(async (code: string) => {
         const requestId = detailRequestRef.current + 1;
@@ -166,7 +206,12 @@ export function ServicesTabContent({
         setDetailStatus('loading');
 
         try {
-            const response = await getNebsEntryDetail(code);
+            let response = localDbStatus === 'ready'
+                ? await getNebsDetailLocal(code)
+                : null;
+            if (!response) {
+                response = await getNebsEntryDetail(code);
+            }
             if (detailRequestRef.current !== requestId) return;
             setNebsDetail(response);
             setNbsDetail(null);
@@ -181,7 +226,7 @@ export function ServicesTabContent({
             reportServiceCatalogError(error, 'nebs', serviceError);
             toast.error(serviceError.message);
         }
-    }, []);
+    }, [getNebsDetailLocal, localDbStatus]);
 
     const firstResultCode = data.results[0]?.code || null;
     const preferredNbsCode = useMemo(() => {

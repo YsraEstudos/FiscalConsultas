@@ -15,6 +15,7 @@ from backend.infrastructure.redis_client import redis_cache
 from backend.presentation.routes import (
     auth,
     comments,
+    database_download,
     profile,
     search,
     services,
@@ -452,6 +453,7 @@ app.include_router(
     tipi.router, prefix="/api/tipi", tags=["TIPI"]
 )  # Note: routes inside are /search, /chapters etc
 app.include_router(services.router, prefix="/api/services", tags=["Services"])
+app.include_router(database_download.router, prefix="/api/database", tags=["Database"])
 app.include_router(system.router, prefix="/api", tags=["System"])
 app.include_router(webhooks.router, prefix="/api/webhooks", tags=["Webhooks"])
 app.include_router(comments.router, prefix="/api", tags=["Comments"])
