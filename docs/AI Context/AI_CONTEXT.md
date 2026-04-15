@@ -1,7 +1,7 @@
 # Nesh / Fiscal - AI_CONTEXT
 
-Atualizado em: 2026-04-12
-Base desta revisao: README, PR 184, `start_nesh_dev.bat`, `client/package.json`, `docs/TESTING.md` e workflows atuais de CI/MegaLinter/Pages.
+Atualizado em: 2026-04-15
+Base desta revisao: README, PR 194, `testar_tudo_local.bat`, `client/package.json`, `docs/TESTING.md`, `LocalDatabaseContext`, `coi-serviceworker` e workflows atuais de CI/MegaLinter/Pages.
 
 ## 1) Proposito
 
@@ -12,6 +12,8 @@ Nesh/Fiscal e uma aplicacao de consulta fiscal com dois domínios principais:
 - NBS/NEBS: busca por codigo e detalhe de catalogo de servicos, com arvore por prefixo, smart-links e painel de explicacoes por capitulo da NBS.
 
 A UX e orientada por navegacao rapida (abas, smart-links, menu contextual, autoscroll, sidebar virtualizada).
+
+O estado atual tambem inclui um modo offline total no navegador para `NESH`, `TIPI`, `NBS` e `NEBS`, com instalacao em um botao, banco local em OPFS e cache do app shell via service worker.
 
 ## 2) Verdade de Execucao (Source of Truth)
 
@@ -25,6 +27,14 @@ A UX e orientada por navegacao rapida (abas, smart-links, menu contextual, autos
   - exige `VITE_CLERK_PUBLISHABLE_KEY`.
 - Shell SPA real: `client/index.html`
   - publica CSP, `referrer` policy e `Permissions-Policy` via meta tags.
+- Service worker real: `client/public/coi-serviceworker.js`
+  - garante COOP/COEP para SQLite WASM e tambem cacheia o app shell.
+- Orquestrador offline real: `client/src/context/LocalDatabaseContext.tsx`
+  - coordena instalacao, remocao, atualizacao, multi-abas, OPFS e worker local.
+- Rotas de distribuicao do artefato offline: `backend/presentation/routes/database_download.py`
+  - `GET /api/database/version`
+  - `POST /api/database/token`
+  - `POST /api/database/download`
 - Frontend estatico pode ser publicado fora do backend
   - Cloudflare Pages ou GitHub Pages (`https://ysraestudos.github.io/FiscalConsultas/` no modo project site).
 
@@ -51,6 +61,10 @@ scripts/
   setup_database.py      monta SQLite NESH (chapters/positions/chapter_notes)
   setup_fulltext.py      cria/atualiza FTS SQLite
   setup_tipi_database.py monta SQLite TIPI (xlsx)
+  setup_nbs_database.py  popula `services.db` com a hierarquia NBS
+  setup_nebs_database.py popula `services.db` com o catalogo NEBS
+  build_offline_db.py    gera o pacote criptografado distribuivel do navegador
+  export_nbs_chapter_notes.py extrai notas oficiais da NBS para JSON do frontend
   rebuild_index.py       rebuild alternativo de nesh.db (usa fonte debug)
   ingest_markdown.py     ingestao alternativa/legada
   migrate_to_postgres.py migracao SQLite -> PostgreSQL
@@ -85,6 +99,21 @@ scripts/
 - Compatibilidade de contrato: rota garante `results` e alias `resultados`.
 - Payload cache da rota TIPI segue padrao semelhante ao NESH.
 
+### 4.4 Instalacao do modo offline no navegador
+
+1. `LocalDatabaseContext` consulta `GET /api/database/version`.
+2. O frontend pede token efemero em `POST /api/database/token`.
+3. O worker baixa o artefato em `POST /api/database/download`.
+4. O blob criptografado e persistido em OPFS.
+5. `db.worker.js` abre o banco local e passa a responder buscas e detalhes localmente.
+6. `coi-serviceworker.js` aquece o cache do app shell para reabertura sem rede.
+7. `BroadcastChannel` coordena instalacao, atualizacao e remocao entre varias abas.
+
+Escopo offline efetivo:
+
+- `NESH`, `TIPI`, `NBS` e `NEBS`: busca e leitura local apos instalacao.
+- autenticacao, comentarios, perfil e chat IA: degradam quando offline, sem quebrar a UI base.
+
 ## 5) Contratos HTTP Relevantes
 
 Rotas principais:
@@ -96,9 +125,12 @@ Rotas principais:
 - `GET /api/tipi/search`
 - `GET /api/tipi/chapters`
 - `GET /api/status`
+- `GET /api/database/version`
 - `GET /api/cache-metrics` (admin)
 - `GET /api/debug/anchors` (debug_mode + admin)
 - `GET /api/auth/me` (`authenticated`, `can_use_ai_chat`, `can_use_restricted_ui`)
+- `POST /api/database/token`
+- `POST /api/database/download`
 - `POST /api/ai/chat` (Rate Limited 5req/min, Auth Required, allowlist por email)
 - `POST /api/webhooks/asaas` (Provisiona Tenants localmente)
 
@@ -121,10 +153,19 @@ Regras de compatibilidade importantes:
 
 - NESH: `database/nesh.db`
 - TIPI: `database/tipi.db`
+- Servicos: `database/services.db`
 - Serviço `NeshService` possui fallback para SQLite em caso de modo Legacy de Ingestão (offline fallback mode), através do `DatabaseAdapter` original.
 - Cuidado: Não é o target para transações reais de negócios como criação de Assinaturas e Usuários B2B.
 
-### 6.3 Fontes de arquivos
+### 6.3 Artefato offline do navegador
+
+- `database/fiscal_offline.enc`
+- `database/fiscal_offline.meta`
+- gerados por `scripts/build_offline_db.py`
+- tratados como artefatos de release/deploy, nao como entrada manual do usuario final
+- o pacote fornece integridade e distribuicao controlada, nao sigilo forte contra o proprio usuario
+
+### 6.4 Fontes de arquivos
 
 - NESH: `data/Nesh.txt` ou `data/Nesh.zip` (setup principal), e variante `data/debug_nesh/Nesh.txt` (rebuild alternativo).
 - TIPI: `data/tipi.xlsx`.
@@ -189,10 +230,16 @@ Local:
 - Backend default: `uv run pytest -q` (sem `perf` e `snapshot` por padrao).
 - Frontend default: `cd client && npm run test`.
 - Frontend type-check: `cd client && npm run type-check`.
-- Bootstrap Windows (frontend): `.\start_nesh_dev.bat` (`--auth-debug` para diagnostico Clerk no frontend).
+- Bootstrap Windows local completo: `.\testar_tudo_local.bat`.
 - Validacao dedicada de auth env (backend): `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate_auth_env.ps1`.
 - Testes de performance existem, mas sao opt-in.
 - Existe cobertura de contratos de rota, renderer, middleware e hooks.
+- Cobertura offline relevante:
+  - `tests/unit/test_database_download_route.py`
+  - `client/src/workers/workerUtils.test.ts`
+  - `client/tests/unit/useSearch.test.tsx`
+  - `client/tests/unit/useSearch.behavior.test.tsx`
+  - `client/tests/e2e/services-tabs.flow.test.tsx`
 - Snapshot observado em 2026-03-09:
   - frontend: `46` arquivos / `270` testes passando
   - novas suítes cobrindo `contentSecurity`, `authz`, `MarkdownPane`, `ModalManager`, `AuthContext`, `ResultDisplay`, `AppSearch`
@@ -228,9 +275,9 @@ CI adicional em `.github/workflows/megalinter.yml`:
 
 Status:
 
-1. README, `TESTING.md` e este contexto foram sincronizados em 2026-03-31 com o fluxo cloud-first e bootstrap frontend-only.
+1. README, `TESTING.md` e este contexto foram sincronizados em 2026-04-15 com o fluxo local `testar_tudo_local.bat`, o pacote offline do navegador e o deploy cloud-first.
 2. O ponto de atencao atual e manter capacidades de UI restrita documentadas como derivadas de `/api/auth/me`, com allowlist real no backend.
-3. Outro ponto de atencao e manter este documento sincronizado quando o escopo do `PR Smart` ou das suites frontend mudar.
+3. Outro ponto de atencao e manter este documento sincronizado quando o contrato do modo offline ou o escopo do `PR Smart` mudar.
 
 ## 12) Divida Tecnica Estrutural (resumo)
 
@@ -283,19 +330,23 @@ npm run dev
 uv run scripts/setup_tipi_database.py
 $env:PYTHONUTF8="1"; uv run scripts/setup_database.py
 $env:PYTHONUTF8="1"; uv run scripts/setup_fulltext.py
+uv run scripts/setup_nbs_database.py
+uv run scripts/setup_nebs_database.py
+uv run scripts/build_offline_db.py
 ```
 
 ### Bootstrap Windows assistido
 
 ```powershell
-.\start_nesh_dev.bat
+.\testar_tudo_local.bat
 ```
 
 Notas:
 
-- o script atual e frontend-only: valida Node/npm e `client/.env.local`, prepara dependencias, sobe Vite na porta 5173 e abre o browser.
-- para diagnostico de auth do frontend, use `.\start_nesh_dev.bat --auth-debug`.
-- para backend local, rode em terminal separado: `uv run Nesh.py`.
+- o script atual sobe backend FastAPI na porta `8000` e frontend Vite na porta `5173`.
+- o script cria `client/.env.development.local` apontando para `http://127.0.0.1:8000`.
+- o frontend so e iniciado depois que o backend responde, para evitar `502` no proxy local.
+- o script desliga Redis no ambiente local (`CACHE__ENABLE_REDIS=false`) para nao bloquear o bootstrap.
 
 ## 14) Regras para Mudancas por IA
 
@@ -326,5 +377,5 @@ Motivo simples: caixas com nome ajudam a achar as coisas rapido.
 
 ## 16) Unknown / Nao Consolidado
 
-- Backend cloud (Render + Neon) ja esta operacional; ainda falta consolidar um guia unico para publicacao do frontend.
+- Backend cloud (Render + Neon) ja esta operacional; ainda falta consolidar rollout automatizado do artefato offline junto do deploy.
 - Estrategia final de desativacao do alias `resultados` no contrato publico: ainda nao definida.

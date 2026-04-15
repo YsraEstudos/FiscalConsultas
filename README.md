@@ -1,12 +1,14 @@
 # Nesh / Fiscal
 
-Sistema híbrido de consulta fiscal (NESH + TIPI) com backend FastAPI e frontend React/Vite.
+Sistema de consulta fiscal com backend FastAPI, frontend React/Vite e modo offline total no navegador para `NESH`, `TIPI`, `NBS` e `NEBS`.
 
 ## O que é
 
 - Busca por código e texto nas Notas Explicativas do Sistema Harmonizado (NESH).
 - Busca na TIPI com visualização por família (`family`) ou capítulo (`chapter`).
+- Busca local em `NBS` e `NEBS`, com detalhe de catálogo e navegação por prefixo.
 - Frontend com navegação por abas, smart-links e recursos de produtividade (glossário, notas, chat IA).
+- Instalação offline em um botão: o app shell é cacheado e o banco local fica disponível no navegador após a instalação.
 
 ## Requisitos
 
@@ -174,11 +176,14 @@ Checklist rápido Clerk (dev local):
 ```powershell
 python scripts/setup_tipi_database.py
 uv run scripts/rebuild_index.py
+python scripts/setup_nbs_database.py
+python scripts/setup_nebs_database.py
 ```
 
 Observações:
 
 - `rebuild_index.py` (Fase 5) é o script consolidado: cria `database/nesh.db`, extrai seções e reconstrói o índice FTS com Stemming.
+- `setup_nbs_database.py` e `setup_nebs_database.py` alimentam `database/services.db`, usado por `NBS` e `NEBS`.
 - Em Windows com encoding CP1252, scripts com emoji podem falhar; usar `PYTHONUTF8=1` (o `uv run` geralmente lida bem com isso, mas o script `.bat` já automatiza essa configuração).
 
 ### 4) Subir aplicação
@@ -236,7 +241,49 @@ Arquivos gerados:
 - `database/fiscal_offline.enc`
 - `database/fiscal_offline.meta`
 
-Esses dois arquivos são o pacote offline usado pelo botão de instalação no navegador.
+Esses dois arquivos sao o pacote offline usado pelo botao de instalacao no navegador.
+
+Comportamento esperado do fluxo:
+
+- o frontend consulta `GET /api/database/version`
+- solicita um token efemero em `POST /api/database/token`
+- baixa o artefato em `POST /api/database/download`
+- grava o pacote em OPFS
+- inicializa o worker local
+- aquece o cache do app shell via `client/public/coi-serviceworker.js`
+
+Depois da instalacao concluida, as buscas e detalhes de `NESH`, `TIPI`, `NBS` e `NEBS` passam a funcionar localmente no navegador, inclusive apos recarregar a pagina sem rede, desde que o navegador suporte `SharedArrayBuffer` e OPFS.
+
+O que continua online por natureza, como autenticacao, comentarios e chat IA, entra em modo degradado quando nao ha rede, sem quebrar a navegacao base.
+
+### 6) Validar o modo offline no localhost
+
+O modo offline tambem deve funcionar em `http://127.0.0.1:5173/` durante o desenvolvimento local.
+
+Fluxo recomendado:
+
+1. gere ou atualize `database/fiscal_offline.enc` e `database/fiscal_offline.meta`
+2. rode `.\testar_tudo_local.bat`
+3. abra o frontend em `http://127.0.0.1:5173/`
+4. clique em `Baixar` no instalador offline
+5. espere o estado mudar para `Pronto`
+6. desligue a rede, recarregue e valide as buscas locais
+
+Importante:
+
+- o frontend local usa proxy para `http://127.0.0.1:8000`
+- se o backend nao subir, o Vite responde `502` nas rotas `/api/database/*`
+- o script `testar_tudo_local.bat` ja cria `client/.env.development.local` apontando para a API local
+- o script tambem sobe o backend com `CACHE__ENABLE_REDIS=false`, entao um warning de Redis nao deve bloquear o teste local
+
+### 7) Diagnostico rapido do instalador offline
+
+Se o botao de instalacao mostrar erro:
+
+- `502` em `/api/database/version` ou `/api/database/token`: o frontend subiu, mas o backend local nao respondeu na porta `8000`
+- `Offline database not available`: faltam `database/fiscal_offline.enc` e/ou `database/fiscal_offline.meta`
+- navegador sem suporte: o instalador entra em `unsupported` quando faltar `SharedArrayBuffer`, `Worker`, `crypto.subtle` ou OPFS
+- detalhe de `NBS`/`NEBS` sem rede: confirme que a instalacao terminou em `ready`; sem isso o frontend ainda pode precisar da API
 
 ## Deploy no Cloudflare
 
@@ -649,7 +696,7 @@ Mudanças principais já aplicadas:
 backend/         API FastAPI, serviços, repositórios e config
 client/          React + Vite + TypeScript
 scripts/         Setup de dados, migração e utilitários
-database/        SQLite local (nesh.db, tipi.db)
+database/        SQLite local + artefatos offline (nesh.db, tipi.db, services.db, fiscal_offline.*)
 migrations/      Alembic migrations (PostgreSQL)
 tests/           Suite principal do backend
 docs/            Documentação funcional/técnica

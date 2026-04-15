@@ -10,9 +10,11 @@ Este documento registra como a navegacao entre NESH/TIPI/NBS/NEBS funciona hoje 
 - `client/src/components/ResultDisplay.tsx`
 - `client/src/components/Sidebar.tsx`
 - `client/src/context/CrossChapterNoteContext.tsx`
+- `client/src/context/LocalDatabaseContext.tsx`
 - `client/src/components/ServicesWorkspace.tsx`
 - `client/src/components/ServicesTabContent.tsx`
 - `client/src/components/SettingsModal.tsx`
+- `client/src/hooks/useServicesAccess.ts`
 
 ## 2) Context Menu Cross-Doc
 
@@ -97,6 +99,13 @@ Contexto: `CrossChapterNoteContext`.
 - se `nbsChapterNotesNewTab` estiver ligado em `SettingsContext`, o mesmo conteudo pode abrir em nova aba.
 - os trechos destacados dentro das notas usam `service-smart-link` e continuam navegaveis pela mesma infraestrutura de smart-links.
 
+### 6.3 Comportamento offline
+
+- quando `LocalDatabaseContext.status === "ready"`, `useSearch` prioriza o worker local para `NBS`, `NEBS`, `TIPI` e `NESH`
+- detalhes de `NBS` e `NEBS` passam a ser resolvidos localmente por `getNbsDetailLocal` e `getNebsDetailLocal`
+- `useServicesAccess` deixa de bloquear a entrada de servicos quando o pacote offline esta pronto, mesmo sem rede
+- o objetivo do contrato atual e evitar nova ida ao backend para busca e leitura desses quatro dominios apos a instalacao
+
 ## 7) Navegacao Lateral (Sidebar)
 
 ### 6.1 Estrutura
@@ -135,6 +144,7 @@ Contexto: `CrossChapterNoteContext`.
 Detalhe critico:
 
 - quando ocorre skip fetch, `useSearch` atualiza `results.query` para manter `targetId` sincronizado no `ResultDisplay`.
+- no fluxo offline, esse mesmo hook tambem decide quando usar o worker local em vez da API, sem mudar o contrato visual da aba.
 
 ## 9) Integracao com Auth e API
 
@@ -153,6 +163,7 @@ Importante:
 
 - a UI restrita reflete capacidades vindas de `/api/auth/me`.
 - controles sensiveis continuam exigindo validacao backend.
+- se o usuario estiver offline, recursos que dependem do backend devem degradar com aviso contextual, sem quebrar a navegacao entre abas ou a leitura local.
 
 ## 10) Riscos atuais de navegacao
 
@@ -171,3 +182,4 @@ Nao quebrar sem migracao coordenada:
 - formato de IDs `pos-...` e `chapter-{cap}-{secao}`
 - shape de resposta com `results` + `resultados`
 - a arvore NBS/NEBS espera que a hierarquia por prefixo continue consistente com os codigos retornados pelo backend
+- apos a instalacao offline, a arvore NBS/NEBS e os detalhes locais nao devem depender de uma nova chamada HTTP para continuar navegaveis

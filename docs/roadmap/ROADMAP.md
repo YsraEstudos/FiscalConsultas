@@ -190,15 +190,15 @@ jobs:
 
 *Tirar tudo do localhost e colocar na nuvem.*
 
-### Guia para Iniciantes: o que o script start_nesh_dev.bat faz (e o que nao faz)
+### Guia para Iniciantes: o que o script testar_tudo_local.bat faz (e o que nao faz)
 
-- O script de desenvolvimento ajuda a validar o ambiente local, subir Docker, iniciar backend/frontend e checar se os servicos responderam.
+- O script de desenvolvimento ajuda a validar o ambiente local, iniciar backend/frontend e checar se os servicos responderam.
 - Isso e excelente para desenvolvimento e testes na sua maquina.
 - Isso nao substitui deploy de producao para usuarios reais.
 
 Em resumo:
 
-- Ambiente local (dev): start_nesh_dev.bat.
+- Ambiente local (dev): `testar_tudo_local.bat`.
 - Ambiente publico (producao): plataforma de deploy + dominio + HTTPS + variaveis seguras + monitoramento.
 
 ### Checklist de Publicacao (passo a passo simples)
@@ -212,6 +212,9 @@ Em resumo:
 - [ ] **[Frontend] Build estatico de Producao**
   - Gerar build com Vite e publicar artefatos estaticos em plataforma de frontend.
   - Configurar URL do backend via variavel de ambiente do frontend.
+- [ ] **[Offline] Anexar artefato offline ao release**
+  - Gerar `database/fiscal_offline.enc` e `database/fiscal_offline.meta` a partir dos bancos locais confiaveis.
+  - Validar o contrato de metadata antes de publicar o frontend.
 - [ ] **[Infra] Banco PostgreSQL gerenciado + backup**
   - Usar banco gerenciado (Neon, Railway, Render, etc.) com backup automatico.
   - Aplicar migracoes Alembic no ambiente de producao.
@@ -228,22 +231,41 @@ Em resumo:
 
 ### Rota recomendada (mais facil para iniciantes)
 
-- Frontend: Vercel ou Netlify.
+- Frontend: Cloudflare Pages ou GitHub Pages.
 - Backend: Render, Railway ou Fly.io.
 - Banco: PostgreSQL gerenciado.
+- Modo offline: empacotar e distribuir `fiscal_offline.enc` + `fiscal_offline.meta` junto do deploy aplicavel.
 
 Sequencia sugerida:
 
 - Publicar backend e validar endpoint de status.
 - Publicar frontend apontando para a URL publica do backend.
+- Publicar ou anexar o artefato offline e validar `GET /api/database/version`.
 - Configurar dominio e HTTPS.
 - Executar checklist de QA e liberar para usuarios.
 
 - [ ] **[Backend] Criar `Dockerfile` otimizado**
 - [ ] **[Infra] Setup do Banco PostgreSQL gerenciado (Neon/Railway)**
 - [ ] **[Infra] Deploy do Backend (Railway/Render)**
-- [ ] **[Infra] Deploy do Frontend (Vercel/Netlify)**
+- [ ] **[Infra] Deploy do Frontend (Cloudflare Pages/GitHub Pages)**
 - [ ] **[Infra] Configurar domínio e HTTPS**
+
+## 🆕 Fase 8.1: Modo Offline Total no Navegador ✅
+
+*Leitura e pesquisa fiscal local apos instalacao em um botao, mantendo a UX existente.*
+
+- [x] **[Frontend] Instalar banco local com um clique**
+  - `DatabaseInstaller` + `LocalDatabaseContext` controlam instalar, atualizar, remover e propagar estado entre abas.
+- [x] **[Frontend] Persistir artefato offline em OPFS**
+  - o worker local salva o pacote criptografado e reabre sem redownload desnecessario.
+- [x] **[Frontend] Cachear o app shell via service worker**
+  - `coi-serviceworker.js` passou a cobrir isolamento para SQLite WASM e shell offline.
+- [x] **[Frontend] Resolver `NESH`, `TIPI`, `NBS` e `NEBS` localmente**
+  - `useSearch` prioriza o worker local apos a instalacao.
+- [x] **[Backend] Distribuir artefato offline com metadata e token efemero**
+  - `version`, `token` e `download` cobrem o fluxo de distribuicao.
+- [ ] **[Release] Automatizar o empacotamento no fluxo oficial de deploy**
+  - consolidar `fiscal_offline.enc` e `fiscal_offline.meta` como artefatos obrigatorios do release.
 
 ## 🆕 Fase 9: Diferenciais de IA (Avançado) 🧠
 

@@ -4,6 +4,7 @@
 - Catch regressions early on API contracts and core search logic.
 - Keep local feedback fast and deterministic.
 - Make CI failures actionable (high signal, low flakiness).
+- Protect the offline install flow, app-shell cache, and local search contract for `NESH`, `TIPI`, `NBS`, and `NEBS`.
 
 ## Test Pyramid
 - Unit (`tests/unit`, `client/tests/unit`):
@@ -18,22 +19,22 @@
   - Run on demand for profiling/regression baselines.
 
 ## Top 10 Risk Areas (Execution Order)
-1. Sanitização de HTML/backend-rendered content no frontend (`contentSecurity.ts`, `MarkdownPane`, `ResultDisplay`).
-2. Gating de moderação/admin por role do Clerk (`AuthContext`, `authz.ts`, `ModalManager`).
-3. Capacidades de UI restrita vindas de `/api/auth/me`, sem expor allowlists no bundle público.
-4. Auth enforcement on `/api/ai/chat` (`401` vs `403` vs `200` contract).
-5. AI chat rate-limit behavior (`429` + `Retry-After` header).
-6. Webhook contract for `/api/webhooks/asaas` (token validation, payload validation, event routing).
-7. Search route contract aliasing (`results` vs `resultados`) for legacy frontend compatibility.
-8. TIPI route compatibility fields (`total_capitulos`, normalized text defaults).
-9. Cross-chapter note cache/dedup behavior on frontend.
-10. Existing NCM/TIPI unit+integration regression tests.
+1. Instalacao offline (`/api/database/version`, `/api/database/token`, `/api/database/download`) e validacao de metadata.
+2. App shell offline via `coi-serviceworker.js` e reabertura sem rede.
+3. Busca local e detalhe local para `NESH`, `TIPI`, `NBS` e `NEBS`.
+4. Sanitização de HTML/backend-rendered content no frontend (`contentSecurity.ts`, `MarkdownPane`, `ResultDisplay`).
+5. Gating de moderação/admin por role do Clerk (`AuthContext`, `authz.ts`, `ModalManager`).
+6. Capacidades de UI restrita vindas de `/api/auth/me`, sem expor allowlists no bundle público.
+7. Auth enforcement on `/api/ai/chat` (`401` vs `403` vs `200` contract).
+8. AI chat rate-limit behavior (`429` + `Retry-After` header).
+9. Webhook contract for `/api/webhooks/asaas` (token validation, payload validation, event routing).
+10. Existing NCM/TIPI/services unit+integration regression tests.
 
 ## Out of Scope (Initial)
-- Full E2E browser automation (Playwright): deferred to avoid extra CI flakiness now.
 - Real external auth/billing provider integration (Clerk/Asaas): mocked contracts only.
 - Performance assertions in default suite: kept as opt-in benchmarks.
 - Legacy diagnostic scripts should live outside collected pytest paths.
+- Full browser-matrix coverage is still opt-in; targeted offline browser flows are part of release validation.
 
 ## Conventions
 - Naming: `test_<feature>_<expected_behavior>.py` and `<Feature>.test.tsx`.
@@ -67,6 +68,9 @@
   - `cd client && npm run test:all`
 - Frontend coverage:
   - `cd client && npm run test:coverage`
+- Offline-focused suites:
+  - `.\.venv\Scripts\python -m pytest tests/unit/test_database_download_route.py -q`
+  - `cd client && npx vitest run tests/unit/useSearch.test.tsx tests/unit/useSearch.behavior.test.tsx tests/e2e/services-tabs.flow.test.tsx`
 
 ## Secrets Scanning (PR-focused)
 - Gitleaks (git history/repo scan):
@@ -77,6 +81,7 @@
 ## CI Policy
 - Run backend unit+integration (no perf/snapshot) on push/PR.
 - Run frontend stable tests on push/PR.
+- Keep the offline contract covered in CI whenever the install flow, worker, service worker, or services search changes.
 - Publish coverage artifacts for backend and frontend.
 - Enforce minimum coverage gates:
   - Backend: `--cov-fail-under=70` in CI.

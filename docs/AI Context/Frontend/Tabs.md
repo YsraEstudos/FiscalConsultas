@@ -35,6 +35,7 @@ Arquivos de validacao (testes):
 - `client/tests/unit/App.behavior.test.tsx`
 - `client/tests/integration/TabScrollPersistence.test.tsx`
 - `client/tests/integration/SameChapterNavigation.test.tsx`
+- `client/tests/e2e/services-tabs.flow.test.tsx`
 
 ## 3) Modelo de estado por aba (`Tab`)
 
@@ -147,6 +148,7 @@ Interferencia direta:
 
 - mudancas no estado de abas afetam dedup e heuristica de "mesmo capitulo".
 - reset de `loadedChaptersByDoc` (ao trocar doc) muda estrategia de busca subsequente.
+- com o modo offline instalado, o mesmo hook tambem passa a arbitrar worker local vs API sem mudar o contrato visual da aba.
 
 ## 5.2 Scroll, autoscroll e restauracao (`ResultDisplay` + App)
 
@@ -211,6 +213,13 @@ Interferencia direta:
 
 - alteracoes em montagem/desmontagem de tabs podem resetar UX de comentarios sem intencao.
 
+## 5.7 Modo offline e multiplas abas
+
+- `LocalDatabaseContext` coordena instalacao, atualizacao e remocao do pacote offline por `BroadcastChannel`
+- uma aba nao deve redownloadar o banco se outra aba ja estiver instalando ou se o pacote ja estiver em OPFS
+- o estado visual das abas de servicos deve convergir para `ready` sem reload manual quando outra aba concluir a instalacao
+- a busca local continua por worker por aba nesta entrega; o compartilhamento e do artefato e do estado, nao de um `SharedWorker`
+
 ## 6) Contratos que nao devem quebrar sem migracao coordenada
 
 1. `Tab.id` como chave estavel em toda pipeline.
@@ -245,6 +254,7 @@ Fluxos criticos:
 
 - `client/tests/integration/TabScrollPersistence.test.tsx`
 - `client/tests/integration/SameChapterNavigation.test.tsx`
+- `client/tests/e2e/services-tabs.flow.test.tsx`
 
 Comandos uteis:
 
@@ -265,5 +275,6 @@ npm run test -- SameChapterNavigation
 4. Confirmar que switch de documento nao sobrescreve aba ocupada indevidamente.
 5. Confirmar que drag-and-drop nao quebra close de aba ativa.
 6. Rodar testes unitarios e integracao de tabs/scroll.
-7. Atualizar este documento e `NavigationInteractions.md` quando houver mudanca de contrato.
+7. Validar que o comportamento offline em varias abas nao introduziu download duplicado nem perda de estado local.
+8. Atualizar este documento e `NavigationInteractions.md` quando houver mudanca de contrato.
 

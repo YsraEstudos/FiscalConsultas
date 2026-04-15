@@ -1,4 +1,4 @@
-# Fontes de Dados e Ingestao (estado real 2026-02-17)
+# Fontes de Dados e Ingestao (estado real 2026-04-15)
 
 Este documento cobre fontes, scripts e riscos de consistencia de dados no estado atual.
 
@@ -56,7 +56,22 @@ Tabelas principais:
 - `tipi_positions`
 - `tipi_fts`
 
-### 2.3 PostgreSQL (opcional)
+### 2.3 SQLite Servicos (`database/services.db`)
+
+Tabelas principais:
+
+- `nbs_items`
+- `nebs_items`
+- tabelas auxiliares de hierarquia e detalhe do catalogo de servicos
+
+### 2.4 Artefatos offline do navegador
+
+- `database/fiscal_offline.enc`
+- `database/fiscal_offline.meta`
+- gerados por `scripts/build_offline_db.py`
+- distribuidos pelo backend para instalacao local no navegador
+
+### 2.5 PostgreSQL (opcional)
 
 - schema por Alembic (`migrations/versions/*.py`)
 - modelos em `backend/domain/sqlmodels.py`
@@ -68,6 +83,9 @@ Tabelas principais:
 | `scripts/setup_database.py` | Setup principal NESH SQLite | extrai capitulos/posicoes/notas/secoes; precompute `parsed_notes_json` |
 | `scripts/setup_fulltext.py` | Cria/atualiza FTS no SQLite NESH | complementar ao setup principal |
 | `scripts/setup_tipi_database.py` | Setup principal TIPI SQLite | parse de xlsx + hierarquia + aliquota |
+| `scripts/setup_nbs_database.py` | Setup principal de NBS em `services.db` | carrega hierarquia, codigos e metadados do catalogo |
+| `scripts/setup_nebs_database.py` | Setup principal de NEBS em `services.db` | carrega explicacoes e entradas de detalhe confiaveis |
+| `scripts/build_offline_db.py` | Empacota o banco offline do navegador | gera `fiscal_offline.enc` e `fiscal_offline.meta` a partir dos bancos locais |
 | `scripts/migrate_to_postgres.py` | migracao SQLite -> PostgreSQL | necessario quando muda para engine postgres |
 | `scripts/rebuild_index.py` | rebuild alternativo NESH | usa fonte `data/debug_nesh/Nesh.txt`; nao necessariamente igual ao setup principal |
 | `scripts/ingest_markdown.py` | fluxo alternativo/legado | usa `raw_data/nesh.md`; regex e regras proprias; reescreve chapters/positions por heuristica |
@@ -94,6 +112,9 @@ Impacto:
 python scripts/setup_tipi_database.py
 $env:PYTHONUTF8="1"; python scripts/setup_database.py
 $env:PYTHONUTF8="1"; python scripts/setup_fulltext.py
+python scripts/setup_nbs_database.py
+python scripts/setup_nebs_database.py
+python scripts/build_offline_db.py
 ```
 
 ## 6) Fluxo Recomendado (PostgreSQL)
@@ -111,11 +132,13 @@ Nota:
 
 ## 7) Validacao Minima Pos-Ingestao
 
-1. `GET /api/status` deve retornar `database.status=online` e `tipi.status=online`.
+1. `GET /api/status` deve retornar `database.status=online`, `tipi.status=online` e o catalogo de servicos sem erro.
 2. Busca de codigo NESH (`/api/search?ncm=8517`) deve retornar `type=code` e `total_capitulos>0`.
 3. Busca textual NESH (`/api/search?ncm=bomba`) deve retornar `type=text`.
 4. Busca TIPI (`/api/tipi/search?ncm=8413`) deve retornar estrutura com `results/resultados`.
-5. A NBS no frontend deve conseguir abrir a arvore do ramo e o painel de explicacoes sem depender de uma nova aba do navegador, salvo quando o usuario ativar essa opcao nas configuracoes.
+5. `GET /api/database/version` deve retornar `version`, `size_bytes`, `sha256`, `built_at`, `format_version`, `chunk_size` e `pbkdf2_iterations`.
+6. O frontend, apos instalar o pacote offline, deve conseguir buscar `NBS`, `NEBS`, `TIPI` e `NESH` localmente sem nova chamada de detalhe ao backend.
+7. A NBS no frontend deve conseguir abrir a arvore do ramo e o painel de explicacoes sem depender de uma nova aba do navegador, salvo quando o usuario ativar essa opcao nas configuracoes.
 
 ## 8) Decisoes de Governanca de Dados
 
@@ -132,3 +155,4 @@ Nota:
 2. Remover duplicacao de regras regex em scripts e runtime.
 3. Definir status formal de `ingest_markdown.py` (ativo vs legado) no roadmap.
 4. Declarar pipeline oficial unico para reconstruir FTS sem ambiguidade (`setup_fulltext.py` vs `rebuild_index.py`).
+5. Formalizar no release que `fiscal_offline.enc` e `fiscal_offline.meta` sao obrigatorios quando o modo offline fizer parte do deploy.

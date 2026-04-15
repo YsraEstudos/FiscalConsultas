@@ -25,7 +25,25 @@ Contrato atual:
 - `NBS/NEBS` permanecem publicos para busca e detalhe (`/api/services/*`).
 - Clerk continua obrigatorio apenas nas rotas protegidas, como comentarios, perfil e chat IA.
 
-### 1.2 Validacao JWT Clerk
+### 1.2 Rotas publicas do pacote offline
+
+Arquivo: `backend/presentation/routes/database_download.py`.
+
+Rotas:
+
+- `GET /api/database/version`
+- `POST /api/database/token`
+- `POST /api/database/download`
+
+Controles ativos:
+
+- `version` expõe apenas metadata do artefato offline disponivel.
+- `token` usa rate limit por IP e gera token efemero de uso unico.
+- `download` exige token valido, expira rapidamente e consome o token no primeiro uso.
+- em producao, o backend recusa download inseguro fora de contexto local.
+- o token nao vai em query string; o download atual usa corpo JSON.
+
+### 1.3 Validacao JWT Clerk
 
 Funcao: `decode_clerk_jwt`.
 
@@ -135,11 +153,13 @@ Fluxo recomendado:
 - webhook com size guard.
 - auth de IA com rate limit.
 - comparacao de segredo/token com `secrets.compare_digest`.
+- download offline com token efemero, one-shot e `Cache-Control: no-store`.
 - CORS configurado com regex mais estrita em desenvolvimento local (`:5173`).
 - shell SPA (`client/index.html`) publica:
   - `Content-Security-Policy`
   - `referrer` policy
   - `Permissions-Policy`
+- `coi-serviceworker.js` mantem COOP/COEP e cache do app shell para o modo offline total.
 - frontend sanitiza HTML renderizado e endurece links/imagens em `client/src/utils/contentSecurity.ts`.
 - frontend nao depende de cookies ambiente para auth cross-origin (`withCredentials: false` no axios client).
 
@@ -150,6 +170,7 @@ Fluxo recomendado:
 3. ambientes sem `AUTH__CLERK_DOMAIN` nao validam JWT e podem bloquear fluxos autenticados.
 4. `TenantMiddleware` usa task background sem observabilidade forte de falha.
 5. endpoint `/api/auth/me` e publico por design; qualquer nova capability ali precisa continuar sendo derivada de policy backend, sem expor dados sensiveis.
+6. o pacote offline no navegador nao deve ser tratado como sigilo forte contra o proprio usuario; a seguranca real aqui e integridade, origem correta e reducao de abuso do endpoint.
 
 ## 10) Checklist Operacional de Seguranca
 
