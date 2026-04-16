@@ -21,6 +21,7 @@ def _build_request(
     method: str = "POST",
     headers: dict[str, str] | None = None,
     client_host: str = "127.0.0.1",
+    scheme: str = "http",
 ) -> Request:
     scope_headers = [
         (key.lower().encode("latin-1"), value.encode("latin-1"))
@@ -31,7 +32,7 @@ def _build_request(
         "method": method,
         "path": path,
         "headers": scope_headers,
-        "scheme": "http",
+        "scheme": scheme,
         "client": (client_host, 12345),
         "server": ("testserver", 80),
         "app": SimpleNamespace(state=SimpleNamespace()),
@@ -116,6 +117,38 @@ async def test_download_requires_same_ip_that_requested_token(offline_bundle):
         )
 
     assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_download_token_is_not_ip_bound_for_untrusted_private_proxy_hops(
+    offline_bundle, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(database_download.settings.server, "env", "production")
+    token_request = _build_request(
+        "/api/database/token",
+        headers={
+            "host": "fiscal.example.com",
+            "x-forwarded-for": "198.51.100.10",
+        },
+        client_host="10.0.0.10",
+        scheme="https",
+    )
+    token_payload = await database_download.create_download_token(token_request)
+
+    response = await database_download.download_database(
+        _build_request(
+            "/api/database/download",
+            headers={
+                "host": "fiscal.example.com",
+                "x-forwarded-for": "198.51.100.10",
+            },
+            client_host="10.0.0.11",
+            scheme="https",
+        ),
+        database_download.DownloadDatabaseRequest(token=token_payload["token"]),
+    )
+
+    assert Path(response.path).read_bytes() == b"encrypted-bundle"
 
 
 @pytest.mark.asyncio
