@@ -87,7 +87,7 @@
 .content {
     grid-column: 1;
     flex: 1;
-    overflow-y: auto;
+    overflow-y: scroll; /* Fix: always preserve scroll layout width avoiding horizontal jumps */
     position: relative;
     scroll-padding-top: var(--scroll-offset, 120px);
     display: flex;
