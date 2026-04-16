@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { StrictMode, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ClerkProvider } from '@clerk/react'
 import './index.css'
@@ -79,7 +79,7 @@ function RootApp() {
 
     const anonymousReason = useMemo(() => fallbackReason || getClerkUnavailableMessage(), [fallbackReason]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (mode !== 'clerk') return undefined;
 
         const activateAnonymousMode = () => {

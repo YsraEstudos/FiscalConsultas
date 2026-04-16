@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const refs = vi.hoisted(() => ({
@@ -33,6 +33,17 @@ vi.mock('@clerk/react', () => ({
 vi.mock('../../src/context/AuthContext', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="auth-provider">{children}</div>
+  ),
+  AnonymousAuthProvider: ({
+    children,
+    reason,
+  }: {
+    children: React.ReactNode;
+    reason: string | null;
+  }) => (
+    <div data-testid="anonymous-auth-provider" data-reason={reason ?? ''}>
+      {children}
+    </div>
   ),
 }));
 
@@ -129,6 +140,35 @@ describe('main.tsx bootstrap', () => {
       expect(screen.getByText(/npm run dev/)).toBeInTheDocument();
     } finally {
       consoleErrorSpy.mockRestore();
+    }
+  });
+
+  it('falls back to anonymous mode when Clerk startup is blocked', async () => {
+    vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', 'pk_test_123');
+    document.body.innerHTML = '<div id="root"></div>';
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      await loadMainModule();
+      render(<>{refs.capturedNode.current}</>);
+
+      act(() => {
+        globalThis.dispatchEvent(
+          new ErrorEvent('error', {
+            message: 'Clerk: Failed to load Clerk JS',
+          }),
+        );
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('anonymous-auth-provider')).toBeInTheDocument();
+      });
+      expect(screen.getByTestId('anonymous-auth-provider').getAttribute('data-reason')).toContain('autenticacao');
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[AuthBootstrap] Clerk error intercepted during startup. Falling back to signed-out mode.',
+      );
+    } finally {
+      consoleWarnSpy.mockRestore();
     }
   });
 });
