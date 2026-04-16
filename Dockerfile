@@ -18,8 +18,12 @@ RUN uv sync --frozen --no-dev
 COPY backend ./backend
 COPY migrations ./migrations
 COPY scripts ./scripts
+COPY database/fiscal_offline.enc ./database/fiscal_offline.enc
+COPY database/fiscal_offline.meta ./database/fiscal_offline.meta
 COPY Nesh.py alembic.ini README.md ./
 RUN test -f /app/backend/server/app.py \
+    && test -f /app/database/fiscal_offline.enc \
+    && test -f /app/database/fiscal_offline.meta \
     && mkdir -p database \
     && chown -R app:app /app
 
