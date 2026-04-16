@@ -8,8 +8,6 @@ Provides:
 """
 
 from __future__ import annotations
-
-import ipaddress
 import json
 import logging
 import os
@@ -49,7 +47,6 @@ _TOKEN_LIMIT_PER_HOUR = 3
 # ---------------------------------------------------------------------------
 _TOKEN_TTL_SECONDS = 300  # 5 minutes
 _REDIS_TOKEN_PREFIX = "dbtoken:"
-_UNBOUND_TOKEN_MARKER = "__unbound__"
 
 # In-memory token store (fallback when Redis unavailable)
 _memory_tokens: dict[str, tuple[float, str]] = {}  # jti -> (created_at, client_ip)
@@ -128,37 +125,12 @@ def _enforce_secure_request(request: Request) -> None:
     )
 
 
-def _resolve_token_binding(request: Request) -> str | None:
-    direct_ip = request.client.host if request.client and request.client.host else None
-    resolved_ip = extract_client_ip(request)
-    if not resolved_ip or resolved_ip == "unknown":
-        return None
-    if _is_local_request(request):
-        return resolved_ip
-
-    forwarded_for = request.headers.get("X-Forwarded-For", "").strip()
-    if forwarded_for and _is_trusted_proxy(direct_ip):
-        return resolved_ip
-
-    try:
-        ip = ipaddress.ip_address(resolved_ip)
-    except ValueError:
-        return None
-
-    if ip.is_loopback:
-        return resolved_ip
-    if ip.is_private:
-        return None
-    return resolved_ip
-
-
-async def _store_token(jti: str, client_ip: str | None) -> None:
+async def _store_token(jti: str) -> None:
     """Store a one-time token (Redis preferred, memory fallback)."""
-    stored_binding = client_ip or _UNBOUND_TOKEN_MARKER
     if redis_cache.available:
         key = f"{_REDIS_TOKEN_PREFIX}{jti}"
         if await redis_cache.set_with_ttl(
-            key, stored_binding, ttl_seconds=_TOKEN_TTL_SECONDS
+            key, "1", ttl_seconds=_TOKEN_TTL_SECONDS
         ):
             return
 
@@ -177,25 +149,15 @@ async def _store_token(jti: str, client_ip: str | None) -> None:
         oldest_key = min(_memory_tokens, key=lambda k: _memory_tokens[k][0])
         del _memory_tokens[oldest_key]
 
-    _memory_tokens[jti] = (now, stored_binding)
+    _memory_tokens[jti] = (now, "1")
 
 
-async def _consume_token(jti: str, client_ip: str | None) -> bool:
+async def _consume_token(jti: str) -> bool:
     """Verify and consume a one-time token. Returns True if valid."""
     if redis_cache.available:
         key = f"{_REDIS_TOKEN_PREFIX}{jti}"
         stored_ip = await redis_cache.consume_once(key)
-        if stored_ip is not None:
-            normalized_ip = (
-                stored_ip.decode("utf-8")
-                if isinstance(stored_ip, bytes)
-                else str(stored_ip)
-            )
-            if normalized_ip == _UNBOUND_TOKEN_MARKER:
-                return True
-            if not client_ip:
-                return False
-            return secrets.compare_digest(normalized_ip, client_ip)
+        return stored_ip is not None
 
     # Memory fallback
     now = time.monotonic()
@@ -205,11 +167,7 @@ async def _consume_token(jti: str, client_ip: str | None) -> bool:
     created_at, stored_ip = entry
     if now - created_at > _TOKEN_TTL_SECONDS:
         return False  # Expired
-    if stored_ip == _UNBOUND_TOKEN_MARKER:
-        return True
-    if not client_ip:
-        return False
-    return secrets.compare_digest(stored_ip, client_ip)
+    return bool(stored_ip)
 
 
 # ---------------------------------------------------------------------------
@@ -250,8 +208,7 @@ async def create_download_token(request: Request):
     The token expires after 5 minutes and can only be used once.
     """
     _enforce_secure_request(request)
-    client_ip = extract_client_ip(request)
-    limiter_key = f"db-download:ip:{client_ip}"
+    limiter_key = f"db-download:ip:{extract_client_ip(request)}"
 
     allowed, retry_after = await _token_rate_limiter.consume(
         key=limiter_key, limit=_TOKEN_LIMIT_PER_HOUR
@@ -271,7 +228,7 @@ async def create_download_token(request: Request):
         raise HTTPException(status_code=503, detail="Offline database file missing")
 
     jti = _generate_token_jti()
-    await _store_token(jti, _resolve_token_binding(request))
+    await _store_token(jti)
 
     return {
         "token": jti,
@@ -301,7 +258,7 @@ async def download_database(
     if not token or len(token) < 16:
         raise HTTPException(status_code=400, detail="Invalid token format")
 
-    is_valid = await _consume_token(token, _resolve_token_binding(request))
+    is_valid = await _consume_token(token)
     if not is_valid:
         raise HTTPException(
             status_code=403,

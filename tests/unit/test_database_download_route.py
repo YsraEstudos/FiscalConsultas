@@ -98,7 +98,7 @@ async def test_get_database_version_exposes_offline_contract(offline_bundle):
 
 
 @pytest.mark.asyncio
-async def test_download_requires_same_ip_that_requested_token(offline_bundle):
+async def test_download_accepts_fresh_token(offline_bundle):
     token_request = _build_request("/api/database/token")
     token_payload = await database_download.create_download_token(token_request)
 
@@ -109,46 +109,6 @@ async def test_download_requires_same_ip_that_requested_token(offline_bundle):
 
     assert Path(response.path).read_bytes() == b"encrypted-bundle"
     assert response.headers["Cross-Origin-Resource-Policy"] == "same-origin"
-
-    with pytest.raises(HTTPException) as exc:
-        await database_download.download_database(
-            _build_request("/api/database/download", client_host="127.0.0.2"),
-            database_download.DownloadDatabaseRequest(token=token_payload["token"]),
-        )
-
-    assert exc.value.status_code == 403
-
-
-@pytest.mark.asyncio
-async def test_download_token_is_not_ip_bound_for_untrusted_private_proxy_hops(
-    offline_bundle, monkeypatch: pytest.MonkeyPatch
-):
-    monkeypatch.setattr(database_download.settings.server, "env", "production")
-    token_request = _build_request(
-        "/api/database/token",
-        headers={
-            "host": "fiscal.example.com",
-            "x-forwarded-for": "198.51.100.10",
-        },
-        client_host="10.0.0.10",
-        scheme="https",
-    )
-    token_payload = await database_download.create_download_token(token_request)
-
-    response = await database_download.download_database(
-        _build_request(
-            "/api/database/download",
-            headers={
-                "host": "fiscal.example.com",
-                "x-forwarded-for": "198.51.100.10",
-            },
-            client_host="10.0.0.11",
-            scheme="https",
-        ),
-        database_download.DownloadDatabaseRequest(token=token_payload["token"]),
-    )
-
-    assert Path(response.path).read_bytes() == b"encrypted-bundle"
 
 
 @pytest.mark.asyncio
