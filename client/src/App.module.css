@@ -68,3 +68,32 @@
     color: var(--text-secondary);
     font-size: 0.95rem;
 }
+
+/* Loading Overlay for Stale-While-Revalidate */
+.loadingOverlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--bg-secondary);
+    opacity: 0.6;
+    z-index: 40;
+    backdrop-filter: blur(2px);
+    pointer-events: none;
+}
+
+.loadingSpinnerContainer {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 50;
+    background: var(--bg-primary);
+    padding: 1rem;
+    border-radius: 50%;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}

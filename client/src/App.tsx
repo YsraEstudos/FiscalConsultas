@@ -22,6 +22,7 @@ import styles from './App.module.css';
 
 import { ModalManager } from './components/ModalManager';
 import { ServicesTabContent } from './components/ServicesTabContent';
+import { Spinner } from './components/Spinner';
 
 function splitSearchTerms(raw: string): string[] {
     // Split only on commas — spaces are kept as part of multi-word queries
@@ -495,8 +496,18 @@ function App() {
                             activeTabId={activeTabId}
                             className={styles.tabPane}
                         >
-                            {/* Loading unificado: mostra skeleton se carregando OU se o conteudo ainda nao esta pronto */}
-                            {(tab.loading || (tab.results && tab.isContentReady === false)) && <ResultSkeleton />}
+                            {/* Loading inicial: mostra skeleton APENAS se estiver carregando E nao tiver resultados ainda */}
+                            {(tab.loading && !tab.results) && <ResultSkeleton />}
+
+                            {/* Mostrar overlay de carregamento se já temos resultados mas estamos buscando de novo */}
+                            {tab.loading && !!tab.results && (
+                                <>
+                                    <div className={styles.loadingOverlay} />
+                                    <div className={styles.loadingSpinnerContainer}>
+                                        <Spinner />
+                                    </div>
+                                </>
+                            )}
 
                             {tab.error && (
                                 <div className={styles.emptyState}>
@@ -518,7 +529,7 @@ function App() {
                                 </div>
                             )}
 
-                            {!tab.loading && tab.results && (tab.document === 'nbs' || tab.document === 'nebs') && (
+                            {tab.results && (tab.document === 'nbs' || tab.document === 'nebs') && (
                                 <ServicesTabContent
                                     doc={tab.document}
                                     data={tab.results as NbsSearchResponse | NebsSearchResponse}
@@ -543,7 +554,7 @@ function App() {
                                 />
                             )}
 
-                            {!tab.loading && tab.results && tab.document !== 'nbs' && tab.document !== 'nebs' && (
+                            {tab.results && tab.document !== 'nbs' && tab.document !== 'nebs' && (
                                 <ResultDisplay
                                     data={tab.results}
                                     latestTextQuery={tab.latestTextQuery}

@@ -1624,7 +1624,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     const contentVisibilityClass = getContentVisibilityClass(styles, isContentReady);
     const commentToggleLabel = getCommentToggleLabel(commentsEnabled);
     const commentToggleClasses = getCommentToggleClassName(styles, commentsEnabled);
-    const shouldRenderSidebar = isContentReady && isActive && !!renderableCodeResults;
+    const shouldRenderSidebar = isActive && !!renderableCodeResults;
 
     return (
         <div className={wrapperClasses}>

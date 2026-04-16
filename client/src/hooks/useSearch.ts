@@ -197,8 +197,7 @@ export function useSearch(
             loading: true,
             error: null,
             ncm: query,
-            title: query,
-            isContentReady: false
+            title: query
         });
 
         try {
