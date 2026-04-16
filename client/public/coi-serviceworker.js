@@ -255,7 +255,14 @@ if (typeof window === "undefined") {
     }
 
     if ("serviceWorker" in navigator) {
-      const serviceWorkerUrl = new URL("/coi-serviceworker.js", window.location.origin);
+      const currentScriptSrc =
+        document.currentScript instanceof HTMLScriptElement
+          ? document.currentScript.src
+          : null;
+      const serviceWorkerUrl = new URL(
+        "coi-serviceworker.js",
+        currentScriptSrc || window.location.href
+      );
       navigator.serviceWorker
         .register(serviceWorkerUrl.href)
         .then(
