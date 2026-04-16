@@ -4,7 +4,7 @@
  * Renders inside the SettingsModal to manage the offline search database.
  * Shows status, progress, and actions for installing/removing the local DB.
  */
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { useLocalDatabase } from "../context/LocalDatabaseContext";
 import styles from "./DatabaseInstaller.module.css";
 
@@ -49,11 +49,10 @@ export default function DatabaseInstaller() {
     error,
     dbSizeBytes,
     isSupported,
+    isRemoving,
     install,
     remove,
   } = useLocalDatabase();
-
-  const [isRemoving, setIsRemoving] = useState(false);
 
   const handleInstall = useCallback(async () => {
     try {
@@ -64,11 +63,10 @@ export default function DatabaseInstaller() {
   }, [install]);
 
   const handleRemove = useCallback(async () => {
-    setIsRemoving(true);
     try {
       await remove();
     } finally {
-      setIsRemoving(false);
+      // Removal lifecycle is tracked in the shared context.
     }
   }, [remove]);
 

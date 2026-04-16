@@ -87,6 +87,7 @@ interface LocalDatabaseState {
   error: string | null;
   dbSizeBytes: number | null;
   isSupported: boolean;
+  isRemoving: boolean;
 }
 
 interface LocalSearchResult {
@@ -110,7 +111,30 @@ interface LocalDatabaseContextType extends LocalDatabaseState {
   getNebsDetailLocal: (code: string) => Promise<NebsDetailResponse | null>;
 }
 
-const LocalDatabaseContext = createContext<LocalDatabaseContextType | null>(null);
+const DEFAULT_LOCAL_DATABASE_CONTEXT: LocalDatabaseContextType = {
+  status: "unsupported",
+  progress: 0,
+  progressStep: "",
+  localVersion: null,
+  remoteVersion: null,
+  updateAvailable: false,
+  error: null,
+  dbSizeBytes: null,
+  isSupported: false,
+  isRemoving: false,
+  install: async () => {
+    throw new Error("Offline DB not supported in this browser");
+  },
+  remove: async () => undefined,
+  refreshAvailability: async () => null,
+  searchLocal: async () => null,
+  getNbsDetailLocal: async () => null,
+  getNebsDetailLocal: async () => null,
+};
+
+const LocalDatabaseContext = createContext<LocalDatabaseContextType>(
+  DEFAULT_LOCAL_DATABASE_CONTEXT
+);
 
 function isOfflineDbSupported(): boolean {
   if (typeof SharedArrayBuffer === "undefined") return false;
@@ -221,11 +245,26 @@ function buildInitPayload(
   };
 }
 
+function runInBackground(task: Promise<unknown>) {
+  task.catch(() => undefined);
+}
+
+let fallbackInstanceCounter = 0;
+
+function createInstanceId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return `offline-db-${globalThis.crypto.randomUUID()}`;
+  }
+
+  fallbackInstanceCounter += 1;
+  return `offline-db-${Date.now()}-${fallbackInstanceCounter}`;
+}
+
 export function LocalDatabaseProvider({
   children,
 }: Readonly<{ children: ReactNode }>) {
   const isSupported = useMemo(() => isOfflineDbSupported(), []);
-  const instanceIdRef = useRef(`offline-db-${Date.now()}-${Math.random()}`);
+  const instanceIdRef = useRef(createInstanceId());
   const pendingRef = useRef<Map<string, PendingRequest>>(new Map());
   const workerRef = useRef<Worker | null>(null);
   const channelRef = useRef<BroadcastChannel | null>(null);
@@ -256,6 +295,7 @@ export function LocalDatabaseProvider({
   const [dbSizeBytes, setDbSizeBytes] = useState<number | null>(
     remoteMetaRef.current?.size_bytes || null
   );
+  const [isRemoving, setIsRemoving] = useState(false);
 
   const updateAvailable = useMemo(
     () =>
@@ -414,6 +454,7 @@ export function LocalDatabaseProvider({
   const handleWorkerMessage = useCallback(
     (event: MessageEvent<WorkerMessage>) => {
       const { type, id, payload } = event.data;
+      const pending = id ? pendingRef.current.get(id) : undefined;
 
       if (type === "PROGRESS") {
         setProgress((payload.progress as number) || 0);
@@ -431,24 +472,35 @@ export function LocalDatabaseProvider({
           setProgressStep("done");
           setError(null);
         }
+        if (
+          id &&
+          pending &&
+          (nextStatus === "ready" || nextStatus === "not_installed")
+        ) {
+          clearTimeout(pending.timeout);
+          pendingRef.current.delete(id);
+          pending.resolve(event.data);
+        }
+        return;
+      }
+
+      if (type === "RESULT") {
+        if (!id || !pending) return;
+        clearTimeout(pending.timeout);
+        pendingRef.current.delete(id);
+        pending.resolve(event.data);
+        return;
       }
 
       if (type === "ERROR") {
         setError((payload.error as string) || "Unknown error");
         setStatus("error");
-      }
-
-      if (id && pendingRef.current.has(id)) {
-        const pending = pendingRef.current.get(id)!;
+        if (!id || !pending) return;
         clearTimeout(pending.timeout);
         pendingRef.current.delete(id);
-        if (type === "ERROR") {
-          pending.reject(
-            new Error((payload.error as string) || "Worker error")
-          );
-        } else {
-          pending.resolve(event.data);
-        }
+        pending.reject(
+          new Error((payload.error as string) || "Worker error")
+        );
       }
     },
     []
@@ -470,9 +522,9 @@ export function LocalDatabaseProvider({
 
     const onReady = () => {
       workerReadyRef.current = true;
-      void initializeInstalledDatabase();
-      void refreshAvailability(false);
-      void primeOfflineShellCache();
+      runInBackground(initializeInstalledDatabase());
+      runInBackground(refreshAvailability(false));
+      runInBackground(primeOfflineShellCache());
     };
 
     const readyListener = (event: MessageEvent<WorkerMessage>) => {
@@ -522,10 +574,13 @@ export function LocalDatabaseProvider({
         applyInstalledMetadata(message.payload.metadata);
         setProgress(95);
         setProgressStep("syncing_with_other_tab");
-        void initializeInstalledDatabase(message.payload.metadata).finally(() => {
-          void primeOfflineShellCache();
-          resolveSyncWaiter();
-        });
+        runInBackground(
+          initializeInstalledDatabase(message.payload.metadata)
+            .finally(() => primeOfflineShellCache())
+            .finally(() => {
+              resolveSyncWaiter();
+            })
+        );
         return;
       }
 
@@ -534,12 +589,14 @@ export function LocalDatabaseProvider({
         setProgress(0);
         setProgressStep("");
         setRemoteVersion(remoteMetaRef.current?.version || null);
-        void sendToWorker("REMOVE", {}, 10_000).catch(() => {
-          setStatus("not_installed");
-          setLocalVersion(null);
-          setDbSizeBytes(null);
-          setError(null);
-        });
+        runInBackground(
+          sendToWorker("REMOVE", {}, 10_000).catch(() => {
+            setStatus("not_installed");
+            setLocalVersion(null);
+            setDbSizeBytes(null);
+            setError(null);
+          })
+        );
         resolveSyncWaiter();
         return;
       }
@@ -569,7 +626,8 @@ export function LocalDatabaseProvider({
     }
 
     const targetStatus: DbStatus =
-      compareOfflineVersions(remoteVersion, localVersion) > 0 || !!localVersion
+      compareOfflineVersions(remoteVersion, localVersion) > 0 ||
+      localVersion !== null
         ? "updating"
         : "installing";
 
@@ -652,6 +710,7 @@ export function LocalDatabaseProvider({
   ]);
 
   const remove = useCallback(async () => {
+    setIsRemoving(true);
     try {
       await sendToWorker("REMOVE", {}, 10_000);
       persistStoredMetadata(null);
@@ -668,6 +727,8 @@ export function LocalDatabaseProvider({
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Removal failed");
+    } finally {
+      setIsRemoving(false);
     }
   }, [broadcast, sendToWorker]);
 
@@ -759,6 +820,7 @@ export function LocalDatabaseProvider({
       error,
       dbSizeBytes,
       isSupported,
+      isRemoving,
       install,
       remove,
       refreshAvailability,
@@ -772,6 +834,7 @@ export function LocalDatabaseProvider({
       getNebsDetailLocal,
       getNbsDetailLocal,
       install,
+      isRemoving,
       isSupported,
       localVersion,
       progress,
@@ -793,11 +856,9 @@ export function LocalDatabaseProvider({
 }
 
 export function useLocalDatabase() {
-  const context = useContext(LocalDatabaseContext);
-  if (!context) {
-    throw new Error(
-      "useLocalDatabase must be used within a LocalDatabaseProvider"
-    );
-  }
-  return context;
+  return useContext(LocalDatabaseContext);
+}
+
+export function useOptionalLocalDatabase() {
+  return useContext(LocalDatabaseContext);
 }

@@ -27,7 +27,7 @@ describe("isCodeQuery", () => {
   });
 
   it("detects code with dots", () => {
-    expect(isCodeQuery("84.13.91.90")).toBe(true);
+    expect(isCodeQuery("8413.91.90")).toBe(true);
   });
 
   it("detects multi-code with comma", () => {

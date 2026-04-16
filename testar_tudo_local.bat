@@ -3,6 +3,17 @@ setlocal EnableExtensions EnableDelayedExpansion
 chcp 65001 >nul
 cd /d "%~dp0"
 
+set "NPM_CMD=npm.cmd"
+where "%NPM_CMD%" >nul 2>&1
+if errorlevel 1 (
+    if exist "%ProgramFiles%\nodejs\npm.cmd" (
+        set "NPM_CMD=%ProgramFiles%\nodejs\npm.cmd"
+    ) else (
+        echo [ERRO] npm.cmd nao encontrado no PATH nem em "%ProgramFiles%\nodejs".
+        goto :end
+    )
+)
+
 echo =======================================================
 echo   Teste Local Completo (Frontend + Backend)
 echo =======================================================
@@ -44,7 +55,7 @@ if exist "%~dp0.venv\Scripts\python.exe" (
     start "Nesh API (Teste Local)" /D "%~dp0" "%~dp0.venv\Scripts\python.exe" Nesh.py
 ) else (
     echo    Python da .venv nao encontrado. Usando uv run.
-    start "Nesh API (Teste Local)" cmd /k "cd /d ""%~dp0"" && set ""CACHE__ENABLE_REDIS=false"" && uv run Nesh.py"
+    start "Nesh API (Teste Local)" powershell -NoExit -NoProfile -ExecutionPolicy Bypass -Command "$env:CACHE__ENABLE_REDIS='false'; Set-Location -LiteralPath '%~dp0'; uv run Nesh.py"
 )
 
 echo    Aguardando o backend responder (ate 30s)...
@@ -74,7 +85,7 @@ echo.
 :: [3] Subir o Frontend
 :: -----------------------------------------------------------
 echo [3/4] Iniciando Frontend React (porta 5173)...
-start "Nesh Client (Teste Local)" /D "%~dp0client" "C:\Program Files\nodejs\npm.cmd" run dev -- --host 127.0.0.1
+start "Nesh Client (Teste Local)" /D "%~dp0client" "%ComSpec%" /k ""%NPM_CMD%" run dev -- --host 127.0.0.1"
 
 echo    Aguardando o Vite abrir (ate 20s)...
 set "VITE_OK=0"

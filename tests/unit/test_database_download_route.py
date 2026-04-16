@@ -42,8 +42,10 @@ def _build_request(
 @pytest.fixture(autouse=True)
 def _reset_token_store():
     database_download._memory_tokens.clear()
+    database_download._token_rate_limiter.reset()
     yield
     database_download._memory_tokens.clear()
+    database_download._token_rate_limiter.reset()
 
 
 @pytest.fixture
@@ -114,6 +116,62 @@ async def test_download_requires_same_ip_that_requested_token(offline_bundle):
         )
 
     assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_download_token_cannot_be_reused(offline_bundle):
+    token_request = _build_request("/api/database/token")
+    token_payload = await database_download.create_download_token(token_request)
+
+    first_response = await database_download.download_database(
+        _build_request("/api/database/download", client_host="127.0.0.1"),
+        database_download.DownloadDatabaseRequest(token=token_payload["token"]),
+    )
+
+    assert first_response.body == b"encrypted-bundle"
+
+    with pytest.raises(HTTPException) as exc:
+        await database_download.download_database(
+            _build_request("/api/database/download", client_host="127.0.0.1"),
+            database_download.DownloadDatabaseRequest(token=token_payload["token"]),
+        )
+
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_download_token_expires_after_ttl(offline_bundle):
+    token_request = _build_request("/api/database/token")
+    token_payload = await database_download.create_download_token(token_request)
+    token = token_payload["token"]
+    created_at, stored_ip = database_download._memory_tokens[token]
+    database_download._memory_tokens[token] = (
+        created_at - database_download._TOKEN_TTL_SECONDS - 1,
+        stored_ip,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await database_download.download_database(
+            _build_request("/api/database/download", client_host="127.0.0.1"),
+            database_download.DownloadDatabaseRequest(token=token),
+        )
+
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_download_token_rate_limit_returns_retry_after(offline_bundle):
+    request = _build_request("/api/database/token", client_host="127.0.0.1")
+
+    for _ in range(database_download._TOKEN_LIMIT_PER_HOUR):
+        payload = await database_download.create_download_token(request)
+        assert payload["token"]
+
+    with pytest.raises(HTTPException) as exc:
+        await database_download.create_download_token(request)
+
+    assert exc.value.status_code == 429
+    assert int(exc.value.headers["Retry-After"]) >= 1
 
 
 @pytest.mark.asyncio

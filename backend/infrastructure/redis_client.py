@@ -24,6 +24,14 @@ except Exception:  # pragma: no cover - optional dependency
 from backend.config.logging_config import service_logger as logger
 from backend.config.settings import settings
 
+REDIS_CONSUME_ONCE_SCRIPT = """
+local value = redis.call('GET', KEYS[1])
+if value then
+    redis.call('DEL', KEYS[1])
+end
+return value
+"""
+
 
 @dataclass
 class RedisCache:
@@ -127,6 +135,27 @@ class RedisCache:
         except Exception as exc:
             logger.debug("Redis SET NX failed (%s): %s", key, exc)
             return False
+
+    async def set_with_ttl(
+        self, key: str, value: str | bytes, *, ttl_seconds: int
+    ) -> bool:
+        if self._client is None:
+            return False
+        try:
+            await self._client.setex(key, ttl_seconds, value)
+            return True
+        except Exception as exc:
+            logger.debug("Redis SETEX failed (%s): %s", key, exc)
+            return False
+
+    async def consume_once(self, key: str) -> bytes | str | None:
+        if self._client is None:
+            return None
+        try:
+            return await self._client.eval(REDIS_CONSUME_ONCE_SCRIPT, 1, key)
+        except Exception as exc:
+            logger.debug("Redis consume_once failed (%s): %s", key, exc)
+            return None
 
     @staticmethod
     def normalize_cache_token(value: str | None) -> str:

@@ -1,4 +1,5 @@
 import { useSettings } from "../context/SettingsContext";
+import { useLocalDatabase } from "../context/LocalDatabaseContext";
 import { ChangeEvent, useEffect } from "react";
 import {
   VIEW_MODE,
@@ -55,15 +56,25 @@ export function SettingsModal({
     restoreDefaults,
   } = useSettings();
   const isAdmin = useIsAdmin();
+  const { status: offlineDbStatus, isRemoving } = useLocalDatabase();
+  const isOfflineMutationInProgress =
+    offlineDbStatus === "installing" ||
+    offlineDbStatus === "updating" ||
+    isRemoving;
+
+  const handleRequestClose = () => {
+    if (isOfflineMutationInProgress) return;
+    onClose();
+  };
 
   // Close on ESC
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") handleRequestClose();
     };
     if (isOpen) globalThis.addEventListener("keydown", handleEsc);
     return () => globalThis.removeEventListener("keydown", handleEsc);
-  }, [isOpen, onClose]);
+  }, [handleRequestClose, isOpen]);
 
   if (!isOpen) return null;
 
@@ -79,7 +90,8 @@ export function SettingsModal({
       <button
         type="button"
         className={styles.backdrop}
-        onClick={onClose}
+        onClick={handleRequestClose}
+        disabled={isOfflineMutationInProgress}
         aria-label="Fechar configurações"
       />
       <dialog
@@ -94,7 +106,8 @@ export function SettingsModal({
           <h2 id="settings-modal-title">Configurações</h2>
           <button
             className={styles.closeBtn}
-            onClick={onClose}
+            onClick={handleRequestClose}
+            disabled={isOfflineMutationInProgress}
             aria-label="Fechar"
           >
             ×

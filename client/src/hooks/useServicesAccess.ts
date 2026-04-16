@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 
-import { useLocalDatabase } from '../context/LocalDatabaseContext';
+import { useOptionalLocalDatabase } from '../context/LocalDatabaseContext';
 import { getSystemStatus } from '../services/api';
 import {
     buildServiceCatalogSnapshot,
@@ -16,7 +16,7 @@ function isSnapshotFresh(snapshot: ServiceCatalogSnapshot): boolean {
 }
 
 export function useServicesAccess() {
-    const { status: offlineDbStatus } = useLocalDatabase();
+    const { status: offlineDbStatus } = useOptionalLocalDatabase();
     const [snapshot, setSnapshot] = useState<ServiceCatalogSnapshot>(
         UNKNOWN_SERVICE_CATALOG_SNAPSHOT,
     );

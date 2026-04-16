@@ -8,6 +8,27 @@ function resolveCredentiallessValue(payload) {
   return Boolean(payload?.credentialless);
 }
 
+function isTrustedMessageOrigin(event) {
+  if (event.origin && event.origin !== self.location.origin) {
+    return false;
+  }
+
+  const sourceUrl =
+    event.source && typeof event.source === "object" && "url" in event.source
+      ? event.source.url
+      : "";
+
+  if (!sourceUrl) {
+    return !event.origin || event.origin === self.location.origin;
+  }
+
+  try {
+    return new URL(sourceUrl).origin === self.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 function withCoiHeaders(response) {
   if (!response || response.status === 0) {
     return response;
@@ -80,6 +101,7 @@ if (typeof window === "undefined") {
   self.addEventListener("message", (event) => {
     const message = event.data;
     if (!message) return;
+    if (!isTrustedMessageOrigin(event)) return;
 
     if (message.type === "deregister") {
       self.registration
@@ -204,9 +226,11 @@ if (typeof window === "undefined") {
     const reloadedBySelf = window.sessionStorage.getItem("coiReloadedBySelf");
     window.sessionStorage.removeItem("coiReloadedBySelf");
 
+    const alreadyRetried = reloadedBySelf === "reload";
     const coepDegrading = reloadedBySelf === "coepdegrade";
     if (
       window.isSecureContext &&
+      !alreadyRetried &&
       !coepDegrading &&
       window.SharedArrayBuffer === undefined
     ) {
@@ -243,7 +267,11 @@ if (typeof window === "undefined") {
                 if (newSW.state === "installed" || newSW.state === "activating") {
                   notifyCoiMode(registration);
                 }
-                if (newSW.state === "activated" && !window.SharedArrayBuffer) {
+                if (
+                  newSW.state === "activated" &&
+                  !window.SharedArrayBuffer &&
+                  !alreadyRetried
+                ) {
                   window.sessionStorage.setItem("coiReloadedBySelf", "reload");
                   window.location.reload();
                 }
@@ -259,7 +287,11 @@ if (typeof window === "undefined") {
               });
             }
 
-            if (registration.active && !window.SharedArrayBuffer) {
+            if (
+              registration.active &&
+              !window.SharedArrayBuffer &&
+              !alreadyRetried
+            ) {
               window.sessionStorage.setItem("coiReloadedBySelf", "reload");
               window.location.reload();
             }

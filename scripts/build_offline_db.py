@@ -88,6 +88,13 @@ APP_SEED = _resolve_app_seed()
 # ---------------------------------------------------------------------------
 def _consolidate_databases(output_path: Path) -> None:
     """Read all source databases and create a single consolidated SQLite DB."""
+    required_inputs = [SERVICES_DB, TIPI_DB, NESH_DB]
+    missing = [path.name for path in required_inputs if not path.exists()]
+    if missing:
+        raise RuntimeError(
+            f"Missing required offline DB inputs: {', '.join(sorted(missing))}"
+        )
+
     if output_path.exists():
         output_path.unlink()
 
@@ -194,26 +201,25 @@ def _consolidate_databases(output_path: Path) -> None:
     # === Populate from source databases ===
 
     # NBS + NEBS from services.db
-    if SERVICES_DB.exists():
-        _log(f"Reading NBS/NEBS from {SERVICES_DB}...")
-        cursor.execute("ATTACH DATABASE ? AS svc", (str(SERVICES_DB),))  # nosec B608
+    _log(f"Reading NBS/NEBS from {SERVICES_DB}...")
+    cursor.execute("ATTACH DATABASE ? AS svc", (str(SERVICES_DB),))  # nosec B608
 
-        cursor.execute("""
+    cursor.execute("""
             INSERT OR IGNORE INTO nbs_items
                 (code, code_clean, description, parent_code, level, has_nebs, source_order)
             SELECT code, code_clean, description, parent_code, level,
                    has_nebs, source_order
             FROM svc.nbs_items
-        """)
-        nbs_count = cursor.rowcount
-        _log(f"  Inserted {nbs_count} NBS items")
+    """)
+    nbs_count = cursor.rowcount
+    _log(f"  Inserted {nbs_count} NBS items")
 
-        # Check if nebs_entries table exists in services.db
-        cursor.execute(
-            "SELECT 1 FROM svc.sqlite_master WHERE type='table' AND name='nebs_entries' LIMIT 1"
-        )
-        if cursor.fetchone():
-            cursor.execute("""
+    # Check if nebs_entries table exists in services.db
+    cursor.execute(
+        "SELECT 1 FROM svc.sqlite_master WHERE type='table' AND name='nebs_entries' LIMIT 1"
+    )
+    if cursor.fetchone():
+        cursor.execute("""
                 INSERT OR IGNORE INTO nebs_entries
                     (
                         code,
@@ -240,77 +246,69 @@ def _consolidate_databases(output_path: Path) -> None:
                     page_end
                 FROM svc.nebs_entries
                 WHERE parser_status = 'trusted'
-            """)
-            nebs_count = cursor.rowcount
-            _log(f"  Inserted {nebs_count} NEBS entries")
+        """)
+        nebs_count = cursor.rowcount
+        _log(f"  Inserted {nebs_count} NEBS entries")
 
-        conn.commit()
-        cursor.execute("DETACH DATABASE svc")
-    else:
-        _log(f"WARNING: {SERVICES_DB} not found, skipping NBS/NEBS")
+    conn.commit()
+    cursor.execute("DETACH DATABASE svc")
 
     # TIPI from tipi.db
-    if TIPI_DB.exists():
-        _log(f"Reading TIPI from {TIPI_DB}...")
-        cursor.execute("ATTACH DATABASE ? AS tipi", (str(TIPI_DB),))  # nosec B608
+    _log(f"Reading TIPI from {TIPI_DB}...")
+    cursor.execute("ATTACH DATABASE ? AS tipi", (str(TIPI_DB),))  # nosec B608
 
-        cursor.execute("""
+    cursor.execute("""
             INSERT OR IGNORE INTO tipi_positions
                 (ncm, capitulo, descricao, aliquota, nivel, ncm_sort)
             SELECT ncm, capitulo, descricao, aliquota, nivel, ncm_sort
             FROM tipi.tipi_positions
-        """)
-        tipi_count = cursor.rowcount
-        _log(f"  Inserted {tipi_count} TIPI positions")
+    """)
+    tipi_count = cursor.rowcount
+    _log(f"  Inserted {tipi_count} TIPI positions")
 
-        conn.commit()
-        cursor.execute("DETACH DATABASE tipi")
-    else:
-        _log(f"WARNING: {TIPI_DB} not found, skipping TIPI")
+    conn.commit()
+    cursor.execute("DETACH DATABASE tipi")
 
     # NESH positions + chapters + notes from nesh.db
-    if NESH_DB.exists():
-        _log(f"Reading NESH from {NESH_DB}...")
-        cursor.execute("ATTACH DATABASE ? AS nesh", (str(NESH_DB),))  # nosec B608
+    _log(f"Reading NESH from {NESH_DB}...")
+    cursor.execute("ATTACH DATABASE ? AS nesh", (str(NESH_DB),))  # nosec B608
 
-        cursor.execute("""
+    cursor.execute("""
             INSERT OR IGNORE INTO nesh_positions (codigo, descricao, chapter_num)
             SELECT codigo, descricao, chapter_num
             FROM nesh.positions
-        """)
-        nesh_pos_count = cursor.rowcount
-        _log(f"  Inserted {nesh_pos_count} NESH positions")
+    """)
+    nesh_pos_count = cursor.rowcount
+    _log(f"  Inserted {nesh_pos_count} NESH positions")
 
-        # NESH chapters (full content for offline rendering)
-        cursor.execute("""
+    # NESH chapters (full content for offline rendering)
+    cursor.execute("""
             INSERT OR IGNORE INTO nesh_chapters (chapter_num, content)
             SELECT chapter_num, content
             FROM nesh.chapters
-        """)
-        nesh_ch_count = cursor.rowcount
-        _log(f"  Inserted {nesh_ch_count} NESH chapters")
+    """)
+    nesh_ch_count = cursor.rowcount
+    _log(f"  Inserted {nesh_ch_count} NESH chapters")
 
-        # NESH chapter notes (structured sections)
-        cursor.execute("""
+    # NESH chapter notes (structured sections)
+    cursor.execute("""
             SELECT 1 FROM nesh.sqlite_master
             WHERE type='table' AND name='chapter_notes' LIMIT 1
-        """)
-        if cursor.fetchone():
-            cursor.execute("""
+    """)
+    if cursor.fetchone():
+        cursor.execute("""
                 INSERT OR IGNORE INTO nesh_chapter_notes
                     (chapter_num, notes_content, titulo, notas,
                      consideracoes, definicoes, parsed_notes_json)
                 SELECT chapter_num, notes_content, titulo, notas,
                        consideracoes, definicoes, parsed_notes_json
                 FROM nesh.chapter_notes
-            """)
-            nesh_notes_count = cursor.rowcount
-            _log(f"  Inserted {nesh_notes_count} NESH chapter notes")
+        """)
+        nesh_notes_count = cursor.rowcount
+        _log(f"  Inserted {nesh_notes_count} NESH chapter notes")
 
-        conn.commit()
-        cursor.execute("DETACH DATABASE nesh")
-    else:
-        _log(f"WARNING: {NESH_DB} not found, skipping NESH")
+    conn.commit()
+    cursor.execute("DETACH DATABASE nesh")
 
     conn.commit()
 
@@ -364,7 +362,7 @@ def _consolidate_databases(output_path: Path) -> None:
     conn.commit()
 
     # === Insert metadata ===
-    version = time.strftime("%Y.%m.%d.001")
+    version = time.strftime("%Y.%m.%d.%H%M%S", time.gmtime())
     cursor.executemany(
         "INSERT INTO db_metadata (key, value) VALUES (?, ?)",
         [
@@ -374,13 +372,11 @@ def _consolidate_databases(output_path: Path) -> None:
     )
     conn.commit()
 
-    # === Aggressive VACUUM ===
-    _log("Running VACUUM (pass 1 — pre-optimization)...")
+    # === Final compaction ===
+    _log("Running VACUUM...")
     cursor.execute("PRAGMA journal_mode=DELETE")
     cursor.execute("PRAGMA synchronous=FULL")
     conn.commit()
-
-    _log("Running VACUUM (pass 2 — main compaction)...")
     cursor.execute("VACUUM")
     conn.commit()
 
@@ -391,11 +387,6 @@ def _consolidate_databases(output_path: Path) -> None:
     if integrity_result and integrity_result[0] != "ok":
         raise RuntimeError(f"Integrity check failed: {integrity_result[0]}")
     _log("  Integrity: OK")
-
-    # Final VACUUM to ensure page_size is applied
-    _log("Running VACUUM (pass 3 — final)...")
-    cursor.execute("VACUUM")
-    conn.commit()
 
     conn.close()
 
@@ -497,7 +488,11 @@ def main() -> int:
     cursor = conn.cursor()
     cursor.execute("SELECT value FROM db_metadata WHERE key = 'version'")
     version_row = cursor.fetchone()
-    version = version_row[0] if version_row else time.strftime("%Y.%m.%d.001")
+    version = (
+        version_row[0]
+        if version_row
+        else time.strftime("%Y.%m.%d.%H%M%S", time.gmtime())
+    )
 
     cursor.execute("SELECT value FROM db_metadata WHERE key = 'built_at'")
     built_row = cursor.fetchone()

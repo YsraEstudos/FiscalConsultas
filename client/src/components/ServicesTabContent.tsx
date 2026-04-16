@@ -55,6 +55,10 @@ const EMPTY_NEBS_STATE: ServicesWorkspaceNebsState = {
 
 const DEFAULT_NBS_TREE_PAGE_SIZE = 50;
 
+function runInBackground(task: Promise<unknown>) {
+    task.catch(() => undefined);
+}
+
 function mergeNbsChapterItems(
     existingItems: readonly NbsDetailResponse['item'][],
     incomingItems: readonly NbsDetailResponse['item'][],
@@ -99,23 +103,18 @@ export function ServicesTabContent({
 
         try {
             const preferLocal = localDbStatus === 'ready';
-            const fetchDetailPage = async (page: number) => {
-                if (preferLocal) {
-                    return getNbsDetailLocal(code, {
-                        page,
+            let response: NbsDetailResponse | null = null;
+            if (preferLocal) {
+                try {
+                    response = await getNbsDetailLocal(code, {
+                        page: 1,
                         pageSize: DEFAULT_NBS_TREE_PAGE_SIZE,
                     });
+                } catch {
+                    response = null;
                 }
-
-                return getNbsServiceDetailPage(code, {
-                    includeTree: true,
-                    page,
-                    pageSize: DEFAULT_NBS_TREE_PAGE_SIZE,
-                });
-            };
-
-            let response = await fetchDetailPage(1);
-            if (!response && preferLocal) {
+            }
+            if (!response) {
                 response = await getNbsServiceDetailPage(code, {
                     includeTree: true,
                     page: 1,
@@ -141,17 +140,18 @@ export function ServicesTabContent({
 
                 while (lastPage.has_more) {
                     const nextPageNumber = currentPage + 1;
-                    let nextPageResponse = preferLocal
-                        ? await getNbsDetailLocal(code, {
-                            page: nextPageNumber,
-                            pageSize: firstPage.page_size,
-                        })
-                        : await getNbsServiceTreePage(
-                            code,
-                            nextPageNumber,
-                            firstPage.page_size,
-                        );
-                    if (!nextPageResponse && preferLocal) {
+                    let nextPageResponse = null;
+                    if (preferLocal) {
+                        try {
+                            nextPageResponse = await getNbsDetailLocal(code, {
+                                page: nextPageNumber,
+                                pageSize: firstPage.page_size,
+                            });
+                        } catch {
+                            nextPageResponse = null;
+                        }
+                    }
+                    if (!nextPageResponse) {
                         nextPageResponse = await getNbsServiceTreePage(
                             code,
                             nextPageNumber,
@@ -213,9 +213,14 @@ export function ServicesTabContent({
         setDetailStatus('loading');
 
         try {
-            let response = localDbStatus === 'ready'
-                ? await getNebsDetailLocal(code)
-                : null;
+            let response: NebsDetailResponse | null = null;
+            if (localDbStatus === 'ready') {
+                try {
+                    response = await getNebsDetailLocal(code);
+                } catch {
+                    response = null;
+                }
+            }
             if (!response) {
                 response = await getNebsEntryDetail(code);
             }
@@ -234,6 +239,14 @@ export function ServicesTabContent({
             toast.error(serviceError.message);
         }
     }, [getNebsDetailLocal, localDbStatus]);
+
+    const startNbsDetailLoad = useCallback((code: string) => {
+        runInBackground(loadNbsDetail(code));
+    }, [loadNbsDetail]);
+
+    const startNebsDetailLoad = useCallback((code: string) => {
+        runInBackground(loadNebsDetail(code));
+    }, [loadNebsDetail]);
 
     const firstResultCode = data.results[0]?.code || null;
     const preferredNbsCode = useMemo(() => {
@@ -278,11 +291,11 @@ export function ServicesTabContent({
                 setDetailStatus('idle');
                 return;
             }
-            void loadNbsDetail(preferredNbsCode);
+            startNbsDetailLoad(preferredNbsCode);
         } else {
-            void loadNebsDetail(firstResultCode);
+            startNebsDetailLoad(firstResultCode);
         }
-    }, [doc, firstResultCode, loadNbsDetail, loadNebsDetail, preferredNbsCode]);
+    }, [doc, firstResultCode, preferredNbsCode, startNebsDetailLoad, startNbsDetailLoad]);
 
     useEffect(() => {
         if (readySignalRef.current) return;
@@ -347,10 +360,10 @@ export function ServicesTabContent({
                     nbsState={nbsState}
                     nebsState={nebsState}
                     onSelectNbs={(code) => {
-                        void loadNbsDetail(code);
+                        startNbsDetailLoad(code);
                     }}
                     onSelectNebs={(code) => {
-                        void loadNebsDetail(code);
+                        startNebsDetailLoad(code);
                     }}
                     onSwitchDoc={onSwitchDoc}
                     onOpenDocInNewTab={onOpenDocInNewTab}

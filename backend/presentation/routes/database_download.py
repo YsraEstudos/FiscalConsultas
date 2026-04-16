@@ -53,6 +53,23 @@ _REDIS_TOKEN_PREFIX = "dbtoken:"
 _memory_tokens: dict[str, tuple[float, str]] = {}  # jti -> (created_at, client_ip)
 _MEMORY_TOKEN_MAX = 100
 
+_VERSION_RESPONSES = {503: {"description": "Offline database metadata is unavailable."}}
+_TOKEN_RESPONSES = {
+    400: {
+        "description": "Offline database token requests require HTTPS in production unless they originate locally."
+    },
+    429: {"description": "Rate limit exceeded for database download token requests."},
+    503: {"description": "Offline database metadata or encrypted file is unavailable."},
+}
+_DOWNLOAD_RESPONSES = {
+    400: {
+        "description": "Offline database downloads require HTTPS in production and a valid token format."
+    },
+    403: {"description": "The download token is invalid, expired, or already used."},
+    500: {"description": "The encrypted offline database could not be read."},
+    503: {"description": "The encrypted offline database file is unavailable."},
+}
+
 
 class DownloadDatabaseRequest(BaseModel):
     token: str = Field(min_length=16, max_length=256)
@@ -111,13 +128,12 @@ def _enforce_secure_request(request: Request) -> None:
 
 async def _store_token(jti: str, client_ip: str) -> None:
     """Store a one-time token (Redis preferred, memory fallback)."""
-    if redis_cache.available and redis_cache._client is not None:
+    if redis_cache.available:
         key = f"{_REDIS_TOKEN_PREFIX}{jti}"
-        try:
-            await redis_cache._client.setex(key, _TOKEN_TTL_SECONDS, client_ip)
+        if await redis_cache.set_with_ttl(
+            key, client_ip, ttl_seconds=_TOKEN_TTL_SECONDS
+        ):
             return
-        except Exception as exc:
-            logger.debug("Redis token store failed, using memory: %s", exc)
 
     # Memory fallback
     now = time.monotonic()
@@ -139,21 +155,16 @@ async def _store_token(jti: str, client_ip: str) -> None:
 
 async def _consume_token(jti: str, client_ip: str) -> bool:
     """Verify and consume a one-time token. Returns True if valid."""
-    if redis_cache.available and redis_cache._client is not None:
+    if redis_cache.available:
         key = f"{_REDIS_TOKEN_PREFIX}{jti}"
-        try:
-            stored_ip = await redis_cache._client.get(key)
-            if stored_ip is not None:
-                await redis_cache._client.delete(key)
-                normalized_ip = (
-                    stored_ip.decode("utf-8")
-                    if isinstance(stored_ip, bytes)
-                    else str(stored_ip)
-                )
-                return secrets.compare_digest(normalized_ip, client_ip)
-            # Token not found in Redis, but may be in memory fallback
-        except Exception as exc:
-            logger.debug("Redis token consume failed: %s", exc)
+        stored_ip = await redis_cache.consume_once(key)
+        if stored_ip is not None:
+            normalized_ip = (
+                stored_ip.decode("utf-8")
+                if isinstance(stored_ip, bytes)
+                else str(stored_ip)
+            )
+            return secrets.compare_digest(normalized_ip, client_ip)
 
     # Memory fallback
     now = time.monotonic()
@@ -171,7 +182,7 @@ async def _consume_token(jti: str, client_ip: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/version")
+@router.get("/version", responses=_VERSION_RESPONSES)
 async def get_database_version():
     """
     Return metadata about the available offline database.
@@ -195,7 +206,7 @@ async def get_database_version():
     }
 
 
-@router.post("/token")
+@router.post("/token", responses=_TOKEN_RESPONSES)
 async def create_download_token(request: Request):
     """
     Generate a one-time download token.
@@ -239,7 +250,7 @@ async def create_download_token(request: Request):
     }
 
 
-@router.post("/download")
+@router.post("/download", responses=_DOWNLOAD_RESPONSES)
 async def download_database(
     request: Request,
     payload: DownloadDatabaseRequest,
