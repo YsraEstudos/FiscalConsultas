@@ -1646,19 +1646,23 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                 }}
                 id={containerId}
             >
-                {shouldHydrateCodeResults && (isHydratingCodeResults || missingChapterBodies.length > 0) && (
-                    <p>Carregando conteúdo detalhado do capítulo...</p>
-                )}
-                {!shouldHydrateCodeResults && !data.markdown && !isTipiResults(renderableCodeResults || null) && (
-                    <p>Sem resultados para exibir.</p>
-                )}
-                {/* Texto renderizado via fragmentos HTML sanitizados */}
-                <div
-                    className={styles.contentText}
-                    ref={(el) => {
-                        (contentRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-                    }}
-                />
+                {/* O container interno organiza o conteúdo da esquerda verticalmente (mensagens + texto) */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                    {shouldHydrateCodeResults && (isHydratingCodeResults || missingChapterBodies.length > 0) && (
+                        <p>Carregando conteúdo detalhado do capítulo...</p>
+                    )}
+                    {!shouldHydrateCodeResults && !data.markdown && !isTipiResults(renderableCodeResults || null) && (
+                        <p>Sem resultados para exibir.</p>
+                    )}
+                    
+                    {/* Texto renderizado via fragmentos HTML sanitizados */}
+                    <div
+                        className={styles.contentText}
+                        ref={(el) => {
+                            (contentRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+                        }}
+                    />
+                </div>
 
                 {/* Painel de Comentários (Google Docs style) — só exibido quando ativado */}
                 {canUseRestrictedUi && commentsEnabled && (
