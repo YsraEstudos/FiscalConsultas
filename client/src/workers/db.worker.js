@@ -24,6 +24,7 @@ const DB_VERSION_KEY = "fiscal_offline_version";
 const MULTI_CODE_MAX_PARTS = 25;
 const MAX_ANCESTOR_DEPTH = 64;
 
+import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import {
   isCodeQuery,
   cleanNcm,
@@ -330,12 +331,6 @@ let sqlite3Api = null;
 
 async function initSqlite() {
   if (sqlite3Api) return sqlite3Api;
-
-  // Dynamic import of sqlite wasm
-  const { default: sqlite3InitModule } = await import(
-    /* @vite-ignore */
-    "@sqlite.org/sqlite-wasm"
-  );
 
   sqlite3Api = await sqlite3InitModule({
     print: () => {},
