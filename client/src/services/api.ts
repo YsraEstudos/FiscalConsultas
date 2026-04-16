@@ -47,9 +47,10 @@ const normalizeApiUrl = (base: string) => {
 };
 
 const API_URL = normalizeApiUrl(rawBaseUrl);
+export const API_BASE_URL = API_URL;
 
 export const api = axios.create({
-    baseURL: API_URL,
+    baseURL: API_BASE_URL,
     timeout: 60000,
     // Clerk auth is forwarded via Authorization header; avoid leaking ambient cookies cross-origin.
     withCredentials: false,

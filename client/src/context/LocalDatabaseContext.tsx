@@ -25,6 +25,7 @@ import {
   sanitizeOfflineMetadata,
   type OfflineDatabaseMetadata,
 } from "../utils/offlineDatabase";
+import { API_BASE_URL } from "../services/api";
 
 export type DbStatus =
   | "checking"
@@ -249,6 +250,10 @@ function runInBackground(task: Promise<unknown>) {
   task.catch(() => undefined);
 }
 
+function getOfflineApiBaseUrl() {
+  return API_BASE_URL;
+}
+
 let fallbackInstanceCounter = 0;
 
 function createInstanceId() {
@@ -404,7 +409,7 @@ export function LocalDatabaseProvider({
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 4000);
           try {
-            const response = await fetch("/api/database/version", {
+            const response = await fetch(`${getOfflineApiBaseUrl()}/database/version`, {
               method: "GET",
               headers: { Accept: "application/json" },
               signal: controller.signal,
@@ -669,7 +674,7 @@ export function LocalDatabaseProvider({
       await sendToWorker(
         "INSTALL",
         {
-          apiBase: "/api",
+          apiBase: getOfflineApiBaseUrl(),
         },
         180_000
       );
