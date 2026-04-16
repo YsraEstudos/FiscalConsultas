@@ -1,6 +1,6 @@
 import { useSettings } from "../context/SettingsContext";
 import { useLocalDatabase } from "../context/LocalDatabaseContext";
-import { ChangeEvent, useEffect } from "react";
+import { ChangeEvent, useCallback, useEffect } from "react";
 import {
   VIEW_MODE,
   SIDEBAR_POSITION,
@@ -62,10 +62,10 @@ export function SettingsModal({
     offlineDbStatus === "updating" ||
     isRemoving;
 
-  const handleRequestClose = () => {
+  const handleRequestClose = useCallback(() => {
     if (isOfflineMutationInProgress) return;
     onClose();
-  };
+  }, [isOfflineMutationInProgress, onClose]);
 
   // Close on ESC
   useEffect(() => {

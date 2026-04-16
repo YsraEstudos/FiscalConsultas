@@ -232,7 +232,7 @@ if (typeof window === "undefined") {
       window.isSecureContext &&
       !alreadyRetried &&
       !coepDegrading &&
-      window.SharedArrayBuffer === undefined
+      typeof window.SharedArrayBuffer === "undefined"
     ) {
       coepCredentialless = true;
     }
@@ -255,8 +255,9 @@ if (typeof window === "undefined") {
     }
 
     if ("serviceWorker" in navigator) {
+      const serviceWorkerUrl = new URL("/coi-serviceworker.js", window.location.origin);
       navigator.serviceWorker
-        .register(new URL("coi-serviceworker.js", window.location.href).href)
+        .register(serviceWorkerUrl.href)
         .then(
           (registration) => {
             notifyCoiMode(registration);
@@ -270,7 +271,8 @@ if (typeof window === "undefined") {
                 if (
                   newSW.state === "activated" &&
                   !window.SharedArrayBuffer &&
-                  !alreadyRetried
+                  !alreadyRetried &&
+                  !navigator.serviceWorker.controller
                 ) {
                   window.sessionStorage.setItem("coiReloadedBySelf", "reload");
                   window.location.reload();
@@ -290,7 +292,8 @@ if (typeof window === "undefined") {
             if (
               registration.active &&
               !window.SharedArrayBuffer &&
-              !alreadyRetried
+              !alreadyRetried &&
+              !navigator.serviceWorker.controller
             ) {
               window.sessionStorage.setItem("coiReloadedBySelf", "reload");
               window.location.reload();

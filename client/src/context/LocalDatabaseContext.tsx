@@ -467,6 +467,9 @@ export function LocalDatabaseProvider({
         setStatus(nextStatus);
         setLocalVersion((payload.version as string) || null);
         setDbSizeBytes((payload.sizeBytes as number) || null);
+        if (nextStatus === "error") {
+          setError((payload.error as string) || "Unknown error");
+        }
         if (nextStatus === "ready") {
           setProgress(100);
           setProgressStep("done");

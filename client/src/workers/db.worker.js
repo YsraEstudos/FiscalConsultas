@@ -1105,8 +1105,37 @@ async function handleInitMessage(id, payload) {
 
   const chunkSize = payload?.chunkSize || 65536;
   const iterations = payload?.pbkdf2Iterations || 600000;
-  const plaintext = await decryptDatabase(encData, chunkSize, iterations);
-  await loadDatabaseFromBytes(plaintext);
+  /** @type {Uint8Array | null} */
+  let plaintext = null;
+
+  try {
+    plaintext = await decryptDatabase(encData, chunkSize, iterations);
+    await loadDatabaseFromBytes(plaintext);
+  } catch (err) {
+    if (plaintext) {
+      plaintext.fill(0);
+    }
+    if (_db) {
+      try {
+        _db.close();
+      } catch {
+        /* ignore */
+      }
+      _db = null;
+    }
+    _currentVersion = null;
+    _status = "error";
+    await removeFromOpfs();
+    const message = err instanceof Error ? err.message : "Unknown error";
+    postWorkerStatus(id, {
+      status: "error",
+      error: `${message}. Reinstale o banco offline para continuar.`,
+      recoverable: true,
+    });
+    postWorkerError(id, `${message}. Reinstale o banco offline para continuar.`);
+    return;
+  }
+
   plaintext.fill(0);
 
   _status = "ready";

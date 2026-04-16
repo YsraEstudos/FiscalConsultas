@@ -106,7 +106,7 @@ async def test_download_requires_same_ip_that_requested_token(offline_bundle):
         database_download.DownloadDatabaseRequest(token=token_payload["token"]),
     )
 
-    assert response.body == b"encrypted-bundle"
+    assert Path(response.path).read_bytes() == b"encrypted-bundle"
     assert response.headers["Cross-Origin-Resource-Policy"] == "same-origin"
 
     with pytest.raises(HTTPException) as exc:
@@ -128,7 +128,7 @@ async def test_download_token_cannot_be_reused(offline_bundle):
         database_download.DownloadDatabaseRequest(token=token_payload["token"]),
     )
 
-    assert first_response.body == b"encrypted-bundle"
+    assert Path(first_response.path).read_bytes() == b"encrypted-bundle"
 
     with pytest.raises(HTTPException) as exc:
         await database_download.download_database(

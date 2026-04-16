@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from backend.config.settings import settings
@@ -277,19 +277,18 @@ async def download_database(
         raise HTTPException(status_code=503, detail="Offline database file missing")
 
     try:
-        data = ENCRYPTED_DB.read_bytes()
+        return FileResponse(
+            path=ENCRYPTED_DB,
+            filename="data.bin",
+            media_type="application/octet-stream",
+            headers={
+                "Content-Disposition": 'attachment; filename="data.bin"',
+                "X-Content-Type-Options": "nosniff",
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Cross-Origin-Resource-Policy": "same-origin",
+            },
+        )
     except OSError as exc:
-        logger.error("Failed to read encrypted DB: %s", exc)
+        logger.error("Failed to stream encrypted DB: %s", exc)
         raise HTTPException(status_code=500, detail="Internal server error") from exc
-
-    return Response(
-        content=data,
-        media_type="application/octet-stream",
-        headers={
-            "Content-Disposition": 'attachment; filename="data.bin"',
-            "X-Content-Type-Options": "nosniff",
-            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-            "Pragma": "no-cache",
-            "Cross-Origin-Resource-Policy": "same-origin",
-        },
-    )

@@ -303,6 +303,61 @@ class RedisCache:
             status="retry-hit",
         )
 
+    async def _try_lock_fallbacks(
+        self,
+        *,
+        key: str,
+        stale_key: str,
+        inflight_future: asyncio.Future[Any],
+        stats: dict[str, float | str | bool],
+        started: float,
+        allow_stale: bool,
+        lock_wait_seconds: float,
+    ) -> tuple[Any | None, dict[str, float | str | bool] | None]:
+        if allow_stale:
+            stale_value, stale_stats = await self._get_stale_value(
+                key,
+                stale_key,
+                inflight_future,
+                stats,
+                started,
+            )
+            if stale_stats is not None:
+                return stale_value, stale_stats
+
+        if lock_wait_seconds > 0:
+            cached_retry, retry_stats = await self._retry_after_lock_wait(
+                key,
+                inflight_future,
+                lock_wait_seconds,
+                stats,
+                started,
+            )
+            if retry_stats is not None:
+                return cached_retry, retry_stats
+
+        return None, None
+
+    async def _fill_cached_json(
+        self,
+        *,
+        key: str,
+        stale_key: str,
+        inflight_future: asyncio.Future[Any],
+        ttl_seconds: int,
+        stale_ttl: int,
+        loader: Callable[[], Awaitable[Any]],
+        stats: dict[str, float | str | bool],
+        started: float,
+        allow_stale: bool,
+    ) -> tuple[Any, dict[str, float | str | bool]]:
+        value = await loader()
+        await self.set_json(key, value, ttl_seconds)
+        if allow_stale:
+            await self.set_json(stale_key, value, ttl_seconds + stale_ttl)
+        await self._resolve_inflight_future(key, inflight_future, result=value)
+        return value, self._finish_cache_stats(stats, started, status="fill")
+
     async def cached_json(
         self,
         key: str,
@@ -342,29 +397,19 @@ class RedisCache:
         lock_acquired = await self.set_if_not_exists(lock_key, b"1", ttl_ms=lock_ttl_ms)
         stats["lock_acquired"] = lock_acquired
 
-        if not lock_acquired and allow_stale:
-            stale_value, stale_stats = await self._get_stale_value(
-                key,
-                stale_key,
-                inflight_future,
-                stats,
-                started,
-            )
-            if stale_stats is not None:
-                return stale_value, stale_stats
-
-        if not lock_acquired and lock_wait_seconds > 0:
-            cached_retry, retry_stats = await self._retry_after_lock_wait(
-                key,
-                inflight_future,
-                lock_wait_seconds,
-                stats,
-                started,
-            )
-            if retry_stats is not None:
-                return cached_retry, retry_stats
-
         if not lock_acquired:
+            fallback_value, fallback_stats = await self._try_lock_fallbacks(
+                key=key,
+                stale_key=stale_key,
+                inflight_future=inflight_future,
+                stats=stats,
+                started=started,
+                allow_stale=allow_stale,
+                lock_wait_seconds=lock_wait_seconds,
+            )
+            if fallback_stats is not None:
+                return fallback_value, fallback_stats
+
             # When stale serving and retry-after-wait both miss, we fall back to the
             # loader without the Redis lock, which can duplicate work under contention.
             logger.debug(
@@ -375,12 +420,17 @@ class RedisCache:
             )
 
         try:
-            value = await loader()
-            await self.set_json(key, value, ttl_seconds)
-            if allow_stale:
-                await self.set_json(stale_key, value, ttl_seconds + stale_ttl)
-            await self._resolve_inflight_future(key, inflight_future, result=value)
-            return value, self._finish_cache_stats(stats, started, status="fill")
+            return await self._fill_cached_json(
+                key=key,
+                stale_key=stale_key,
+                inflight_future=inflight_future,
+                ttl_seconds=ttl_seconds,
+                stale_ttl=stale_ttl,
+                loader=loader,
+                stats=stats,
+                started=started,
+                allow_stale=allow_stale,
+            )
         except Exception as exc:
             await self._resolve_inflight_future(key, inflight_future, error=exc)
             raise

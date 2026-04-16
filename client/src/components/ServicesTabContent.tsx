@@ -8,6 +8,7 @@ import {
 import { useLocalDatabase } from '../context/LocalDatabaseContext';
 import type {
     NbsDetailResponse,
+    NbsServiceItem,
     NbsSearchResponse,
     NebsDetailResponse,
     NebsSearchResponse,
@@ -75,6 +76,96 @@ function mergeNbsChapterItems(
     return mergedItems;
 }
 
+async function fetchLocalNbsDetailPage(
+    getNbsDetailLocal: (
+        code: string,
+        options?: { page?: number; pageSize?: number },
+    ) => Promise<NbsDetailResponse | null>,
+    code: string,
+    page: number,
+    pageSize: number,
+): Promise<NbsDetailResponse | null> {
+    try {
+        return await getNbsDetailLocal(code, { page, pageSize });
+    } catch {
+        return null;
+    }
+}
+
+async function fetchInitialNbsDetailPage(
+    code: string,
+    pageSize: number,
+    preferLocal: boolean,
+    getNbsDetailLocal: (
+        code: string,
+        options?: { page?: number; pageSize?: number },
+    ) => Promise<NbsDetailResponse | null>,
+): Promise<NbsDetailResponse | null> {
+    if (preferLocal) {
+        const localResponse = await fetchLocalNbsDetailPage(
+            getNbsDetailLocal,
+            code,
+            1,
+            pageSize,
+        );
+        if (localResponse) return localResponse;
+    }
+
+    return getNbsServiceDetailPage(code, {
+        includeTree: true,
+        page: 1,
+        pageSize,
+    });
+}
+
+async function fetchNextNbsDetailPage(
+    code: string,
+    page: number,
+    pageSize: number,
+    preferLocal: boolean,
+    getNbsDetailLocal: (
+        code: string,
+        options?: { page?: number; pageSize?: number },
+    ) => Promise<NbsDetailResponse | null>,
+): Promise<
+    Pick<NbsDetailResponse, 'chapter_root' | 'chapter_page'> | null
+> {
+    if (preferLocal) {
+        const localResponse = await fetchLocalNbsDetailPage(
+            getNbsDetailLocal,
+            code,
+            page,
+            pageSize,
+        );
+        if (localResponse) return localResponse;
+    }
+
+    return getNbsServiceTreePage(code, page, pageSize);
+}
+
+function buildHydratedNbsResponse(
+    response: NbsDetailResponse,
+    chapterRoot: NbsDetailResponse['chapter_root'],
+    mergedItems: NbsServiceItem[],
+    currentPage: number,
+    lastPage: NonNullable<NbsDetailResponse['chapter_page']>,
+): NbsDetailResponse {
+    const firstPage = response.chapter_page!;
+    return {
+        ...response,
+        chapter_root: chapterRoot,
+        chapter_items: mergedItems,
+        chapter_page: {
+            ...lastPage,
+            items: mergedItems,
+            page: currentPage,
+            page_size: firstPage.page_size,
+            total: firstPage.total,
+            has_more: false,
+        },
+    } as NbsDetailResponse;
+}
+
 export function ServicesTabContent({
     doc,
     data,
@@ -95,6 +186,66 @@ export function ServicesTabContent({
         getNebsDetailLocal,
     } = useLocalDatabase();
 
+    const isCurrentDetailRequest = useCallback(
+        (requestId: number) => detailRequestRef.current === requestId,
+        [],
+    );
+
+    const hydrateNbsDetailResponse = useCallback(
+        async (
+            code: string,
+            response: NbsDetailResponse,
+            requestId: number,
+            preferLocal: boolean,
+        ): Promise<NbsDetailResponse | null> => {
+            const firstPage = response.chapter_page;
+            if (!firstPage?.has_more) {
+                return response;
+            }
+
+            let mergedItems = mergeNbsChapterItems(
+                response.chapter_items ?? firstPage.items,
+                [],
+            );
+            let currentPage = firstPage.page;
+            let lastPage = firstPage;
+            let chapterRoot = response.chapter_root;
+
+            while (lastPage.has_more) {
+                const nextPageNumber = currentPage + 1;
+                const nextPageResponse = await fetchNextNbsDetailPage(
+                    code,
+                    nextPageNumber,
+                    firstPage.page_size,
+                    preferLocal,
+                    getNbsDetailLocal,
+                );
+                if (!nextPageResponse) break;
+                if (!isCurrentDetailRequest(requestId)) return null;
+
+                const nextPage = nextPageResponse.chapter_page;
+                if (!nextPage) break;
+
+                mergedItems = mergeNbsChapterItems(
+                    mergedItems,
+                    nextPage.items,
+                );
+                chapterRoot = chapterRoot ?? nextPageResponse.chapter_root ?? undefined;
+                currentPage = nextPageNumber;
+                lastPage = nextPage;
+            }
+
+            return buildHydratedNbsResponse(
+                response,
+                chapterRoot,
+                mergedItems,
+                currentPage,
+                lastPage,
+            );
+        },
+        [getNbsDetailLocal, isCurrentDetailRequest],
+    );
+
     const loadNbsDetail = useCallback(async (code: string) => {
         const requestId = detailRequestRef.current + 1;
         detailRequestRef.current = requestId;
@@ -103,93 +254,24 @@ export function ServicesTabContent({
 
         try {
             const preferLocal = localDbStatus === 'ready';
-            let response: NbsDetailResponse | null = null;
-            if (preferLocal) {
-                try {
-                    response = await getNbsDetailLocal(code, {
-                        page: 1,
-                        pageSize: DEFAULT_NBS_TREE_PAGE_SIZE,
-                    });
-                } catch {
-                    response = null;
-                }
-            }
-            if (!response) {
-                response = await getNbsServiceDetailPage(code, {
-                    includeTree: true,
-                    page: 1,
-                    pageSize: DEFAULT_NBS_TREE_PAGE_SIZE,
-                });
-            }
+            const response = await fetchInitialNbsDetailPage(
+                code,
+                DEFAULT_NBS_TREE_PAGE_SIZE,
+                preferLocal,
+                getNbsDetailLocal,
+            );
             if (!response) {
                 throw new Error('NBS detail unavailable');
             }
-            if (detailRequestRef.current !== requestId) return;
+            if (!isCurrentDetailRequest(requestId)) return;
 
-            const firstPage = response.chapter_page;
-            let hydratedResponse = response;
-
-            if (firstPage?.has_more) {
-                let mergedItems = mergeNbsChapterItems(
-                    response.chapter_items ?? firstPage.items,
-                    [],
-                );
-                let currentPage = firstPage.page;
-                let lastPage = firstPage;
-                let chapterRoot = response.chapter_root;
-
-                while (lastPage.has_more) {
-                    const nextPageNumber = currentPage + 1;
-                    let nextPageResponse = null;
-                    if (preferLocal) {
-                        try {
-                            nextPageResponse = await getNbsDetailLocal(code, {
-                                page: nextPageNumber,
-                                pageSize: firstPage.page_size,
-                            });
-                        } catch {
-                            nextPageResponse = null;
-                        }
-                    }
-                    if (!nextPageResponse) {
-                        nextPageResponse = await getNbsServiceTreePage(
-                            code,
-                            nextPageNumber,
-                            firstPage.page_size,
-                        );
-                    }
-                    if (!nextPageResponse) {
-                        break;
-                    }
-                    if (detailRequestRef.current !== requestId) return;
-                    const nextPage = nextPageResponse.chapter_page;
-                    if (!nextPage) {
-                        break;
-                    }
-
-                    mergedItems = mergeNbsChapterItems(
-                        mergedItems,
-                        nextPage.items,
-                    );
-                    chapterRoot = chapterRoot ?? nextPageResponse.chapter_root ?? undefined;
-                    currentPage = nextPageNumber;
-                    lastPage = nextPage;
-                }
-
-                hydratedResponse = {
-                    ...response,
-                    chapter_root: chapterRoot,
-                    chapter_items: mergedItems,
-                    chapter_page: {
-                        ...lastPage,
-                        items: mergedItems,
-                        page: currentPage,
-                        page_size: firstPage.page_size,
-                        total: firstPage.total,
-                        has_more: false,
-                    },
-                };
-            }
+            const hydratedResponse = await hydrateNbsDetailResponse(
+                code,
+                response,
+                requestId,
+                preferLocal,
+            );
+            if (!hydratedResponse) return;
 
             setNbsDetail(hydratedResponse);
             setNebsDetail(null);
@@ -204,7 +286,7 @@ export function ServicesTabContent({
             reportServiceCatalogError(error, 'nbs', serviceError);
             toast.error(serviceError.message);
         }
-    }, [getNbsDetailLocal, localDbStatus]);
+    }, [getNbsDetailLocal, hydrateNbsDetailResponse, isCurrentDetailRequest, localDbStatus]);
 
     const loadNebsDetail = useCallback(async (code: string) => {
         const requestId = detailRequestRef.current + 1;
