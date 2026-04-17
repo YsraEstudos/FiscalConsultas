@@ -55,18 +55,20 @@ def test_setup_logging_does_not_duplicate_managed_handlers(monkeypatch):
     _clear_nesh_handlers()
     monkeypatch.setattr(logging_config.sys, "platform", "linux", raising=False)
 
-    logging_config.setup_logging(level="INFO")
-    logging_config.setup_logging(level="DEBUG")
+    try:
+        logging_config.setup_logging(level="INFO")
+        logging_config.setup_logging(level="DEBUG")
 
-    logger = logging.getLogger("nesh")
-    stream_handlers = [
-        handler
-        for handler in logger.handlers
-        if isinstance(handler, logging.StreamHandler)
-    ]
-    assert len(stream_handlers) == 1
-    assert logger.level == logging.DEBUG
-    _clear_nesh_handlers()
+        logger = logging.getLogger("nesh")
+        stream_handlers = [
+            handler
+            for handler in logger.handlers
+            if isinstance(handler, logging.StreamHandler)
+        ]
+        assert len(stream_handlers) == 1
+        assert logger.level == logging.DEBUG
+    finally:
+        _clear_nesh_handlers()
 
 
 def test_setup_logging_redacts_sensitive_values(monkeypatch, capsys):
@@ -75,20 +77,22 @@ def test_setup_logging_redacts_sensitive_values(monkeypatch, capsys):
     credential_key = "".join(["pass", "word"])
     credential_value = "demo-secret"
 
-    logging_config.setup_logging(level="INFO", redact_sensitive_data=True)
-    logger = logging.getLogger("nesh")
-    logger.info(
-        f"headers authorization=Bearer abc.def token=secret-value {credential_key}={credential_value}"
-    )
-    logger.info({"authorization": "Bearer jwt-token", "safe": "ok"})
+    try:
+        logging_config.setup_logging(level="INFO", redact_sensitive_data=True)
+        logger = logging.getLogger("nesh")
+        logger.info(
+            f"headers authorization=Bearer abc.def token=secret-value {credential_key}={credential_value}"
+        )
+        logger.info({"authorization": "Bearer jwt-token", "safe": "ok"})
 
-    captured = capsys.readouterr()
-    assert "abc.def" not in captured.out
-    assert "secret-value" not in captured.out
-    assert credential_value not in captured.out
-    assert "[REDACTED]" in captured.out
-    assert "ok" in captured.out
-    _clear_nesh_handlers()
+        captured = capsys.readouterr()
+        assert "abc.def" not in captured.out
+        assert "secret-value" not in captured.out
+        assert credential_value not in captured.out
+        assert "[REDACTED]" in captured.out
+        assert "ok" in captured.out
+    finally:
+        _clear_nesh_handlers()
 
 
 def test_get_logger_uses_nesh_prefix():

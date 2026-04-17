@@ -545,8 +545,16 @@ def _append_metric_line(
 ) -> None:
     label_text = ""
     if labels:
+        def _escape_label_value(label_value: str) -> str:
+            return (
+                label_value.replace("\\", "\\\\")
+                .replace('"', '\\"')
+                .replace("\n", "\\n")
+            )
+
         encoded_labels = ",".join(
-            f'{key}="{str(label_value)}"' for key, label_value in sorted(labels.items())
+            f'{key}="{_escape_label_value(str(label_value))}"'
+            for key, label_value in sorted(labels.items())
         )
         label_text = f"{{{encoded_labels}}}"
     lines.append(f"{name}{label_text} {value}")
@@ -780,6 +788,7 @@ async def get_metrics(request: Request):
         raise HTTPException(status_code=404, detail="Not Found")
     if not _is_metrics_request_authorized(request):
         raise HTTPException(status_code=403, detail="Forbidden")
+    await _apply_status_rate_limit(request)
 
     (
         normalized_db,

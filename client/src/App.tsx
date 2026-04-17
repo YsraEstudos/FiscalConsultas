@@ -199,7 +199,7 @@ function App() {
 
             await Promise.all(searchTasks);
         })(), 'handleSearch');
-    }, [activeTabId, createTab, ensureServicesSearchAccess, executeSearchForTab, localDbStatus, runNonBlockingTask]);
+    }, [activeTabId, createTab, ensureServicesSearchAccess, executeSearchForTab, runNonBlockingTask]);
 
     const triggerInstall = useCallback(() => {
         runNonBlockingTask(install(), 'installLocalDb');
@@ -361,6 +361,35 @@ function App() {
 
     // Handler único de clique com delegação (smart-link + note-ref)
     useEffect(() => {
+        const handleDelegatedMiddleMouseDown = (event: MouseEvent) => {
+            if (event.button !== 1) return;
+
+            const target = event.target;
+            if (!(target instanceof Element)) return;
+
+            if (handleDelegatedSearchNavigation(
+                target,
+                'a.smart-link',
+                'ncm',
+                true,
+                event,
+                handleSearchRef.current,
+                openTextResultInNewTabRef.current,
+            )) {
+                return;
+            }
+
+            handleDelegatedSearchNavigation(
+                target,
+                '.service-smart-link, .service-code-target',
+                'serviceCode',
+                true,
+                event,
+                handleSearchRef.current,
+                openServiceResultInNewTabRef.current,
+            );
+        };
+
         const handleDelegatedClick = (event: MouseEvent) => {
             const target = event.target;
             if (!(target instanceof Element)) return;
@@ -368,7 +397,10 @@ function App() {
             // Ignorar botão direito
             if (event.button === 2) return;
 
-            const isMiddleClickOrCmd = event.button === 1 || event.ctrlKey || event.metaKey;
+            // Middle button is handled on mousedown to avoid native scroll-mode capture.
+            if (event.button === 1) return;
+
+            const isMiddleClickOrCmd = event.ctrlKey || event.metaKey;
 
             if (handleDelegatedSearchNavigation(
                 target,
@@ -394,17 +426,14 @@ function App() {
                 return;
             }
 
-            // Para referências de nota, ignoramos abertura em nova aba / botão do meio
-            if (event.button === 1) return;
-
             handleDelegatedNoteNavigation(target, handleOpenNoteRef.current);
         };
 
+        document.addEventListener('mousedown', handleDelegatedMiddleMouseDown);
         document.addEventListener('click', handleDelegatedClick);
-        document.addEventListener('auxclick', handleDelegatedClick);
         return () => {
+            document.removeEventListener('mousedown', handleDelegatedMiddleMouseDown);
             document.removeEventListener('click', handleDelegatedClick);
-            document.removeEventListener('auxclick', handleDelegatedClick);
         };
     }, []);
 
@@ -522,7 +551,6 @@ function App() {
             await executeSearchForTab(tabId, doc, query.trim(), false);
         }
     }, [
-        localDbStatus,
         ensureServicesSearchAccess,
         executeSearchForTab,
         resetLoadedChaptersForDoc,
@@ -558,8 +586,8 @@ function App() {
             <Toaster position="top-right" />
             <ErrorBoundary
                 boundaryName="modal-manager"
-                title="Nao foi possivel abrir um painel da interface."
-                description="Um dos modais ou paineis da aplicacao falhou ao renderizar. Feche e tente abrir novamente."
+                title="Não foi possível abrir um painel da interface."
+                description="Um dos modais ou painéis da aplicação falhou ao renderizar. Feche e tente abrir novamente."
                 resetKeys={[isSettingsOpen, isTutorialOpen, isStatsOpen, isComparatorOpen, isModerateOpen]}
             >
                 <Suspense fallback={null}>
@@ -740,8 +768,8 @@ function App() {
             </Layout>
             <ErrorBoundary
                 boundaryName="user-profile-page"
-                title="Nao foi possivel abrir o perfil."
-                description="A area de conta encontrou um erro inesperado. Feche e tente abrir o perfil novamente."
+                title="Não foi possível abrir o perfil."
+                description="A área de conta encontrou um erro inesperado. Feche e tente abrir o perfil novamente."
                 resetKeys={[isProfileOpen]}
             >
                 <UserProfilePage

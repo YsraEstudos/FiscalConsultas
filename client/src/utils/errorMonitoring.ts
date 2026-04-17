@@ -1,3 +1,5 @@
+import { isClerkLoadFailureReason } from '../auth/clerkLoadFailure';
+
 type ClientErrorSource =
     | 'error-boundary'
     | 'window-error'
@@ -172,10 +174,32 @@ function logClientError(report: ClientErrorReport) {
     method('[ClientError]', report);
 }
 
+function buildSafeClientErrorPayload(report: ClientErrorReport): string {
+    try {
+        return JSON.stringify(report);
+    } catch {
+        return JSON.stringify({
+            source: report.source,
+            level: report.level,
+            message: report.message,
+            boundaryName: report.boundaryName,
+            path: report.path,
+            requestId: report.requestId,
+            statusCode: report.statusCode,
+            context: report.context,
+            handled: report.handled,
+            route: report.route,
+            timestamp: report.timestamp,
+            runtimeMode: report.runtimeMode,
+            serializationError: true,
+        });
+    }
+}
+
 function sendClientErrorToEndpoint(report: ClientErrorReport) {
     if (!CLIENT_ERROR_ENDPOINT) return;
 
-    const payload = JSON.stringify(report);
+    let payload = buildSafeClientErrorPayload(report);
 
     try {
         if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
@@ -324,4 +348,3 @@ export function __setClientErrorEndpointForTests(endpoint: string) {
 }
 
 export { CLIENT_ERROR_EVENT_NAME };
-import { isClerkLoadFailureReason } from '../auth/clerkLoadFailure';

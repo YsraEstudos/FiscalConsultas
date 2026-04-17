@@ -202,6 +202,10 @@ def _log_runtime_security_warnings() -> None:
         warnings.append(
             "SERVER__CORS_ALLOWED_ORIGINS vazio em produção; configure apenas domínios oficiais."
         )
+    elif any(origin.strip() == "*" for origin in settings.server.cors_allowed_origins):
+        warnings.append(
+            'SERVER__CORS_ALLOWED_ORIGINS="*" é inseguro em produção; configure apenas origens explícitas.'
+        )
     elif any(
         origin_looks_like_loopback(origin)
         for origin in settings.server.cors_allowed_origins
