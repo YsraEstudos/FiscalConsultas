@@ -9,6 +9,21 @@ interface UseRobustScrollProps {
   expectedTags?: string[];
 }
 
+function queryElementsById(root: ParentNode, id: string): HTMLElement[] {
+  if (
+    typeof globalThis.CSS !== "undefined" &&
+    typeof globalThis.CSS.escape === "function"
+  ) {
+    return Array.from(
+      root.querySelectorAll<HTMLElement>(`#${globalThis.CSS.escape(id)}`),
+    );
+  }
+
+  return Array.from(root.querySelectorAll<HTMLElement>("[id]")).filter(
+    (element) => element.id === id,
+  );
+}
+
 /**
  * Hook to robustly scroll to an element by ID, handling:
  * 1. Special characters in IDs (dots, slashes)
@@ -86,9 +101,7 @@ export function useRobustScroll({
       let bestScore = -1;
 
       for (const id of targets) {
-        const elements = root.querySelectorAll<HTMLElement>(
-          `#${CSS.escape(id)}`,
-        );
+        const elements = queryElementsById(root, id);
         debug.log(
           `[RobustScroll] ID "${id}": ${elements.length} elements found`,
         );
