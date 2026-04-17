@@ -356,5 +356,65 @@
 .commentToggleActive:hover {
     background: rgb(99 102 241 / 25%);
 }
+.loadingSpinnerContainer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 0;
+    gap: 1rem;
+    color: var(--text-color, #4a5568);
+}
 
+.spinner {
+    width: 40px;
+    height: 40px;
+    animation: rotate 2s linear infinite;
+}
 
+.spinnerPath {
+    stroke: var(--primary-color, #3498db);
+    stroke-linecap: round;
+    animation: dash 1.5s ease-in-out infinite;
+}
+
+.loadingText {
+    font-size: 0.95rem;
+    font-weight: 500;
+    opacity: 0.8;
+    animation: loadingPulse 1.5s infinite;
+}
+
+@keyframes rotate {
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes dash {
+    0% {
+        stroke-dasharray: 1, 150;
+        stroke-dashoffset: 0;
+    }
+
+    50% {
+        stroke-dasharray: 90, 150;
+        stroke-dashoffset: -35;
+    }
+
+    100% {
+        stroke-dasharray: 90, 150;
+        stroke-dashoffset: -124;
+    }
+}
+
+@keyframes loadingPulse {
+    0%,
+    100% {
+        opacity: 0.6;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}

@@ -614,10 +614,10 @@ describe('ResultDisplay advanced behavior', () => {
       />,
     );
 
-    expect(screen.getByText('Carregando conteúdo detalhado do capítulo...')).toBeInTheDocument();
+    expect(screen.getByText('Carregando conteúdo detalhado...')).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.queryByText('Carregando conteúdo detalhado do capítulo...')).not.toBeInTheDocument();
+      expect(screen.queryByText('Carregando conteúdo detalhado...')).not.toBeInTheDocument();
     });
 
     expect(errorSpy).toHaveBeenCalledWith(
@@ -808,11 +808,11 @@ describe('ResultDisplay advanced behavior', () => {
     );
 
     await waitFor(() => {
-      expect(screen.queryByText('Conteudo ativo')).not.toBeInTheDocument();
+      expect(screen.getByText('Conteudo ativo')).toBeInTheDocument();
     });
 
     const contentContainer = container.querySelector('#results-content-tab-reactivate');
-    expect(contentContainer?.textContent).not.toContain('Conteudo ativo');
+    expect(contentContainer?.textContent).toContain('Conteudo ativo');
 
     rerender(
       <ResultDisplay
@@ -829,7 +829,7 @@ describe('ResultDisplay advanced behavior', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Conteudo ativo')).toBeInTheDocument();
-      expect(onContentReady).toHaveBeenCalledTimes(2);
+      expect(onContentReady).toHaveBeenCalledTimes(1);
     });
   });
 

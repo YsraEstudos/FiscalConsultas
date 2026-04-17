@@ -622,11 +622,9 @@ function renderMarkupContent(options: MarkupRenderOptions): (() => void) | undef
     const shouldParseMarkdown = !!rawMarkdown && isLikelyLegacyMarkdown(markupToRender);
     const cacheKey = `${shouldParseMarkdown ? 'md' : 'html'}:${markupToRender}`;
 
-    // Evita render custoso em abas inativas; o conteúdo é re-hidratado ao ativar a aba.
+    // Aba inativa: preservar o DOM existente para restauração de scroll.
+    // TabPanel já esconde com display:none; não precisa limpar.
     if (!isActive) {
-        container.textContent = '';
-        setIsContentReady(false);
-        setIsFullyRendered(false);
         return undefined;
     }
 
@@ -1405,6 +1403,8 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     useEffect(() => {
         // Skip restore if this is a new search - auto-scroll will handle positioning
         if (!isActive || isNewSearch) return;
+        // Wait until content is rendered before restoring scroll
+        if (!isContentReady) return;
         const element = containerRef.current;
         if (!element) return;
 
@@ -1420,7 +1420,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             latestScrollTopRef.current = targetScrollTop;
             hasRestoredInitialScrollRef.current = true;
         });
-    }, [isActive, initialScrollTop, isNewSearch]);
+    }, [isActive, initialScrollTop, isNewSearch, isContentReady]);
 
     // Reset restored flag when inactive so it can restore again when returning
     useEffect(() => {
@@ -1649,7 +1649,12 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                 {/* O container interno organiza o conteúdo da esquerda verticalmente (mensagens + texto) */}
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                     {shouldHydrateCodeResults && (isHydratingCodeResults || missingChapterBodies.length > 0) && (
-                        <p>Carregando conteúdo detalhado do capítulo...</p>
+                        <div className={styles.loadingSpinnerContainer}>
+                            <svg className={styles.spinner} viewBox="0 0 50 50">
+                                <circle className={styles.spinnerPath} cx="25" cy="25" r="20" fill="none" strokeWidth="5"></circle>
+                            </svg>
+                            <p className={styles.loadingText}>Carregando conteúdo detalhado...</p>
+                        </div>
                     )}
                     {!shouldHydrateCodeResults && !data.markdown && !isTipiResults(renderableCodeResults || null) && (
                         <p>Sem resultados para exibir.</p>
