@@ -771,15 +771,29 @@ describe('App behavior', () => {
     });
   });
 
-  it('opens service links in background tab on middle click', async () => {
+  it('opens service links in NBS background tabs on middle click', async () => {
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        document: 'nbs',
+        ncm: '1.1706.90.00',
+        results: buildServiceResults('nbs', '1.1706.90.00'),
+      }),
+    ]);
+
     render(<App />);
 
-    const serviceLink = appendServiceLink('1.0501.11');
-    fireEvent(serviceLink, new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+    const leafServiceLink = appendServiceLink('1.1706.90.00');
+    fireEvent(leafServiceLink, new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+
+    const parentServiceLink = appendServiceLink('1.17');
+    fireEvent(parentServiceLink, new MouseEvent('auxclick', { bubbles: true, button: 1 }));
 
     await waitFor(() => {
-      expect(mocks.createTabMock).toHaveBeenCalledWith('nesh', false);
-      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nesh-1', 'nesh', '1.0501.11', false);
+      expect(mocks.createTabMock).toHaveBeenNthCalledWith(1, 'nbs', false);
+      expect(mocks.createTabMock).toHaveBeenNthCalledWith(2, 'nbs', false);
+      expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(1, 'new-nbs-1', 'nbs', '1.1706.90.00', false);
+      expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(2, 'new-nbs-2', 'nbs', '1.17', false);
     });
   });
 

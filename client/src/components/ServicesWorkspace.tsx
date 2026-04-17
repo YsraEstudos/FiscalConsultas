@@ -137,6 +137,7 @@ export function ServicesWorkspace({
     const { openNewTab, nbsPrefixAutoExpand, nbsChapterNotesNewTab } = useSettings();
     const [isChapterNotesOpen, setIsChapterNotesOpen] = useState(false);
     const chapterNotesDialogRef = useRef<HTMLDialogElement | null>(null);
+    const nbsNotesContentRef = useRef<HTMLDivElement | null>(null);
     const chapterCodeSource = doc === 'nbs'
         ? (nbsState.detail?.item.code || nbsState.selectedCode || (
             isCodeLikeNbsQuery(nbsState.query) ? nbsState.query : null
@@ -148,16 +149,48 @@ export function ServicesWorkspace({
         ? renderNbsChapterNotesHtml(currentChapterNotesEntry)
         : '';
 
-    const openCatalogDoc = (targetDoc: ServiceDocType, query?: string) => {
+    const openCatalogDoc = (targetDoc: ServiceDocType, query?: string, forceNewTab?: boolean) => {
         if (!query) return;
 
-        if (openNewTab && onOpenDocInNewTab) {
+        if ((openNewTab || forceNewTab) && onOpenDocInNewTab) {
             onOpenDocInNewTab(targetDoc, query);
             return;
         }
 
         onSwitchDoc(targetDoc, query);
     };
+
+    useEffect(() => {
+        const container = nbsNotesContentRef.current;
+        if (!container) return;
+
+        const handlePointer = (event: MouseEvent) => {
+            const target = event.target;
+            if (!(target instanceof Element)) return;
+
+            const serviceLink = target.closest('.service-smart-link, .service-code-target');
+            if (!(serviceLink instanceof HTMLElement) || !container.contains(serviceLink)) {
+                return;
+            }
+
+            const serviceCode = serviceLink.dataset.serviceCode;
+            if (!serviceCode) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const forceNewTab = event.metaKey || event.ctrlKey || event.button === 1;
+            openCatalogDoc('nebs', serviceCode, forceNewTab);
+        };
+
+        container.addEventListener('click', handlePointer);
+        container.addEventListener('auxclick', handlePointer);
+
+        return () => {
+            container.removeEventListener('click', handlePointer);
+            container.removeEventListener('auxclick', handlePointer);
+        };
+    }, [openCatalogDoc]);
 
     useEffect(() => {
         if (!isChapterNotesOpen || !currentChapterNotesEntry) {
@@ -349,6 +382,7 @@ export function ServicesWorkspace({
                                         <span>NOTAS EXPLICATIVAS</span>
                                     </div>
                                     <div
+                                        ref={nbsNotesContentRef}
                                         className={styles.notesContent}
                                         dangerouslySetInnerHTML={{ __html: nbsNoteBodyHtml }}
                                     />
@@ -358,7 +392,7 @@ export function ServicesWorkspace({
                             <button
                                 type="button"
                                 className={styles.primaryAction}
-                                onClick={() => openCatalogDoc('nebs', nbsState.detail?.item.code)}
+                                onClick={() => openCatalogDoc('nebs', nbsState.detail?.item.code, true)}
                             >
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
                                 Ver NEBS

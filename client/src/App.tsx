@@ -128,6 +128,7 @@ function App() {
     const handleSearchRef = useRef<(query: string) => void>(() => { });
     const handleOpenNoteRef = useRef<(note: string, chapter?: string) => Promise<void> | void>(() => { });
     const openTextResultInNewTabRef = useRef<(ncm: string, textQuery?: string, activate?: boolean) => Promise<void> | void>(() => { });
+    const openServiceResultInNewTabRef = useRef<(code: string, textQuery?: string, activate?: boolean) => Promise<void> | void>(() => { });
 
     activeTabRef.current = activeTab;
 
@@ -388,7 +389,7 @@ function App() {
                 isMiddleClickOrCmd,
                 event,
                 handleSearchRef.current,
-                openTextResultInNewTabRef.current,
+                openServiceResultInNewTabRef.current,
             )) {
                 return;
             }
@@ -432,6 +433,18 @@ function App() {
     useEffect(() => {
         openTextResultInNewTabRef.current = openTextResultInNewTab;
     }, [openTextResultInNewTab]);
+
+    const openServiceResultInNewTab = useCallback(async (code: string, _textQuery?: string, activate: boolean = true) => {
+        const activeDoc = (activeTabRef.current?.document || 'nbs') as DocType;
+        const doc: DocType = activeDoc === 'nebs' ? 'nebs' : 'nbs';
+        const tabId = createTab(doc, activate);
+
+        await executeSearchForTab(tabId, doc, code, false);
+    }, [createTab, executeSearchForTab]);
+
+    useEffect(() => {
+        openServiceResultInNewTabRef.current = openServiceResultInNewTab;
+    }, [openServiceResultInNewTab]);
 
     const openInDocCurrentTab = useCallback(async (doc: DocType, ncm: string) => {
         const currentTab = activeTabRef.current;
