@@ -28,7 +28,7 @@ from starlette.responses import JSONResponse
 from backend.config.settings import settings
 from backend.infrastructure.db_engine import tenant_context
 
-logger = logging.getLogger("middleware.tenant")
+logger = logging.getLogger("nesh.middleware.tenant")
 
 # Cache do JWKS client (Clerk public keys)
 _jwks_client: Optional[PyJWKClient] = None
@@ -859,6 +859,10 @@ class TenantMiddleware:
         "/api/auth/me",
         "/api/status",
         "/api/status/details",
+        "/api/cache-metrics",
+        "/api/metrics",
+        "/api/admin/reload-secrets",
+        "/api/debug/anchors",
         "/api/search",
         "/api/chapters",
         "/api/glossary",

@@ -56,6 +56,7 @@ const mocks = vi.hoisted(() => {
         activeTab: null as MockTab | null,
       },
     },
+    resultDisplayCrashTabIdRef: { value: null as string | null },
   };
 });
 
@@ -150,28 +151,36 @@ vi.mock('../../src/components/ResultDisplay', () => ({
     onPersistScroll,
     onContentReady,
   }: any) => (
-    <div
-      data-testid={`result-display-${tabId}`}
-      data-mobile-open={String(Boolean(mobileMenuOpen))}
-      data-active={String(Boolean(isActive))}
-      data-latest-text-query={latestTextQuery ?? ''}
-    >
-      <button data-testid={`result-consume-scroll-${tabId}`} onClick={() => onConsumeNewSearch(tabId, 321)}>
-        consume-scroll
-      </button>
-      <button data-testid={`result-consume-no-scroll-${tabId}`} onClick={() => onConsumeNewSearch(tabId, undefined)}>
-        consume-no-scroll
-      </button>
-      <button data-testid={`result-persist-${tabId}`} onClick={() => onPersistScroll(tabId, 77)}>
-        persist
-      </button>
-      <button data-testid={`result-ready-${tabId}`} onClick={onContentReady}>
-        ready
-      </button>
-      <button data-testid={`result-close-mobile-${tabId}`} onClick={onCloseMobileMenu}>
-        close-mobile
-      </button>
-    </div>
+    (() => {
+      if (mocks.resultDisplayCrashTabIdRef.value === tabId) {
+        throw new Error(`ResultDisplay crashed for ${tabId}`);
+      }
+
+      return (
+        <div
+          data-testid={`result-display-${tabId}`}
+          data-mobile-open={String(Boolean(mobileMenuOpen))}
+          data-active={String(Boolean(isActive))}
+          data-latest-text-query={latestTextQuery ?? ''}
+        >
+          <button data-testid={`result-consume-scroll-${tabId}`} onClick={() => onConsumeNewSearch(tabId, 321)}>
+            consume-scroll
+          </button>
+          <button data-testid={`result-consume-no-scroll-${tabId}`} onClick={() => onConsumeNewSearch(tabId, undefined)}>
+            consume-no-scroll
+          </button>
+          <button data-testid={`result-persist-${tabId}`} onClick={() => onPersistScroll(tabId, 77)}>
+            persist
+          </button>
+          <button data-testid={`result-ready-${tabId}`} onClick={onContentReady}>
+            ready
+          </button>
+          <button data-testid={`result-close-mobile-${tabId}`} onClick={onCloseMobileMenu}>
+            close-mobile
+          </button>
+        </div>
+      );
+    })()
   ),
 }));
 
@@ -442,6 +451,7 @@ describe('App behavior', () => {
     mocks.fetchNotesMock.mockResolvedValue({});
     mocks.historyRef.value = [{ term: '8517', timestamp: 1 }];
     mocks.sidebarPositionRef.value = 'right';
+    mocks.resultDisplayCrashTabIdRef.value = null;
     setTabsState([buildTab({ id: 'tab-1' })], 'tab-1');
   });
 
@@ -928,5 +938,28 @@ describe('App behavior', () => {
 
     unmount();
     expect((globalThis as any).nesh).toBeUndefined();
+  });
+
+  it('keeps the layout visible when ResultDisplay crashes and shows a fallback in the results area', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.resultDisplayCrashTabIdRef.value = 'tab-1';
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        document: 'nesh',
+        results: buildCodeResults({ '84': { notas_parseadas: {} } }),
+      }),
+    ]);
+
+    try {
+      render(<App />);
+
+      expect(screen.getByTestId('layout')).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+      expect(screen.getByText('Nao foi possivel renderizar os resultados.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Tentar novamente' })).toBeInTheDocument();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 });

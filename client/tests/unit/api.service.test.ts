@@ -1,4 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  __resetErrorMonitoringForTests,
+  CLIENT_ERROR_EVENT_NAME,
+  type ClientErrorReport,
+} from '../../src/utils/errorMonitoring';
 
 type InterceptorHandler = ((value: any) => any) | undefined;
 
@@ -98,6 +103,11 @@ describe('api service', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.unstubAllEnvs();
+    __resetErrorMonitoringForTests();
+  });
+
+  afterEach(() => {
+    __resetErrorMonitoringForTests();
   });
 
   it('creates axios instance and registers interceptors on import', async () => {
@@ -348,6 +358,48 @@ describe('api service', () => {
     );
 
     warnSpy.mockRestore();
+  });
+
+  it('reports 5xx API failures to the client monitoring channel', async () => {
+    await loadApiModule();
+    const reportedErrors: ClientErrorReport[] = [];
+    const handleClientError = (event: Event) => {
+      reportedErrors.push((event as CustomEvent<ClientErrorReport>).detail);
+    };
+    globalThis.addEventListener(CLIENT_ERROR_EVENT_NAME, handleClientError as EventListener);
+
+    try {
+      const serverError = {
+        code: 'ERR_BAD_RESPONSE',
+        message: 'Request failed with status code 503',
+        response: { status: 503 },
+        config: {
+          url: '/profile/me',
+          method: 'get',
+          timeout: 60000,
+          headers: {
+            get: (name: string) => (name.toLowerCase() === 'x-request-id' ? 'req_test_123' : undefined),
+          },
+        },
+      } as any;
+
+      await expect(mockAxios.handlers.responseRejected?.(serverError)).rejects.toBe(serverError);
+
+      expect(reportedErrors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            source: 'network',
+            handled: true,
+            path: '/profile/me',
+            requestId: 'req_test_123',
+            statusCode: 503,
+            message: 'API request failed with status 503',
+          }),
+        ]),
+      );
+    } finally {
+      globalThis.removeEventListener(CLIENT_ERROR_EVENT_NAME, handleClientError as EventListener);
+    }
   });
 
   it('deduplicates in-flight searchNCM requests and caches successful code responses', async () => {

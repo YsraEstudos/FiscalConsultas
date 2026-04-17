@@ -195,8 +195,6 @@ export function SettingsModal({
                 </div>
                 <label
                   className={styles.switch}
-                  aria-label="Realçar Resultados"
-                  title="Realçar Resultados"
                 >
                   <input
                     type="checkbox"
@@ -211,16 +209,22 @@ export function SettingsModal({
                 </label>
               </div>
 
-              <div className={styles.item}>
+              <div
+                className={`${styles.item} ${styles.navigationBehaviorItem}`}
+                data-testid="navigation-behavior-item"
+              >
                 <div className={styles.label}>
                   <span>Comportamento de Navegação</span>
                   <span className={styles.hint}>
                     Abrir NBS/NEBS relacionado
                   </span>
                 </div>
-                <div className={styles.toggleGroup}>
+                <div
+                  className={styles.toggleGroup}
+                  data-testid="navigation-behavior-toggle-group"
+                >
                   <button
-                    className={`${styles.toggleBtn} ${!openNewTab ? styles.active : ""}`}
+                    className={`${styles.toggleBtn} ${openNewTab ? "" : styles.active}`}
                     onClick={() => openNewTab && toggleOpenNewTab()}
                   >
                     Na mesma aba
@@ -243,8 +247,6 @@ export function SettingsModal({
                 </div>
                 <label
                   className={styles.switch}
-                  aria-label="Expandir prefixos NBS"
-                  title="Expandir prefixos NBS"
                 >
                   <input
                     type="checkbox"
@@ -268,7 +270,7 @@ export function SettingsModal({
                 </div>
                 <div className={styles.toggleGroup}>
                   <button
-                    className={`${styles.toggleBtn} ${!nbsChapterNotesNewTab ? styles.active : ""}`}
+                    className={`${styles.toggleBtn} ${nbsChapterNotesNewTab ? "" : styles.active}`}
                     onClick={() => nbsChapterNotesNewTab && toggleNbsChapterNotesNewTab()}
                     aria-pressed={!nbsChapterNotesNewTab}
                   >
@@ -292,8 +294,6 @@ export function SettingsModal({
                   </div>
                   <label
                     className={styles.switch}
-                    aria-label="Modo Desenvolvedor"
-                    title="Modo Desenvolvedor"
                   >
                     <input
                       type="checkbox"

@@ -2,6 +2,7 @@ import { useEffect, useCallback, useRef, useState, Suspense } from 'react';
 
 import { Toaster, toast } from 'react-hot-toast';
 import { Layout } from './components/Layout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { ResultDisplay } from './components/ResultDisplay';
 import { TabsBar } from './components/TabsBar';
 import { ResultSkeleton } from './components/ResultSkeleton';
@@ -19,6 +20,7 @@ import { isServiceCatalogDoc } from './utils/servicesCatalog';
 import { useLocalDatabase } from './context/LocalDatabaseContext';
 import { NotePanel } from './components/NotePanel';
 import { UserProfilePage } from './components/UserProfilePage';
+import { reportClientError } from './utils/errorMonitoring';
 import styles from './App.module.css';
 
 import { ModalManager } from './components/ModalManager';
@@ -89,9 +91,13 @@ function App() {
     }, []);
     const runNonBlockingTask = useCallback((task: Promise<unknown> | void, context: string) => {
         Promise.resolve(task).catch((error) => {
-            if (import.meta.env.DEV) {
-                console.error(`[App] ${context}:`, error);
-            }
+            reportClientError({
+                source: 'async-task',
+                error,
+                context,
+                handled: true,
+                message: `Background UI task failed: ${context}`,
+            });
         });
     }, []);
 
@@ -500,27 +506,34 @@ function App() {
     return (
         <>
             <Toaster position="top-right" />
-            <Suspense fallback={null}>
-                <ModalManager
-                    modals={{
-                        settings: isSettingsOpen,
-                        tutorial: isTutorialOpen,
-                        stats: isStatsOpen,
-                        comparator: isComparatorOpen,
-                        moderate: isModerateOpen,
-                    }}
-                    onClose={{
-                        settings: () => setIsSettingsOpen(false),
-                        tutorial: () => setIsTutorialOpen(false),
-                        stats: () => setIsStatsOpen(false),
-                        comparator: () => setIsComparatorOpen(false),
-                        moderate: () => setIsModerateOpen(false),
-                    }}
-                    currentDoc={activeTab?.document || 'nesh'}
-                    onOpenInDoc={openInDocCurrentTab}
-                    onOpenInNewTab={openInDocNewTab}
-                />
-            </Suspense>
+            <ErrorBoundary
+                boundaryName="modal-manager"
+                title="Nao foi possivel abrir um painel da interface."
+                description="Um dos modais ou paineis da aplicacao falhou ao renderizar. Feche e tente abrir novamente."
+                resetKeys={[isSettingsOpen, isTutorialOpen, isStatsOpen, isComparatorOpen, isModerateOpen]}
+            >
+                <Suspense fallback={null}>
+                    <ModalManager
+                        modals={{
+                            settings: isSettingsOpen,
+                            tutorial: isTutorialOpen,
+                            stats: isStatsOpen,
+                            comparator: isComparatorOpen,
+                            moderate: isModerateOpen,
+                        }}
+                        onClose={{
+                            settings: () => setIsSettingsOpen(false),
+                            tutorial: () => setIsTutorialOpen(false),
+                            stats: () => setIsStatsOpen(false),
+                            comparator: () => setIsComparatorOpen(false),
+                            moderate: () => setIsModerateOpen(false),
+                        }}
+                        currentDoc={activeTab?.document || 'nesh'}
+                        onOpenInDoc={openInDocCurrentTab}
+                        onOpenInNewTab={openInDocNewTab}
+                    />
+                </Suspense>
+            </ErrorBoundary>
             <NotePanel
                 isOpen={!!noteModal}
                 onClose={() => setNoteModal(null)}
@@ -557,121 +570,135 @@ function App() {
                     onNewTab={() => createTab(activeTab?.document || 'nesh')}
                 />
 
-                <div className={styles.resultsSection}>
-                    {/* Renderizacao persistente das abas - usa TabPanel para lazy loading + keep alive */}
-                    {tabs.map(tab => (
-                        <TabPanel
-                            key={tab.id}
-                            id={tab.id}
-                            activeTabId={activeTabId}
-                            className={styles.tabPane}
-                        >
-                            {/* Loading inicial: mostra skeleton APENAS se estiver carregando E nao tiver resultados ainda */}
-                            {(tab.loading && !tab.results) && <ResultSkeleton />}
+                <ErrorBoundary
+                    boundaryName="results-section"
+                    title="Nao foi possivel renderizar os resultados."
+                    description="A area principal da busca encontrou um erro inesperado. Tente novamente ou mude de aba para continuar."
+                    resetKeys={[activeTabId, tabs.length, activeTab?.document, activeTab?.ncm, activeTab?.error]}
+                >
+                    <div className={styles.resultsSection}>
+                        {/* Renderizacao persistente das abas - usa TabPanel para lazy loading + keep alive */}
+                        {tabs.map(tab => (
+                            <TabPanel
+                                key={tab.id}
+                                id={tab.id}
+                                activeTabId={activeTabId}
+                                className={styles.tabPane}
+                            >
+                                {/* Loading inicial: mostra skeleton APENAS se estiver carregando E nao tiver resultados ainda */}
+                                {(tab.loading && !tab.results) && <ResultSkeleton />}
 
-                            {/* Mostrar overlay de carregamento se já temos resultados mas estamos buscando de novo */}
-                            {tab.loading && !!tab.results && (
-                                <>
-                                    <div className={styles.loadingOverlay} />
-                                    <div className={styles.loadingSpinnerContainer}>
-                                        <Spinner />
-                                    </div>
-                                </>
-                            )}
-
-                            {tab.error && (
-                                <div className={styles.emptyState}>
-                                    <h3 className={styles.emptyStateTitle}>Erro</h3>
-                                    <p>{tab.error}</p>
-                                </div>
-                            )}
-
-                            {!tab.loading && !tab.results && !tab.error && (
-                                <div className={styles.emptyState}>
-                                    <div className={styles.emptyStateIconContainer}>
-                                        <div className={styles.emptyStateIcon}>
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
-                                                <circle cx="10" cy="10" r="7" strokeWidth="2.5" fill="currentColor" fillOpacity="0.1"></circle>
-                                                <path d="M6.5 10a3.5 3.5 0 0 1 3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.6"></path>
-                                                <line x1="15.5" y1="15.5" x2="21" y2="21" strokeWidth="3"></line>
-                                            </svg>
+                                {/* Mostrar overlay de carregamento se já temos resultados mas estamos buscando de novo */}
+                                {tab.loading && !!tab.results && (
+                                    <>
+                                        <div className={styles.loadingOverlay} />
+                                        <div className={styles.loadingSpinnerContainer}>
+                                            <Spinner />
                                         </div>
+                                    </>
+                                )}
 
-                                        {renderOfflineStatusAction()}
+                                {tab.error && (
+                                    <div className={styles.emptyState}>
+                                        <h3 className={styles.emptyStateTitle}>Erro</h3>
+                                        <p>{tab.error}</p>
                                     </div>
-                                    <h3 className={styles.emptyStateTitle}>Pronto para buscar</h3>
-                                    <p>{tab.document === 'nbs' || tab.document === 'nebs'
-                                        ? (servicesUnavailableReason || 'Digite um codigo de servico ou termo textual acima')
-                                        : 'Digite um NCM acima ou use o histórico'}</p>
-                                    <p className={styles.emptyStateHint}>
-                                        Dica: Pressione <kbd>/</kbd> para buscar
-                                    </p>
-                                </div>
-                            )}
+                                )}
 
-                            {tab.results && (tab.document === 'nbs' || tab.document === 'nebs') && (
-                                <ServicesTabContent
-                                    doc={tab.document}
-                                    data={tab.results as NbsSearchResponse | NebsSearchResponse}
-                                    onSwitchDoc={(nextDoc, query) => {
-                                        runNonBlockingTask(
-                                            switchTabDocument(tab.id, nextDoc, query),
-                                            'switchTabDocument (services)'
-                                        );
-                                    }}
-                                    onOpenDocInNewTab={(nextDoc, query) => {
-                                        const nextTabId = createTab(nextDoc);
-                                        runNonBlockingTask(
-                                            switchTabDocument(nextTabId, nextDoc, query),
-                                            'switchTabDocument (services new tab)'
-                                        );
-                                    }}
-                                    onContentReady={() => {
-                                        if (!tab.isContentReady) {
-                                            updateTab(tab.id, { isContentReady: true });
-                                        }
-                                    }}
-                                />
-                            )}
+                                {!tab.loading && !tab.results && !tab.error && (
+                                    <div className={styles.emptyState}>
+                                        <div className={styles.emptyStateIconContainer}>
+                                            <div className={styles.emptyStateIcon}>
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+                                                    <circle cx="10" cy="10" r="7" strokeWidth="2.5" fill="currentColor" fillOpacity="0.1"></circle>
+                                                    <path d="M6.5 10a3.5 3.5 0 0 1 3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.6"></path>
+                                                    <line x1="15.5" y1="15.5" x2="21" y2="21" strokeWidth="3"></line>
+                                                </svg>
+                                            </div>
 
-                            {tab.results && tab.document !== 'nbs' && tab.document !== 'nebs' && (
-                                <ResultDisplay
-                                    data={tab.results}
-                                    latestTextQuery={tab.latestTextQuery}
-                                    mobileMenuOpen={tab.id === activeTabId ? mobileMenuOpen : false}
-                                    onCloseMobileMenu={tab.id === activeTabId ? closeMobileMenu : noop}
-                                    isActive={tab.id === activeTabId}
-                                    tabId={tab.id}
-                                    isNewSearch={tab.isNewSearch || false}
-                                    onConsumeNewSearch={(incomingTabId, finalScrollTop) => {
-                                        const updates: Partial<Tab> = { isNewSearch: false };
-                                        if (typeof finalScrollTop === 'number') {
-                                            updates.scrollTop = finalScrollTop;
-                                        }
-                                        updateTab(incomingTabId, updates);
-                                    }}
-                                    // Persistencia explicita do scroll para robustez em unmounts/otimizacoes
-                                    initialScrollTop={tab.scrollTop}
-                                    onPersistScroll={(id, top) => updateTab(id, { scrollTop: top })}
-                                    onContentReady={() => {
-                                        if (!tab.isContentReady) {
-                                            updateTab(tab.id, { isContentReady: true });
-                                        }
-                                    }}
-                                />
-                            )}
-                            {/* Esconder visualmente ResultDisplay se nao estiver pronto? Nao, manter montado para o IntersectionObserver rodar,
-                                apenas cobrir com Skeleton (posicionado absoluto) ou controlar visibilidade via CSS se precisar.
-                                Na pratica o ResultDisplay controla sua propria visibilidade via isContentReady.
-                            */}
-                        </TabPanel>
-                    ))}
-                </div>
+                                            {renderOfflineStatusAction()}
+                                        </div>
+                                        <h3 className={styles.emptyStateTitle}>Pronto para buscar</h3>
+                                        <p>{tab.document === 'nbs' || tab.document === 'nebs'
+                                            ? (servicesUnavailableReason || 'Digite um codigo de servico ou termo textual acima')
+                                            : 'Digite um NCM acima ou use o histórico'}</p>
+                                        <p className={styles.emptyStateHint}>
+                                            Dica: Pressione <kbd>/</kbd> para buscar
+                                        </p>
+                                    </div>
+                                )}
+
+                                {tab.results && (tab.document === 'nbs' || tab.document === 'nebs') && (
+                                    <ServicesTabContent
+                                        doc={tab.document}
+                                        data={tab.results as NbsSearchResponse | NebsSearchResponse}
+                                        onSwitchDoc={(nextDoc, query) => {
+                                            runNonBlockingTask(
+                                                switchTabDocument(tab.id, nextDoc, query),
+                                                'switchTabDocument (services)'
+                                            );
+                                        }}
+                                        onOpenDocInNewTab={(nextDoc, query) => {
+                                            const nextTabId = createTab(nextDoc);
+                                            runNonBlockingTask(
+                                                switchTabDocument(nextTabId, nextDoc, query),
+                                                'switchTabDocument (services new tab)'
+                                            );
+                                        }}
+                                        onContentReady={() => {
+                                            if (!tab.isContentReady) {
+                                                updateTab(tab.id, { isContentReady: true });
+                                            }
+                                        }}
+                                    />
+                                )}
+
+                                {tab.results && tab.document !== 'nbs' && tab.document !== 'nebs' && (
+                                    <ResultDisplay
+                                        data={tab.results}
+                                        latestTextQuery={tab.latestTextQuery}
+                                        mobileMenuOpen={tab.id === activeTabId ? mobileMenuOpen : false}
+                                        onCloseMobileMenu={tab.id === activeTabId ? closeMobileMenu : noop}
+                                        isActive={tab.id === activeTabId}
+                                        tabId={tab.id}
+                                        isNewSearch={tab.isNewSearch || false}
+                                        onConsumeNewSearch={(incomingTabId, finalScrollTop) => {
+                                            const updates: Partial<Tab> = { isNewSearch: false };
+                                            if (typeof finalScrollTop === 'number') {
+                                                updates.scrollTop = finalScrollTop;
+                                            }
+                                            updateTab(incomingTabId, updates);
+                                        }}
+                                        // Persistencia explicita do scroll para robustez em unmounts/otimizacoes
+                                        initialScrollTop={tab.scrollTop}
+                                        onPersistScroll={(id, top) => updateTab(id, { scrollTop: top })}
+                                        onContentReady={() => {
+                                            if (!tab.isContentReady) {
+                                                updateTab(tab.id, { isContentReady: true });
+                                            }
+                                        }}
+                                    />
+                                )}
+                                {/* Esconder visualmente ResultDisplay se nao estiver pronto? Nao, manter montado para o IntersectionObserver rodar,
+                                    apenas cobrir com Skeleton (posicionado absoluto) ou controlar visibilidade via CSS se precisar.
+                                    Na pratica o ResultDisplay controla sua propria visibilidade via isContentReady.
+                                */}
+                            </TabPanel>
+                        ))}
+                    </div>
+                </ErrorBoundary>
             </Layout>
-            <UserProfilePage
-                isOpen={isProfileOpen}
-                onClose={() => setIsProfileOpen(false)}
-            />
+            <ErrorBoundary
+                boundaryName="user-profile-page"
+                title="Nao foi possivel abrir o perfil."
+                description="A area de conta encontrou um erro inesperado. Feche e tente abrir o perfil novamente."
+                resetKeys={[isProfileOpen]}
+            >
+                <UserProfilePage
+                    isOpen={isProfileOpen}
+                    onClose={() => setIsProfileOpen(false)}
+                />
+            </ErrorBoundary>
         </>
     );
 }

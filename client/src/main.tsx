@@ -3,12 +3,14 @@ import { createRoot } from 'react-dom/client'
 import { ClerkProvider } from '@clerk/react'
 import './index.css'
 import App from './App'
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthProvider, AnonymousAuthProvider } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
 import { GlossaryProvider } from './context/GlossaryContext';
 import { CrossChapterNoteProvider } from './context/CrossChapterNoteContext';
 import { LocalDatabaseProvider } from './context/LocalDatabaseContext';
 import { clerkTheme } from './config/clerkAppearance';
+import { installGlobalErrorMonitoring } from './utils/errorMonitoring';
 import {
     getClerkUnavailableMessage,
     isClerkLoadFailureReason,
@@ -137,8 +139,17 @@ function RootApp() {
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Failed to find the root element');
 
+installGlobalErrorMonitoring();
+
 createRoot(rootElement).render(
     <StrictMode>
-        <RootApp />
+        <ErrorBoundary
+            boundaryName="root-app"
+            title="Nao foi possivel iniciar o aplicativo."
+            description="A aplicacao encontrou um erro inesperado durante a inicializacao. Tente recarregar a pagina para continuar."
+            variant="full-screen"
+        >
+            <RootApp />
+        </ErrorBoundary>
     </StrictMode>,
 );

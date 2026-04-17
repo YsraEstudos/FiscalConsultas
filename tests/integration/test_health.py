@@ -159,6 +159,18 @@ def test_security_headers_are_sent_on_public_responses(client):
         assert "Strict-Transport-Security" not in response.headers
 
 
+def test_production_csp_does_not_expose_local_connect_sources(client, monkeypatch):
+    monkeypatch.setattr(system.settings.server, "env", "production", raising=False)
+
+    response = client.get("/api/status")
+
+    assert response.status_code == 200
+    csp = response.headers["Content-Security-Policy"]
+    assert "localhost" not in csp
+    assert "127.0.0.1" not in csp
+    assert "connect-src 'self' https: wss:" in csp
+
+
 def test_openapi_route_is_hidden_without_local_debug_mode(client, monkeypatch):
     monkeypatch.setattr(system.settings.features, "debug_mode", False, raising=False)
 
@@ -208,3 +220,26 @@ def test_cors_exposes_request_id_header(client):
     assert response.status_code == 200
     exposed_headers = response.headers.get("Access-Control-Expose-Headers", "")
     assert "X-Request-Id" in exposed_headers
+
+
+def test_metrics_endpoint_requires_token(client, monkeypatch):
+    monkeypatch.setattr(
+        system.settings.observability, "metrics_token", "metrics-secret", raising=False
+    )
+
+    response = client.get("/api/metrics")
+
+    assert response.status_code == 403
+
+
+def test_metrics_endpoint_returns_prometheus_payload_with_token(client, monkeypatch):
+    monkeypatch.setattr(
+        system.settings.observability, "metrics_token", "metrics-secret", raising=False
+    )
+
+    response = client.get("/api/metrics", headers={"X-Metrics-Token": "metrics-secret"})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "nesh_catalog_status" in response.text
+    assert "nesh_payload_cache_hits" in response.text

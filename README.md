@@ -411,6 +411,12 @@ AUTH__CLERK_CLOCK_SKEW_SECONDS=120
 SERVER__CORS_ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","https://fiscalconsultas.pages.dev"]
 SERVER__CORS_ALLOWED_ORIGIN_REGEX=^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$
 GOOGLE_API_KEY=
+LOGGING__LEVEL=INFO
+LOGGING__REDACT_SENSITIVE_DATA=true
+OBSERVABILITY__METRICS_TOKEN=troque-por-um-token-forte
+OBSERVABILITY__SENTRY_DSN=
+OBSERVABILITY__SENTRY_ENVIRONMENT=production
+OBSERVABILITY__SENTRY_TRACES_SAMPLE_RATE=0.0
 ```
 
 Se você usar previews do Cloudflare Pages, essas duas variáveis com regex evitam dor de cabeça com subdomínios temporários.
@@ -722,6 +728,17 @@ Checklist mínimo para produção:
 3. Configurar `SERVER__CORS_ALLOWED_ORIGINS` com domínios oficiais (sem curingas em produção).
 4. Configurar Redis (opcional, recomendado): `CACHE__ENABLE_REDIS=true` e `CACHE__REDIS_URL`.
 5. Validar `GET /api/status` após deploy.
+6. Rodar `python scripts/validate_production_env.py` antes do go-live para detectar configuração de produção incoerente.
+7. Configurar `OBSERVABILITY__METRICS_TOKEN` para proteger `GET /api/metrics`.
+8. Se quiser APM externo, configurar `OBSERVABILITY__SENTRY_DSN` e instalar `sentry-sdk` no ambiente.
+
+Hardening operacional já aplicado no backend:
+
+- `Content-Security-Policy` agora é dinâmica por ambiente: em produção ela não anuncia origens locais (`localhost`, `127.0.0.1`, `ws://` locais).
+- O logger do backend agora evita duplicação de handlers e redige dados sensíveis comuns (`Authorization`, tokens, segredos, senhas, chaves).
+- O startup em produção passa a registrar warnings explícitos quando encontra sinais de configuração fraca, como `debug_mode` ligado, `CORS` com loopback, Redis em `localhost` ou banco ainda em SQLite.
+- O backend já expõe `GET /api/metrics` em formato Prometheus, mas só responde quando `OBSERVABILITY__METRICS_TOKEN` estiver configurado e enviado no header.
+- A inicialização de Sentry é opcional e segura por fallback: se `OBSERVABILITY__SENTRY_DSN` existir sem `sentry-sdk`, o backend apenas registra warning e segue operando.
 
 Exemplos de origem real do frontend:
 

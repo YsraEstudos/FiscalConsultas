@@ -1,4 +1,6 @@
 import logging
+import os
+import tempfile
 
 import pytest
 from backend.config import logging_config
@@ -38,14 +40,55 @@ def test_setup_logging_handles_windows_stdout_reconfigure_failure(monkeypatch):
     _clear_nesh_handlers()
 
 
-def test_setup_logging_adds_file_handler_when_log_file_provided(tmp_path, monkeypatch):
+def test_setup_logging_adds_file_handler_when_log_file_provided(monkeypatch):
     _clear_nesh_handlers()
     monkeypatch.setattr(logging_config.sys, "platform", "linux", raising=False)
-    log_file = tmp_path / "nesh.log"
+    with tempfile.NamedTemporaryFile(suffix=".log", delete=False, dir=".") as temp_log:
+        log_file = temp_log.name
 
-    logging_config.setup_logging(log_file=str(log_file))
+    try:
+        logging_config.setup_logging(log_file=log_file)
+        logger = logging.getLogger("nesh")
+        assert any(isinstance(h, logging.FileHandler) for h in logger.handlers)
+    finally:
+        _clear_nesh_handlers()
+        if os.path.exists(log_file):
+            os.remove(log_file)
+
+
+def test_setup_logging_does_not_duplicate_managed_handlers(monkeypatch):
+    _clear_nesh_handlers()
+    monkeypatch.setattr(logging_config.sys, "platform", "linux", raising=False)
+
+    logging_config.setup_logging(level="INFO")
+    logging_config.setup_logging(level="DEBUG")
+
     logger = logging.getLogger("nesh")
-    assert any(isinstance(h, logging.FileHandler) for h in logger.handlers)
+    stream_handlers = [
+        handler for handler in logger.handlers if isinstance(handler, logging.StreamHandler)
+    ]
+    assert len(stream_handlers) == 1
+    assert logger.level == logging.DEBUG
+    _clear_nesh_handlers()
+
+
+def test_setup_logging_redacts_sensitive_values(monkeypatch, capsys):
+    _clear_nesh_handlers()
+    monkeypatch.setattr(logging_config.sys, "platform", "linux", raising=False)
+
+    logging_config.setup_logging(level="INFO", redact_sensitive_data=True)
+    logger = logging.getLogger("nesh")
+    logger.info(
+        "headers authorization=Bearer abc.def token=secret-value password=hunter2"
+    )
+    logger.info({"authorization": "Bearer jwt-token", "safe": "ok"})
+
+    captured = capsys.readouterr()
+    assert "abc.def" not in captured.out
+    assert "secret-value" not in captured.out
+    assert "hunter2" not in captured.out
+    assert "[REDACTED]" in captured.out
+    assert "ok" in captured.out
     _clear_nesh_handlers()
 
 
