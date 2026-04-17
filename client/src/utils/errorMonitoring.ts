@@ -49,7 +49,8 @@ type MonitoringState = {
 };
 
 const CLIENT_ERROR_EVENT_NAME = 'nesh:error-report';
-const CLIENT_ERROR_ENDPOINT = (import.meta.env.VITE_CLIENT_ERROR_ENDPOINT || '').trim();
+const DEFAULT_CLIENT_ERROR_ENDPOINT = (import.meta.env.VITE_CLIENT_ERROR_ENDPOINT || '').trim();
+let CLIENT_ERROR_ENDPOINT = DEFAULT_CLIENT_ERROR_ENDPOINT;
 const DEDUPE_WINDOW_MS = 3000;
 const MAX_MESSAGE_LENGTH = 500;
 const MAX_STACK_LENGTH = 4000;
@@ -179,8 +180,9 @@ function sendClientErrorToEndpoint(report: ClientErrorReport) {
     try {
         if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
             const blob = new Blob([payload], { type: 'application/json' });
-            navigator.sendBeacon(CLIENT_ERROR_ENDPOINT, blob);
-            return;
+            if (navigator.sendBeacon(CLIENT_ERROR_ENDPOINT, blob)) {
+                return;
+            }
         }
     } catch {
         // Fall back to fetch below.
@@ -303,6 +305,11 @@ export function __resetErrorMonitoringForTests() {
     state.handleUnhandledRejection = undefined;
     state.recentFingerprints.clear();
     state.installed = false;
+    CLIENT_ERROR_ENDPOINT = DEFAULT_CLIENT_ERROR_ENDPOINT;
+}
+
+export function __setClientErrorEndpointForTests(endpoint: string) {
+    CLIENT_ERROR_ENDPOINT = endpoint.trim();
 }
 
 export { CLIENT_ERROR_EVENT_NAME };

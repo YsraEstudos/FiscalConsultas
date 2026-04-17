@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
     __resetErrorMonitoringForTests,
+    __setClientErrorEndpointForTests,
     CLIENT_ERROR_EVENT_NAME,
     installGlobalErrorMonitoring,
     reportClientError,
@@ -86,6 +87,40 @@ describe('errorMonitoring', () => {
             expect(reportedErrors).toHaveLength(1);
         } finally {
             dispose();
+        }
+    });
+
+    it('falls back to fetch when sendBeacon rejects the payload queue', () => {
+        __resetErrorMonitoringForTests();
+        const sendBeaconMock = vi.fn().mockReturnValue(false);
+        const fetchMock = vi.fn().mockResolvedValue(undefined);
+
+        __setClientErrorEndpointForTests('/api/client-errors');
+        vi.stubGlobal('navigator', { sendBeacon: sendBeaconMock } as Navigator);
+        vi.stubGlobal('fetch', fetchMock);
+
+        try {
+            reportClientError({
+                source: 'network',
+                message: 'queue dropped',
+                handled: true,
+            });
+
+            expect(sendBeaconMock).toHaveBeenCalledTimes(1);
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/client-errors',
+                expect.objectContaining({
+                    method: 'POST',
+                    keepalive: true,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: expect.stringContaining('"message":"queue dropped"'),
+                }),
+            );
+        } finally {
+            vi.unstubAllGlobals();
         }
     });
 
