@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+import threading
 from typing import Any
 
 from backend.config.settings import settings
@@ -9,6 +10,7 @@ from backend.config.settings import settings
 logger = logging.getLogger("nesh.server.observability")
 
 _sentry_initialized = False
+_sentry_lock = threading.Lock()
 
 
 def _resolve_sentry_environment() -> str:
@@ -25,15 +27,26 @@ def configure_observability(
 ) -> None:
     global _sentry_initialized
 
-    if _sentry_initialized or not settings.observability.sentry_enabled:
+    if not settings.observability.sentry_enabled:
         return
+
+    with _sentry_lock:
+        if _sentry_initialized:
+            return
 
     try:
         sentry_sdk = importlib.import_module("sentry_sdk")
-        sentry_fastapi = importlib.import_module("sentry_sdk.integrations.fastapi")
-    except ModuleNotFoundError:
+    except (ImportError, ModuleNotFoundError):
         logger.warning(
             "Observability configured with Sentry DSN, but sentry_sdk is not installed."
+        )
+        return
+
+    try:
+        sentry_fastapi = importlib.import_module("sentry_sdk.integrations.fastapi")
+    except (ImportError, ModuleNotFoundError):
+        logger.warning(
+            "sentry_sdk is installed, but sentry_sdk.integrations.fastapi is unavailable."
         )
         return
 
@@ -46,7 +59,9 @@ def configure_observability(
 
     init = getattr(sentry_sdk, "init", None)
     if not callable(init):
-        logger.warning("sentry_sdk.init is unavailable; skipping Sentry initialization.")
+        logger.warning(
+            "sentry_sdk.init is unavailable; skipping Sentry initialization."
+        )
         return
 
     init_kwargs: dict[str, Any] = {
@@ -60,8 +75,11 @@ def configure_observability(
     if server_name:
         init_kwargs["server_name"] = server_name
 
-    init(**init_kwargs)
-    _sentry_initialized = True
+    with _sentry_lock:
+        if _sentry_initialized:
+            return
+        init(**init_kwargs)
+        _sentry_initialized = True
     logger.info(
         "Sentry observability initialized for environment=%s",
         init_kwargs["environment"],

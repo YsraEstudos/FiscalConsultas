@@ -1,5 +1,6 @@
 import asyncio
 import re
+import secrets
 import time
 from typing import Annotated
 
@@ -98,7 +99,7 @@ def _is_metrics_request_authorized(request: Request) -> bool:
     if not configured_token:
         return False
     token = _extract_metrics_token(request)
-    return bool(token and token == configured_token)
+    return bool(token and secrets.compare_digest(token, configured_token))
 
 
 def _status_limiter_key(request: Request) -> str:

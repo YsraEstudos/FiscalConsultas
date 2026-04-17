@@ -9,6 +9,8 @@ import sys
 from typing import Any, Optional
 
 _REDACTED = "[REDACTED]"
+NESH_MANAGED_HANDLER_ATTR = "_nesh_managed_handler"
+# Sentinel used to identify handlers created by setup_logging without touching user-managed handlers.
 _SENSITIVE_KEY_TOKENS = (
     "authorization",
     "token",
@@ -23,9 +25,7 @@ _SENSITIVE_KEY_TOKENS = (
     "postgres_url",
 )
 _SENSITIVE_STRING_PATTERNS = (
-    re.compile(
-        r"(?i)\b(authorization)\b(\s*[:=]\s*)(bearer\s+[^\s,]+|[^\s,]+)"
-    ),
+    re.compile(r"(?i)\b(authorization)\b(\s*[:=]\s*)(bearer\s+[^\s,]+|[^\s,]+)"),
     re.compile(
         r"(?i)\b(x-admin-token|x-asaas-access-token|asaas-access-token|api[_-]?key|secret|password|token)\b(\s*[:=]\s*)([^\s,]+)"
     ),
@@ -84,7 +84,7 @@ def _resolve_logging_level(level: int | str | None) -> int:
 
 def _remove_managed_handlers(logger: logging.Logger) -> None:
     for handler in list(logger.handlers):
-        if getattr(handler, "_nesh_managed_handler", False):
+        if getattr(handler, NESH_MANAGED_HANDLER_ATTR, False):
             logger.removeHandler(handler)
             try:
                 handler.close()
@@ -129,7 +129,7 @@ def setup_logging(
 
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
-    console_handler._nesh_managed_handler = True
+    setattr(console_handler, NESH_MANAGED_HANDLER_ATTR, True)
     for active_filter in active_filters:
         console_handler.addFilter(active_filter)
 
@@ -144,7 +144,7 @@ def setup_logging(
     if log_file:
         file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setFormatter(formatter)
-        file_handler._nesh_managed_handler = True
+        setattr(file_handler, NESH_MANAGED_HANDLER_ATTR, True)
         for active_filter in active_filters:
             file_handler.addFilter(active_filter)
         root_logger.addHandler(file_handler)

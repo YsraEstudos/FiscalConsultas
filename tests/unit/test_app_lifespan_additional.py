@@ -468,7 +468,10 @@ def test_build_content_security_policy_drops_local_origins_in_production(monkeyp
     assert "connect-src 'self' https: wss:" in csp
     assert "localhost" not in csp
     assert "127.0.0.1" not in csp
-    assert "frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com" in csp
+    assert (
+        "frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com"
+        in csp
+    )
 
 
 def test_build_content_security_policy_keeps_local_origins_in_development(monkeypatch):
@@ -501,14 +504,22 @@ def test_log_runtime_security_warnings_for_production_misconfiguration(monkeypat
         raising=False,
     )
     monkeypatch.setattr(app_module.settings.database, "engine", "sqlite", raising=False)
-    monkeypatch.setattr(app_module.logger, "warning", lambda message, *args: warnings.append(message % args))
+    monkeypatch.setattr(
+        app_module.logger,
+        "warning",
+        lambda message, *args: warnings.append(message % args),
+    )
 
     app_module._log_runtime_security_warnings()
 
     assert any("FEATURES__DEBUG_MODE=true" in warning for warning in warnings)
     assert any("localhost/loopback" in warning for warning in warnings)
-    assert any("CACHE__REDIS_URL apontando para localhost" in warning for warning in warnings)
-    assert any("DATABASE__ENGINE não está em postgresql" in warning for warning in warnings)
+    assert any(
+        "CACHE__REDIS_URL apontando para localhost" in warning for warning in warnings
+    )
+    assert any(
+        "DATABASE__ENGINE não está em postgresql" in warning for warning in warnings
+    )
 
 
 @pytest.mark.asyncio

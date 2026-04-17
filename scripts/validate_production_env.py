@@ -9,14 +9,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend.config.settings import settings
-from backend.server.middleware import is_loopback_host
-
-
-def _origin_looks_like_loopback(origin: str) -> bool:
-    try:
-        return is_loopback_host(urlparse(origin).hostname)
-    except Exception:
-        return False
+from backend.server.middleware import is_loopback_host, origin_looks_like_loopback
 
 
 def _print_items(prefix: str, items: list[str]) -> None:
@@ -41,8 +34,8 @@ def main() -> int:
             "SERVER__CORS_ALLOWED_ORIGINS deve listar explicitamente os domínios oficiais do frontend."
         )
 
-    if any(
-        _origin_looks_like_loopback(origin)
+    if settings.server.env == "production" and any(
+        origin_looks_like_loopback(origin)
         for origin in settings.server.cors_allowed_origins
     ):
         warnings.append(
@@ -62,26 +55,40 @@ def main() -> int:
     if settings.cache.enable_redis:
         if not settings.cache.redis_url.strip():
             errors.append("CACHE__ENABLE_REDIS=true exige CACHE__REDIS_URL preenchida.")
-        elif "localhost" in settings.cache.redis_url:
+        elif is_loopback_host(urlparse(settings.cache.redis_url).hostname):
             warnings.append(
                 "CACHE__REDIS_URL ainda aponta para localhost. Em produção, use Redis gerenciado."
             )
 
-    if settings.server.env == "production" and not settings.observability.metrics_enabled:
+    if (
+        settings.server.env == "production"
+        and not settings.observability.metrics_enabled
+    ):
         warnings.append(
             "OBSERVABILITY__METRICS_TOKEN ausente. O endpoint /api/metrics ficará desabilitado."
         )
 
-    if not settings.observability.sentry_enabled:
+    if (
+        settings.server.env == "production"
+        and not settings.observability.sentry_enabled
+    ):
         warnings.append(
             "OBSERVABILITY__SENTRY_DSN ausente. Erros do backend não serão enviados para APM externo."
         )
 
-    if not settings.auth.clerk_domain:
-        warnings.append("AUTH__CLERK_DOMAIN ausente. Fluxos autenticados não serão validados.")
-    if not settings.auth.clerk_issuer:
-        warnings.append("AUTH__CLERK_ISSUER ausente. O backend perde validação explícita de issuer.")
-    if not settings.auth.clerk_authorized_parties and not settings.auth.clerk_authorized_parties_regex:
+    if settings.server.env == "production" and not settings.auth.clerk_domain:
+        warnings.append(
+            "AUTH__CLERK_DOMAIN ausente. Fluxos autenticados não serão validados."
+        )
+    if settings.server.env == "production" and not settings.auth.clerk_issuer:
+        warnings.append(
+            "AUTH__CLERK_ISSUER ausente. O backend perde validação explícita de issuer."
+        )
+    if (
+        settings.server.env == "production"
+        and not settings.auth.clerk_authorized_parties
+        and not settings.auth.clerk_authorized_parties_regex
+    ):
         warnings.append(
             "Nenhum AUTH__CLERK_AUTHORIZED_PARTIES(_REGEX) configurado. Revise azp antes do deploy."
         )

@@ -240,7 +240,14 @@ export function reportClientError(options: ReportClientErrorOptions): ClientErro
 }
 
 function handleWindowError(event: Event) {
+    if (event.defaultPrevented) {
+        return;
+    }
+
     if (event instanceof ErrorEvent) {
+        if (isClerkLoadFailureReason(event.error ?? event.message)) {
+            return;
+        }
         reportClientError({
             source: 'window-error',
             error: event.error ?? event.message,
@@ -272,6 +279,10 @@ function handleWindowError(event: Event) {
 }
 
 function handleUnhandledRejection(event: PromiseRejectionEvent) {
+    if (event.defaultPrevented || isClerkLoadFailureReason(event.reason)) {
+        return;
+    }
+
     reportClientError({
         source: 'unhandled-rejection',
         error: event.reason,
@@ -313,3 +324,4 @@ export function __setClientErrorEndpointForTests(endpoint: string) {
 }
 
 export { CLIENT_ERROR_EVENT_NAME };
+import { isClerkLoadFailureReason } from '../auth/clerkLoadFailure';

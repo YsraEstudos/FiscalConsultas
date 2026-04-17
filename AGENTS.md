@@ -1,4 +1,4 @@
-# AGENTS.md instructions for `C:\Users\israe\OneDrive\Documentos\Projetos\Trabalho\Fiscal Site`
+# AGENTS.md for this repository
 
 Before sending code, check whether the full Windows file path is too long. Prefer shorter paths, and if you get a "filename too long" error, split the change into smaller parts or use a relative path.
 

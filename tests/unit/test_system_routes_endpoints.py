@@ -441,16 +441,23 @@ async def test_get_metrics_returns_prometheus_payload(monkeypatch):
             "tipi_internal_caches": {"code_search_cache": {"hit_rate": 0.75}},
         }
 
-    monkeypatch.setattr(system, "_collect_cache_metrics_payload", _fake_collect_cache_metrics)
+    monkeypatch.setattr(
+        system, "_collect_cache_metrics_payload", _fake_collect_cache_metrics
+    )
 
     response = await system.get_metrics(request)
 
     assert response.status_code == 200
     body = response.body.decode("utf-8")
-    assert '# HELP nesh_catalog_status Catalog health status (1=online, 0=error).' in body
+    assert (
+        "# HELP nesh_catalog_status Catalog health status (1=online, 0=error)." in body
+    )
     assert 'nesh_catalog_status{catalog="nesh"} 1' in body
     assert 'nesh_payload_cache_hits{cache="search_code_payload_cache"} 1' in body
-    assert 'nesh_internal_cache_hit_rate{cache="chapter_cache",service="nesh_internal_caches"} 0.5' in body
+    assert (
+        'nesh_internal_cache_hit_rate{cache="chapter_cache",service="nesh_internal_caches"} 0.5'
+        in body
+    )
 
 
 @pytest.mark.asyncio

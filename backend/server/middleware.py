@@ -107,6 +107,10 @@ def is_loopback_host(host: Optional[str]) -> bool:
         return False
 
 
+def origin_looks_like_loopback(origin: str) -> bool:
+    return is_loopback_host(urlparse(origin).hostname)
+
+
 def _build_jwks_url(raw_domain: Optional[str]) -> Optional[str]:
     normalized_domain = _normalize_clerk_domain(raw_domain)
     if not normalized_domain:

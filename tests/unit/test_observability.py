@@ -25,7 +25,9 @@ def _reset_observability_state(monkeypatch):
         0.0,
         raising=False,
     )
-    monkeypatch.setattr(observability.settings.server, "env", "development", raising=False)
+    monkeypatch.setattr(
+        observability.settings.server, "env", "development", raising=False
+    )
     yield
     observability.reset_observability_for_tests()
 
@@ -44,23 +46,27 @@ def test_configure_observability_skips_when_dsn_missing(monkeypatch):
     assert called["count"] == 0
 
 
-def test_configure_observability_logs_warning_when_sdk_missing(monkeypatch, caplog):
+def test_configure_observability_logs_warning_when_sdk_missing(monkeypatch):
     monkeypatch.setattr(
         observability.settings.observability,
         "sentry_dsn",
         "https://public@example.ingest.sentry.io/1",
         raising=False,
     )
+    warnings: list[str] = []
 
     def _missing_import(_name):  # NOSONAR
         raise ModuleNotFoundError("missing sentry")
 
+    def _capture_warning(message, *args, **kwargs):  # NOSONAR
+        warnings.append(str(message))
+
     monkeypatch.setattr(observability.importlib, "import_module", _missing_import)
+    monkeypatch.setattr(observability.logger, "warning", _capture_warning)
 
-    with caplog.at_level("WARNING"):
-        observability.configure_observability()
+    observability.configure_observability()
 
-    assert "sentry_sdk is not installed" in caplog.text
+    assert any("sentry_sdk is not installed" in message for message in warnings)
 
 
 def test_configure_observability_initializes_sentry_once(monkeypatch):

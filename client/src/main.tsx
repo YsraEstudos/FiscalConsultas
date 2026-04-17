@@ -122,6 +122,10 @@ function RootApp() {
         };
     }, [mode]);
 
+    useLayoutEffect(() => {
+        installGlobalErrorMonitoring();
+    }, []);
+
     if (mode === 'missing-key') {
         console.error(
             'Missing Clerk key. Configure VITE_CLERK_PUBLISHABLE_KEY in client/.env.local and restart Vite.'
@@ -139,14 +143,12 @@ function RootApp() {
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Failed to find the root element');
 
-installGlobalErrorMonitoring();
-
 createRoot(rootElement).render(
     <StrictMode>
         <ErrorBoundary
             boundaryName="root-app"
-            title="Nao foi possivel iniciar o aplicativo."
-            description="A aplicacao encontrou um erro inesperado durante a inicializacao. Tente recarregar a pagina para continuar."
+            title="Não foi possível iniciar o aplicativo."
+            description="A aplicação encontrou um erro inesperado durante a inicialização. Tente recarregar a página para continuar."
             variant="full-screen"
         >
             <RootApp />

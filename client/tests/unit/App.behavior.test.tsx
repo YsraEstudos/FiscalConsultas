@@ -940,7 +940,7 @@ describe('App behavior', () => {
     expect((globalThis as any).nesh).toBeUndefined();
   });
 
-  it('keeps the layout visible when ResultDisplay crashes and shows a fallback in the results area', () => {
+  it('keeps the layout visible when ResultDisplay crashes, shows a fallback, and recovers after retry', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mocks.resultDisplayCrashTabIdRef.value = 'tab-1';
     setTabsState([
@@ -956,8 +956,14 @@ describe('App behavior', () => {
 
       expect(screen.getByTestId('layout')).toBeInTheDocument();
       expect(screen.getByRole('alert')).toBeInTheDocument();
-      expect(screen.getByText('Nao foi possivel renderizar os resultados.')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Tentar novamente' })).toBeInTheDocument();
+      expect(screen.getByText('Não foi possível renderizar os resultados.')).toBeInTheDocument();
+
+      mocks.resultDisplayCrashTabIdRef.value = null;
+      fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('result-display-tab-1')).toBeInTheDocument();
+      });
     } finally {
       consoleErrorSpy.mockRestore();
     }

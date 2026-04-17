@@ -1,6 +1,4 @@
 import logging
-import os
-import tempfile
 
 import pytest
 from backend.config import logging_config
@@ -40,11 +38,10 @@ def test_setup_logging_handles_windows_stdout_reconfigure_failure(monkeypatch):
     _clear_nesh_handlers()
 
 
-def test_setup_logging_adds_file_handler_when_log_file_provided(monkeypatch):
+def test_setup_logging_adds_file_handler_when_log_file_provided(monkeypatch, tmp_path):
     _clear_nesh_handlers()
     monkeypatch.setattr(logging_config.sys, "platform", "linux", raising=False)
-    with tempfile.NamedTemporaryFile(suffix=".log", delete=False, dir=".") as temp_log:
-        log_file = temp_log.name
+    log_file = str(tmp_path / "nesh.log")
 
     try:
         logging_config.setup_logging(log_file=log_file)
@@ -52,8 +49,6 @@ def test_setup_logging_adds_file_handler_when_log_file_provided(monkeypatch):
         assert any(isinstance(h, logging.FileHandler) for h in logger.handlers)
     finally:
         _clear_nesh_handlers()
-        if os.path.exists(log_file):
-            os.remove(log_file)
 
 
 def test_setup_logging_does_not_duplicate_managed_handlers(monkeypatch):
@@ -65,7 +60,9 @@ def test_setup_logging_does_not_duplicate_managed_handlers(monkeypatch):
 
     logger = logging.getLogger("nesh")
     stream_handlers = [
-        handler for handler in logger.handlers if isinstance(handler, logging.StreamHandler)
+        handler
+        for handler in logger.handlers
+        if isinstance(handler, logging.StreamHandler)
     ]
     assert len(stream_handlers) == 1
     assert logger.level == logging.DEBUG

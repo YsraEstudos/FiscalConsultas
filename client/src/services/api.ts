@@ -287,7 +287,20 @@ function logUnauthorizedResponse(
     });
 }
 
+function isCanceledRequestError(error: AxiosError | Error | unknown): boolean {
+    if (axios.isCancel(error)) {
+        return true;
+    }
+
+    const candidate = error as { code?: unknown; name?: unknown } | null;
+    return candidate?.code === 'ERR_CANCELED' || candidate?.name === 'CanceledError';
+}
+
 function shouldReportApiFailure(status: number | undefined, error: AxiosError): boolean {
+    if (isCanceledRequestError(error)) {
+        return false;
+    }
+
     if (typeof status === 'number') {
         return status >= 500;
     }
@@ -522,15 +535,20 @@ api.interceptors.request.use(
         return config;
     },
     (error: AxiosError) => {
+        const axiosMetadata = axios.isAxiosError(error)
+            ? {
+                code: error.code,
+                timeoutMs: error.config?.timeout,
+            }
+            : undefined;
+
         reportClientError({
             source: 'network',
             error,
             handled: true,
             context: 'axios-request-interceptor',
-            message: 'API request could not be prepared',
-            metadata: {
-                code: error.code,
-            },
+            message: error instanceof Error ? error.message : 'API request could not be prepared',
+            metadata: axiosMetadata,
         });
         return Promise.reject(error);
     }

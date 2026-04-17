@@ -226,12 +226,14 @@ export function SettingsModal({
                   <button
                     className={`${styles.toggleBtn} ${openNewTab ? "" : styles.active}`}
                     onClick={() => openNewTab && toggleOpenNewTab()}
+                    aria-pressed={!openNewTab}
                   >
                     Na mesma aba
                   </button>
                   <button
                     className={`${styles.toggleBtn} ${openNewTab ? styles.active : ""}`}
                     onClick={() => !openNewTab && toggleOpenNewTab()}
+                    aria-pressed={openNewTab}
                   >
                     Em nova aba
                   </button>

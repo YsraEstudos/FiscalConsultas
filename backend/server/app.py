@@ -3,6 +3,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Any, cast
+from urllib.parse import urlparse
 
 from backend.config import CONFIG, setup_logging
 from backend.config.exceptions import NeshError
@@ -27,7 +28,11 @@ from backend.server.error_handlers import (
     generic_exception_handler,
     nesh_exception_handler,
 )
-from backend.server.middleware import TenantMiddleware, is_loopback_host
+from backend.server.middleware import (
+    TenantMiddleware,
+    is_loopback_host,
+    origin_looks_like_loopback,
+)
 from backend.server.observability import configure_observability
 from backend.services.ai_service import AiService
 from backend.services.nbs_service import NbsService
@@ -185,16 +190,6 @@ def _record_release_metadata(app: FastAPI) -> None:
     )
 
 
-def _origin_looks_like_loopback(origin: str) -> bool:
-    try:
-        from urllib.parse import urlparse
-
-        parsed = urlparse(origin)
-        return is_loopback_host(parsed.hostname)
-    except Exception:
-        return False
-
-
 def _log_runtime_security_warnings() -> None:
     if settings.server.env != "production":
         return
@@ -208,14 +203,15 @@ def _log_runtime_security_warnings() -> None:
             "SERVER__CORS_ALLOWED_ORIGINS vazio em produção; configure apenas domínios oficiais."
         )
     elif any(
-        _origin_looks_like_loopback(origin)
+        origin_looks_like_loopback(origin)
         for origin in settings.server.cors_allowed_origins
     ):
         warnings.append(
             "SERVER__CORS_ALLOWED_ORIGINS em produção ainda inclui origem localhost/loopback."
         )
 
-    if settings.cache.enable_redis and "localhost" in settings.cache.redis_url:
+    redis_hostname = urlparse(settings.cache.redis_url).hostname
+    if settings.cache.enable_redis and is_loopback_host(redis_hostname):
         warnings.append(
             "CACHE__ENABLE_REDIS=true em produção com CACHE__REDIS_URL apontando para localhost."
         )

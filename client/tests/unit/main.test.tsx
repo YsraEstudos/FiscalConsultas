@@ -191,7 +191,7 @@ describe('main.tsx bootstrap', () => {
       render(<>{refs.capturedNode.current}</>);
 
       expect(screen.getByRole('alert')).toBeInTheDocument();
-      expect(screen.getByText('Nao foi possivel iniciar o aplicativo.')).toBeInTheDocument();
+      expect(screen.getByText('Não foi possível iniciar o aplicativo.')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Recarregar página' })).toBeInTheDocument();
     } finally {
       consoleErrorSpy.mockRestore();

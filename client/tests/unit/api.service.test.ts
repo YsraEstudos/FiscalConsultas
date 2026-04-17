@@ -65,6 +65,26 @@ const mockAxios = vi.hoisted(() => {
 vi.mock('axios', () => ({
   default: {
     create: mockAxios.create,
+    isAxiosError: vi.fn(
+      (error: unknown) =>
+        Boolean(
+          error &&
+            typeof error === 'object' &&
+            ('config' in error ||
+              'response' in error ||
+              'code' in error ||
+              'isAxiosError' in error),
+        ),
+    ),
+    isCancel: vi.fn(
+      (error: unknown) =>
+        Boolean(
+          error &&
+            typeof error === 'object' &&
+            ((error as { code?: unknown }).code === 'ERR_CANCELED' ||
+              (error as { name?: unknown }).name === 'CanceledError'),
+        ),
+    ),
   },
 }));
 
@@ -397,6 +417,77 @@ describe('api service', () => {
           }),
         ]),
       );
+    } finally {
+      globalThis.removeEventListener(CLIENT_ERROR_EVENT_NAME, handleClientError as EventListener);
+    }
+  });
+
+  it('reports network failures without a response to the client monitoring channel', async () => {
+    await loadApiModule();
+    const reportedErrors: ClientErrorReport[] = [];
+    const handleClientError = (event: Event) => {
+      reportedErrors.push((event as CustomEvent<ClientErrorReport>).detail);
+    };
+    globalThis.addEventListener(CLIENT_ERROR_EVENT_NAME, handleClientError as EventListener);
+
+    try {
+      const networkError = {
+        message: 'Network Error',
+        code: 'ERR_NETWORK',
+        config: {
+          url: '/profile/me',
+          method: 'get',
+          timeout: 60000,
+          headers: {
+            get: () => undefined,
+          },
+        },
+      } as any;
+
+      await expect(mockAxios.handlers.responseRejected?.(networkError)).rejects.toBe(networkError);
+
+      expect(reportedErrors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            source: 'network',
+            handled: true,
+            path: '/profile/me',
+            requestId: undefined,
+            statusCode: undefined,
+            message: 'API request failed before receiving a response',
+          }),
+        ]),
+      );
+    } finally {
+      globalThis.removeEventListener(CLIENT_ERROR_EVENT_NAME, handleClientError as EventListener);
+    }
+  });
+
+  it('does not report canceled API failures to the client monitoring channel', async () => {
+    await loadApiModule();
+    const reportedErrors: ClientErrorReport[] = [];
+    const handleClientError = (event: Event) => {
+      reportedErrors.push((event as CustomEvent<ClientErrorReport>).detail);
+    };
+    globalThis.addEventListener(CLIENT_ERROR_EVENT_NAME, handleClientError as EventListener);
+
+    try {
+      const canceledError = {
+        message: 'Request canceled',
+        code: 'ERR_CANCELED',
+        name: 'CanceledError',
+        config: {
+          url: '/profile/me',
+          method: 'get',
+          timeout: 60000,
+          headers: {
+            get: () => undefined,
+          },
+        },
+      } as any;
+
+      await expect(mockAxios.handlers.responseRejected?.(canceledError)).rejects.toBe(canceledError);
+      expect(reportedErrors).toEqual([]);
     } finally {
       globalThis.removeEventListener(CLIENT_ERROR_EVENT_NAME, handleClientError as EventListener);
     }

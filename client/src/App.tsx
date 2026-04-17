@@ -572,9 +572,9 @@ function App() {
 
                 <ErrorBoundary
                     boundaryName="results-section"
-                    title="Nao foi possivel renderizar os resultados."
-                    description="A area principal da busca encontrou um erro inesperado. Tente novamente ou mude de aba para continuar."
-                    resetKeys={[activeTabId, tabs.length, activeTab?.document, activeTab?.ncm, activeTab?.error]}
+                    title="Não foi possível renderizar os resultados."
+                    description="A área principal da busca encontrou um erro inesperado. Tente novamente ou mude de aba para continuar."
+                    resetKeys={[activeTabId, tabs.length]}
                 >
                     <div className={styles.resultsSection}>
                         {/* Renderizacao persistente das abas - usa TabPanel para lazy loading + keep alive */}
