@@ -1,6 +1,6 @@
+import functools
 import re
 import unicodedata
-import functools
 from typing import List
 
 # Pre-compiled regex for word extraction (performance optimization)

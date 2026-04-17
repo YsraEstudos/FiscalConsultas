@@ -129,9 +129,7 @@ async def _store_token(jti: str) -> None:
     """Store a one-time token (Redis preferred, memory fallback)."""
     if redis_cache.available:
         key = f"{_REDIS_TOKEN_PREFIX}{jti}"
-        if await redis_cache.set_with_ttl(
-            key, "1", ttl_seconds=_TOKEN_TTL_SECONDS
-        ):
+        if await redis_cache.set_with_ttl(key, "1", ttl_seconds=_TOKEN_TTL_SECONDS):
             return
 
     # Memory fallback
