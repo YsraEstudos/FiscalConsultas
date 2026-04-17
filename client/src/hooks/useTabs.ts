@@ -98,7 +98,7 @@ export function useTabs() {
   const [activeTabId, setActiveTabId] = useState<string>("tab-1");
   const nextActiveIdRef = useRef<string | null>(null);
 
-  const createTab = useCallback((document: DocType = "nesh") => {
+  const createTab = useCallback((document: DocType = "nesh", activate: boolean = true) => {
     const newTabId = generateTabId();
     const newTab: Tab = {
       id: newTabId,
@@ -110,7 +110,9 @@ export function useTabs() {
       loadedChaptersByDoc: createLoadedChaptersByDoc(),
     };
     setTabs((prev) => [...prev, newTab]);
-    setActiveTabId(newTabId);
+    if (activate) {
+      setActiveTabId(newTabId);
+    }
     return newTabId;
   }, []);
 

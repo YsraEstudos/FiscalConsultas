@@ -16,6 +16,7 @@ import type { NbsSearchResponse, NebsSearchResponse } from './types/api.types';
 import { useSettings } from './context/SettingsContext';
 import { useServicesAccess } from './hooks/useServicesAccess';
 import { isServiceCatalogDoc } from './utils/servicesCatalog';
+import { useLocalDatabase } from './context/LocalDatabaseContext';
 import { NotePanel } from './components/NotePanel';
 import { UserProfilePage } from './components/UserProfilePage';
 import styles from './App.module.css';
@@ -65,6 +66,7 @@ function App() {
     } | null>(null);
 
     const { sidebarPosition } = useSettings();
+    const { status: localDbStatus, install, progress } = useLocalDatabase();
 
     // Hooks customizados
     const { history, addToHistory, removeFromHistory, clearHistory } = useHistory();
@@ -76,7 +78,7 @@ function App() {
     const activeTabRef = useRef(activeTab);
     const handleSearchRef = useRef<(query: string) => void>(() => { });
     const handleOpenNoteRef = useRef<(note: string, chapter?: string) => Promise<void> | void>(() => { });
-    const openTextResultInNewTabRef = useRef<(ncm: string, textQuery?: string) => Promise<void> | void>(() => { });
+    const openTextResultInNewTabRef = useRef<(ncm: string, textQuery?: string, activate?: boolean) => Promise<void> | void>(() => { });
 
     activeTabRef.current = activeTab;
 
@@ -143,7 +145,54 @@ function App() {
 
             await Promise.all(searchTasks);
         })(), 'handleSearch');
-    }, [activeTabId, createTab, ensureServicesSearchAccess, executeSearchForTab, runNonBlockingTask]);
+    }, [activeTabId, createTab, ensureServicesSearchAccess, executeSearchForTab, localDbStatus, runNonBlockingTask]);
+
+    const triggerInstall = useCallback(() => {
+        void install();
+    }, [install]);
+
+    const renderOfflineStatusAction = useCallback(() => {
+        if (localDbStatus === 'ready') {
+            return (
+                <div title="Buscas Offline configuradas!" className={`${styles.minimalDownloadBtn} ${styles.installed}`}>
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </div>
+            );
+        }
+
+        if (localDbStatus === 'checking' || localDbStatus === 'installing' || localDbStatus === 'updating') {
+            return (
+                <div
+                    title={localDbStatus === 'updating' ? `Atualizando... ${Math.round(progress)}%` : `Baixando... ${Math.round(progress)}%`}
+                    className={`${styles.minimalDownloadBtn} ${styles.downloading}`}
+                >
+                    <Spinner size="sm" />
+                </div>
+            );
+        }
+
+        if (localDbStatus === 'error') {
+            return (
+                <button onClick={triggerInstall} title="Erro ao baixar. Tentar de novo" className={`${styles.minimalDownloadBtn} ${styles.errorStatus}`}>
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                </button>
+            );
+        }
+
+        if (localDbStatus === 'unsupported') {
+            return (
+                <div title="Este navegador não suporta banco offline" className={`${styles.minimalDownloadBtn} ${styles.disabledStatus}`}>
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="8" x2="16" y2="16"></line></svg>
+                </div>
+            );
+        }
+
+        return (
+            <button onClick={triggerInstall} title="Baixar BD para habilitar as buscas" className={styles.minimalDownloadBtn}>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            </button>
+        );
+    }, [localDbStatus, progress, triggerInstall]);
 
     const scrollToNotesSection = useCallback((chapter?: string) => {
         const container = document.getElementById(`results-content-${activeTabId}`);
@@ -262,25 +311,41 @@ function App() {
             const target = event.target;
             if (!(target instanceof Element)) return;
 
+            // Ignorar botão direito
+            if (event.button === 2) return;
+
+            const isMiddleClickOrCmd = event.button === 1 || event.ctrlKey || event.metaKey;
+
             const smartLink = target.closest('a.smart-link');
             if (smartLink instanceof HTMLElement) {
                 event.preventDefault();
                 const ncm = smartLink.dataset.ncm;
                 if (ncm) {
-                    handleSearchRef.current(ncm);
+                    if (isMiddleClickOrCmd) {
+                        openTextResultInNewTabRef.current(ncm, undefined, false);
+                    } else {
+                        handleSearchRef.current(ncm);
+                    }
                 }
                 return;
             }
 
-            const serviceLink = target.closest('.service-smart-link');
+            const serviceLink = target.closest('.service-smart-link, .service-code-target');
             if (serviceLink instanceof HTMLElement) {
                 const serviceCode = serviceLink.dataset.serviceCode;
                 if (serviceCode) {
                     event.preventDefault();
-                    handleSearchRef.current(serviceCode);
+                    if (isMiddleClickOrCmd) {
+                        openTextResultInNewTabRef.current(serviceCode, undefined, false);
+                    } else {
+                        handleSearchRef.current(serviceCode);
+                    }
                     return;
                 }
             }
+
+            // Para referências de nota, ignoramos abertura em nova aba / botão do meio
+            if (event.button === 1) return;
 
             const noteRef = target.closest('.note-ref');
             if (!(noteRef instanceof HTMLElement)) return;
@@ -292,7 +357,11 @@ function App() {
         };
 
         document.addEventListener('click', handleDelegatedClick);
-        return () => document.removeEventListener('click', handleDelegatedClick);
+        document.addEventListener('auxclick', handleDelegatedClick);
+        return () => {
+            document.removeEventListener('click', handleDelegatedClick);
+            document.removeEventListener('auxclick', handleDelegatedClick);
+        };
     }, []);
 
     const openInDocNewTab = useCallback(async (doc: DocType, ncm: string) => {
@@ -300,10 +369,10 @@ function App() {
         await executeSearchForTab(tabId, doc, ncm, false);
     }, [createTab, executeSearchForTab]);
 
-    const openTextResultInNewTab = useCallback(async (ncm: string, textQuery?: string) => {
+    const openTextResultInNewTab = useCallback(async (ncm: string, textQuery?: string, activate: boolean = true) => {
         const activeDoc = (activeTabRef.current?.document || 'nesh') as DocType;
         const doc: DocType = activeDoc === 'nbs' || activeDoc === 'nebs' ? 'nesh' : activeDoc;
-        const tabId = createTab(doc);
+        const tabId = createTab(doc, activate);
         const nextTextQuery = (textQuery || '').trim();
 
         if (nextTextQuery) {
@@ -397,6 +466,7 @@ function App() {
             await executeSearchForTab(tabId, doc, query.trim(), false);
         }
     }, [
+        localDbStatus,
         ensureServicesSearchAccess,
         executeSearchForTab,
         resetLoadedChaptersForDoc,
@@ -415,9 +485,9 @@ function App() {
             openSettings: () => {
                 setIsSettingsOpen(true);
             },
-            openTextResultInNewTab: (ncm: string, textQuery?: string) => {
+            openTextResultInNewTab: (ncm: string, textQuery?: string, activate?: boolean) => {
                 runNonBlockingTask(
-                    Promise.resolve(openTextResultInNewTabRef.current(ncm, textQuery)),
+                    Promise.resolve(openTextResultInNewTabRef.current(ncm, textQuery, activate)),
                     'openTextResultInNewTab'
                 );
             }
@@ -518,7 +588,17 @@ function App() {
 
                             {!tab.loading && !tab.results && !tab.error && (
                                 <div className={styles.emptyState}>
-                                    <div className={styles.emptyStateIcon}>🔎</div>
+                                    <div className={styles.emptyStateIconContainer}>
+                                        <div className={styles.emptyStateIcon}>
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+                                                <circle cx="10" cy="10" r="7" strokeWidth="2.5" fill="currentColor" fillOpacity="0.1"></circle>
+                                                <path d="M6.5 10a3.5 3.5 0 0 1 3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.6"></path>
+                                                <line x1="15.5" y1="15.5" x2="21" y2="21" strokeWidth="3"></line>
+                                            </svg>
+                                        </div>
+
+                                        {renderOfflineStatusAction()}
+                                    </div>
                                     <h3 className={styles.emptyStateTitle}>Pronto para buscar</h3>
                                     <p>{tab.document === 'nbs' || tab.document === 'nebs'
                                         ? (servicesUnavailableReason || 'Digite um codigo de servico ou termo textual acima')

@@ -32,7 +32,33 @@
 .emptyStateIcon {
     font-size: 3rem;
     margin-bottom: 1rem;
-    opacity: 0.5;
+    color: var(--accent-primary, #6366f1);
+    animation: float 3s ease-in-out infinite, glow 3s ease-in-out infinite;
+    display: inline-flex;
+}
+
+.emptyStateIcon svg {
+    width: 64px;
+    height: 64px;
+    filter: drop-shadow(0 0 8px var(--accent-primary, #6366f1));
+}
+
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+@keyframes glow {
+    0%, 100% {
+        filter: drop-shadow(0 0 5px var(--accent-primary, #6366f1));
+    }
+    50% {
+        filter: drop-shadow(0 0 15px var(--accent-primary, #6366f1));
+    }
 }
 
 .emptyStateTitle {
@@ -62,6 +88,34 @@
     box-shadow: 0 1px 1px rgb(0 0 0 / 10%);
 }
 
+.installerContainer {
+    width: 100%;
+    margin: 0 auto 2rem auto;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+    border-radius: 12px;
+}
+
+.blinkRed {
+    animation: urgentBlink 0.4s ease-in-out 2;
+    transform: scale(1.02);
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+}
+
+@keyframes urgentBlink {
+    0% {
+        box-shadow: 0 0 0px rgba(239, 68, 68, 0);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(239, 68, 68, 0.8);
+        transform: scale(1.02);
+    }
+    100% {
+        box-shadow: 0 0 0px rgba(239, 68, 68, 0);
+        transform: scale(1);
+    }
+}
+
 .noteContent {
     white-space: pre-wrap;
     line-height: 1.7;
@@ -81,6 +135,82 @@
     z-index: 40;
     backdrop-filter: blur(2px);
     pointer-events: none;
+}
+
+.emptyStateIconContainer {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1.5rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.emptyStateIconContainer.blinkRed {
+    animation: urgentBlink 0.4s ease-in-out 2;
+    transform: scale(1.02);
+    border-radius: 12px;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+}
+
+.minimalDownloadBtn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.minimalDownloadBtn:hover {
+    border-color: var(--accent-primary, #6366f1);
+    color: var(--accent-primary, #6366f1);
+    background: var(--bg-tertiary);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+.minimalDownloadBtn.downloading {
+    cursor: default;
+    border-color: var(--warning-color, #f59e0b);
+    color: var(--warning-color, #f59e0b);
+    animation: pulse 1.5s infinite ease-in-out;
+}
+
+.minimalDownloadBtn.installed {
+    cursor: default;
+    border-color: var(--success-color, #10b981);
+    color: var(--success-color, #10b981);
+}
+
+.minimalDownloadBtn.errorStatus {
+    border-color: var(--error-color, #ef4444);
+    color: var(--error-color, #ef4444);
+}
+
+.minimalDownloadBtn.disabledStatus {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.minimalDownloadBtn.downloading:hover,
+.minimalDownloadBtn.installed:hover,
+.minimalDownloadBtn.disabledStatus:hover {
+    border-color: currentColor;
+    color: inherit;
+    background: transparent;
+    transform: none;
+    box-shadow: none;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.6; transform: scale(0.9); }
+    50% { opacity: 1; transform: scale(1.1); }
+    100% { opacity: 0.6; transform: scale(0.9); }
 }
 
 .loadingSpinnerContainer {

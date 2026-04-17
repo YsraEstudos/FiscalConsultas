@@ -221,7 +221,15 @@ async function primeOfflineShellCache() {
   }
 
   try {
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<null>((resolve) => {
+        setTimeout(() => resolve(null), 1500);
+      }),
+    ]);
+    if (!registration) {
+      return;
+    }
     registration.active?.postMessage({
       type: "CACHE_APP_SHELL",
       payload: {
@@ -670,7 +678,7 @@ export function LocalDatabaseProvider({
         setRemoteVersion(metadata.version);
       }
 
-      await primeOfflineShellCache();
+      runInBackground(primeOfflineShellCache());
       await sendToWorker(
         "INSTALL",
         {

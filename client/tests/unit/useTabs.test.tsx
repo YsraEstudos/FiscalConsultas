@@ -73,6 +73,22 @@ describe("useTabs", () => {
     uuidSpy.mockRestore();
   });
 
+  it("creates a background tab when activate is false", () => {
+    const uuidSpy = mockRandomUuid("211");
+    const { result } = renderHook(() => useTabs());
+
+    act(() => {
+      const created = result.current.createTab("tipi", false);
+      expect(created).toBe("tab-211");
+    });
+
+    expect(result.current.tabs).toHaveLength(2);
+    expect(result.current.tabsById.get("tab-211")?.document).toBe("tipi");
+    expect(result.current.activeTabId).toBe("tab-1");
+    expect(result.current.activeTab.id).toBe("tab-1");
+    uuidSpy.mockRestore();
+  });
+
   it("updates only the target tab", () => {
     const uuidSpy = mockRandomUuid("300");
     const { result } = renderHook(() => useTabs());

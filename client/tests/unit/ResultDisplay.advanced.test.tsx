@@ -582,7 +582,7 @@ describe('ResultDisplay advanced behavior', () => {
     );
 
     await waitFor(() => {
-      expect(screen.queryByText('Carregando conteúdo detalhado do capítulo...')).not.toBeInTheDocument();
+      expect(screen.queryByText('Carregando conteúdo detalhado...')).not.toBeInTheDocument();
     });
 
     errorSpy.mockRestore();

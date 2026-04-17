@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     toastMock,
+    installLocalDbMock: vi.fn(),
     createTabMock: vi.fn(),
     closeTabMock: vi.fn(),
     switchTabMock: vi.fn(),
@@ -45,6 +46,8 @@ const mocks = vi.hoisted(() => {
     nextTabIdRef: { value: 0 },
     sidebarPositionRef: { value: 'right' as 'left' | 'right' },
     historyRef: { value: [{ term: '8517', timestamp: 1 }] as Array<{ term: string; timestamp: number }> },
+    localDbStatusRef: { value: 'ready' as 'checking' | 'not_installed' | 'installing' | 'ready' | 'updating' | 'error' | 'unsupported' },
+    localDbProgressRef: { value: 0 },
     tabsStateRef: {
       value: {
         tabs: [] as MockTab[],
@@ -312,6 +315,14 @@ vi.mock('../../src/hooks/useServicesAccess', () => ({
   }),
 }));
 
+vi.mock('../../src/context/LocalDatabaseContext', () => ({
+  useLocalDatabase: () => ({
+    status: mocks.localDbStatusRef.value,
+    progress: mocks.localDbProgressRef.value,
+    install: mocks.installLocalDbMock,
+  }),
+}));
+
 
 
 function buildTab(overrides: Partial<MockTab> = {}): MockTab {
@@ -397,6 +408,15 @@ function appendSmartLink(ncm: string) {
   return smartLink;
 }
 
+function appendServiceLink(serviceCode: string) {
+  const serviceLink = document.createElement('span');
+  serviceLink.className = 'service-smart-link service-code-target';
+  serviceLink.setAttribute('data-service-code', serviceCode);
+  serviceLink.textContent = serviceCode;
+  document.body.appendChild(serviceLink);
+  return serviceLink;
+}
+
 function appendNoteRef(note: string, chapter?: string) {
   const noteRef = document.createElement('button');
   noteRef.className = 'note-ref';
@@ -412,6 +432,8 @@ describe('App behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.nextTabIdRef.value = 0;
+    mocks.localDbStatusRef.value = 'ready';
+    mocks.localDbProgressRef.value = 0;
     mocks.createTabMock.mockImplementation((doc: DocType = 'nesh') => `new-${doc}-${++mocks.nextTabIdRef.value}`);
     mocks.ensureServicesAccessMock.mockResolvedValue(true);
     mocks.ensureServicesSearchAccessMock.mockResolvedValue(true);
@@ -445,6 +467,43 @@ describe('App behavior', () => {
       expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(2, 'tab-1', 'nesh', '8517', true);
       expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(3, 'new-nesh-1', 'nesh', '9401', true);
     });
+  });
+
+  it('does not ask for download again when offline DB is ready', async () => {
+    mocks.localDbStatusRef.value = 'ready';
+
+    render(<App />);
+
+    expect(screen.getByTitle('Buscas Offline configuradas!')).toBeInTheDocument();
+    expect(screen.queryByTitle('Baixar BD para habilitar as buscas')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('layout-search-single'));
+
+    await waitFor(() => {
+      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('tab-1', 'nesh', '8517', true);
+    });
+
+    expect(mocks.installLocalDbMock).not.toHaveBeenCalled();
+    expect(mocks.toastMock.error).not.toHaveBeenCalledWith('O banco de dados precisa estar baixado e ativo para pesquisas locais.');
+  });
+
+  it('keeps searches working and offers install when offline DB is not installed', async () => {
+    mocks.localDbStatusRef.value = 'not_installed';
+
+    render(<App />);
+
+    const downloadButton = screen.getByTitle('Baixar BD para habilitar as buscas');
+    expect(downloadButton).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('layout-search-single'));
+
+    await waitFor(() => {
+      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('tab-1', 'nesh', '8517', true);
+    });
+    expect(mocks.toastMock.error).not.toHaveBeenCalledWith('O banco de dados precisa estar baixado e ativo para pesquisas locais.');
+
+    fireEvent.click(downloadButton);
+    expect(mocks.installLocalDbMock).toHaveBeenCalledTimes(1);
   });
 
   it('creates a new tab for every split term when active tab is occupied', async () => {
@@ -690,6 +749,30 @@ describe('App behavior', () => {
     }
   });
 
+  it('opens smart links in background tab on middle click', async () => {
+    render(<App />);
+
+    const smartLink = appendSmartLink('9401');
+    fireEvent(smartLink, new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+
+    await waitFor(() => {
+      expect(mocks.createTabMock).toHaveBeenCalledWith('nesh', false);
+      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nesh-1', 'nesh', '9401', false);
+    });
+  });
+
+  it('opens service links in background tab on middle click', async () => {
+    render(<App />);
+
+    const serviceLink = appendServiceLink('1.0501.11');
+    fireEvent(serviceLink, new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+
+    await waitFor(() => {
+      expect(mocks.createTabMock).toHaveBeenCalledWith('nesh', false);
+      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nesh-1', 'nesh', '1.0501.11', false);
+    });
+  });
+
   it('falls back to chapter scroll and errors when note content is missing', () => {
     vi.useFakeTimers();
     setTabsState([
@@ -786,10 +869,10 @@ describe('App behavior', () => {
 
     const { unmount } = render(<App />);
 
-    fireEvent.keyDown(window, { key: '/' });
+    fireEvent.keyDown(globalThis, { key: '/' });
     expect(document.activeElement).toBe(input);
 
-    const bridge = (window as any).nesh;
+    const bridge = (globalThis as any).nesh;
     expect(typeof bridge.smartLinkSearch).toBe('function');
     expect(typeof bridge.openNote).toBe('function');
     expect(typeof bridge.openSettings).toBe('function');
@@ -844,6 +927,6 @@ describe('App behavior', () => {
     expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nesh-2', 'nesh', '8422', false);
 
     unmount();
-    expect((window as any).nesh).toBeUndefined();
+    expect((globalThis as any).nesh).toBeUndefined();
   });
 });

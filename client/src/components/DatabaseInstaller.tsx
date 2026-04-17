@@ -54,6 +54,8 @@ export default function DatabaseInstaller() {
     remove,
   } = useLocalDatabase();
 
+  const progressWidth = progress > 0 ? Math.max(progress, 2) : 0;
+
   const handleInstall = useCallback(async () => {
     try {
       await install();
@@ -128,7 +130,7 @@ export default function DatabaseInstaller() {
           <div className={styles.progressBar}>
             <div
               className={styles.progressFill}
-              style={{ width: `${Math.max(progress, 2)}%` }}
+              style={{ width: `${progressWidth}%` }}
             />
           </div>
           <div className={styles.progressInfo}>

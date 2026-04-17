@@ -118,9 +118,15 @@ export const TextSearchResults = React.memo(function TextSearchResults({ results
     if (!hasResults) {
         return (
             <div className={styles.emptyState}>
-                <div className={styles.emptyStateIcon}>🔎</div>
+                <div className={styles.emptyStateIcon}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="10" cy="10" r="7" strokeWidth="2.5" fill="currentColor" fillOpacity="0.1"></circle>
+                        <path d="M6.5 10a3.5 3.5 0 0 1 3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.6"></path>
+                        <line x1="15.5" y1="15.5" x2="21" y2="21" strokeWidth="3"></line>
+                    </svg>
+                </div>
                 <h3>Nenhum resultado encontrado</h3>
-                <p>Tente termos mais genéricos (ex: "motor" em vez de "motores") ou verifique a ortografia.</p>
+                <p>Tente outro codigo ou um termo mais amplo</p>
             </div>
         );
     }
