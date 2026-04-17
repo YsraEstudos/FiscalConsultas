@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -8,8 +9,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.config.settings import settings
-from backend.server.middleware import is_loopback_host, origin_looks_like_loopback
+
+def _load_backend_dependencies():
+    settings_module = importlib.import_module("backend.config.settings")
+    middleware_module = importlib.import_module("backend.server.middleware")
+    return (
+        settings_module.settings,
+        middleware_module.is_loopback_host,
+        middleware_module.origin_looks_like_loopback,
+    )
+
+
+settings, is_loopback_host, origin_looks_like_loopback = _load_backend_dependencies()
 
 
 def _print_items(prefix: str, items: list[str]) -> None:

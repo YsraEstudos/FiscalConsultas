@@ -4,6 +4,9 @@ import secrets
 import time
 from typing import Annotated
 
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import PlainTextResponse
+
 from backend.config.settings import is_valid_admin_token, reload_settings, settings
 from backend.infrastructure.redis_client import redis_cache
 from backend.server.dependencies import get_nesh_service
@@ -11,8 +14,6 @@ from backend.server.middleware import decode_clerk_jwt
 from backend.server.rate_limit import status_rate_limiter
 from backend.services import NeshService
 from backend.utils.auth import extract_bearer_token, extract_client_ip, is_admin_payload
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import PlainTextResponse
 
 router = APIRouter()
 _STATUS_CACHE: dict[str, object | None] = {"value": None, "expires_at": 0.0}
@@ -229,8 +230,9 @@ async def _collect_db_status(request: Request) -> tuple[dict, float]:
         return db_stats, latency_ms
 
     try:
-        from backend.infrastructure.db_engine import get_session
         from sqlalchemy import text
+
+        from backend.infrastructure.db_engine import get_session
 
         async with get_session() as session:
             chapters_count = await session.execute(
@@ -545,6 +547,7 @@ def _append_metric_line(
 ) -> None:
     label_text = ""
     if labels:
+
         def _escape_label_value(label_value: str) -> str:
             return (
                 label_value.replace("\\", "\\\\")
