@@ -759,11 +759,11 @@ describe('App behavior', () => {
     }
   });
 
-  it('opens smart links in background tab on middle click', async () => {
+  it('opens smart links in background tab on middle mouse down', async () => {
     render(<App />);
 
     const smartLink = appendSmartLink('9401');
-    fireEvent(smartLink, new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+    fireEvent.mouseDown(smartLink, { bubbles: true, button: 1 });
 
     await waitFor(() => {
       expect(mocks.createTabMock).toHaveBeenCalledWith('nesh', false);
@@ -771,7 +771,7 @@ describe('App behavior', () => {
     });
   });
 
-  it('opens service links in NBS background tabs on middle click', async () => {
+  it('opens service links in NBS background tabs on middle mouse down', async () => {
     setTabsState([
       buildTab({
         id: 'tab-1',
@@ -784,16 +784,37 @@ describe('App behavior', () => {
     render(<App />);
 
     const leafServiceLink = appendServiceLink('1.1706.90.00');
-    fireEvent(leafServiceLink, new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+    fireEvent.mouseDown(leafServiceLink, { bubbles: true, button: 1 });
 
     const parentServiceLink = appendServiceLink('1.17');
-    fireEvent(parentServiceLink, new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+    fireEvent.mouseDown(parentServiceLink, { bubbles: true, button: 1 });
 
     await waitFor(() => {
       expect(mocks.createTabMock).toHaveBeenNthCalledWith(1, 'nbs', false);
       expect(mocks.createTabMock).toHaveBeenNthCalledWith(2, 'nbs', false);
       expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(1, 'new-nbs-1', 'nbs', '1.1706.90.00', false);
       expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(2, 'new-nbs-2', 'nbs', '1.17', false);
+    });
+  });
+
+  it('opens service links on middle mouse down to avoid scroll-mode swallowing', async () => {
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        document: 'nbs',
+        ncm: '1.1701.1',
+        results: buildServiceResults('nbs', '1.1701.1'),
+      }),
+    ]);
+
+    render(<App />);
+
+    const serviceLink = appendServiceLink('1.17');
+    fireEvent.mouseDown(serviceLink, { bubbles: true, button: 1 });
+
+    await waitFor(() => {
+      expect(mocks.createTabMock).toHaveBeenCalledWith('nbs', false);
+      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nbs-1', 'nbs', '1.17', false);
     });
   });
 

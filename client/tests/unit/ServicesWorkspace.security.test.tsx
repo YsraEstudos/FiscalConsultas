@@ -138,6 +138,36 @@ describe('ServicesWorkspace security', () => {
     expect(onSwitchDoc).toHaveBeenCalledWith('nebs', '1.1703.2');
   });
 
+  it('routes service-code middle mouse down inside NBS note content to NEBS detail', () => {
+    const onSwitchDoc = vi.fn();
+    const { container } = render(
+      <ServicesWorkspace
+        doc="nbs"
+        nbsState={{
+          ...baseNbsState,
+          detail: buildNbsDetail({
+            body_text: 'Ver detalhes na subposição 1.1703.2.',
+            body_normalized: 'ver detalhes na subposição 1.1703.2',
+          }),
+        }}
+        nebsState={baseNebsState}
+        onSelectNbs={noop}
+        onSelectNebs={noop}
+        onSwitchDoc={onSwitchDoc}
+      />,
+    );
+
+    const noteCodeLink = container.querySelector('[data-service-code="1.1703.2"]');
+    expect(noteCodeLink).not.toBeNull();
+    if (!noteCodeLink) {
+      throw new Error('Expected service code link inside NBS note content');
+    }
+
+    fireEvent.mouseDown(noteCodeLink, { bubbles: true, button: 1 });
+
+    expect(onSwitchDoc).toHaveBeenCalledWith('nebs', '1.1703.2');
+  });
+
   it('escapes raw NBS note body_text instead of injecting it as HTML', () => {
     const { container } = renderNbsWorkspace({
       body_text: '<img src=x onerror=alert(1) />\n<script>alert(1)</script>\ntexto seguro',

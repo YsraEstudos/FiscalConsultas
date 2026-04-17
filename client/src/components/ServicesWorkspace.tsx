@@ -165,6 +165,10 @@ export function ServicesWorkspace({
         if (!container) return;
 
         const handlePointer = (event: MouseEvent) => {
+            if (event.type === 'mousedown' && event.button !== 1) {
+                return;
+            }
+
             const target = event.target;
             if (!(target instanceof Element)) return;
 
@@ -183,12 +187,12 @@ export function ServicesWorkspace({
             openCatalogDoc('nebs', serviceCode, forceNewTab);
         };
 
+        container.addEventListener('mousedown', handlePointer);
         container.addEventListener('click', handlePointer);
-        container.addEventListener('auxclick', handlePointer);
 
         return () => {
+            container.removeEventListener('mousedown', handlePointer);
             container.removeEventListener('click', handlePointer);
-            container.removeEventListener('auxclick', handlePointer);
         };
     }, [openCatalogDoc]);
 
@@ -224,6 +228,22 @@ export function ServicesWorkspace({
 
         const closeChapterNotes = () => {
             setIsChapterNotesOpen(false);
+        };
+
+        const handleChapterNotesDialogKeyDown = (
+            event: React.KeyboardEvent<HTMLDialogElement>,
+        ) => {
+            if (event.key === 'Escape') {
+                closeChapterNotes();
+            }
+        };
+
+        const handleChapterNotesBackdropClick = (
+            event: React.MouseEvent<HTMLDialogElement>,
+        ) => {
+            if (event.target === event.currentTarget) {
+                closeChapterNotes();
+            }
         };
 
         const handleOpenChapterNotes = () => {
@@ -412,11 +432,8 @@ export function ServicesWorkspace({
                     aria-labelledby="nbs-chapter-notes-title"
                     onClose={closeChapterNotes}
                     onCancel={closeChapterNotes}
-                    onClick={(event) => {
-                        if (event.target === event.currentTarget) {
-                            closeChapterNotes();
-                        }
-                    }}
+                    onClick={handleChapterNotesBackdropClick}
+                    onKeyDown={handleChapterNotesDialogKeyDown}
                 >
                     {currentChapterNotesEntry && (
                         <section className={styles.chapterNotesSheet}>

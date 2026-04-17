@@ -678,7 +678,7 @@ function removeLocalStorageCacheEntry(key: string, index?: CacheIndex): void {
 }
 
 function sanitizeStringForStorage(value: string): string {
-    return value.replace(/\u0000/g, '');
+    return value.split('\0').join('');
 }
 
 function sanitizeValueForStorage(value: unknown): StorageSafeValue | undefined {
