@@ -552,14 +552,7 @@ def _append_metric_line(
     lines.append(f"{name}{label_text} {value}")
 
 
-def _build_prometheus_metrics_payload(
-    status_payload: dict,
-    cache_metrics: dict,
-) -> str:
-    lines: list[str] = [
-        "# HELP nesh_catalog_status Catalog health status (1=online, 0=error).",
-        "# TYPE nesh_catalog_status gauge",
-    ]
+def _append_catalog_status_metrics(lines: list[str], status_payload: dict) -> None:
     catalogs = status_payload.get("catalogs", {})
     for catalog_name, catalog_payload in catalogs.items():
         if not isinstance(catalog_payload, dict):
@@ -571,54 +564,54 @@ def _build_prometheus_metrics_payload(
             {"catalog": catalog_name},
         )
 
+
+def _append_database_latency_metric(lines: list[str], status_payload: dict) -> None:
     database_payload = status_payload.get("database", {})
-    if isinstance(database_payload, dict) and "latency_ms" in database_payload:
-        lines.extend(
-            [
-                "# HELP nesh_database_latency_ms Database latency observed by /api/status/details.",
-                "# TYPE nesh_database_latency_ms gauge",
-            ]
-        )
-        _append_metric_line(
-            lines,
-            "nesh_database_latency_ms",
-            float(database_payload.get("latency_ms") or 0),
-        )
+    if not isinstance(database_payload, dict) or "latency_ms" not in database_payload:
+        return
 
     lines.extend(
         [
-            "# HELP nesh_payload_cache_hits Total payload-cache hits by route family.",
-            "# TYPE nesh_payload_cache_hits gauge",
+            "# HELP nesh_database_latency_ms Database latency observed by /api/status/details.",
+            "# TYPE nesh_database_latency_ms gauge",
         ]
     )
-    for metric_name in ("search_code_payload_cache", "tipi_code_payload_cache"):
-        metric_payload = cache_metrics.get(metric_name)
-        if not isinstance(metric_payload, dict):
-            continue
-        _append_metric_line(
-            lines,
-            "nesh_payload_cache_hits",
-            int(metric_payload.get("hits") or 0),
-            {"cache": metric_name},
-        )
+    _append_metric_line(
+        lines,
+        "nesh_database_latency_ms",
+        float(database_payload.get("latency_ms") or 0),
+    )
 
+
+def _append_payload_cache_metrics(
+    lines: list[str],
+    cache_metrics: dict,
+    *,
+    metric_name: str,
+    help_text: str,
+    field_name: str,
+) -> None:
     lines.extend(
         [
-            "# HELP nesh_payload_cache_misses Total payload-cache misses by route family.",
-            "# TYPE nesh_payload_cache_misses gauge",
+            f"# HELP {metric_name} {help_text}",
+            f"# TYPE {metric_name} gauge",
         ]
     )
-    for metric_name in ("search_code_payload_cache", "tipi_code_payload_cache"):
-        metric_payload = cache_metrics.get(metric_name)
-        if not isinstance(metric_payload, dict):
+    for cache_name in ("search_code_payload_cache", "tipi_code_payload_cache"):
+        cache_payload = cache_metrics.get(cache_name)
+        if not isinstance(cache_payload, dict):
             continue
         _append_metric_line(
             lines,
-            "nesh_payload_cache_misses",
-            int(metric_payload.get("misses") or 0),
-            {"cache": metric_name},
+            metric_name,
+            int(cache_payload.get(field_name) or 0),
+            {"cache": cache_name},
         )
 
+
+def _append_internal_cache_hit_rate_metrics(
+    lines: list[str], cache_metrics: dict
+) -> None:
     lines.extend(
         [
             "# HELP nesh_internal_cache_hit_rate Internal service cache hit rate.",
@@ -633,25 +626,43 @@ def _build_prometheus_metrics_payload(
             if not isinstance(cache_payload, dict):
                 continue
             hit_rate = cache_payload.get("hit_rate")
-            if isinstance(hit_rate, (int, float)):
-                _append_metric_line(
-                    lines,
-                    "nesh_internal_cache_hit_rate",
-                    float(hit_rate),
-                    {"service": service_name, "cache": cache_name},
-                )
+            if not isinstance(hit_rate, (int, float)):
+                continue
+            _append_metric_line(
+                lines,
+                "nesh_internal_cache_hit_rate",
+                float(hit_rate),
+                {"service": service_name, "cache": cache_name},
+            )
+
+
+def _build_prometheus_metrics_payload(
+    status_payload: dict,
+    cache_metrics: dict,
+) -> str:
+    lines: list[str] = [
+        "# HELP nesh_catalog_status Catalog health status (1=online, 0=error).",
+        "# TYPE nesh_catalog_status gauge",
+    ]
+    _append_catalog_status_metrics(lines, status_payload)
+    _append_database_latency_metric(lines, status_payload)
+    _append_payload_cache_metrics(
+        lines,
+        cache_metrics,
+        metric_name="nesh_payload_cache_hits",
+        help_text="Total payload-cache hits by route family.",
+        field_name="hits",
+    )
+    _append_payload_cache_metrics(
+        lines,
+        cache_metrics,
+        metric_name="nesh_payload_cache_misses",
+        help_text="Total payload-cache misses by route family.",
+        field_name="misses",
+    )
+    _append_internal_cache_hit_rate_metrics(lines, cache_metrics)
 
     return "\n".join(lines) + "\n"
-    return {
-        "status": overall_status,
-        "version": getattr(request.app, "version", "unknown"),
-        "backend": "FastAPI",
-        "database": normalized_db,
-        "tipi": normalized_tipi,
-        "nbs": normalized_nbs,
-        "nebs": normalized_nebs,
-        "catalogs": catalogs,
-    }
 
 
 @router.get("/status", responses=STATUS_RESPONSES)

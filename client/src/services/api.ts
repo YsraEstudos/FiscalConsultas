@@ -616,6 +616,14 @@ interface CacheIndex {
     [key: string]: number;
 }
 
+type StorageSafeValue =
+    | string
+    | number
+    | boolean
+    | null
+    | StorageSafeValue[]
+    | { [key: string]: StorageSafeValue };
+
 // In-memory cache (fastest - survives within session)
 const memoryCache = new Map<string, CacheEntry<any>>();
 const inFlightRequests = new Map<string, Promise<any>>();
@@ -667,6 +675,63 @@ function saveCacheIndex(index: CacheIndex): void {
 function removeLocalStorageCacheEntry(key: string, index?: CacheIndex): void {
     localStorage.removeItem(CACHE_PREFIX + key);
     if (index) delete index[key];
+}
+
+function sanitizeStringForStorage(value: string): string {
+    return value.replace(/\u0000/g, '');
+}
+
+function sanitizeValueForStorage(value: unknown): StorageSafeValue | undefined {
+    if (value == null) {
+        return null;
+    }
+
+    if (typeof value === 'string') {
+        return sanitizeStringForStorage(value);
+    }
+
+    if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : undefined;
+    }
+
+    if (typeof value === 'boolean') {
+        return value;
+    }
+
+    if (Array.isArray(value)) {
+        const sanitizedItems = value
+            .map(sanitizeValueForStorage)
+            .filter((item): item is StorageSafeValue => item !== undefined);
+        return sanitizedItems;
+    }
+
+    if (typeof value !== 'object') {
+        return undefined;
+    }
+
+    const sanitizedObject: Record<string, StorageSafeValue> = {};
+    for (const [key, item] of Object.entries(value)) {
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+            continue;
+        }
+        const sanitizedItem = sanitizeValueForStorage(item);
+        if (sanitizedItem !== undefined) {
+            sanitizedObject[key] = sanitizedItem;
+        }
+    }
+    return sanitizedObject;
+}
+
+function sanitizeCacheEntryForStorage<T>(entry: CacheEntry<T>): CacheEntry<StorageSafeValue> | null {
+    const sanitizedData = sanitizeValueForStorage(entry.data);
+    if (sanitizedData === undefined || !Number.isFinite(entry.timestamp)) {
+        return null;
+    }
+
+    return {
+        data: sanitizedData,
+        timestamp: entry.timestamp,
+    };
 }
 
 function setMemoryCacheEntry<T>(key: string, entry: CacheEntry<T>): void {
@@ -774,6 +839,10 @@ function setCache<T>(key: string, data: T): void {
     // localStorage (with eviction)
     try {
         const index = getCacheIndex();
+        const sanitizedEntry = sanitizeCacheEntryForStorage(entry);
+        if (!sanitizedEntry) {
+            return;
+        }
 
         // Cleanup stale index entries without parsing full payloads
         for (const indexedKey of Object.keys(index)) {
@@ -794,7 +863,7 @@ function setCache<T>(key: string, data: T): void {
         }
 
         index[key] = entry.timestamp;
-        localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(entry));
+        localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(sanitizedEntry));
         saveCacheIndex(index);
     } catch {
         // localStorage full or unavailable - memory cache still works

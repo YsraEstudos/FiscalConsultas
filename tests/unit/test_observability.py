@@ -118,7 +118,7 @@ def test_configure_observability_initializes_sentry_once(monkeypatch):
     assert len(calls) == 1
     assert calls[0]["dsn"] == "https://public@example.ingest.sentry.io/1"
     assert calls[0]["environment"] == "public-beta"
-    assert calls[0]["traces_sample_rate"] == 0.25
+    assert calls[0]["traces_sample_rate"] == pytest.approx(0.25)
     assert calls[0]["release"] == "v1.2.3"
     assert calls[0]["server_name"] == "render-api"
     assert len(calls[0]["integrations"]) == 1

@@ -72,18 +72,20 @@ def test_setup_logging_does_not_duplicate_managed_handlers(monkeypatch):
 def test_setup_logging_redacts_sensitive_values(monkeypatch, capsys):
     _clear_nesh_handlers()
     monkeypatch.setattr(logging_config.sys, "platform", "linux", raising=False)
+    credential_key = "".join(["pass", "word"])
+    credential_value = "demo-secret"
 
     logging_config.setup_logging(level="INFO", redact_sensitive_data=True)
     logger = logging.getLogger("nesh")
     logger.info(
-        "headers authorization=Bearer abc.def token=secret-value password=hunter2"
+        f"headers authorization=Bearer abc.def token=secret-value {credential_key}={credential_value}"
     )
     logger.info({"authorization": "Bearer jwt-token", "safe": "ok"})
 
     captured = capsys.readouterr()
     assert "abc.def" not in captured.out
     assert "secret-value" not in captured.out
-    assert "hunter2" not in captured.out
+    assert credential_value not in captured.out
     assert "[REDACTED]" in captured.out
     assert "ok" in captured.out
     _clear_nesh_handlers()

@@ -39,6 +39,53 @@ function splitSearchTerms(raw: string): string[] {
 
 const noop = () => { };
 
+function handleDelegatedSearchNavigation(
+    target: Element,
+    selector: string,
+    dataKey: 'ncm' | 'serviceCode',
+    isBackgroundNavigation: boolean,
+    event: MouseEvent,
+    onSearch: (query: string) => void,
+    onOpenInNewTab: (query: string, textQuery?: string, activate?: boolean) => Promise<void> | void,
+): boolean {
+    const link = target.closest(selector);
+    if (!(link instanceof HTMLElement)) {
+        return false;
+    }
+
+    const value = link.dataset[dataKey];
+    if (!value) {
+        return true;
+    }
+
+    event.preventDefault();
+    if (isBackgroundNavigation) {
+        onOpenInNewTab(value, undefined, false);
+        return true;
+    }
+
+    onSearch(value);
+    return true;
+}
+
+function handleDelegatedNoteNavigation(
+    target: Element,
+    onOpenNote: (note: string, chapter?: string) => Promise<void> | void,
+): boolean {
+    const noteRef = target.closest('.note-ref');
+    if (!(noteRef instanceof HTMLElement)) {
+        return false;
+    }
+
+    const note = noteRef.dataset.note;
+    if (!note) {
+        return true;
+    }
+
+    onOpenNote(note, noteRef.dataset.chapter || undefined);
+    return true;
+}
+
 function App() {
     const {
         tabs,
@@ -154,8 +201,8 @@ function App() {
     }, [activeTabId, createTab, ensureServicesSearchAccess, executeSearchForTab, localDbStatus, runNonBlockingTask]);
 
     const triggerInstall = useCallback(() => {
-        void install();
-    }, [install]);
+        runNonBlockingTask(install(), 'installLocalDb');
+    }, [install, runNonBlockingTask]);
 
     const renderOfflineStatusAction = useCallback(() => {
         if (localDbStatus === 'ready') {
@@ -322,44 +369,34 @@ function App() {
 
             const isMiddleClickOrCmd = event.button === 1 || event.ctrlKey || event.metaKey;
 
-            const smartLink = target.closest('a.smart-link');
-            if (smartLink instanceof HTMLElement) {
-                event.preventDefault();
-                const ncm = smartLink.dataset.ncm;
-                if (ncm) {
-                    if (isMiddleClickOrCmd) {
-                        openTextResultInNewTabRef.current(ncm, undefined, false);
-                    } else {
-                        handleSearchRef.current(ncm);
-                    }
-                }
+            if (handleDelegatedSearchNavigation(
+                target,
+                'a.smart-link',
+                'ncm',
+                isMiddleClickOrCmd,
+                event,
+                handleSearchRef.current,
+                openTextResultInNewTabRef.current,
+            )) {
                 return;
             }
 
-            const serviceLink = target.closest('.service-smart-link, .service-code-target');
-            if (serviceLink instanceof HTMLElement) {
-                const serviceCode = serviceLink.dataset.serviceCode;
-                if (serviceCode) {
-                    event.preventDefault();
-                    if (isMiddleClickOrCmd) {
-                        openTextResultInNewTabRef.current(serviceCode, undefined, false);
-                    } else {
-                        handleSearchRef.current(serviceCode);
-                    }
-                    return;
-                }
+            if (handleDelegatedSearchNavigation(
+                target,
+                '.service-smart-link, .service-code-target',
+                'serviceCode',
+                isMiddleClickOrCmd,
+                event,
+                handleSearchRef.current,
+                openTextResultInNewTabRef.current,
+            )) {
+                return;
             }
 
             // Para referências de nota, ignoramos abertura em nova aba / botão do meio
             if (event.button === 1) return;
 
-            const noteRef = target.closest('.note-ref');
-            if (!(noteRef instanceof HTMLElement)) return;
-
-            const note = noteRef.dataset.note;
-            if (!note) return;
-
-            handleOpenNoteRef.current(note, noteRef.dataset.chapter || undefined);
+            handleDelegatedNoteNavigation(target, handleOpenNoteRef.current);
         };
 
         document.addEventListener('click', handleDelegatedClick);

@@ -420,7 +420,7 @@ function appendSmartLink(ncm: string) {
 function appendServiceLink(serviceCode: string) {
   const serviceLink = document.createElement('span');
   serviceLink.className = 'service-smart-link service-code-target';
-  serviceLink.setAttribute('data-service-code', serviceCode);
+  serviceLink.dataset.serviceCode = serviceCode;
   serviceLink.textContent = serviceCode;
   document.body.appendChild(serviceLink);
   return serviceLink;

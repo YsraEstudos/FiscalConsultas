@@ -171,7 +171,7 @@ describe('main.tsx bootstrap', () => {
       await waitFor(() => {
         expect(screen.getByTestId('anonymous-auth-provider')).toBeInTheDocument();
       });
-      expect(screen.getByTestId('anonymous-auth-provider').getAttribute('data-reason')).toContain('autenticacao');
+      expect(screen.getByTestId('anonymous-auth-provider').dataset.reason).toContain('autenticacao');
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         '[AuthBootstrap] Clerk error intercepted during startup. Falling back to signed-out mode.',
       );

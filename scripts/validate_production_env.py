@@ -17,23 +17,20 @@ def _print_items(prefix: str, items: list[str]) -> None:
         print(f"[{prefix}] {item}")
 
 
-def main() -> int:
-    warnings: list[str] = []
-    errors: list[str] = []
-
+def _validate_environment_mode(warnings: list[str], errors: list[str]) -> None:
     if settings.server.env != "production":
         warnings.append(
             f"SERVER__ENV={settings.server.env!r}. Este validador foi pensado para deploy publicado."
         )
-
     if settings.server.env == "production" and settings.features.debug_mode:
         errors.append("FEATURES__DEBUG_MODE deve ficar false em produção.")
 
+
+def _validate_cors_configuration(warnings: list[str], errors: list[str]) -> None:
     if settings.server.env == "production" and not settings.server.cors_allowed_origins:
         errors.append(
             "SERVER__CORS_ALLOWED_ORIGINS deve listar explicitamente os domínios oficiais do frontend."
         )
-
     if settings.server.env == "production" and any(
         origin_looks_like_loopback(origin)
         for origin in settings.server.cors_allowed_origins
@@ -42,24 +39,31 @@ def main() -> int:
             "SERVER__CORS_ALLOWED_ORIGINS ainda inclui localhost/loopback. Remova isso do ambiente publicado."
         )
 
+
+def _validate_database_configuration(warnings: list[str], errors: list[str]) -> None:
     if settings.database.is_postgres and not settings.database.postgres_url:
         errors.append(
             "DATABASE__ENGINE=postgresql exige DATABASE__POSTGRES_URL preenchida."
         )
-
     if settings.server.env == "production" and not settings.database.is_postgres:
         warnings.append(
             "DATABASE__ENGINE não está em postgresql. Isso é aceitável só para ambiente temporário, não para produção final."
         )
 
-    if settings.cache.enable_redis:
-        if not settings.cache.redis_url.strip():
-            errors.append("CACHE__ENABLE_REDIS=true exige CACHE__REDIS_URL preenchida.")
-        elif is_loopback_host(urlparse(settings.cache.redis_url).hostname):
-            warnings.append(
-                "CACHE__REDIS_URL ainda aponta para localhost. Em produção, use Redis gerenciado."
-            )
 
+def _validate_cache_configuration(warnings: list[str], errors: list[str]) -> None:
+    if not settings.cache.enable_redis:
+        return
+    if not settings.cache.redis_url.strip():
+        errors.append("CACHE__ENABLE_REDIS=true exige CACHE__REDIS_URL preenchida.")
+        return
+    if is_loopback_host(urlparse(settings.cache.redis_url).hostname):
+        warnings.append(
+            "CACHE__REDIS_URL ainda aponta para localhost. Em produção, use Redis gerenciado."
+        )
+
+
+def _validate_observability_configuration(warnings: list[str]) -> None:
     if (
         settings.server.env == "production"
         and not settings.observability.metrics_enabled
@@ -67,7 +71,6 @@ def main() -> int:
         warnings.append(
             "OBSERVABILITY__METRICS_TOKEN ausente. O endpoint /api/metrics ficará desabilitado."
         )
-
     if (
         settings.server.env == "production"
         and not settings.observability.sentry_enabled
@@ -76,6 +79,8 @@ def main() -> int:
             "OBSERVABILITY__SENTRY_DSN ausente. Erros do backend não serão enviados para APM externo."
         )
 
+
+def _validate_auth_configuration(warnings: list[str]) -> None:
     if settings.server.env == "production" and not settings.auth.clerk_domain:
         warnings.append(
             "AUTH__CLERK_DOMAIN ausente. Fluxos autenticados não serão validados."
@@ -92,6 +97,18 @@ def main() -> int:
         warnings.append(
             "Nenhum AUTH__CLERK_AUTHORIZED_PARTIES(_REGEX) configurado. Revise azp antes do deploy."
         )
+
+
+def main() -> int:
+    warnings: list[str] = []
+    errors: list[str] = []
+
+    _validate_environment_mode(warnings, errors)
+    _validate_cors_configuration(warnings, errors)
+    _validate_database_configuration(warnings, errors)
+    _validate_cache_configuration(warnings, errors)
+    _validate_observability_configuration(warnings)
+    _validate_auth_configuration(warnings)
 
     _print_items("ERROR", errors)
     _print_items("WARN", warnings)
