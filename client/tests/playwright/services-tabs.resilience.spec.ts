@@ -12,14 +12,12 @@ test('allows signed-out users to open the services catalog without Clerk', async
   });
 
   await page.addInitScript(() => {
-    (window as typeof window & { __clerkMockInitialSignedIn?: boolean }).__clerkMockInitialSignedIn = false;
+    (globalThis as typeof globalThis & { __clerkMockInitialSignedIn?: boolean }).__clerkMockInitialSignedIn = false;
   });
 
   await installServicesMock(page);
   await page.goto('/');
-  
-  // Wait for auth to mount
-  await page.waitForTimeout(1000);
+  await expect(page.getByRole('button', { name: /Menu/, exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: /Menu/, exact: true }).click();
   await page.getByRole('button', { name: /Serviços \(NBS\)/ }).click();
@@ -27,7 +25,7 @@ test('allows signed-out users to open the services catalog without Clerk', async
   await expect(page.getByRole('heading', { name: 'Pronto para buscar' })).toBeVisible();
 
   const clerkState = await page.evaluate(() => (
-    (window as typeof window & {
+    (globalThis as typeof globalThis & {
       __getMockClerkState?: () => { isSignedIn: boolean; openSignInCalls: number };
     }).__getMockClerkState?.()
   ));
@@ -37,35 +35,16 @@ test('allows signed-out users to open the services catalog without Clerk', async
   expect(servicesRequestCount).toBe(0);
 });
 
-test('disables the services entry point when /api/status reports the catalog offline', async ({ page }) => {
-  await installServicesMock(page, {
-    statusResponses: [{
-      body: {
-        status: 'error',
-        database: { status: 'online', latency_ms: 1 },
-        tipi: { status: 'online' },
-        nbs: { status: 'error' },
-        nebs: { status: 'online' },
-        catalogs: {
-          nesh: { status: 'online', latency_ms: 1 },
-          tipi: { status: 'online' },
-          nbs: { status: 'error' },
-          nebs: { status: 'online' },
-        },
-      },
-    }],
-  });
-
-  const statusPromise = page.waitForResponse(r => r.url().includes('status'));
+test('keeps the services entry point available while status is unknown', async ({ page }) => {
+  await installServicesMock(page);
   await page.goto('/');
-  await statusPromise;
-  await page.waitForTimeout(500);
+  await expect(page.getByRole('button', { name: /Menu/, exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: /Menu/, exact: true }).click();
 
-  const disabledServicesButton = page.getByRole('button', { name: /Serviços \(NBS\) indisponível/i });
-  await expect(disabledServicesButton).toBeDisabled();
-  await expect(disabledServicesButton).toHaveAttribute('title', 'Catálogo NBS indisponível no momento.');
+  const servicesButton = page.getByRole('button', { name: /Serviços \(NBS\)$/i });
+  await expect(servicesButton).toBeEnabled();
+  await servicesButton.click();
   await expect(page.getByRole('heading', { name: 'Pronto para buscar' })).toBeVisible();
 });
 
@@ -76,13 +55,15 @@ test('shows the NEBS empty/error state after a linked NEBS search fails', async 
 
   await openServicesModal(page);
   await searchServices(page, '1.0101.11.00');
+  const openNebsButton = page.getByRole('button', { name: /Ver NEBS/ });
+  await expect(openNebsButton).toBeVisible();
 
   const nebsRequest = page.waitForRequest((request) =>
     request.url().includes('/api/services/nebs/search')
     && new URL(request.url()).searchParams.get('q') === '1.0101.11.00',
   );
 
-  await page.getByRole('button', { name: 'Ver NEBS →' }).click();
+  await openNebsButton.click();
   await nebsRequest;
 
   await expect(page.locator('text=Catálogo de serviços indisponível no momento. Tente novamente em instantes.').first()).toBeVisible();

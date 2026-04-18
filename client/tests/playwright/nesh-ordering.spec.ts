@@ -71,6 +71,10 @@ test.beforeEach(async ({ page }) => {
             '  <h2>Capítulo 84</h2>',
             '  <article id="pos-84-03" data-ncm="84.03">84.03 - Caldeiras para aquecimento central.</article>',
             '  <article id="pos-84-04" data-ncm="84.04">84.04 - Aparelhos auxiliares para caldeiras.</article>',
+            ...Array.from(
+              { length: 48 },
+              (_, index) => `<p>Trecho técnico de contexto ${index + 1} para validar navegação por âncora.</p>`,
+            ),
             '  <article id="pos-84-05" data-ncm="84.05">84.05 - Geradores de gás.</article>',
             '</div>',
           ].join(''),
@@ -100,4 +104,117 @@ test('renders NESH chapter 84 navigation items in order', async ({ page }) => {
     const codes = await page.locator('span[class*="itemCode"]').allTextContents();
     return codes.map((code) => code.trim()).filter((code) => targetCodes.has(code));
   }).toEqual(['84.03', '8404', '8404.10.10', '84.05']);
+});
+
+test('navigates to a NESH position from sidebar click and highlights target anchor', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+
+  const searchRequest = page.waitForRequest((request) =>
+    request.url().includes('/api/search')
+    && new URL(request.url()).searchParams.get('ncm') === '8404',
+  );
+
+  await page.locator('#ncmInput').fill('8404');
+  await page.locator('#ncmInput').press('Enter');
+  await searchRequest;
+
+  const resultsContainer = page.locator('#results-content-tab-1');
+  const targetAnchor = page.locator('#pos-84-05');
+
+  await expect(resultsContainer).toBeVisible();
+  await expect(targetAnchor).toBeVisible();
+
+  await resultsContainer.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await expect.poll(async () => (
+    resultsContainer.evaluate((element) => element.scrollTop)
+  )).toBe(0);
+
+  const initialScrollTop = await resultsContainer.evaluate((element) => element.scrollTop);
+
+  await page.getByRole('button', { name: /84\.05\s*Geradores de gás\./i }).click();
+
+  await expect(targetAnchor).toHaveClass(/flash-highlight/);
+
+  await expect.poll(async () => {
+    return resultsContainer.evaluate((element) => element.scrollTop);
+  }).toBeGreaterThan(initialScrollTop);
+});
+
+test('auto-scrolls to target position right after NESH search in real browser flow', async ({ page }) => {
+  await page.unroute('**/api/**');
+  await installServicesMock(page, {
+    neshSearchResponses: [
+      {
+        body: {
+          success: true,
+          type: 'code',
+          query: '8405',
+          normalized: null,
+          results: {
+            '84': makeNeshChapterData(
+              '84',
+              [
+                {
+                  codigo: '84.03',
+                  descricao: 'Caldeiras para aquecimento central.',
+                  anchor_id: 'pos-84-03',
+                },
+                {
+                  codigo: '84.04',
+                  descricao: 'Aparelhos auxiliares para caldeiras.',
+                  anchor_id: 'pos-84-04',
+                },
+                {
+                  codigo: '84.05',
+                  descricao: 'Geradores de gás.',
+                  anchor_id: 'pos-84-05',
+                },
+              ],
+              {
+                ncm_buscado: '8405',
+                posicao_alvo: '84.05',
+              },
+            ),
+          },
+          total_capitulos: 1,
+          markdown: [
+            '<div id="cap-84">',
+            '  <h2>Capítulo 84</h2>',
+            '  <article id="pos-84-03" data-ncm="84.03">84.03 - Caldeiras para aquecimento central.</article>',
+            ...Array.from(
+              { length: 80 },
+              (_, index) => `<p>Contexto adicional ${index + 1} para auto-scroll.</p>`,
+            ),
+            '  <article id="pos-84-04" data-ncm="84.04">84.04 - Aparelhos auxiliares para caldeiras.</article>',
+            '  <article id="pos-84-05" data-ncm="84.05">84.05 - Geradores de gás.</article>',
+            '</div>',
+          ].join(''),
+        },
+      },
+    ],
+  });
+
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+
+  const searchRequest = page.waitForRequest((request) =>
+    request.url().includes('/api/search')
+    && new URL(request.url()).searchParams.get('ncm') === '8405',
+  );
+
+  await page.locator('#ncmInput').fill('8405');
+  await page.locator('#ncmInput').press('Enter');
+  await searchRequest;
+
+  const resultsContainer = page.locator('#results-content-tab-1');
+  const targetAnchor = page.locator('#pos-84-05');
+
+  await expect(resultsContainer).toBeVisible();
+  await expect(targetAnchor).toHaveClass(/flash-highlight/);
+  await expect.poll(async () => (
+    resultsContainer.evaluate((element) => element.scrollTop)
+  )).toBeGreaterThan(300);
 });

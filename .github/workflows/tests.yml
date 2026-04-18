@@ -129,3 +129,58 @@ jobs:
         with:
           name: frontend-coverage
           path: client/coverage
+
+  frontend-e2e-p0:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Install Playwright browser dependencies
+        working-directory: client
+        run: npx playwright install --with-deps chromium
+
+      - name: Configure non-localhost alias for service worker tests
+        run: |
+          echo "127.0.0.1 offline-e2e.local" | sudo tee -a /etc/hosts
+          getent hosts offline-e2e.local
+
+      - name: Run Playwright P0 offline/service/scroll/auth specs
+        working-directory: client
+        env:
+          PLAYWRIGHT_LIVE_BASE_URL: http://offline-e2e.local:4173
+        run: >
+          npx playwright test
+          tests/playwright/services-tabs.spec.ts
+          tests/playwright/services-tabs.resilience.spec.ts
+          tests/playwright/nesh-ordering.spec.ts
+          tests/playwright/auth-capabilities.spec.ts
+          tests/playwright/tabs-scroll-persistence.spec.ts
+          tests/playwright/offline-install-reopen.spec.ts
+          tests/playwright/offline-reopen.sw.live.spec.ts
+          --project=mocked-chromium
+          --project=live-chromium
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: frontend-e2e-p0-artifacts
+          path: |
+            client/test-results
+            client/playwright-report

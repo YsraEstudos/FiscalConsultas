@@ -205,6 +205,98 @@ def test_search_chapter_body_allows_anonymous_access(client, monkeypatch):
     assert payload["notas_gerais"] == "Notas gerais"
 
 
+def test_search_chapters_endpoint_returns_available_chapters(client, monkeypatch):
+    class _FakeDb:
+        async def get_all_chapters_list(self):
+            return ["01", "02", "84"]
+
+    monkeypatch.setattr(app.state, "db", _FakeDb(), raising=False)
+
+    response = client.get("/api/chapters")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "capitulos": ["01", "02", "84"],
+    }
+
+
+def test_nesh_chapter_notes_endpoint_returns_notes_payload(client, monkeypatch):
+    monkeypatch.setattr(
+        NeshService,
+        "fetch_chapter_data",
+        AsyncMock(
+            return_value={
+                "parsed_notes": {"N1": "Nota 1", "N2": "Nota 2"},
+                "notes": "Notas gerais",
+            }
+        ),
+    )
+
+    response = client.get("/api/nesh/chapter/84/notes")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "capitulo": "84",
+        "notas_parseadas": {"N1": "Nota 1", "N2": "Nota 2"},
+        "notas_gerais": "Notas gerais",
+    }
+
+
+def test_nesh_chapter_notes_endpoint_returns_404_when_chapter_missing(client, monkeypatch):
+    monkeypatch.setattr(
+        NeshService,
+        "fetch_chapter_data",
+        AsyncMock(return_value=None),
+    )
+
+    response = client.get("/api/nesh/chapter/99/notes")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Capítulo 99 não encontrado"
+
+
+def test_glossary_endpoint_returns_found_and_not_found_contracts(client, monkeypatch):
+    monkeypatch.setattr(
+        search_route.glossary_manager,
+        "get_definition",
+        lambda term: {"definicao": f"def-{term}"} if term == "drawback" else None,
+    )
+
+    found = client.get("/api/glossary?term=drawback")
+    not_found = client.get("/api/glossary?term=termo-inexistente")
+
+    assert found.status_code == 200
+    assert found.json() == {
+        "found": True,
+        "term": "drawback",
+        "data": {"definicao": "def-drawback"},
+    }
+
+    assert not_found.status_code == 200
+    assert not_found.json() == {
+        "found": False,
+        "term": "termo-inexistente",
+    }
+
+
+def test_tipi_chapters_endpoint_returns_available_chapters(client, monkeypatch):
+    monkeypatch.setattr(
+        TipiService,
+        "get_all_chapters",
+        AsyncMock(return_value=["01", "02", "11"]),
+    )
+
+    response = client.get("/api/tipi/chapters")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "capitulos": ["01", "02", "11"],
+    }
+
+
 def test_tipi_code_response_enforces_compatibility_fields(client, monkeypatch):
     fake_service = _FakeTipiServiceCode()
     monkeypatch.setattr(TipiService, "is_code_query", fake_service.is_code_query)
