@@ -126,6 +126,13 @@ def _enforce_secure_request(request: Request) -> None:
     )
 
 
+def _should_rate_limit_token_request(request: Request) -> bool:
+    """Keep strict limits in production, but avoid locking local dev/test sessions."""
+    return settings.server.env.lower() == "production" or not _is_local_request(
+        request
+    )
+
+
 async def _store_token(jti: str) -> None:
     """Store a one-time token (Redis preferred, memory fallback)."""
     if redis_cache.available:
@@ -209,15 +216,16 @@ async def create_download_token(request: Request):
     _enforce_secure_request(request)
     limiter_key = f"db-download:ip:{extract_client_ip(request)}"
 
-    allowed, retry_after = await _token_rate_limiter.consume(
-        key=limiter_key, limit=_TOKEN_LIMIT_PER_HOUR
-    )
-    if not allowed:
-        raise HTTPException(
-            status_code=429,
-            detail="Rate limit exceeded for database download tokens. Try again later.",
-            headers={"Retry-After": str(retry_after)},
+    if _should_rate_limit_token_request(request):
+        allowed, retry_after = await _token_rate_limiter.consume(
+            key=limiter_key, limit=_TOKEN_LIMIT_PER_HOUR
         )
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limit exceeded for database download tokens. Try again later.",
+                headers={"Retry-After": str(retry_after)},
+            )
 
     meta = _load_metadata()
     if meta is None:

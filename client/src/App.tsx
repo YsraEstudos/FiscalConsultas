@@ -755,6 +755,19 @@ function App() {
                                                 updateTab(tab.id, { isContentReady: true });
                                             }
                                         }}
+                                        onHydratedResults={(incomingTabId, hydratedResults) => {
+                                            if (!hydratedResults || !tab.results || !isCodeSearchResponse(tab.results)) {
+                                                return;
+                                            }
+
+                                            updateTab(incomingTabId, {
+                                                results: {
+                                                    ...tab.results,
+                                                    results: hydratedResults,
+                                                    resultados: hydratedResults,
+                                                },
+                                            });
+                                        }}
                                     />
                                 )}
                                 {/* Esconder visualmente ResultDisplay se nao estiver pronto? Nao, manter montado para o IntersectionObserver rodar,

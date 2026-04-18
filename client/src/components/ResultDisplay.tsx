@@ -347,6 +347,8 @@ interface ResultDisplayProps {
     onConsumeNewSearch: (tabId: string, finalScrollTop?: number) => void;
     /** Callback to notify parent when content is ready (for coordinated loading) */
     onContentReady?: (tabId: string) => void;
+    /** Callback to sync hydrated code results back to the owning tab */
+    onHydratedResults?: (tabId: string, results: Record<string, any>) => void;
 }
 
 type MarkupRenderRefs = {
@@ -486,6 +488,15 @@ type ChapterHydrationResult = {
     chapterBodies: ChapterBodyResponse[];
     failedChapters: string[];
 };
+
+function createFailedChapterBodiesUpdater(failedChapters: string[]) {
+    return (current: string[]) => Array.from(new Set([...current, ...failedChapters]));
+}
+
+function createRecoveredChapterBodiesUpdater(chapterBodies: ChapterBodyResponse[]) {
+    const recoveredChapters = new Set(chapterBodies.map((body) => body.capitulo));
+    return (current: string[]) => current.filter((chapter) => !recoveredChapters.has(chapter));
+}
 
 async function fetchChapterBodies(chapters: string[]): Promise<ChapterHydrationResult> {
     const settledBodies = await Promise.allSettled(
@@ -833,7 +844,8 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     latestTextQuery,
     isNewSearch,
     onConsumeNewSearch,
-    onContentReady
+    onContentReady,
+    onHydratedResults,
 }: ResultDisplayProps) {
     const { sidebarPosition } = useSettings();
     const {
@@ -1082,30 +1094,36 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         let cancelled = false;
         setIsHydratingCodeResults(true);
 
-        void fetchChapterBodies(missingChapterBodies)
-            .then(({ chapterBodies, failedChapters }) => {
-                if (cancelled) return;
-                if (failedChapters.length > 0) {
-                    startTransition(() => {
-                        setFailedChapterBodies((current) => Array.from(new Set([...current, ...failedChapters])));
-                    });
-                }
-                if (chapterBodies.length === 0) return;
+        const applyHydrationResult = ({
+            chapterBodies,
+            failedChapters,
+        }: ChapterHydrationResult) => {
+            if (cancelled) return;
+
+            if (failedChapters.length > 0) {
                 startTransition(() => {
-                    setHydratedCodeResults((current) => {
-                        const baseResults = current ?? codeResults;
-                        return mergeHydratedChapterBodies(baseResults, chapterBodies);
-                    });
-                    setFailedChapterBodies((current) =>
-                        current.filter(
-                            (chapter) =>
-                                !chapterBodies.some(
-                                    (body: ChapterBodyResponse) => body.capitulo === chapter,
-                                ),
-                        ),
-                    );
+                    setFailedChapterBodies(createFailedChapterBodiesUpdater(failedChapters));
                 });
-            })
+            }
+
+            if (chapterBodies.length === 0) return;
+
+            const mergedResults = mergeHydratedChapterBodies(
+                renderableCodeResults ?? codeResults,
+                chapterBodies,
+            );
+
+            startTransition(() => {
+                setHydratedCodeResults(mergedResults);
+                setFailedChapterBodies(
+                    createRecoveredChapterBodiesUpdater(chapterBodies),
+                );
+                onHydratedResults?.(tabId, mergedResults);
+            });
+        };
+
+        void fetchChapterBodies(missingChapterBodies)
+            .then(applyHydrationResult)
             .catch((error) => {
                 console.error('[ResultDisplay] Failed to hydrate chapter bodies', error);
             })
@@ -1122,7 +1140,10 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         codeResults,
         isActive,
         missingChapterBodies,
+        onHydratedResults,
+        renderableCodeResults,
         shouldHydrateCodeResults,
+        tabId,
     ]);
 
     const findAnchorIdForQuery = useCallback((resultados: any, query: string) => {
