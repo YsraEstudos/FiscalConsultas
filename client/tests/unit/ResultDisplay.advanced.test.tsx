@@ -474,6 +474,51 @@ describe('ResultDisplay advanced behavior', () => {
     warnSpy.mockRestore();
   });
 
+  it('prefers offline rendered HTML over NeshRenderer fallback for multiline note lists', async () => {
+    const renderFallbackSpy = vi.spyOn(NeshRenderer, 'renderFullResponse');
+    const { container } = render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '8401',
+          markdown: `
+            <div class="offline-html">
+              <ol class="nesh-list">
+                <li>
+                  As partes excluídas pela <span class="note-ref" data-note="1">Nota 1</span> da
+                  Seção ou pela <span class="note-ref" data-note="1">Nota 1</span> do presente Capítulo.
+                </li>
+              </ol>
+            </div>
+          `,
+          resultados: {
+            '84': {
+              capitulo: '84',
+              posicoes: [{ codigo: '84.01', anchor_id: 'pos-84-01', descricao: 'Reatores nucleares' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-nesh-offline-html"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('.offline-html .nesh-list li')).not.toBeNull();
+    });
+
+    expect(renderFallbackSpy).not.toHaveBeenCalled();
+    expect(container.querySelectorAll('.offline-html .nesh-list > li')).toHaveLength(1);
+    expect(container.querySelector('.offline-html .nesh-list')?.textContent).toContain('Seção ou pela');
+    expect(container.querySelectorAll('.offline-html .note-ref')).toHaveLength(2);
+
+    renderFallbackSpy.mockRestore();
+  });
+
   it('enables robust auto-scroll for new search and consumes final scroll', async () => {
     const onConsumeNewSearch = vi.fn();
 

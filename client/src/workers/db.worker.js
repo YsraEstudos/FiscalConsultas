@@ -942,7 +942,7 @@ function getNeshChapterSearchData(chapterNum) {
       [chapterNum]
     ),
     chapterData: queryFirstOptionalRow(
-      `SELECT content FROM nesh_chapters WHERE chapter_num = ?`,
+      `SELECT content, rendered_html FROM nesh_chapters WHERE chapter_num = ?`,
       [chapterNum]
     ),
     notesData: queryFirstOptionalRow(
@@ -951,6 +951,22 @@ function getNeshChapterSearchData(chapterNum) {
       [chapterNum]
     ),
   };
+}
+
+function buildOfflineNeshMarkdown(results, chapterHtmlByChapter) {
+  const orderedChapters = Object.keys(results).sort(
+    (left, right) => Number(left) - Number(right)
+  );
+  const htmlParts = [];
+
+  for (const chapterNum of orderedChapters) {
+    const chapterHtml = chapterHtmlByChapter[chapterNum];
+    if (typeof chapterHtml === "string" && chapterHtml.trim()) {
+      htmlParts.push(chapterHtml.trim());
+    }
+  }
+
+  return htmlParts.join("\n\n");
 }
 
 function buildMissingNeshChapterResult(chapterNum, ncmBuscado) {
@@ -1031,7 +1047,13 @@ function searchTipiByCode(query, viewMode = "family") {
  */
 function searchNeshByCode(query) {
   if (!_db)
-    return { type: "code", results: {}, total_capitulos: 0, success: true };
+    return {
+      type: "code",
+      results: {},
+      total_capitulos: 0,
+      success: true,
+      markdown: "",
+    };
 
   const chapterTargets = collectNeshChapterTargets(query);
 
@@ -1043,11 +1065,14 @@ function searchNeshByCode(query) {
       results: {},
       total_capitulos: 0,
       success: true,
+      markdown: "",
     };
   }
 
   /** @type {Record<string, any>} */
   const results = {};
+  /** @type {Record<string, string>} */
+  const renderedHtmlByChapter = {};
 
   for (const [chapterNum, [ncmBuscado, targetPos]] of chapterTargets) {
     const { positions, chapterData, notesData } =
@@ -1069,6 +1094,10 @@ function searchNeshByCode(query) {
       chapterData,
       notesData
     );
+
+    if (typeof chapterData?.rendered_html === "string") {
+      renderedHtmlByChapter[chapterNum] = chapterData.rendered_html;
+    }
   }
 
   return {
@@ -1078,6 +1107,37 @@ function searchNeshByCode(query) {
     results,
     total_capitulos: Object.keys(results).length,
     success: true,
+    markdown: buildOfflineNeshMarkdown(results, renderedHtmlByChapter),
+  };
+}
+
+function getLocalNeshChapterNotes(chapter) {
+  if (!_db) return null;
+
+  const notesData = queryFirstOptionalRow(
+    `SELECT notes_content, parsed_notes_json
+     FROM nesh_chapter_notes
+     WHERE chapter_num = ?`,
+    [String(chapter || "").trim()]
+  );
+
+  if (!notesData) return null;
+
+  let parsedNotes = {};
+  if (typeof notesData.parsed_notes_json === "string") {
+    try {
+      parsedNotes = JSON.parse(notesData.parsed_notes_json);
+    } catch {
+      parsedNotes = {};
+    }
+  }
+
+  return {
+    notas_parseadas: parsedNotes,
+    notas_gerais:
+      typeof notesData.notes_content === "string"
+        ? notesData.notes_content
+        : null,
   };
 }
 
@@ -1285,10 +1345,14 @@ function runStructuredSearch(docType, query, viewMode) {
         searchType: "code",
       };
     case "nesh":
-      return {
-        results: searchNeshByCode(query).results,
-        searchType: "code",
-      };
+      {
+        const neshCodeResponse = searchNeshByCode(query);
+        return {
+          results: neshCodeResponse.results,
+          searchType: "code",
+          markdown: neshCodeResponse.markdown || "",
+        };
+      }
     case "nbs":
       return { results: searchNbsByCode(query), searchType: "text" };
     case "nebs":
@@ -1305,13 +1369,18 @@ function handleSearchMessage(id, payload) {
   }
 
   const { docType, query, viewMode } = payload;
-  const { results, searchType } = runStructuredSearch(docType, query, viewMode);
+  const { results, searchType, markdown } = runStructuredSearch(
+    docType,
+    query,
+    viewMode
+  );
   postWorkerResult(id, {
     results,
     source: "local",
     docType,
     query,
     searchType,
+    markdown: typeof markdown === "string" ? markdown : undefined,
   });
 }
 
@@ -1337,6 +1406,16 @@ function handleNebsDetailMessage(id, payload) {
 
   const detail = getLocalNebsDetail(String(payload.code || ""));
   postWorkerResult(id, { detail, source: "local" });
+}
+
+function handleNeshChapterNotesMessage(id, payload) {
+  if (!_db || _status !== "ready") {
+    postWorkerResult(id, { notes: null, source: "not_ready" });
+    return;
+  }
+
+  const notes = getLocalNeshChapterNotes(String(payload.chapter || ""));
+  postWorkerResult(id, { notes, source: "local" });
 }
 
 function handleGetStatusMessage(id) {
@@ -1378,6 +1457,9 @@ async function dispatchWorkerMessage(type, id, payload) {
       return;
     case "GET_NEBS_DETAIL":
       handleNebsDetailMessage(id, payload);
+      return;
+    case "GET_NESH_CHAPTER_NOTES":
+      handleNeshChapterNotesMessage(id, payload);
       return;
     case "GET_STATUS":
       handleGetStatusMessage(id);

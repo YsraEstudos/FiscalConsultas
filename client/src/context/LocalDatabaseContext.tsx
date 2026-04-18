@@ -94,6 +94,12 @@ interface LocalDatabaseState {
 interface LocalSearchResult {
   results: Record<string, unknown>[] | Record<string, unknown> | null;
   searchType: "text" | "code";
+  markdown?: string | null;
+}
+
+interface LocalNeshChapterNotesResult {
+  notas_parseadas: Record<string, string>;
+  notas_gerais: string | null;
 }
 
 interface LocalDatabaseContextType extends LocalDatabaseState {
@@ -110,6 +116,9 @@ interface LocalDatabaseContextType extends LocalDatabaseState {
     options?: { page?: number; pageSize?: number }
   ) => Promise<NbsDetailResponse | null>;
   getNebsDetailLocal: (code: string) => Promise<NebsDetailResponse | null>;
+  getNeshChapterNotesLocal: (
+    chapter: string
+  ) => Promise<LocalNeshChapterNotesResult | null>;
 }
 
 const DEFAULT_LOCAL_DATABASE_CONTEXT: LocalDatabaseContextType = {
@@ -131,6 +140,7 @@ const DEFAULT_LOCAL_DATABASE_CONTEXT: LocalDatabaseContextType = {
   searchLocal: async () => null,
   getNbsDetailLocal: async () => null,
   getNebsDetailLocal: async () => null,
+  getNeshChapterNotesLocal: async () => null,
 };
 
 const LocalDatabaseContext = createContext<LocalDatabaseContextType>(
@@ -772,6 +782,10 @@ export function LocalDatabaseProvider({
               | null) || null,
           searchType:
             ((response.payload?.searchType as "text" | "code") || "text"),
+          markdown:
+            typeof response.payload?.markdown === "string"
+              ? response.payload.markdown
+              : null,
         };
       } catch {
         return null;
@@ -825,6 +839,27 @@ export function LocalDatabaseProvider({
     [sendToWorker, status]
   );
 
+  const getNeshChapterNotesLocal = useCallback(
+    async (chapter: string): Promise<LocalNeshChapterNotesResult | null> => {
+      if (status !== "ready") return null;
+
+      try {
+        const response = (await sendToWorker(
+          "GET_NESH_CHAPTER_NOTES",
+          { chapter },
+          10_000
+        )) as WorkerMessage;
+
+        return (
+          (response.payload.notes as LocalNeshChapterNotesResult | null) || null
+        );
+      } catch {
+        return null;
+      }
+    },
+    [sendToWorker, status]
+  );
+
   const contextValue = useMemo<LocalDatabaseContextType>(
     () => ({
       status,
@@ -843,11 +878,13 @@ export function LocalDatabaseProvider({
       searchLocal,
       getNbsDetailLocal,
       getNebsDetailLocal,
+      getNeshChapterNotesLocal,
     }),
     [
       dbSizeBytes,
       error,
       getNebsDetailLocal,
+      getNeshChapterNotesLocal,
       getNbsDetailLocal,
       install,
       isRemoving,

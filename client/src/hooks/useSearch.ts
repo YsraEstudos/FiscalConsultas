@@ -105,7 +105,8 @@ function normalizeLocalResults(
 function normalizeLocalCodeResults(
     doc: DocType,
     query: string,
-    results: Record<string, any>
+    results: Record<string, any>,
+    markdown?: string | null,
 ): SearchResponse | null {
     const safeResults = results && typeof results === 'object' ? results : {};
 
@@ -115,6 +116,7 @@ function normalizeLocalCodeResults(
             results: safeResults, resultados: safeResults,
             total: Object.values(safeResults).reduce((s: number, c: any) => s + (c.posicoes?.length || 0), 0),
             total_capitulos: Object.keys(safeResults).length,
+            markdown: markdown || undefined,
         } as TipiCodeSearchResponse;
     }
 
@@ -123,6 +125,7 @@ function normalizeLocalCodeResults(
             success: true, type: 'code', query,
             normalized: null, results: safeResults, resultados: safeResults,
             total_capitulos: Object.keys(safeResults).length,
+            markdown: markdown || undefined,
         } as CodeSearchResponse;
     }
 
@@ -210,7 +213,12 @@ export function useSearch(
                     const localResponse = await searchLocal(doc as any, query, tipiViewModeRef.current);
                     if (localResponse) {
                         if (localResponse.searchType === 'code') {
-                            data = normalizeLocalCodeResults(doc, query, localResponse.results as Record<string, any>);
+                            data = normalizeLocalCodeResults(
+                                doc,
+                                query,
+                                localResponse.results as Record<string, any>,
+                                localResponse.markdown,
+                            );
                         } else if (Array.isArray(localResponse.results)) {
                             data = normalizeLocalResults(doc, query, localResponse.results as Record<string, unknown>[]);
                         }

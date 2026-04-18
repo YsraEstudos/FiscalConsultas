@@ -24,6 +24,7 @@ import struct
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 try:
     from cryptography.hazmat.primitives import hashes
@@ -83,6 +84,101 @@ def _resolve_app_seed() -> str:
 APP_SEED = _resolve_app_seed()
 
 
+def _load_html_renderer():
+    if str(PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(PROJECT_ROOT))
+
+    from backend.presentation.renderer import HtmlRenderer
+
+    return HtmlRenderer
+
+
+def _parse_notes_json(raw_value: Any) -> dict[str, str]:
+    if not raw_value:
+        return {}
+
+    try:
+        parsed = json.loads(str(raw_value))
+    except (TypeError, json.JSONDecodeError):
+        return {}
+
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _build_nesh_sections(notes_row: sqlite3.Row | None) -> dict[str, str | None] | None:
+    if not notes_row:
+        return None
+
+    sections = {
+        "titulo": notes_row["titulo"] or None,
+        "notas": notes_row["notas"] or None,
+        "consideracoes": notes_row["consideracoes"] or None,
+        "definicoes": notes_row["definicoes"] or None,
+    }
+
+    if any(value for value in sections.values()):
+        return sections
+
+    return None
+
+
+def _render_nesh_chapters(cursor: sqlite3.Cursor) -> None:
+    HtmlRenderer = _load_html_renderer()
+    chapter_rows = cursor.execute(
+        "SELECT chapter_num, content FROM nesh_chapters ORDER BY chapter_num"
+    ).fetchall()
+
+    _log("Rendering NESH chapter HTML for offline bundle...")
+
+    for chapter_row in chapter_rows:
+        chapter_num = str(chapter_row["chapter_num"])
+        content = str(chapter_row["content"] or "")
+        position_rows = cursor.execute(
+            """
+            SELECT codigo, descricao
+            FROM nesh_positions
+            WHERE chapter_num = ?
+            ORDER BY codigo
+            """,
+            (chapter_num,),
+        ).fetchall()
+        notes_row = cursor.execute(
+            """
+            SELECT notes_content, titulo, notas, consideracoes, definicoes, parsed_notes_json
+            FROM nesh_chapter_notes
+            WHERE chapter_num = ?
+            """,
+            (chapter_num,),
+        ).fetchone()
+
+        chapter_payload = {
+            "ncm_buscado": chapter_num,
+            "capitulo": chapter_num,
+            "posicao_alvo": None,
+            "posicoes": [
+                {
+                    "codigo": str(position_row["codigo"] or ""),
+                    "descricao": str(position_row["descricao"] or ""),
+                }
+                for position_row in position_rows
+            ],
+            "notas_gerais": notes_row["notes_content"] if notes_row else None,
+            "notas_parseadas": _parse_notes_json(
+                notes_row["parsed_notes_json"] if notes_row else None
+            ),
+            "conteudo": content,
+            "real_content_found": bool(content),
+            "erro": None,
+            "secoes": _build_nesh_sections(notes_row),
+        }
+
+        rendered_html = HtmlRenderer.render_chapter(chapter_payload)
+        cursor.execute(
+            "UPDATE nesh_chapters SET rendered_html = ? WHERE chapter_num = ?",
+            (rendered_html, chapter_num),
+        )
+
+
 # ---------------------------------------------------------------------------
 # Step 1: Consolidate — Read from source DBs and write to a single offline DB
 # ---------------------------------------------------------------------------
@@ -99,6 +195,7 @@ def _consolidate_databases(output_path: Path) -> None:
         output_path.unlink()
 
     conn = sqlite3.connect(str(output_path))
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
     # Performance pragmas
@@ -170,7 +267,8 @@ def _consolidate_databases(output_path: Path) -> None:
     cursor.execute("""
         CREATE TABLE nesh_chapters (
             chapter_num TEXT PRIMARY KEY,
-            content TEXT NOT NULL
+            content TEXT NOT NULL,
+            rendered_html TEXT
         )
     """)
 
@@ -310,6 +408,9 @@ def _consolidate_databases(output_path: Path) -> None:
     conn.commit()
     cursor.execute("DETACH DATABASE nesh")
 
+    conn.commit()
+
+    _render_nesh_chapters(cursor)
     conn.commit()
 
     # === Create FTS5 Indices ===
