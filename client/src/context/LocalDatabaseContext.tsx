@@ -94,6 +94,7 @@ interface LocalDatabaseState {
 interface LocalSearchResult {
   results: Record<string, unknown>[] | Record<string, unknown> | null;
   searchType: "text" | "code";
+  markdown?: string;
 }
 
 interface LocalDatabaseContextType extends LocalDatabaseState {
@@ -105,6 +106,9 @@ interface LocalDatabaseContextType extends LocalDatabaseState {
     query: string,
     viewMode?: string
   ) => Promise<LocalSearchResult | null>;
+  getNeshChapterNotesLocal: (
+    chapter: string
+  ) => Promise<Record<string, string> | null>;
   getNbsDetailLocal: (
     code: string,
     options?: { page?: number; pageSize?: number }
@@ -129,6 +133,7 @@ const DEFAULT_LOCAL_DATABASE_CONTEXT: LocalDatabaseContextType = {
   remove: async () => undefined,
   refreshAvailability: async () => null,
   searchLocal: async () => null,
+  getNeshChapterNotesLocal: async () => null,
   getNbsDetailLocal: async () => null,
   getNebsDetailLocal: async () => null,
 };
@@ -772,12 +777,37 @@ export function LocalDatabaseProvider({
               | null) || null,
           searchType:
             ((response.payload?.searchType as "text" | "code") || "text"),
+          markdown:
+            (response.payload?.markdown as string | undefined) || undefined,
         };
       } catch {
         return null;
       }
     },
     [sendToWorker, status]
+  );
+
+  const getNeshChapterNotesLocal = useCallback(
+    async (chapter: string): Promise<Record<string, string> | null> => {
+      if (status !== "ready") return null;
+
+      const response = await searchLocal("nesh", chapter);
+      if (!response || response.searchType !== "code") {
+        return null;
+      }
+
+      const results = response.results;
+      if (!results || Array.isArray(results)) {
+        return null;
+      }
+
+      const chapterResult = results[chapter] as
+        | { notas_parseadas?: Record<string, string> | null }
+        | undefined;
+
+      return chapterResult?.notas_parseadas || null;
+    },
+    [searchLocal, status]
   );
 
   const getNbsDetailLocal = useCallback(
@@ -841,6 +871,7 @@ export function LocalDatabaseProvider({
       remove,
       refreshAvailability,
       searchLocal,
+      getNeshChapterNotesLocal,
       getNbsDetailLocal,
       getNebsDetailLocal,
     }),
@@ -856,6 +887,7 @@ export function LocalDatabaseProvider({
       progress,
       progressStep,
       refreshAvailability,
+      getNeshChapterNotesLocal,
       remoteVersion,
       remove,
       searchLocal,
