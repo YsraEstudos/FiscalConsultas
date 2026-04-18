@@ -699,10 +699,9 @@ function sanitizeValueForStorage(value: unknown): StorageSafeValue | undefined {
     }
 
     if (Array.isArray(value)) {
-        const sanitizedItems = value
+        return value
             .map(sanitizeValueForStorage)
             .filter((item): item is StorageSafeValue => item !== undefined);
-        return sanitizedItems;
     }
 
     if (typeof value !== 'object') {

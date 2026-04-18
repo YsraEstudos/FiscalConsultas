@@ -426,10 +426,13 @@ function appendServiceLink(serviceCode: string) {
   return serviceLink;
 }
 
-function appendNoteRef(note: string, chapter?: string) {
-  const noteRef = document.createElement('button');
+function appendNoteRef(note: string, chapter?: string, tagName: 'button' | 'a' = 'button') {
+  const noteRef = document.createElement(tagName);
   noteRef.className = 'note-ref';
   noteRef.dataset.note = note;
+  if (noteRef instanceof HTMLAnchorElement) {
+    noteRef.href = '#nota';
+  }
   if (chapter) {
     noteRef.dataset.chapter = chapter;
   }
@@ -815,6 +818,30 @@ describe('App behavior', () => {
     await waitFor(() => {
       expect(mocks.createTabMock).toHaveBeenCalledWith('nbs', false);
       expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nbs-1', 'nbs', '1.17', false);
+    });
+  });
+
+  it('prevents native navigation for note-ref anchors handled by delegated notes', async () => {
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        ncm: '8401',
+        results: buildCodeResults({
+          '84': { notas_parseadas: { '1': 'Nota local 84' } },
+        }),
+      }),
+    ]);
+
+    render(<App />);
+
+    const noteRef = appendNoteRef('1', '84', 'a');
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+    noteRef.dispatchEvent(clickEvent);
+
+    expect(clickEvent.defaultPrevented).toBe(true);
+    await waitFor(() => {
+      expect(screen.getByTestId('note-panel')).toHaveAttribute('data-open', 'true');
+      expect(screen.getByTestId('note-panel')).toHaveAttribute('data-content', 'Nota local 84');
     });
   });
 
