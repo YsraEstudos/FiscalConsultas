@@ -646,6 +646,62 @@ describe('ResultDisplay advanced behavior', () => {
     errorSpy.mockRestore();
   });
 
+  it('notifies the parent when chapter hydration enriches code results', async () => {
+    const onHydratedResults = vi.fn();
+
+    hoisted.getNeshChapterBodyMock.mockResolvedValue({
+      success: true,
+      capitulo: '84',
+      conteudo: 'Conteudo hidratado 84',
+      notas_parseadas: { '4': 'Nota 4 hidratada' },
+      notas_gerais: 'Notas gerais hidratadas',
+      secoes: null,
+    });
+
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '8413',
+          resultados: {
+            '84': {
+              capitulo: '84',
+              titulo: 'Capitulo 84',
+              conteudo: '',
+              notas_parseadas: {},
+              posicoes: [{ codigo: '84.13', anchor_id: 'pos-84-13', descricao: 'Bombas' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-hydrated-callback"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+        onHydratedResults={onHydratedResults}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(hoisted.getNeshChapterBodyMock).toHaveBeenCalledWith('84');
+    });
+
+    await waitFor(() => {
+      expect(onHydratedResults).toHaveBeenCalledWith(
+        'tab-hydrated-callback',
+        expect.objectContaining({
+          '84': expect.objectContaining({
+            capitulo: '84',
+            conteudo: 'Conteudo hidratado 84',
+            notas_parseadas: { '4': 'Nota 4 hidratada' },
+            notas_gerais: 'Notas gerais hidratadas',
+          }),
+        }),
+      );
+    });
+  });
+
   it('stops showing the chapter hydration loading state when all chapter body requests fail', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     hoisted.getNeshChapterBodyMock.mockRejectedValue(new Error('Falha 401'));

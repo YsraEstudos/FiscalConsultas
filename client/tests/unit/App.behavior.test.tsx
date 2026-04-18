@@ -56,7 +56,8 @@ const mocks = vi.hoisted(() => {
         activeTab: null as MockTab | null,
       },
     },
-    resultDisplayCrashTabIdRef: { value: null as string | null },
+  resultDisplayCrashTabIdRef: { value: null as string | null },
+  hydratedResultsRef: { value: null as Record<string, any> | null },
   };
 });
 
@@ -150,6 +151,7 @@ vi.mock('../../src/components/ResultDisplay', () => ({
     onConsumeNewSearch,
     onPersistScroll,
     onContentReady,
+    onHydratedResults,
   }: any) => (
     (() => {
       if (mocks.resultDisplayCrashTabIdRef.value === tabId) {
@@ -174,6 +176,12 @@ vi.mock('../../src/components/ResultDisplay', () => ({
           </button>
           <button data-testid={`result-ready-${tabId}`} onClick={onContentReady}>
             ready
+          </button>
+          <button
+            data-testid={`result-hydrate-${tabId}`}
+            onClick={() => onHydratedResults?.(tabId, mocks.hydratedResultsRef.value)}
+          >
+            hydrate
           </button>
           <button data-testid={`result-close-mobile-${tabId}`} onClick={onCloseMobileMenu}>
             close-mobile
@@ -455,6 +463,7 @@ describe('App behavior', () => {
     mocks.historyRef.value = [{ term: '8517', timestamp: 1 }];
     mocks.sidebarPositionRef.value = 'right';
     mocks.resultDisplayCrashTabIdRef.value = null;
+    mocks.hydratedResultsRef.value = null;
     setTabsState([buildTab({ id: 'tab-1' })], 'tab-1');
   });
 
@@ -760,6 +769,63 @@ describe('App behavior', () => {
     } finally {
       consoleErrorSpy.mockRestore();
     }
+  });
+
+  it('opens local notes from hydrated chapter data after ResultDisplay updates the tab snapshot', async () => {
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        ncm: '8413',
+        results: buildCodeResults({
+          '84': {
+            capitulo: '84',
+            conteudo: '',
+            notas_parseadas: {},
+            posicoes: [],
+          },
+        }, '8413'),
+      }),
+    ]);
+
+    mocks.hydratedResultsRef.value = {
+      '84': {
+        capitulo: '84',
+        conteudo: 'Conteúdo hidratado',
+        notas_parseadas: { '4': 'Nota 4 hidratada' },
+        posicoes: [],
+      },
+    };
+
+    mocks.updateTabMock.mockImplementation((tabId: string, updates: Partial<MockTab>) => {
+      const nextTabs = mocks.tabsStateRef.value.tabs.map((tab) =>
+        tab.id === tabId ? { ...tab, ...updates } : tab
+      );
+      setTabsState(nextTabs, tabId);
+    });
+
+    const { rerender } = render(<App />);
+
+    fireEvent.click(screen.getByTestId('result-hydrate-tab-1'));
+
+    await waitFor(() => {
+      expect(mocks.updateTabMock).toHaveBeenCalledWith('tab-1', {
+        results: expect.objectContaining({
+          results: mocks.hydratedResultsRef.value,
+        }),
+      });
+    });
+    rerender(<App />);
+
+    const localNoteRef = appendNoteRef('4');
+    fireEvent.click(localNoteRef);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('note-panel')).toHaveAttribute('data-open', 'true');
+    });
+    expect(screen.getByTestId('note-panel')).toHaveAttribute('data-note', '4');
+    expect(screen.getByTestId('note-panel')).toHaveAttribute('data-chapter', '84');
+    expect(screen.getByTestId('note-panel')).toHaveAttribute('data-content', 'Nota 4 hidratada');
+    expect(mocks.toastMock).not.toHaveBeenCalledWith('Nota 4 não encontrada. Mostrando notas do capítulo.');
   });
 
   it('opens smart links in background tab on middle mouse down', async () => {

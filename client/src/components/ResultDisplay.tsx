@@ -347,6 +347,8 @@ interface ResultDisplayProps {
     onConsumeNewSearch: (tabId: string, finalScrollTop?: number) => void;
     /** Callback to notify parent when content is ready (for coordinated loading) */
     onContentReady?: (tabId: string) => void;
+    /** Callback to sync hydrated code results back to the owning tab */
+    onHydratedResults?: (tabId: string, results: Record<string, any>) => void;
 }
 
 type MarkupRenderRefs = {
@@ -489,16 +491,6 @@ type ChapterHydrationResult = {
 
 function createFailedChapterBodiesUpdater(failedChapters: string[]) {
     return (current: string[]) => Array.from(new Set([...current, ...failedChapters]));
-}
-
-function createHydratedCodeResultsUpdater(
-    codeResults: Record<string, any>,
-    chapterBodies: ChapterBodyResponse[],
-) {
-    return (current: Record<string, any> | null) => {
-        const baseResults = current ?? codeResults;
-        return mergeHydratedChapterBodies(baseResults, chapterBodies);
-    };
 }
 
 function createRecoveredChapterBodiesUpdater(chapterBodies: ChapterBodyResponse[]) {
@@ -852,7 +844,8 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     latestTextQuery,
     isNewSearch,
     onConsumeNewSearch,
-    onContentReady
+    onContentReady,
+    onHydratedResults,
 }: ResultDisplayProps) {
     const { sidebarPosition } = useSettings();
     const {
@@ -1115,13 +1108,17 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
             if (chapterBodies.length === 0) return;
 
+            const mergedResults = mergeHydratedChapterBodies(
+                renderableCodeResults ?? codeResults,
+                chapterBodies,
+            );
+
             startTransition(() => {
-                setHydratedCodeResults(
-                    createHydratedCodeResultsUpdater(codeResults, chapterBodies),
-                );
+                setHydratedCodeResults(mergedResults);
                 setFailedChapterBodies(
                     createRecoveredChapterBodiesUpdater(chapterBodies),
                 );
+                onHydratedResults?.(tabId, mergedResults);
             });
         };
 
@@ -1143,7 +1140,10 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         codeResults,
         isActive,
         missingChapterBodies,
+        onHydratedResults,
+        renderableCodeResults,
         shouldHydrateCodeResults,
+        tabId,
     ]);
 
     const findAnchorIdForQuery = useCallback((resultados: any, query: string) => {

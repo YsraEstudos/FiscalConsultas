@@ -133,5 +133,3 @@ export function useCrossChapterNotes(): CrossChapterNoteContextValue {
     }
     return context;
 }
-
-export default CrossChapterNoteContext;
