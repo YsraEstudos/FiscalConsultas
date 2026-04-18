@@ -16,6 +16,7 @@ import type {
     NebsSearchResponse,
     SystemStatusResponse
 } from '../types/api.types';
+import { reportClientError } from '../utils/errorMonitoring';
 
 const explicitBaseUrl = import.meta.env.VITE_API_FILTER_URL || import.meta.env.VITE_API_URL;
 const isLocalHost = (host: string) => host === 'localhost' || host === '127.0.0.1';
@@ -286,6 +287,60 @@ function logUnauthorizedResponse(
     });
 }
 
+function isCanceledRequestError(error: AxiosError | Error | unknown): boolean {
+    if (axios.isCancel(error)) {
+        return true;
+    }
+
+    const candidate = error as { code?: unknown; name?: unknown } | null;
+    return candidate?.code === 'ERR_CANCELED' || candidate?.name === 'CanceledError';
+}
+
+function shouldReportApiFailure(status: number | undefined, error: AxiosError): boolean {
+    if (isCanceledRequestError(error)) {
+        return false;
+    }
+
+    if (typeof status === 'number') {
+        return status >= 500;
+    }
+
+    return !error.response;
+}
+
+function reportApiFailure(
+    error: AxiosError,
+    originalRequest: InternalAxiosRequestConfig | undefined,
+    requestId: string | undefined,
+    status: number | undefined,
+) {
+    if (!shouldReportApiFailure(status, error)) {
+        return;
+    }
+
+    const rawPath = getRequestPath(originalRequest?.url);
+    const normalizedPath = rawPath ? normalizeRequestPath(rawPath) : undefined;
+    const method = originalRequest?.method?.toUpperCase?.();
+
+    reportClientError({
+        source: 'network',
+        error,
+        handled: true,
+        path: normalizedPath,
+        requestId,
+        statusCode: status,
+        context: 'axios',
+        message: status
+            ? `API request failed with status ${status}`
+            : 'API request failed before receiving a response',
+        metadata: {
+            method,
+            code: error.code,
+            timeoutMs: originalRequest?.timeout,
+        },
+    });
+}
+
 /**
  * Registra a função getToken do Clerk para uso no interceptor.
  * Deve ser chamado uma vez quando o AuthProvider monta.
@@ -480,6 +535,21 @@ api.interceptors.request.use(
         return config;
     },
     (error: AxiosError) => {
+        const axiosMetadata = axios.isAxiosError(error)
+            ? {
+                code: error.code,
+                timeoutMs: error.config?.timeout,
+            }
+            : undefined;
+
+        reportClientError({
+            source: 'network',
+            error,
+            handled: true,
+            context: 'axios-request-interceptor',
+            message: error instanceof Error ? error.message : 'API request could not be prepared',
+            metadata: axiosMetadata,
+        });
         return Promise.reject(error);
     }
 );
@@ -517,6 +587,7 @@ api.interceptors.response.use(
             refreshAttempt,
             refreshMode,
         );
+        reportApiFailure(error, originalRequest, requestId, status);
         return Promise.reject(error);
     }
 );
@@ -647,7 +718,6 @@ function sanitizeValueForStorage(value: unknown): StorageSafeValue | undefined {
             sanitizedObject[key] = sanitizedItem;
         }
     }
-
     return sanitizedObject;
 }
 

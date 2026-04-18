@@ -6,6 +6,7 @@ const refs = vi.hoisted(() => ({
   capturedNode: { current: null as React.ReactNode },
   renderMock: vi.fn<(node: React.ReactNode) => void>(),
   createRootMock: vi.fn(),
+  shouldThrowAppRef: { value: false },
 }));
 
 vi.mock('react-dom/client', () => ({
@@ -13,7 +14,13 @@ vi.mock('react-dom/client', () => ({
 }));
 
 vi.mock('../../src/App', () => ({
-  default: () => <div data-testid="app">App</div>,
+  default: () => {
+    if (refs.shouldThrowAppRef.value) {
+      throw new Error('App render failed');
+    }
+
+    return <div data-testid="app">App</div>;
+  },
 }));
 
 vi.mock('@clerk/react', () => ({
@@ -87,6 +94,7 @@ describe('main.tsx bootstrap', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     vi.unstubAllEnvs();
+    refs.shouldThrowAppRef.value = false;
   });
 
   afterEach(() => {
@@ -163,12 +171,30 @@ describe('main.tsx bootstrap', () => {
       await waitFor(() => {
         expect(screen.getByTestId('anonymous-auth-provider')).toBeInTheDocument();
       });
-      expect(screen.getByTestId('anonymous-auth-provider').getAttribute('data-reason')).toContain('autenticacao');
+      expect(screen.getByTestId('anonymous-auth-provider').dataset.reason).toContain('autenticacao');
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         '[AuthBootstrap] Clerk error intercepted during startup. Falling back to signed-out mode.',
       );
     } finally {
       consoleWarnSpy.mockRestore();
+    }
+  });
+
+  it('shows the global error boundary fallback when the app crashes during render', async () => {
+    vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', 'pk_test_123');
+    document.body.innerHTML = '<div id="root"></div>';
+    refs.shouldThrowAppRef.value = true;
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      await loadMainModule();
+      render(<>{refs.capturedNode.current}</>);
+
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+      expect(screen.getByText('Não foi possível iniciar o aplicativo.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Recarregar página' })).toBeInTheDocument();
+    } finally {
+      consoleErrorSpy.mockRestore();
     }
   });
 });

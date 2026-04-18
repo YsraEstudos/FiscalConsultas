@@ -6,8 +6,9 @@ Segue o padrão de test_comments_api_contract.py:
 - Override de _get_service com _FakeProfileService
 """
 
-from types import SimpleNamespace
 from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from backend.presentation.routes import profile
@@ -112,17 +113,40 @@ async def _mock_decode_tenant_mismatch(_t):
 
 def _setup_mocks(monkeypatch):
     """Configura mocks padrão de JWT e tenant para testes autenticados."""
+    fake_service = _FakeProfileService()
     monkeypatch.setattr(profile, "decode_clerk_jwt", _mock_decode_valid)
     monkeypatch.setattr(profile, "get_current_tenant", lambda: "org_test")
-    app.dependency_overrides[profile._get_service] = lambda: _FakeProfileService()
+    monkeypatch.setattr(
+        profile.ProfileService,
+        "get_profile",
+        AsyncMock(side_effect=fake_service.get_profile),
+    )
+    monkeypatch.setattr(
+        profile.ProfileService,
+        "update_bio",
+        AsyncMock(side_effect=fake_service.update_bio),
+    )
+    monkeypatch.setattr(
+        profile.ProfileService,
+        "get_contributions",
+        AsyncMock(side_effect=fake_service.get_contributions),
+    )
+    monkeypatch.setattr(
+        profile.ProfileService,
+        "get_user_card",
+        AsyncMock(side_effect=fake_service.get_user_card),
+    )
+    monkeypatch.setattr(
+        profile.ProfileService,
+        "delete_account",
+        AsyncMock(side_effect=fake_service.delete_account),
+    )
 
 
 # ─── Tests: GET /api/profile/me ────────────────────────────────────────────
 
 
 def test_get_profile_requires_token(client):
-    app.dependency_overrides[profile._get_service] = lambda: _FakeProfileService()
-
     response = client.get("/api/profile/me")
 
     assert response.status_code == 401
@@ -237,8 +261,6 @@ def test_delete_account_returns_success(client, monkeypatch):
 
 
 def test_delete_account_requires_token(client):
-    app.dependency_overrides[profile._get_service] = lambda: _FakeProfileService()
-
     response = client.delete("/api/profile/me")
 
     assert response.status_code == 401
@@ -248,9 +270,14 @@ def test_delete_account_requires_token(client):
 
 
 def test_get_profile_uses_org_id_when_tenant_context_missing(client, monkeypatch):
+    fake_service = _FakeProfileService()
     monkeypatch.setattr(profile, "decode_clerk_jwt", _mock_decode_valid)
     monkeypatch.setattr(profile, "get_current_tenant", lambda: None)
-    app.dependency_overrides[profile._get_service] = lambda: _FakeProfileService()
+    monkeypatch.setattr(
+        profile.ProfileService,
+        "get_profile",
+        AsyncMock(side_effect=fake_service.get_profile),
+    )
 
     response = client.get(
         "/api/profile/me",
@@ -264,7 +291,6 @@ def test_get_profile_uses_org_id_when_tenant_context_missing(client, monkeypatch
 def test_get_profile_rejects_payload_without_sub(client, monkeypatch):
     monkeypatch.setattr(profile, "decode_clerk_jwt", _mock_decode_without_sub)
     monkeypatch.setattr(profile, "get_current_tenant", lambda: "org_test")
-    app.dependency_overrides[profile._get_service] = lambda: _FakeProfileService()
 
     response = client.get(
         "/api/profile/me",
@@ -279,7 +305,6 @@ def test_get_profile_rejects_tenant_mismatch_between_context_and_jwt(
 ):
     monkeypatch.setattr(profile, "decode_clerk_jwt", _mock_decode_tenant_mismatch)
     monkeypatch.setattr(profile, "get_current_tenant", lambda: "org_test")
-    app.dependency_overrides[profile._get_service] = lambda: _FakeProfileService()
 
     response = client.get(
         "/api/profile/me",

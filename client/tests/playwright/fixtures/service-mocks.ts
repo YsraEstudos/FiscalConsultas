@@ -1,12 +1,18 @@
 import type { Page, Route } from '@playwright/test';
 
 import type {
+  ChapterData,
+  ChapterPosition,
+  CodeSearchResponse,
   NebsEntry,
   NebsDetailResponse,
   NebsSearchResponse,
   NbsDetailResponse,
   NbsSearchResponse,
   NbsServiceItem,
+  TipiCodeSearchResponse,
+  TipiChapterData,
+  TipiPosition,
 } from '../../../src/types/api.types';
 
 type MockResponseEntry = {
@@ -18,8 +24,10 @@ type MockResponseEntry = {
 type MockResponseQueue = MockResponseEntry[];
 
 export type ServicesMockOptions = {
+  neshSearchResponses?: MockResponseEntry[];
   nebsSearchResponses?: MockResponseEntry[];
   nbsSearchResponses?: MockResponseEntry[];
+  tipiSearchResponses?: MockResponseEntry[];
   statusResponses?: MockResponseEntry[];
   unmatchedApiStrategy?: 'abort' | 'continue';
 };
@@ -53,7 +61,7 @@ function makeOnlineStatusResponse() {
 function makeItem(code = '1.0101.11.00', overrides: Partial<NbsServiceItem> = {}): NbsServiceItem {
   return {
     code,
-    code_clean: code.replace(/\D/g, ''),
+    code_clean: code.replaceAll(/\D/g, ''),
     description: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
     parent_code: '1.0101.1',
     level: 3,
@@ -65,7 +73,7 @@ function makeItem(code = '1.0101.11.00', overrides: Partial<NbsServiceItem> = {}
 function makeNebsEntry(code = '1.0101.11.00'): NebsEntry {
   return {
     code,
-    code_clean: code.replace(/\D/g, ''),
+    code_clean: code.replaceAll(/\D/g, ''),
     title: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
     title_normalized: 'servicos de construcao de edificacoes residenciais de um e dois pavimentos',
     body_text: 'Conteudo da nota',
@@ -76,8 +84,64 @@ function makeNebsEntry(code = '1.0101.11.00'): NebsEntry {
     page_end: 13,
     parser_status: 'trusted',
     parse_warnings: null,
-    source_hash: `fixture-${code.replace(/\D/g, '')}`,
+    source_hash: `fixture-${code.replaceAll(/\D/g, '')}`,
     updated_at: '2026-03-13T00:00:00.000Z',
+  };
+}
+
+function makeTipiSearchResponse(query = '11'): TipiCodeSearchResponse {
+  return {
+    success: true,
+    type: 'code',
+    query,
+    results: {},
+    total: 0,
+    total_capitulos: 0,
+  };
+}
+
+function makeNeshCodeSearchResponse(query = '8404'): CodeSearchResponse {
+  return {
+    success: true,
+    type: 'code',
+    query,
+    normalized: null,
+    results: {},
+    total_capitulos: 0,
+  };
+}
+
+export function makeNeshChapterData(
+  capitulo: string,
+  posicoes: ChapterPosition[],
+  overrides: Partial<ChapterData> = {},
+): ChapterData {
+  return {
+    ncm_buscado: capitulo,
+    capitulo,
+    posicao_alvo: null,
+    posicoes,
+    notas_gerais: null,
+    notas_parseadas: {},
+    conteudo: '',
+    real_content_found: false,
+    erro: null,
+    ...overrides,
+  };
+}
+
+export function makeTipiChapterData(
+  capitulo: string,
+  posicoes: TipiPosition[],
+  overrides: Partial<TipiChapterData> = {},
+): TipiChapterData {
+  return {
+    capitulo,
+    titulo: `Capítulo ${capitulo}`,
+    notas_gerais: null,
+    posicao_alvo: null,
+    posicoes,
+    ...overrides,
   };
 }
 
@@ -126,7 +190,7 @@ export function makeNbsDetail(code = '1.0101.11.00'): NbsDetailResponse {
     has_nebs: false,
   });
   const leaf = makeItem(code, {
-    code_clean: code.replace(/\D/g, ''),
+    code_clean: code.replaceAll(/\D/g, ''),
   });
 
   return {
@@ -188,11 +252,11 @@ export function makeNebsDetail(code = '1.0101.11.00'): NebsDetailResponse {
   };
 }
 
-async function fulfillSearchRoute(
+async function fulfillSearchRoute<TResponse>(
   route: Route,
   query: string,
   queue: MockResponseQueue,
-  makeResponse: (requestedQuery: string) => NbsSearchResponse | NebsSearchResponse,
+  makeResponse: (requestedQuery: string) => TResponse,
 ) {
   const trimmedQuery = query.trim();
   const next = trimmedQuery ? queue.shift() : undefined;
@@ -216,6 +280,14 @@ async function handleNebsSearch(route: Route, query: string, nebsQueue: MockResp
   await fulfillSearchRoute(route, query, nebsQueue, makeNebsSearch);
 }
 
+async function handleTipiSearch(route: Route, query: string, tipiQueue: MockResponseQueue) {
+  await fulfillSearchRoute(route, query, tipiQueue, makeTipiSearchResponse);
+}
+
+async function handleNeshSearch(route: Route, query: string, neshQueue: MockResponseQueue) {
+  await fulfillSearchRoute(route, query, neshQueue, makeNeshCodeSearchResponse);
+}
+
 async function handleNbsDetail(route: Route, code: string) {
   await route.fulfill({ json: makeNbsDetail(code) });
 }
@@ -225,19 +297,23 @@ async function handleNebsDetail(route: Route, code: string) {
 }
 
 function getDetailCode(path: string, doc: 'nbs' | 'nebs'): string | null {
-  const match = path.match(new RegExp(`^/api/services/${doc}/([^/]+)$`));
+  const match = new RegExp(`^/api/services/${doc}/([^/]+)$`).exec(path);
   return match ? decodeURIComponent(match[1]) : null;
 }
 
 export async function installServicesMock(page: Page, options: ServicesMockOptions = {}) {
+  const neshQueue = [...(options.neshSearchResponses ?? [])];
   const nbsQueue = [...(options.nbsSearchResponses ?? [])];
   const nebsQueue = [...(options.nebsSearchResponses ?? [])];
+  const tipiQueue = [...(options.tipiSearchResponses ?? [])];
   const statusQueue = [...(options.statusResponses ?? [])];
 
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
-    const query = url.searchParams.get('q') ?? '';
+    const isCodeCatalogSearch = path.endsWith('/tipi/search') || (path.endsWith('/search') && !path.includes('/services/'));
+    const queryParam = isCodeCatalogSearch ? 'ncm' : 'q';
+    const query = url.searchParams.get(queryParam) ?? '';
 
     if (path.endsWith('/status')) {
       const next = statusQueue.shift();
@@ -261,6 +337,16 @@ export async function installServicesMock(page: Page, options: ServicesMockOptio
 
     if (path.endsWith('/services/nebs/search')) {
       await handleNebsSearch(route, query, nebsQueue);
+      return;
+    }
+
+    if (path.endsWith('/tipi/search')) {
+      await handleTipiSearch(route, query, tipiQueue);
+      return;
+    }
+
+    if (path.endsWith('/search') && !path.includes('/services/')) {
+      await handleNeshSearch(route, query, neshQueue);
       return;
     }
 

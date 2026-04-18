@@ -53,6 +53,12 @@ type NoteContent = {
     readonly body_text?: string | null;
 } | null | undefined;
 
+type OpenCatalogDoc = (
+    targetDoc: ServiceDocType,
+    query?: string,
+    forceNewTab?: boolean,
+) => void;
+
 function escapeHtml(value: string): string {
     return value
         .replaceAll('&', '&amp;')
@@ -122,8 +128,6 @@ function getExpandedPrefixBranch(
         && item.code_clean.startsWith(cleanQuery)
     ));
 }
-
-type OpenCatalogDoc = (targetDoc: ServiceDocType, query?: string) => void;
 
 interface NbsHierarchySectionProps {
     readonly activeChapterNumber: string | null;
@@ -244,12 +248,14 @@ function NbsHierarchySection({
 
 interface NbsDetailSectionProps {
     readonly nbsNoteBodyHtml: string;
+    readonly nbsNotesContentRef: React.RefObject<HTMLDivElement | null>;
     readonly nbsState: ServicesWorkspaceNbsState;
     readonly openCatalogDoc: OpenCatalogDoc;
 }
 
 function NbsDetailSection({
     nbsNoteBodyHtml,
+    nbsNotesContentRef,
     nbsState,
     openCatalogDoc,
 }: Readonly<NbsDetailSectionProps>) {
@@ -285,12 +291,13 @@ function NbsDetailSection({
                     </section>
 
                     {nbsState.detail.nebs && (
-                        <section className={styles.notesCard} style={{ marginTop: "1rem" }}>
+                        <section className={styles.notesCard} style={{ marginTop: '1rem' }}>
                             <div className={styles.notesHeader}>
                                 <span className={styles.notesIcon}>i</span>
                                 <span>NOTAS EXPLICATIVAS</span>
                             </div>
                             <div
+                                ref={nbsNotesContentRef}
                                 className={styles.notesContent}
                                 dangerouslySetInnerHTML={{ __html: nbsNoteBodyHtml }}
                             />
@@ -300,7 +307,7 @@ function NbsDetailSection({
                     <button
                         type="button"
                         className={styles.primaryAction}
-                        onClick={() => openCatalogDoc('nebs', nbsState.detail?.item.code)}
+                        onClick={() => openCatalogDoc('nebs', nbsState.detail?.item.code, true)}
                     >
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
                         Ver NEBS
@@ -321,6 +328,8 @@ interface NbsChapterNotesDialogProps {
     readonly chapterNotesHtml: string;
     readonly closeChapterNotes: () => void;
     readonly currentChapterNotesEntry: ReturnType<typeof getNbsChapterNotesEntry>;
+    readonly onBackdropClick: (event: React.MouseEvent<HTMLDialogElement>) => void;
+    readonly onDialogKeyDown: (event: React.KeyboardEvent<HTMLDialogElement>) => void;
 }
 
 function NbsChapterNotesDialog({
@@ -328,6 +337,8 @@ function NbsChapterNotesDialog({
     chapterNotesHtml,
     closeChapterNotes,
     currentChapterNotesEntry,
+    onBackdropClick,
+    onDialogKeyDown,
 }: Readonly<NbsChapterNotesDialogProps>) {
     return (
         <dialog
@@ -336,11 +347,8 @@ function NbsChapterNotesDialog({
             aria-labelledby="nbs-chapter-notes-title"
             onClose={closeChapterNotes}
             onCancel={closeChapterNotes}
-            onClick={(event) => {
-                if (event.target === event.currentTarget) {
-                    closeChapterNotes();
-                }
-            }}
+            onClick={onBackdropClick}
+            onKeyDown={onDialogKeyDown}
         >
             {currentChapterNotesEntry && (
                 <section className={styles.chapterNotesSheet}>
@@ -387,9 +395,9 @@ interface NbsWorkspaceViewProps {
     readonly chapterNotesDialogRef: React.RefObject<HTMLDialogElement | null>;
     readonly chapterNotesHtml: string;
     readonly currentChapterNotesEntry: ReturnType<typeof getNbsChapterNotesEntry>;
-    readonly isChapterNotesOpen: boolean;
     readonly nbsChapterNotesNewTab: boolean;
     readonly nbsNoteBodyHtml: string;
+    readonly nbsNotesContentRef: React.RefObject<HTMLDivElement | null>;
     readonly nbsPrefixAutoExpand: boolean;
     readonly nbsState: ServicesWorkspaceNbsState;
     readonly onSelectNbs: (code: string) => void;
@@ -404,6 +412,7 @@ function NbsWorkspaceView({
     currentChapterNotesEntry,
     nbsChapterNotesNewTab,
     nbsNoteBodyHtml,
+    nbsNotesContentRef,
     nbsPrefixAutoExpand,
     nbsState,
     onSelectNbs,
@@ -419,6 +428,22 @@ function NbsWorkspaceView({
 
     const closeChapterNotes = () => {
         setIsChapterNotesOpen(false);
+    };
+
+    const handleChapterNotesDialogKeyDown = (
+        event: React.KeyboardEvent<HTMLDialogElement>,
+    ) => {
+        if (event.key === 'Escape') {
+            closeChapterNotes();
+        }
+    };
+
+    const handleChapterNotesBackdropClick = (
+        event: React.MouseEvent<HTMLDialogElement>,
+    ) => {
+        if (event.target === event.currentTarget) {
+            closeChapterNotes();
+        }
     };
 
     const handleOpenChapterNotes = () => {
@@ -460,6 +485,7 @@ function NbsWorkspaceView({
             />
             <NbsDetailSection
                 nbsNoteBodyHtml={nbsNoteBodyHtml}
+                nbsNotesContentRef={nbsNotesContentRef}
                 nbsState={nbsState}
                 openCatalogDoc={openCatalogDoc}
             />
@@ -468,6 +494,8 @@ function NbsWorkspaceView({
                 chapterNotesHtml={chapterNotesHtml}
                 closeChapterNotes={closeChapterNotes}
                 currentChapterNotesEntry={currentChapterNotesEntry}
+                onBackdropClick={handleChapterNotesBackdropClick}
+                onDialogKeyDown={handleChapterNotesDialogKeyDown}
             />
         </div>
     );
@@ -654,6 +682,7 @@ export function ServicesWorkspace({
     const { openNewTab, nbsPrefixAutoExpand, nbsChapterNotesNewTab } = useSettings();
     const [isChapterNotesOpen, setIsChapterNotesOpen] = useState(false);
     const chapterNotesDialogRef = useRef<HTMLDialogElement | null>(null);
+    const nbsNotesContentRef = useRef<HTMLDivElement | null>(null);
     const chapterCodeSource = doc === 'nbs'
         ? (nbsState.detail?.item.code || nbsState.selectedCode || (
             isCodeLikeNbsQuery(nbsState.query) ? nbsState.query : null
@@ -665,16 +694,52 @@ export function ServicesWorkspace({
         ? renderNbsChapterNotesHtml(currentChapterNotesEntry)
         : '';
 
-    const openCatalogDoc = (targetDoc: ServiceDocType, query?: string) => {
+    const openCatalogDoc = (targetDoc: ServiceDocType, query?: string, forceNewTab?: boolean) => {
         if (!query) return;
 
-        if (openNewTab && onOpenDocInNewTab) {
+        if ((openNewTab || forceNewTab) && onOpenDocInNewTab) {
             onOpenDocInNewTab(targetDoc, query);
             return;
         }
 
         onSwitchDoc(targetDoc, query);
     };
+
+    useEffect(() => {
+        const container = nbsNotesContentRef.current;
+        if (!container) return;
+
+        const handlePointer = (event: MouseEvent) => {
+            if (event.type === 'mousedown' && event.button !== 1) {
+                return;
+            }
+
+            const target = event.target;
+            if (!(target instanceof Element)) return;
+
+            const serviceLink = target.closest('.service-smart-link, .service-code-target');
+            if (!(serviceLink instanceof HTMLElement) || !container.contains(serviceLink)) {
+                return;
+            }
+
+            const serviceCode = serviceLink.dataset.serviceCode;
+            if (!serviceCode) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const forceNewTab = event.metaKey || event.ctrlKey || event.button === 1;
+            openCatalogDoc('nebs', serviceCode, forceNewTab);
+        };
+
+        container.addEventListener('mousedown', handlePointer);
+        container.addEventListener('click', handlePointer);
+
+        return () => {
+            container.removeEventListener('mousedown', handlePointer);
+            container.removeEventListener('click', handlePointer);
+        };
+    }, [openCatalogDoc]);
 
     useEffect(() => {
         if (!isChapterNotesOpen || !currentChapterNotesEntry) {
@@ -705,9 +770,9 @@ export function ServicesWorkspace({
                 chapterNotesDialogRef={chapterNotesDialogRef}
                 chapterNotesHtml={chapterNotesHtml}
                 currentChapterNotesEntry={currentChapterNotesEntry}
-                isChapterNotesOpen={isChapterNotesOpen}
                 nbsChapterNotesNewTab={nbsChapterNotesNewTab}
                 nbsNoteBodyHtml={nbsNoteBodyHtml}
+                nbsNotesContentRef={nbsNotesContentRef}
                 nbsPrefixAutoExpand={nbsPrefixAutoExpand}
                 nbsState={nbsState}
                 onSelectNbs={onSelectNbs}

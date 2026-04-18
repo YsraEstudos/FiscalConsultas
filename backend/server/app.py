@@ -3,6 +3,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Any, cast
+from urllib.parse import urlparse
 
 from backend.config import CONFIG, setup_logging
 from backend.config.exceptions import NeshError
@@ -27,7 +28,12 @@ from backend.server.error_handlers import (
     generic_exception_handler,
     nesh_exception_handler,
 )
-from backend.server.middleware import TenantMiddleware, is_loopback_host
+from backend.server.middleware import (
+    TenantMiddleware,
+    is_loopback_host,
+    origin_looks_like_loopback,
+)
+from backend.server.observability import configure_observability
 from backend.services.ai_service import AiService
 from backend.services.nbs_service import NbsService
 from backend.services.tipi_service import TipiService
@@ -50,33 +56,49 @@ Responsável por:
 """
 
 # Logger setup
-setup_logging()
-logger = logging.getLogger("server")
+setup_logging(
+    level=settings.logging.python_level,
+    redact_sensitive_data=settings.logging.redact_sensitive_data,
+)
+logger = logging.getLogger("nesh.server")
 
 _DOCS_PATHS = frozenset({"/docs", "/redoc", "/openapi.json"})
-_CONTENT_SECURITY_POLICY = "; ".join(
-    (
-        "default-src 'self'",
-        "base-uri 'self'",
-        "object-src 'none'",
-        "frame-ancestors 'none'",
-        "form-action 'self'",
+
+
+def _build_content_security_policy() -> str:
+    connect_sources = ["'self'", "https:", "wss:"]
+    if settings.server.env == "development":
+        connect_sources.extend(
+            [
+                "http://127.0.0.1:8000",
+                "http://localhost:8000",
+                "ws://127.0.0.1:*",
+                "ws://localhost:*",
+            ]
+        )
+
+    return "; ".join(
         (
-            "script-src 'self' https://*.clerk.accounts.dev "
-            "https://*.clerk.com https://challenges.cloudflare.com"
-        ),
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-        "img-src 'self' data: blob: https:",
-        "font-src 'self' https://fonts.gstatic.com data:",
-        (
-            "connect-src 'self' https: wss: http://127.0.0.1:8000 "
-            "http://localhost:8000 ws://127.0.0.1:* ws://localhost:* "
-            "wss://me.kis.v2.scr.kaspersky-labs.com"
-        ),
-        "worker-src 'self' blob:",
-        "frame-src 'self' https:",
+            "default-src 'self'",
+            "base-uri 'self'",
+            "object-src 'none'",
+            "frame-ancestors 'none'",
+            "form-action 'self'",
+            (
+                "script-src 'self' https://*.clerk.accounts.dev "
+                "https://*.clerk.com https://challenges.cloudflare.com"
+            ),
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+            "img-src 'self' data: blob: https:",
+            "font-src 'self' https://fonts.gstatic.com data:",
+            f"connect-src {' '.join(connect_sources)}",
+            "worker-src 'self' blob:",
+            (
+                "frame-src 'self' https://*.clerk.accounts.dev "
+                "https://*.clerk.com https://challenges.cloudflare.com"
+            ),
+        )
     )
-)
 
 
 def _resolve_project_root() -> str:
@@ -161,6 +183,50 @@ def _record_release_metadata(app: FastAPI) -> None:
         "Runtime release metadata: %s",
         json.dumps(metadata, ensure_ascii=False, sort_keys=True),
     )
+    configure_observability(
+        release=metadata.get("git_commit") or metadata.get("app_version"),
+        server_name=metadata.get("render_service_name")
+        or metadata.get("render_service_id"),
+    )
+
+
+def _log_runtime_security_warnings() -> None:
+    if settings.server.env != "production":
+        return
+
+    warnings: list[str] = []
+    if settings.features.debug_mode:
+        warnings.append("SERVER__ENV=production com FEATURES__DEBUG_MODE=true.")
+
+    if not settings.server.cors_allowed_origins:
+        warnings.append(
+            "SERVER__CORS_ALLOWED_ORIGINS vazio em produção; configure apenas domínios oficiais."
+        )
+    elif any(origin.strip() == "*" for origin in settings.server.cors_allowed_origins):
+        warnings.append(
+            'SERVER__CORS_ALLOWED_ORIGINS="*" é inseguro em produção; configure apenas origens explícitas.'
+        )
+    elif any(
+        origin_looks_like_loopback(origin)
+        for origin in settings.server.cors_allowed_origins
+    ):
+        warnings.append(
+            "SERVER__CORS_ALLOWED_ORIGINS em produção ainda inclui origem localhost/loopback."
+        )
+
+    redis_hostname = urlparse(settings.cache.redis_url).hostname
+    if settings.cache.enable_redis and is_loopback_host(redis_hostname):
+        warnings.append(
+            "CACHE__ENABLE_REDIS=true em produção com CACHE__REDIS_URL apontando para localhost."
+        )
+
+    if not settings.database.is_postgres:
+        warnings.append(
+            "DATABASE__ENGINE não está em postgresql no ambiente de produção."
+        )
+
+    for warning in warnings:
+        logger.warning("Runtime security warning: %s", warning)
 
 
 def _request_uses_https(request: Request) -> bool:
@@ -173,7 +239,7 @@ def _request_uses_https(request: Request) -> bool:
 
 
 def _apply_security_headers(request: Request, response) -> None:
-    response.headers["Content-Security-Policy"] = _CONTENT_SECURITY_POLICY
+    response.headers["Content-Security-Policy"] = _build_content_security_policy()
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -345,6 +411,7 @@ async def lifespan(app: FastAPI):
     project_root = _resolve_project_root()
     try:
         _record_release_metadata(app)
+        _log_runtime_security_warnings()
         _validate_dev_tenant_override_safety()
         await _init_primary_database(app)
         await _init_sqlmodel_engine(app)

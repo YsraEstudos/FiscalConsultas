@@ -3,12 +3,14 @@ import { createRoot } from 'react-dom/client'
 import { ClerkProvider } from '@clerk/react'
 import './index.css'
 import App from './App'
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthProvider, AnonymousAuthProvider } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
 import { GlossaryProvider } from './context/GlossaryContext';
 import { CrossChapterNoteProvider } from './context/CrossChapterNoteContext';
 import { LocalDatabaseProvider } from './context/LocalDatabaseContext';
 import { clerkTheme } from './config/clerkAppearance';
+import { installGlobalErrorMonitoring } from './utils/errorMonitoring';
 import {
     getClerkUnavailableMessage,
     isClerkLoadFailureReason,
@@ -120,6 +122,10 @@ function RootApp() {
         };
     }, [mode]);
 
+    useLayoutEffect(() => {
+        installGlobalErrorMonitoring();
+    }, []);
+
     if (mode === 'missing-key') {
         console.error(
             'Missing Clerk key. Configure VITE_CLERK_PUBLISHABLE_KEY in client/.env.local and restart Vite.'
@@ -139,6 +145,13 @@ if (!rootElement) throw new Error('Failed to find the root element');
 
 createRoot(rootElement).render(
     <StrictMode>
-        <RootApp />
+        <ErrorBoundary
+            boundaryName="root-app"
+            title="Não foi possível iniciar o aplicativo."
+            description="A aplicação encontrou um erro inesperado durante a inicialização. Tente recarregar a página para continuar."
+            variant="full-screen"
+        >
+            <RootApp />
+        </ErrorBoundary>
     </StrictMode>,
 );

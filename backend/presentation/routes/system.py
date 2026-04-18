@@ -1,16 +1,19 @@
 import asyncio
 import re
+import secrets
 import time
 from typing import Annotated
 
-from backend.infrastructure.redis_client import redis_cache
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import PlainTextResponse
+
 from backend.config.settings import is_valid_admin_token, reload_settings, settings
+from backend.infrastructure.redis_client import redis_cache
 from backend.server.dependencies import get_nesh_service
 from backend.server.middleware import decode_clerk_jwt
 from backend.server.rate_limit import status_rate_limiter
 from backend.services import NeshService
 from backend.utils.auth import extract_bearer_token, extract_client_ip, is_admin_payload
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 router = APIRouter()
 _STATUS_CACHE: dict[str, object | None] = {"value": None, "expires_at": 0.0}
@@ -22,6 +25,10 @@ STATUS_RESPONSES = {
 STATUS_DETAILS_RESPONSES = {
     **STATUS_RESPONSES,
     403: {"description": "Forbidden (admin-only endpoint)."},
+}
+METRICS_RESPONSES = {
+    403: {"description": "Forbidden (invalid metrics token)."},
+    404: {"description": "Not Found when metrics endpoint is disabled."},
 }
 
 
@@ -70,6 +77,30 @@ async def _is_admin_request(request: Request) -> bool:
         return False
     payload = await decode_clerk_jwt(token)
     return is_admin_payload(payload)
+
+
+def _extract_metrics_token(request: Request) -> str | None:
+    header_token = request.headers.get("X-Metrics-Token", "").strip()
+    if header_token:
+        return header_token
+
+    authorization = request.headers.get("Authorization", "").strip()
+    if authorization.lower().startswith("bearer "):
+        return authorization[7:].strip() or None
+
+    return None
+
+
+def _metrics_endpoint_enabled() -> bool:
+    return settings.observability.metrics_enabled
+
+
+def _is_metrics_request_authorized(request: Request) -> bool:
+    configured_token = settings.observability.metrics_token.strip()
+    if not configured_token:
+        return False
+    token = _extract_metrics_token(request)
+    return bool(token and secrets.compare_digest(token, configured_token))
 
 
 def _status_limiter_key(request: Request) -> str:
@@ -199,8 +230,9 @@ async def _collect_db_status(request: Request) -> tuple[dict, float]:
         return db_stats, latency_ms
 
     try:
-        from backend.infrastructure.db_engine import get_session
         from sqlalchemy import text
+
+        from backend.infrastructure.db_engine import get_session
 
         async with get_session() as session:
             chapters_count = await session.execute(
@@ -467,14 +499,181 @@ def _build_detailed_status_payload(
     }
     return {
         "status": overall_status,
-        "version": getattr(request.app, "version", "unknown"),
+        "version": getattr(request.app, "version", None),
         "backend": "FastAPI",
         "database": normalized_db,
         "tipi": normalized_tipi,
-        "nbs": normalized_nbs,
-        "nebs": normalized_nebs,
+        "nbs": {
+            "status": normalized_nbs.get("status", "error"),
+            "items": int(normalized_nbs.get("items") or 0),
+            **(
+                {"metadata": normalized_nbs["metadata"]}
+                if isinstance(normalized_nbs.get("metadata"), dict)
+                else {}
+            ),
+            **(
+                {"error": normalized_nbs["error"]}
+                if normalized_nbs.get("error")
+                else {}
+            ),
+        },
+        "nebs": {
+            "status": normalized_nebs.get("status", "error"),
+            "entries": int(normalized_nebs.get("entries") or 0),
+            **(
+                {"metadata": normalized_nebs["metadata"]}
+                if isinstance(normalized_nebs.get("metadata"), dict)
+                else {}
+            ),
+            **(
+                {"error": normalized_nebs["error"]}
+                if normalized_nebs.get("error")
+                else {}
+            ),
+        },
         "catalogs": catalogs,
     }
+
+
+def _metric_value_from_status(status: str) -> int:
+    return 1 if status == "online" else 0
+
+
+def _append_metric_line(
+    lines: list[str],
+    name: str,
+    value: int | float,
+    labels: dict[str, str] | None = None,
+) -> None:
+    label_text = ""
+    if labels:
+
+        def _escape_label_value(label_value: str) -> str:
+            return (
+                label_value.replace("\\", "\\\\")
+                .replace('"', '\\"')
+                .replace("\n", "\\n")
+            )
+
+        encoded_labels = ",".join(
+            f'{key}="{_escape_label_value(str(label_value))}"'
+            for key, label_value in sorted(labels.items())
+        )
+        label_text = f"{{{encoded_labels}}}"
+    lines.append(f"{name}{label_text} {value}")
+
+
+def _append_catalog_status_metrics(lines: list[str], status_payload: dict) -> None:
+    catalogs = status_payload.get("catalogs", {})
+    for catalog_name, catalog_payload in catalogs.items():
+        if not isinstance(catalog_payload, dict):
+            continue
+        _append_metric_line(
+            lines,
+            "nesh_catalog_status",
+            _metric_value_from_status(str(catalog_payload.get("status", "error"))),
+            {"catalog": catalog_name},
+        )
+
+
+def _append_database_latency_metric(lines: list[str], status_payload: dict) -> None:
+    database_payload = status_payload.get("database", {})
+    if not isinstance(database_payload, dict) or "latency_ms" not in database_payload:
+        return
+
+    lines.extend(
+        [
+            "# HELP nesh_database_latency_ms Database latency observed by /api/status/details.",
+            "# TYPE nesh_database_latency_ms gauge",
+        ]
+    )
+    _append_metric_line(
+        lines,
+        "nesh_database_latency_ms",
+        float(database_payload.get("latency_ms") or 0),
+    )
+
+
+def _append_payload_cache_metrics(
+    lines: list[str],
+    cache_metrics: dict,
+    *,
+    metric_name: str,
+    help_text: str,
+    field_name: str,
+) -> None:
+    lines.extend(
+        [
+            f"# HELP {metric_name} {help_text}",
+            f"# TYPE {metric_name} gauge",
+        ]
+    )
+    for cache_name in ("search_code_payload_cache", "tipi_code_payload_cache"):
+        cache_payload = cache_metrics.get(cache_name)
+        if not isinstance(cache_payload, dict):
+            continue
+        _append_metric_line(
+            lines,
+            metric_name,
+            int(cache_payload.get(field_name) or 0),
+            {"cache": cache_name},
+        )
+
+
+def _append_internal_cache_hit_rate_metrics(
+    lines: list[str], cache_metrics: dict
+) -> None:
+    lines.extend(
+        [
+            "# HELP nesh_internal_cache_hit_rate Internal service cache hit rate.",
+            "# TYPE nesh_internal_cache_hit_rate gauge",
+        ]
+    )
+    for service_name in ("nesh_internal_caches", "tipi_internal_caches"):
+        service_payload = cache_metrics.get(service_name)
+        if not isinstance(service_payload, dict):
+            continue
+        for cache_name, cache_payload in service_payload.items():
+            if not isinstance(cache_payload, dict):
+                continue
+            hit_rate = cache_payload.get("hit_rate")
+            if not isinstance(hit_rate, (int, float)):
+                continue
+            _append_metric_line(
+                lines,
+                "nesh_internal_cache_hit_rate",
+                float(hit_rate),
+                {"service": service_name, "cache": cache_name},
+            )
+
+
+def _build_prometheus_metrics_payload(
+    status_payload: dict,
+    cache_metrics: dict,
+) -> str:
+    lines: list[str] = [
+        "# HELP nesh_catalog_status Catalog health status (1=online, 0=error).",
+        "# TYPE nesh_catalog_status gauge",
+    ]
+    _append_catalog_status_metrics(lines, status_payload)
+    _append_database_latency_metric(lines, status_payload)
+    _append_payload_cache_metrics(
+        lines,
+        cache_metrics,
+        metric_name="nesh_payload_cache_hits",
+        help_text="Total payload-cache hits by route family.",
+        field_name="hits",
+    )
+    _append_payload_cache_metrics(
+        lines,
+        cache_metrics,
+        metric_name="nesh_payload_cache_misses",
+        help_text="Total payload-cache misses by route family.",
+        field_name="misses",
+    )
+    _append_internal_cache_hit_rate_metrics(lines, cache_metrics)
+
+    return "\n".join(lines) + "\n"
 
 
 @router.get("/status", responses=STATUS_RESPONSES)
@@ -539,18 +738,7 @@ async def get_status_details(request: Request):
     )
 
 
-@router.get(
-    "/cache-metrics",
-    responses={403: {"description": "Forbidden (admin-only endpoint)."}},
-)
-async def get_cache_metrics(request: Request):
-    """
-    Métricas de hit/miss dos payload caches de /api/search e /api/tipi/search.
-    Restrito a admins por conter dados operacionais internos.
-    """
-    if not await _is_admin_request(request):
-        raise HTTPException(status_code=403, detail="Forbidden")
-
+async def _collect_cache_metrics_payload(request: Request) -> dict:
     from backend.presentation.routes import search as search_route
     from backend.presentation.routes import tipi as tipi_route
 
@@ -571,6 +759,61 @@ async def get_cache_metrics(request: Request):
         "nesh_internal_caches": nesh_internal,
         "tipi_internal_caches": tipi_internal,
     }
+
+
+@router.get(
+    "/cache-metrics",
+    responses={403: {"description": "Forbidden (admin-only endpoint)."}},
+)
+async def get_cache_metrics(request: Request):
+    """
+    Métricas de hit/miss dos payload caches de /api/search e /api/tipi/search.
+    Restrito a admins por conter dados operacionais internos.
+    """
+    if not await _is_admin_request(request):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    return await _collect_cache_metrics_payload(request)
+
+
+@router.get(
+    "/metrics",
+    include_in_schema=False,
+    response_class=PlainTextResponse,
+    responses=METRICS_RESPONSES,
+)
+async def get_metrics(request: Request):
+    """
+    Endpoint Prometheus-style para observabilidade básica.
+    Protegido por token dedicado em X-Metrics-Token ou Authorization: Bearer.
+    """
+    if not _metrics_endpoint_enabled():
+        raise HTTPException(status_code=404, detail="Not Found")
+    if not _is_metrics_request_authorized(request):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    await _apply_status_rate_limit(request)
+
+    (
+        normalized_db,
+        normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
+        overall_status,
+    ) = await _collect_status_payloads(request)
+    status_payload = _build_detailed_status_payload(
+        request,
+        normalized_db,
+        normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
+        overall_status,
+    )
+    cache_metrics = await _collect_cache_metrics_payload(request)
+    payload = _build_prometheus_metrics_payload(status_payload, cache_metrics)
+    return PlainTextResponse(
+        payload,
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
 
 
 @router.get(

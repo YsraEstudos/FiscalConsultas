@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import secrets
 from typing import List, Literal, Optional, Set
@@ -177,6 +178,34 @@ class SecuritySettings(BaseModel):
         return self.ai_chat_allowed_email_set
 
 
+class LoggingSettings(BaseModel):
+    level: str = "INFO"
+    redact_sensitive_data: bool = True
+
+    @property
+    def normalized_level(self) -> str:
+        return str(self.level or "INFO").strip().upper() or "INFO"
+
+    @property
+    def python_level(self) -> int:
+        return getattr(logging, self.normalized_level, logging.INFO)
+
+
+class ObservabilitySettings(BaseModel):
+    metrics_token: str = ""
+    sentry_dsn: str = ""
+    sentry_environment: str = ""
+    sentry_traces_sample_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    @property
+    def sentry_enabled(self) -> bool:
+        return bool(self.sentry_dsn.strip())
+
+    @property
+    def metrics_enabled(self) -> bool:
+        return bool(self.metrics_token.strip())
+
+
 class AppSettings(BaseSettings):
     """
     Main Application Configuration.
@@ -191,6 +220,8 @@ class AppSettings(BaseSettings):
     auth: AuthSettings = Field(default_factory=AuthSettings)
     billing: BillingSettings = Field(default_factory=BillingSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
 
     # Legacy compatibility property
     @property

@@ -1,11 +1,13 @@
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 
 from backend.presentation.routes import search as search_route
 from backend.presentation.routes import tipi as tipi_route
+from backend.services.nesh_service import NeshService
+from backend.services.tipi_service import TipiService
 from backend.server.app import app
-from backend.server.dependencies import get_nesh_service, get_tipi_service
 
 pytestmark = pytest.mark.integration
 
@@ -107,8 +109,12 @@ def _cleanup_overrides():
     app.dependency_overrides.clear()
 
 
-def test_search_code_response_keeps_resultados_alias(client):
-    app.dependency_overrides[get_nesh_service] = lambda: _FakeNeshServiceCode()
+def test_search_code_response_keeps_resultados_alias(client, monkeypatch):
+    monkeypatch.setattr(
+        NeshService,
+        "process_request",
+        AsyncMock(side_effect=_FakeNeshServiceCode().process_request),
+    )
 
     response = client.get("/api/search?ncm=8517")
     assert response.status_code == 200
@@ -123,8 +129,12 @@ def test_search_code_response_keeps_resultados_alias(client):
     assert {"Authorization", "X-Tenant-Id", "Accept-Encoding"}.issubset(vary_tokens)
 
 
-def test_search_text_response_does_not_inject_resultados(client):
-    app.dependency_overrides[get_nesh_service] = lambda: _FakeNeshServiceText()
+def test_search_text_response_does_not_inject_resultados(client, monkeypatch):
+    monkeypatch.setattr(
+        NeshService,
+        "process_request",
+        AsyncMock(side_effect=_FakeNeshServiceText().process_request),
+    )
 
     response = client.get("/api/search?ncm=texto")
     assert response.status_code == 200
@@ -134,9 +144,11 @@ def test_search_text_response_does_not_inject_resultados(client):
     assert "resultados" not in payload
 
 
-def test_search_code_prefers_results_key_even_when_empty(client):
-    app.dependency_overrides[get_nesh_service] = lambda: (
-        _FakeNeshServiceCodeEmptyResults()
+def test_search_code_prefers_results_key_even_when_empty(client, monkeypatch):
+    monkeypatch.setattr(
+        NeshService,
+        "process_request",
+        AsyncMock(side_effect=_FakeNeshServiceCodeEmptyResults().process_request),
     )
 
     response = client.get("/api/search?ncm=8517")
@@ -149,8 +161,14 @@ def test_search_code_prefers_results_key_even_when_empty(client):
     assert payload["total_capitulos"] == 0
 
 
-def test_search_invalid_service_response_returns_500_with_cors_header(client):
-    app.dependency_overrides[get_nesh_service] = lambda: _FakeNeshServiceInvalid()
+def test_search_invalid_service_response_returns_500_with_cors_header(
+    client, monkeypatch
+):
+    monkeypatch.setattr(
+        NeshService,
+        "process_request",
+        AsyncMock(side_effect=_FakeNeshServiceInvalid().process_request),
+    )
 
     response = client.get(
         "/api/search?ncm=texto-invalido",
@@ -163,8 +181,18 @@ def test_search_invalid_service_response_returns_500_with_cors_header(client):
     )
 
 
-def test_search_chapter_body_allows_anonymous_access(client):
-    app.dependency_overrides[get_nesh_service] = lambda: _FakeNeshChapterService()
+def test_search_chapter_body_allows_anonymous_access(client, monkeypatch):
+    fake_service = _FakeNeshChapterService()
+    monkeypatch.setattr(
+        NeshService,
+        "fetch_chapter_data",
+        AsyncMock(side_effect=fake_service.fetch_chapter_data),
+    )
+    monkeypatch.setattr(
+        NeshService,
+        "strip_chapter_preamble",
+        fake_service.strip_chapter_preamble,
+    )
 
     response = client.get("/api/search/chapter/84/body")
     assert response.status_code == 200
@@ -177,8 +205,14 @@ def test_search_chapter_body_allows_anonymous_access(client):
     assert payload["notas_gerais"] == "Notas gerais"
 
 
-def test_tipi_code_response_enforces_compatibility_fields(client):
-    app.dependency_overrides[get_tipi_service] = lambda: _FakeTipiServiceCode()
+def test_tipi_code_response_enforces_compatibility_fields(client, monkeypatch):
+    fake_service = _FakeTipiServiceCode()
+    monkeypatch.setattr(TipiService, "is_code_query", fake_service.is_code_query)
+    monkeypatch.setattr(
+        TipiService,
+        "search_by_code",
+        AsyncMock(side_effect=fake_service.search_by_code),
+    )
 
     response = client.get("/api/tipi/search?ncm=8517")
     assert response.status_code == 200
@@ -193,8 +227,14 @@ def test_tipi_code_response_enforces_compatibility_fields(client):
     assert {"Authorization", "X-Tenant-Id", "Accept-Encoding"}.issubset(vary_tokens)
 
 
-def test_tipi_text_response_sets_route_defaults(client):
-    app.dependency_overrides[get_tipi_service] = lambda: _FakeTipiServiceText()
+def test_tipi_text_response_sets_route_defaults(client, monkeypatch):
+    fake_service = _FakeTipiServiceText()
+    monkeypatch.setattr(TipiService, "is_code_query", fake_service.is_code_query)
+    monkeypatch.setattr(
+        TipiService,
+        "search_text",
+        AsyncMock(side_effect=fake_service.search_text),
+    )
 
     response = client.get("/api/tipi/search?ncm=motor")
     assert response.status_code == 200

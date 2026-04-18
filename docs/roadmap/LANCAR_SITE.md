@@ -25,6 +25,7 @@ O objetivo é tirar a aplicação do "localhost" e garantir alta disponibilidade
 - Backend FastAPI publicado no Render e respondendo healthcheck em produção.
 - Banco PostgreSQL gerenciado no Neon provisionado com migrações e carga inicial já aplicadas.
 - Frontend segue em modo local para desenvolvimento; publicação pública do frontend permanece como etapa pendente de go-live.
+- O Clerk vai permanecer em `development` por enquanto, porque ainda não há domínio próprio nem plano pago para migração. Isso é aceito como decisão temporária, desde que o front-end continue sem segredos, sem dados administrativos expostos e com autorização real validada no backend.
 
 ---
 
@@ -103,8 +104,9 @@ Proteção contra abusos e falhas técnicas para operação contínua.
 - [ ] **Auditoria de Variáveis e Log**:
   - Verificar que nenhuma API Key (`GOOGLE_API_KEY`, senhas de DB) existe solta no código.
   - Adequar o `backend/config/logging_config.py` para nível condizente com produção (reduzir DEBUG desnecessário).
-- [ ] **Tratamento de Erros Client-Side**:
-  - Implementar Error Boundaries no React para telas de erro amigáveis ao invés de "tela branca".
+- [x] **Tratamento de Erros Client-Side**:
+  - Error Boundaries implementados no React para evitar "tela branca".
+  - Captura client-side centralizada para erros de boundary, `window.onerror`, `unhandledrejection`, falhas assíncronas e erros relevantes de rede.
 
 ---
 
@@ -114,7 +116,16 @@ Proteção contra abusos e falhas técnicas para operação contínua.
   - Integrar logs com Sentry, Datadog ou ferramentas nativas em nuvem.
 - [ ] **Healthcheck e Métricas**:
   - Expandir o endpoint `/api/status` para reportar detalhes da conexão (DB/Redis).
-  - Criar um endpoint Prometheus/métrica oculta (`/api/metrics`) protegido por token.
+  - Validar o endpoint Prometheus/métrica oculta (`/api/metrics`) protegido por token já implementado no backend.
+
+### Progresso aplicado na fase 3
+
+- A `Content-Security-Policy` do backend agora é dinâmica por ambiente e não anuncia origens locais em produção.
+- O logger do backend agora evita handlers duplicados e redige campos sensíveis comuns em logs operacionais.
+- O startup do backend passou a registrar warnings objetivos quando encontra sinais de configuração fraca em produção.
+- Foi adicionado o script `python scripts/validate_production_env.py` para validação pré-deploy do ambiente publicado.
+- O backend agora expõe `GET /api/metrics` em formato Prometheus, protegido por `OBSERVABILITY__METRICS_TOKEN`.
+- A integração com Sentry passou a ser opcional por configuração (`OBSERVABILITY__SENTRY_DSN`), com fallback seguro se o SDK não estiver instalado.
 
 ---
 
@@ -140,6 +151,7 @@ Proteção contra abusos e falhas técnicas para operação contínua.
 ### Já confirmado no repositório
 
 - As proteções de cabeçalho já existem no backend, incluindo `CSP`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` e `HSTS` condicional.
+- A `CSP` do backend agora diferencia desenvolvimento de produção e remove allowances locais (`localhost`, `127.0.0.1`, `ws://`) quando `SERVER__ENV=production`.
 - O endpoint `GET /api/status/details` existe e é restrito a admin, assim como `GET /api/cache-metrics`.
 - O suporte a isolamento por tenant/RLS é real: há injeção de `app.current_tenant` e o script `scripts/setup_postgres_rls.sql` aplica `ENABLE ROW LEVEL SECURITY`, `FORCE ROW LEVEL SECURITY` e policies.
 - O frontend já usa `TabPanel` com lazy loading/keep alive e já exibe `ResultSkeleton` durante carregamento.
@@ -149,7 +161,6 @@ Proteção contra abusos e falhas técnicas para operação contínua.
 ### Ainda parcial ou ausente
 
 - O `client/index.html` ainda não tem `meta description`, OpenGraph, `robots.txt` nem `sitemap.xml`.
-- Não encontrei `ErrorBoundary` no frontend nem um endpoint `/api/metrics` no backend.
 - O `ai_chat_rate_limiter` ainda é em memória; apenas parte dos rate limits já usa Redis.
 - O `Dockerfile` já é orientado à produção, mas continua single-stage.
 - `ResultDisplay.tsx` ainda mantém o fallback imperativo que cria âncoras por `data-ncm`.

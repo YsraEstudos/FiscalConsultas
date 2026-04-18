@@ -28,7 +28,7 @@ from starlette.responses import JSONResponse
 from backend.config.settings import settings
 from backend.infrastructure.db_engine import tenant_context
 
-logger = logging.getLogger("middleware.tenant")
+logger = logging.getLogger("nesh.middleware.tenant")
 
 # Cache do JWKS client (Clerk public keys)
 _jwks_client: Optional[PyJWKClient] = None
@@ -105,6 +105,10 @@ def is_loopback_host(host: Optional[str]) -> bool:
         return ipaddress.ip_address(normalized).is_loopback
     except ValueError:
         return False
+
+
+def origin_looks_like_loopback(origin: str) -> bool:
+    return is_loopback_host(urlparse(origin).hostname)
 
 
 def _build_jwks_url(raw_domain: Optional[str]) -> Optional[str]:
@@ -859,6 +863,10 @@ class TenantMiddleware:
         "/api/auth/me",
         "/api/status",
         "/api/status/details",
+        "/api/cache-metrics",
+        "/api/metrics",
+        "/api/admin/reload-secrets",
+        "/api/debug/anchors",
         "/api/search",
         "/api/chapters",
         "/api/glossary",

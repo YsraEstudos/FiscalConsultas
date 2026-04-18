@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 import backend.presentation.routes.services as services_routes
+from backend.services.nbs_service import NbsService
 from backend.server.app import app
-from backend.server.dependencies import get_nbs_service
 
 pytestmark = pytest.mark.integration
 
@@ -120,9 +120,32 @@ def _mock_rate_limits(monkeypatch):
     )
 
 
-def test_services_routes_allow_anonymous_access(client):
-    app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
+def _setup_fake_services_catalog(monkeypatch):
+    fake_service = _FakeServicesCatalog()
+    monkeypatch.setattr(
+        NbsService,
+        "search",
+        AsyncMock(side_effect=fake_service.search),
+    )
+    monkeypatch.setattr(
+        NbsService,
+        "get_item_details",
+        AsyncMock(side_effect=fake_service.get_item_details),
+    )
+    monkeypatch.setattr(
+        NbsService,
+        "search_nebs",
+        AsyncMock(side_effect=fake_service.search_nebs),
+    )
+    monkeypatch.setattr(
+        NbsService,
+        "get_nebs_details",
+        AsyncMock(side_effect=fake_service.get_nebs_details),
+    )
 
+
+def test_services_routes_allow_anonymous_access(client, monkeypatch):
+    _setup_fake_services_catalog(monkeypatch)
     nbs_search = client.get("/api/services/nbs/search?q=construcao")
     nbs_detail = client.get("/api/services/nbs/1.01")
     nebs_search = client.get("/api/services/nebs/search?q=energia")
@@ -134,8 +157,8 @@ def test_services_routes_allow_anonymous_access(client):
     assert nebs_detail.status_code == 200
 
 
-def test_services_routes_ignore_invalid_authorization_headers(client):
-    app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
+def test_services_routes_ignore_invalid_authorization_headers(client, monkeypatch):
+    _setup_fake_services_catalog(monkeypatch)
     headers = {"Authorization": "Bearer broken-token"}
 
     nbs_search = client.get("/api/services/nbs/search?q=construcao", headers=headers)
@@ -150,7 +173,7 @@ def test_services_routes_ignore_invalid_authorization_headers(client):
 
 
 def test_services_routes_rate_limit_anonymous_requests(client, monkeypatch):
-    app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
+    _setup_fake_services_catalog(monkeypatch)
     consumed_keys: list[str] = []
 
     def _deny_consume(*, key: str, limit: int):
@@ -170,8 +193,8 @@ def test_services_routes_rate_limit_anonymous_requests(client, monkeypatch):
     assert consumed_keys == ["services:ip:testclient"]
 
 
-def test_services_routes_expose_nbs_and_nebs_contracts(client):
-    app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
+def test_services_routes_expose_nbs_and_nebs_contracts(client, monkeypatch):
+    _setup_fake_services_catalog(monkeypatch)
 
     nbs_search = client.get("/api/services/nbs/search?q=construcao")
     nbs_detail = client.get("/api/services/nbs/1.01")
@@ -224,7 +247,7 @@ def test_services_routes_document_public_rate_limit_responses():
 def test_services_detail_rejects_overly_long_code(
     client, endpoint, service_method, monkeypatch
 ):
-    app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
+    _setup_fake_services_catalog(monkeypatch)
     oversized_code = "1" * (services_routes.MAX_SERVICE_CODE_LENGTH + 1)
     called = {"value": False}
 
@@ -233,7 +256,7 @@ def test_services_detail_rejects_overly_long_code(
         raise AssertionError(f"{service_method} should not be called")
 
     monkeypatch.setattr(
-        _FakeServicesCatalog,
+        NbsService,
         service_method,
         AsyncMock(side_effect=_unexpected_call),
     )
@@ -248,7 +271,7 @@ def test_services_detail_rejects_overly_long_code(
 
 
 def test_services_search_returns_retry_after_when_rate_limited(client, monkeypatch):
-    app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
+    _setup_fake_services_catalog(monkeypatch)
 
     async def _deny_consume(*, key: str, limit: int):
         return False, 23
@@ -265,7 +288,7 @@ def test_services_search_returns_retry_after_when_rate_limited(client, monkeypat
 
 
 def test_services_detail_returns_retry_after_when_rate_limited(client, monkeypatch):
-    app.dependency_overrides[get_nbs_service] = lambda: _FakeServicesCatalog()
+    _setup_fake_services_catalog(monkeypatch)
 
     async def _deny_detail(*, key: str, limit: int):
         return False, 11

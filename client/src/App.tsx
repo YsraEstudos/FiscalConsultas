@@ -2,6 +2,7 @@ import { useEffect, useCallback, useRef, useState, Suspense } from 'react';
 
 import { Toaster, toast } from 'react-hot-toast';
 import { Layout } from './components/Layout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { ResultDisplay } from './components/ResultDisplay';
 import { TabsBar } from './components/TabsBar';
 import { ResultSkeleton } from './components/ResultSkeleton';
@@ -19,6 +20,7 @@ import { isServiceCatalogDoc } from './utils/servicesCatalog';
 import { useLocalDatabase } from './context/LocalDatabaseContext';
 import { NotePanel } from './components/NotePanel';
 import { UserProfilePage } from './components/UserProfilePage';
+import { reportClientError } from './utils/errorMonitoring';
 import styles from './App.module.css';
 
 import { ModalManager } from './components/ModalManager';
@@ -37,6 +39,35 @@ function splitSearchTerms(raw: string): string[] {
 
 const noop = () => { };
 
+function handleDelegatedSearchNavigation(
+    target: Element,
+    selector: string,
+    dataKey: 'ncm' | 'serviceCode',
+    isBackgroundNavigation: boolean,
+    event: MouseEvent,
+    onSearch: (query: string) => void,
+    onOpenInNewTab: (query: string, textQuery?: string, activate?: boolean) => Promise<void> | void,
+): boolean {
+    const link = target.closest(selector);
+    if (!(link instanceof HTMLElement)) {
+        return false;
+    }
+
+    const value = link.dataset[dataKey];
+    if (!value) {
+        return true;
+    }
+
+    event.preventDefault();
+    if (isBackgroundNavigation) {
+        onOpenInNewTab(value, undefined, false);
+        return true;
+    }
+
+    onSearch(value);
+    return true;
+}
+
 function handleDelegatedNoteNavigation(
     target: Element,
     event: MouseEvent,
@@ -44,10 +75,8 @@ function handleDelegatedNoteNavigation(
 ): boolean {
     const noteRef = target.closest('.note-ref');
     if (!(noteRef instanceof HTMLElement)) return false;
-
     const note = noteRef.dataset.note;
     if (!note) return true;
-
     event.preventDefault();
     onOpenNote(note, noteRef.dataset.chapter || undefined);
     return true;
@@ -95,6 +124,7 @@ function App() {
     const handleSearchRef = useRef<(query: string) => void>(() => { });
     const handleOpenNoteRef = useRef<(note: string, chapter?: string) => Promise<void> | void>(() => { });
     const openTextResultInNewTabRef = useRef<(ncm: string, textQuery?: string, activate?: boolean) => Promise<void> | void>(() => { });
+    const openServiceResultInNewTabRef = useRef<(code: string, textQuery?: string, activate?: boolean) => Promise<void> | void>(() => { });
 
     activeTabRef.current = activeTab;
 
@@ -105,9 +135,13 @@ function App() {
     }, []);
     const runNonBlockingTask = useCallback((task: Promise<unknown> | void, context: string) => {
         Promise.resolve(task).catch((error) => {
-            if (import.meta.env.DEV) {
-                console.error(`[App] ${context}:`, error);
-            }
+            reportClientError({
+                source: 'async-task',
+                error,
+                context,
+                handled: true,
+                message: `Background UI task failed: ${context}`,
+            });
         });
     }, []);
 
@@ -161,11 +195,11 @@ function App() {
 
             await Promise.all(searchTasks);
         })(), 'handleSearch');
-    }, [activeTabId, createTab, ensureServicesSearchAccess, executeSearchForTab, localDbStatus, runNonBlockingTask]);
+    }, [activeTabId, createTab, ensureServicesSearchAccess, executeSearchForTab, runNonBlockingTask]);
 
     const triggerInstall = useCallback(() => {
-        void install();
-    }, [install]);
+        runNonBlockingTask(install(), 'installLocalDb');
+    }, [install, runNonBlockingTask]);
 
     const renderOfflineStatusAction = useCallback(() => {
         if (localDbStatus === 'ready') {
@@ -323,6 +357,35 @@ function App() {
 
     // Handler único de clique com delegação (smart-link + note-ref)
     useEffect(() => {
+        const handleDelegatedMiddleMouseDown = (event: MouseEvent) => {
+            if (event.button !== 1) return;
+
+            const target = event.target;
+            if (!(target instanceof Element)) return;
+
+            if (handleDelegatedSearchNavigation(
+                target,
+                'a.smart-link',
+                'ncm',
+                true,
+                event,
+                handleSearchRef.current,
+                openTextResultInNewTabRef.current,
+            )) {
+                return;
+            }
+
+            handleDelegatedSearchNavigation(
+                target,
+                '.service-smart-link, .service-code-target',
+                'serviceCode',
+                true,
+                event,
+                handleSearchRef.current,
+                openServiceResultInNewTabRef.current,
+            );
+        };
+
         const handleDelegatedClick = (event: MouseEvent) => {
             const target = event.target;
             if (!(target instanceof Element)) return;
@@ -330,47 +393,43 @@ function App() {
             // Ignorar botão direito
             if (event.button === 2) return;
 
-            const isMiddleClickOrCmd = event.button === 1 || event.ctrlKey || event.metaKey;
+            // Middle button is handled on mousedown to avoid native scroll-mode capture.
+            if (event.button === 1) return;
 
-            const smartLink = target.closest('a.smart-link');
-            if (smartLink instanceof HTMLElement) {
-                event.preventDefault();
-                const ncm = smartLink.dataset.ncm;
-                if (ncm) {
-                    if (isMiddleClickOrCmd) {
-                        openTextResultInNewTabRef.current(ncm, undefined, false);
-                    } else {
-                        handleSearchRef.current(ncm);
-                    }
-                }
+            const isMiddleClickOrCmd = event.ctrlKey || event.metaKey;
+
+            if (handleDelegatedSearchNavigation(
+                target,
+                'a.smart-link',
+                'ncm',
+                isMiddleClickOrCmd,
+                event,
+                handleSearchRef.current,
+                openTextResultInNewTabRef.current,
+            )) {
                 return;
             }
 
-            const serviceLink = target.closest('.service-smart-link, .service-code-target');
-            if (serviceLink instanceof HTMLElement) {
-                const serviceCode = serviceLink.dataset.serviceCode;
-                if (serviceCode) {
-                    event.preventDefault();
-                    if (isMiddleClickOrCmd) {
-                        openTextResultInNewTabRef.current(serviceCode, undefined, false);
-                    } else {
-                        handleSearchRef.current(serviceCode);
-                    }
-                    return;
-                }
+            if (handleDelegatedSearchNavigation(
+                target,
+                '.service-smart-link, .service-code-target',
+                'serviceCode',
+                isMiddleClickOrCmd,
+                event,
+                handleSearchRef.current,
+                openServiceResultInNewTabRef.current,
+            )) {
+                return;
             }
-
-            // Para referências de nota, ignoramos abertura em nova aba / botão do meio
-            if (event.button === 1) return;
 
             handleDelegatedNoteNavigation(target, event, handleOpenNoteRef.current);
         };
 
+        document.addEventListener('mousedown', handleDelegatedMiddleMouseDown);
         document.addEventListener('click', handleDelegatedClick);
-        document.addEventListener('auxclick', handleDelegatedClick);
         return () => {
+            document.removeEventListener('mousedown', handleDelegatedMiddleMouseDown);
             document.removeEventListener('click', handleDelegatedClick);
-            document.removeEventListener('auxclick', handleDelegatedClick);
         };
     }, []);
 
@@ -399,6 +458,18 @@ function App() {
     useEffect(() => {
         openTextResultInNewTabRef.current = openTextResultInNewTab;
     }, [openTextResultInNewTab]);
+
+    const openServiceResultInNewTab = useCallback(async (code: string, _textQuery?: string, activate: boolean = true) => {
+        const activeDoc = (activeTabRef.current?.document || 'nbs') as DocType;
+        const doc: DocType = activeDoc === 'nebs' ? 'nebs' : 'nbs';
+        const tabId = createTab(doc, activate);
+
+        await executeSearchForTab(tabId, doc, code, false);
+    }, [createTab, executeSearchForTab]);
+
+    useEffect(() => {
+        openServiceResultInNewTabRef.current = openServiceResultInNewTab;
+    }, [openServiceResultInNewTab]);
 
     const openInDocCurrentTab = useCallback(async (doc: DocType, ncm: string) => {
         const currentTab = activeTabRef.current;
@@ -476,7 +547,6 @@ function App() {
             await executeSearchForTab(tabId, doc, query.trim(), false);
         }
     }, [
-        localDbStatus,
         ensureServicesSearchAccess,
         executeSearchForTab,
         resetLoadedChaptersForDoc,
@@ -510,27 +580,34 @@ function App() {
     return (
         <>
             <Toaster position="top-right" />
-            <Suspense fallback={null}>
-                <ModalManager
-                    modals={{
-                        settings: isSettingsOpen,
-                        tutorial: isTutorialOpen,
-                        stats: isStatsOpen,
-                        comparator: isComparatorOpen,
-                        moderate: isModerateOpen,
-                    }}
-                    onClose={{
-                        settings: () => setIsSettingsOpen(false),
-                        tutorial: () => setIsTutorialOpen(false),
-                        stats: () => setIsStatsOpen(false),
-                        comparator: () => setIsComparatorOpen(false),
-                        moderate: () => setIsModerateOpen(false),
-                    }}
-                    currentDoc={activeTab?.document || 'nesh'}
-                    onOpenInDoc={openInDocCurrentTab}
-                    onOpenInNewTab={openInDocNewTab}
-                />
-            </Suspense>
+            <ErrorBoundary
+                boundaryName="modal-manager"
+                title="Não foi possível abrir um painel da interface."
+                description="Um dos modais ou painéis da aplicação falhou ao renderizar. Feche e tente abrir novamente."
+                resetKeys={[isSettingsOpen, isTutorialOpen, isStatsOpen, isComparatorOpen, isModerateOpen]}
+            >
+                <Suspense fallback={null}>
+                    <ModalManager
+                        modals={{
+                            settings: isSettingsOpen,
+                            tutorial: isTutorialOpen,
+                            stats: isStatsOpen,
+                            comparator: isComparatorOpen,
+                            moderate: isModerateOpen,
+                        }}
+                        onClose={{
+                            settings: () => setIsSettingsOpen(false),
+                            tutorial: () => setIsTutorialOpen(false),
+                            stats: () => setIsStatsOpen(false),
+                            comparator: () => setIsComparatorOpen(false),
+                            moderate: () => setIsModerateOpen(false),
+                        }}
+                        currentDoc={activeTab?.document || 'nesh'}
+                        onOpenInDoc={openInDocCurrentTab}
+                        onOpenInNewTab={openInDocNewTab}
+                    />
+                </Suspense>
+            </ErrorBoundary>
             <NotePanel
                 isOpen={!!noteModal}
                 onClose={() => setNoteModal(null)}
@@ -567,121 +644,135 @@ function App() {
                     onNewTab={() => createTab(activeTab?.document || 'nesh')}
                 />
 
-                <div className={styles.resultsSection}>
-                    {/* Renderizacao persistente das abas - usa TabPanel para lazy loading + keep alive */}
-                    {tabs.map(tab => (
-                        <TabPanel
-                            key={tab.id}
-                            id={tab.id}
-                            activeTabId={activeTabId}
-                            className={styles.tabPane}
-                        >
-                            {/* Loading inicial: mostra skeleton APENAS se estiver carregando E nao tiver resultados ainda */}
-                            {(tab.loading && !tab.results) && <ResultSkeleton />}
+                <ErrorBoundary
+                    boundaryName="results-section"
+                    title="Não foi possível renderizar os resultados."
+                    description="A área principal da busca encontrou um erro inesperado. Tente novamente ou mude de aba para continuar."
+                    resetKeys={[activeTabId, tabs.length]}
+                >
+                    <div className={styles.resultsSection}>
+                        {/* Renderizacao persistente das abas - usa TabPanel para lazy loading + keep alive */}
+                        {tabs.map(tab => (
+                            <TabPanel
+                                key={tab.id}
+                                id={tab.id}
+                                activeTabId={activeTabId}
+                                className={styles.tabPane}
+                            >
+                                {/* Loading inicial: mostra skeleton APENAS se estiver carregando E nao tiver resultados ainda */}
+                                {(tab.loading && !tab.results) && <ResultSkeleton />}
 
-                            {/* Mostrar overlay de carregamento se já temos resultados mas estamos buscando de novo */}
-                            {tab.loading && !!tab.results && (
-                                <>
-                                    <div className={styles.loadingOverlay} />
-                                    <div className={styles.loadingSpinnerContainer}>
-                                        <Spinner />
-                                    </div>
-                                </>
-                            )}
-
-                            {tab.error && (
-                                <div className={styles.emptyState}>
-                                    <h3 className={styles.emptyStateTitle}>Erro</h3>
-                                    <p>{tab.error}</p>
-                                </div>
-                            )}
-
-                            {!tab.loading && !tab.results && !tab.error && (
-                                <div className={styles.emptyState}>
-                                    <div className={styles.emptyStateIconContainer}>
-                                        <div className={styles.emptyStateIcon}>
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
-                                                <circle cx="10" cy="10" r="7" strokeWidth="2.5" fill="currentColor" fillOpacity="0.1"></circle>
-                                                <path d="M6.5 10a3.5 3.5 0 0 1 3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.6"></path>
-                                                <line x1="15.5" y1="15.5" x2="21" y2="21" strokeWidth="3"></line>
-                                            </svg>
+                                {/* Mostrar overlay de carregamento se já temos resultados mas estamos buscando de novo */}
+                                {tab.loading && !!tab.results && (
+                                    <>
+                                        <div className={styles.loadingOverlay} />
+                                        <div className={styles.loadingSpinnerContainer}>
+                                            <Spinner />
                                         </div>
+                                    </>
+                                )}
 
-                                        {renderOfflineStatusAction()}
+                                {tab.error && (
+                                    <div className={styles.emptyState}>
+                                        <h3 className={styles.emptyStateTitle}>Erro</h3>
+                                        <p>{tab.error}</p>
                                     </div>
-                                    <h3 className={styles.emptyStateTitle}>Pronto para buscar</h3>
-                                    <p>{tab.document === 'nbs' || tab.document === 'nebs'
-                                        ? (servicesUnavailableReason || 'Digite um codigo de servico ou termo textual acima')
-                                        : 'Digite um NCM acima ou use o histórico'}</p>
-                                    <p className={styles.emptyStateHint}>
-                                        Dica: Pressione <kbd>/</kbd> para buscar
-                                    </p>
-                                </div>
-                            )}
+                                )}
 
-                            {tab.results && (tab.document === 'nbs' || tab.document === 'nebs') && (
-                                <ServicesTabContent
-                                    doc={tab.document}
-                                    data={tab.results as NbsSearchResponse | NebsSearchResponse}
-                                    onSwitchDoc={(nextDoc, query) => {
-                                        runNonBlockingTask(
-                                            switchTabDocument(tab.id, nextDoc, query),
-                                            'switchTabDocument (services)'
-                                        );
-                                    }}
-                                    onOpenDocInNewTab={(nextDoc, query) => {
-                                        const nextTabId = createTab(nextDoc);
-                                        runNonBlockingTask(
-                                            switchTabDocument(nextTabId, nextDoc, query),
-                                            'switchTabDocument (services new tab)'
-                                        );
-                                    }}
-                                    onContentReady={() => {
-                                        if (!tab.isContentReady) {
-                                            updateTab(tab.id, { isContentReady: true });
-                                        }
-                                    }}
-                                />
-                            )}
+                                {!tab.loading && !tab.results && !tab.error && (
+                                    <div className={styles.emptyState}>
+                                        <div className={styles.emptyStateIconContainer}>
+                                            <div className={styles.emptyStateIcon}>
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+                                                    <circle cx="10" cy="10" r="7" strokeWidth="2.5" fill="currentColor" fillOpacity="0.1"></circle>
+                                                    <path d="M6.5 10a3.5 3.5 0 0 1 3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.6"></path>
+                                                    <line x1="15.5" y1="15.5" x2="21" y2="21" strokeWidth="3"></line>
+                                                </svg>
+                                            </div>
 
-                            {tab.results && tab.document !== 'nbs' && tab.document !== 'nebs' && (
-                                <ResultDisplay
-                                    data={tab.results}
-                                    latestTextQuery={tab.latestTextQuery}
-                                    mobileMenuOpen={tab.id === activeTabId ? mobileMenuOpen : false}
-                                    onCloseMobileMenu={tab.id === activeTabId ? closeMobileMenu : noop}
-                                    isActive={tab.id === activeTabId}
-                                    tabId={tab.id}
-                                    isNewSearch={tab.isNewSearch || false}
-                                    onConsumeNewSearch={(incomingTabId, finalScrollTop) => {
-                                        const updates: Partial<Tab> = { isNewSearch: false };
-                                        if (typeof finalScrollTop === 'number') {
-                                            updates.scrollTop = finalScrollTop;
-                                        }
-                                        updateTab(incomingTabId, updates);
-                                    }}
-                                    // Persistencia explicita do scroll para robustez em unmounts/otimizacoes
-                                    initialScrollTop={tab.scrollTop}
-                                    onPersistScroll={(id, top) => updateTab(id, { scrollTop: top })}
-                                    onContentReady={() => {
-                                        if (!tab.isContentReady) {
-                                            updateTab(tab.id, { isContentReady: true });
-                                        }
-                                    }}
-                                />
-                            )}
-                            {/* Esconder visualmente ResultDisplay se nao estiver pronto? Nao, manter montado para o IntersectionObserver rodar,
-                                apenas cobrir com Skeleton (posicionado absoluto) ou controlar visibilidade via CSS se precisar.
-                                Na pratica o ResultDisplay controla sua propria visibilidade via isContentReady.
-                            */}
-                        </TabPanel>
-                    ))}
-                </div>
+                                            {renderOfflineStatusAction()}
+                                        </div>
+                                        <h3 className={styles.emptyStateTitle}>Pronto para buscar</h3>
+                                        <p>{tab.document === 'nbs' || tab.document === 'nebs'
+                                            ? (servicesUnavailableReason || 'Digite um codigo de servico ou termo textual acima')
+                                            : 'Digite um NCM acima ou use o histórico'}</p>
+                                        <p className={styles.emptyStateHint}>
+                                            Dica: Pressione <kbd>/</kbd> para buscar
+                                        </p>
+                                    </div>
+                                )}
+
+                                {tab.results && (tab.document === 'nbs' || tab.document === 'nebs') && (
+                                    <ServicesTabContent
+                                        doc={tab.document}
+                                        data={tab.results as NbsSearchResponse | NebsSearchResponse}
+                                        onSwitchDoc={(nextDoc, query) => {
+                                            runNonBlockingTask(
+                                                switchTabDocument(tab.id, nextDoc, query),
+                                                'switchTabDocument (services)'
+                                            );
+                                        }}
+                                        onOpenDocInNewTab={(nextDoc, query) => {
+                                            const nextTabId = createTab(nextDoc);
+                                            runNonBlockingTask(
+                                                switchTabDocument(nextTabId, nextDoc, query),
+                                                'switchTabDocument (services new tab)'
+                                            );
+                                        }}
+                                        onContentReady={() => {
+                                            if (!tab.isContentReady) {
+                                                updateTab(tab.id, { isContentReady: true });
+                                            }
+                                        }}
+                                    />
+                                )}
+
+                                {tab.results && tab.document !== 'nbs' && tab.document !== 'nebs' && (
+                                    <ResultDisplay
+                                        data={tab.results}
+                                        latestTextQuery={tab.latestTextQuery}
+                                        mobileMenuOpen={tab.id === activeTabId ? mobileMenuOpen : false}
+                                        onCloseMobileMenu={tab.id === activeTabId ? closeMobileMenu : noop}
+                                        isActive={tab.id === activeTabId}
+                                        tabId={tab.id}
+                                        isNewSearch={tab.isNewSearch || false}
+                                        onConsumeNewSearch={(incomingTabId, finalScrollTop) => {
+                                            const updates: Partial<Tab> = { isNewSearch: false };
+                                            if (typeof finalScrollTop === 'number') {
+                                                updates.scrollTop = finalScrollTop;
+                                            }
+                                            updateTab(incomingTabId, updates);
+                                        }}
+                                        // Persistencia explicita do scroll para robustez em unmounts/otimizacoes
+                                        initialScrollTop={tab.scrollTop}
+                                        onPersistScroll={(id, top) => updateTab(id, { scrollTop: top })}
+                                        onContentReady={() => {
+                                            if (!tab.isContentReady) {
+                                                updateTab(tab.id, { isContentReady: true });
+                                            }
+                                        }}
+                                    />
+                                )}
+                                {/* Esconder visualmente ResultDisplay se nao estiver pronto? Nao, manter montado para o IntersectionObserver rodar,
+                                    apenas cobrir com Skeleton (posicionado absoluto) ou controlar visibilidade via CSS se precisar.
+                                    Na pratica o ResultDisplay controla sua propria visibilidade via isContentReady.
+                                */}
+                            </TabPanel>
+                        ))}
+                    </div>
+                </ErrorBoundary>
             </Layout>
-            <UserProfilePage
-                isOpen={isProfileOpen}
-                onClose={() => setIsProfileOpen(false)}
-            />
+            <ErrorBoundary
+                boundaryName="user-profile-page"
+                title="Não foi possível abrir o perfil."
+                description="A área de conta encontrou um erro inesperado. Feche e tente abrir o perfil novamente."
+                resetKeys={[isProfileOpen]}
+            >
+                <UserProfilePage
+                    isOpen={isProfileOpen}
+                    onClose={() => setIsProfileOpen(false)}
+                />
+            </ErrorBoundary>
         </>
     );
 }

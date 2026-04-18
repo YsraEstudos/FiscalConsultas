@@ -159,6 +159,9 @@ vi.mock('../../src/components/Sidebar', () => ({
       <button data-testid="sidebar-nav-generated" onClick={() => onNavigate('84.13')}>
         nav-generated
       </button>
+      <button data-testid="sidebar-nav-tipi" onClick={() => onNavigate('1108.1')}>
+        nav-tipi
+      </button>
       <button data-testid="sidebar-nav-direct" onClick={() => onNavigate('pos-85-17')}>
         nav-direct
       </button>
@@ -356,6 +359,61 @@ describe('ResultDisplay advanced behavior', () => {
     const toggle = screen.getByRole('button', { name: 'Recolher navegação' });
     fireEvent.click(toggle);
     expect(screen.getByRole('button', { name: 'Expandir navegação' })).toBeInTheDocument();
+  });
+
+  it('keeps TIPI sidebar highlight on the clicked item while smooth scroll settles', async () => {
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '1108.1',
+          resultados: {
+            '11': {
+              capitulo: '11',
+              titulo: 'Amidos e féculas',
+              posicoes: [
+                { codigo: '1108.1', ncm: '1108.1', descricao: 'Amidos e féculas', aliquota: '0', nivel: 2 },
+                { codigo: '1108.2', ncm: '1108.2', descricao: 'Inulina', aliquota: '0', nivel: 2 },
+              ],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-tipi-highlight"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.getElementById('pos-1108-1')).not.toBeNull();
+      expect(document.getElementById('pos-1108-2')).not.toBeNull();
+      expect(intersectionCallbacks.length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getByTestId('sidebar-nav-tipi'));
+    expect(screen.getByTestId('sidebar-active-anchor')).toHaveTextContent('pos-1108-1');
+
+    const nextTarget = document.getElementById('pos-1108-2');
+    if (!nextTarget) {
+      throw new Error('Expected pos-1108-2 to exist for intersection test');
+    }
+
+    act(() => {
+      intersectionCallbacks[0]([
+        {
+          isIntersecting: true,
+          target: nextTarget,
+          boundingClientRect: { top: 0 },
+        },
+      ] as any[]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('sidebar-active-anchor')).toHaveTextContent('pos-1108-1');
+    });
   });
 
   it('uses NeshRenderer fallback and resolves sidebar navigation ids', async () => {

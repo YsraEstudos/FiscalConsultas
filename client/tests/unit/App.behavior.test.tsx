@@ -56,6 +56,7 @@ const mocks = vi.hoisted(() => {
         activeTab: null as MockTab | null,
       },
     },
+    resultDisplayCrashTabIdRef: { value: null as string | null },
   };
 });
 
@@ -150,28 +151,36 @@ vi.mock('../../src/components/ResultDisplay', () => ({
     onPersistScroll,
     onContentReady,
   }: any) => (
-    <div
-      data-testid={`result-display-${tabId}`}
-      data-mobile-open={String(Boolean(mobileMenuOpen))}
-      data-active={String(Boolean(isActive))}
-      data-latest-text-query={latestTextQuery ?? ''}
-    >
-      <button data-testid={`result-consume-scroll-${tabId}`} onClick={() => onConsumeNewSearch(tabId, 321)}>
-        consume-scroll
-      </button>
-      <button data-testid={`result-consume-no-scroll-${tabId}`} onClick={() => onConsumeNewSearch(tabId, undefined)}>
-        consume-no-scroll
-      </button>
-      <button data-testid={`result-persist-${tabId}`} onClick={() => onPersistScroll(tabId, 77)}>
-        persist
-      </button>
-      <button data-testid={`result-ready-${tabId}`} onClick={onContentReady}>
-        ready
-      </button>
-      <button data-testid={`result-close-mobile-${tabId}`} onClick={onCloseMobileMenu}>
-        close-mobile
-      </button>
-    </div>
+    (() => {
+      if (mocks.resultDisplayCrashTabIdRef.value === tabId) {
+        throw new Error(`ResultDisplay crashed for ${tabId}`);
+      }
+
+      return (
+        <div
+          data-testid={`result-display-${tabId}`}
+          data-mobile-open={String(Boolean(mobileMenuOpen))}
+          data-active={String(Boolean(isActive))}
+          data-latest-text-query={latestTextQuery ?? ''}
+        >
+          <button data-testid={`result-consume-scroll-${tabId}`} onClick={() => onConsumeNewSearch(tabId, 321)}>
+            consume-scroll
+          </button>
+          <button data-testid={`result-consume-no-scroll-${tabId}`} onClick={() => onConsumeNewSearch(tabId, undefined)}>
+            consume-no-scroll
+          </button>
+          <button data-testid={`result-persist-${tabId}`} onClick={() => onPersistScroll(tabId, 77)}>
+            persist
+          </button>
+          <button data-testid={`result-ready-${tabId}`} onClick={onContentReady}>
+            ready
+          </button>
+          <button data-testid={`result-close-mobile-${tabId}`} onClick={onCloseMobileMenu}>
+            close-mobile
+          </button>
+        </div>
+      );
+    })()
   ),
 }));
 
@@ -411,7 +420,7 @@ function appendSmartLink(ncm: string) {
 function appendServiceLink(serviceCode: string) {
   const serviceLink = document.createElement('span');
   serviceLink.className = 'service-smart-link service-code-target';
-  serviceLink.setAttribute('data-service-code', serviceCode);
+  serviceLink.dataset.serviceCode = serviceCode;
   serviceLink.textContent = serviceCode;
   document.body.appendChild(serviceLink);
   return serviceLink;
@@ -445,6 +454,7 @@ describe('App behavior', () => {
     mocks.fetchNotesMock.mockResolvedValue({});
     mocks.historyRef.value = [{ term: '8517', timestamp: 1 }];
     mocks.sidebarPositionRef.value = 'right';
+    mocks.resultDisplayCrashTabIdRef.value = null;
     setTabsState([buildTab({ id: 'tab-1' })], 'tab-1');
   });
 
@@ -752,11 +762,11 @@ describe('App behavior', () => {
     }
   });
 
-  it('opens smart links in background tab on middle click', async () => {
+  it('opens smart links in background tab on middle mouse down', async () => {
     render(<App />);
 
     const smartLink = appendSmartLink('9401');
-    fireEvent(smartLink, new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+    fireEvent.mouseDown(smartLink, { bubbles: true, button: 1 });
 
     await waitFor(() => {
       expect(mocks.createTabMock).toHaveBeenCalledWith('nesh', false);
@@ -764,15 +774,50 @@ describe('App behavior', () => {
     });
   });
 
-  it('opens service links in background tab on middle click', async () => {
+  it('opens service links in NBS background tabs on middle mouse down', async () => {
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        document: 'nbs',
+        ncm: '1.1706.90.00',
+        results: buildServiceResults('nbs', '1.1706.90.00'),
+      }),
+    ]);
+
     render(<App />);
 
-    const serviceLink = appendServiceLink('1.0501.11');
-    fireEvent(serviceLink, new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+    const leafServiceLink = appendServiceLink('1.1706.90.00');
+    fireEvent.mouseDown(leafServiceLink, { bubbles: true, button: 1 });
+
+    const parentServiceLink = appendServiceLink('1.17');
+    fireEvent.mouseDown(parentServiceLink, { bubbles: true, button: 1 });
 
     await waitFor(() => {
-      expect(mocks.createTabMock).toHaveBeenCalledWith('nesh', false);
-      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nesh-1', 'nesh', '1.0501.11', false);
+      expect(mocks.createTabMock).toHaveBeenNthCalledWith(1, 'nbs', false);
+      expect(mocks.createTabMock).toHaveBeenNthCalledWith(2, 'nbs', false);
+      expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(1, 'new-nbs-1', 'nbs', '1.1706.90.00', false);
+      expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(2, 'new-nbs-2', 'nbs', '1.17', false);
+    });
+  });
+
+  it('opens service links on middle mouse down to avoid scroll-mode swallowing', async () => {
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        document: 'nbs',
+        ncm: '1.1701.1',
+        results: buildServiceResults('nbs', '1.1701.1'),
+      }),
+    ]);
+
+    render(<App />);
+
+    const serviceLink = appendServiceLink('1.17');
+    fireEvent.mouseDown(serviceLink, { bubbles: true, button: 1 });
+
+    await waitFor(() => {
+      expect(mocks.createTabMock).toHaveBeenCalledWith('nbs', false);
+      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nbs-1', 'nbs', '1.17', false);
     });
   });
 
@@ -955,5 +1000,34 @@ describe('App behavior', () => {
 
     unmount();
     expect((globalThis as any).nesh).toBeUndefined();
+  });
+
+  it('keeps the layout visible when ResultDisplay crashes, shows a fallback, and recovers after retry', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.resultDisplayCrashTabIdRef.value = 'tab-1';
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        document: 'nesh',
+        results: buildCodeResults({ '84': { notas_parseadas: {} } }),
+      }),
+    ]);
+
+    try {
+      render(<App />);
+
+      expect(screen.getByTestId('layout')).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+      expect(screen.getByText('Não foi possível renderizar os resultados.')).toBeInTheDocument();
+
+      mocks.resultDisplayCrashTabIdRef.value = null;
+      fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('result-display-tab-1')).toBeInTheDocument();
+      });
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 });

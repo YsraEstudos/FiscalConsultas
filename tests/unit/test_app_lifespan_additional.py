@@ -460,6 +460,68 @@ def test_validate_dev_tenant_override_safety_allows_localhost(monkeypatch):
     app_module._validate_dev_tenant_override_safety()
 
 
+def test_build_content_security_policy_drops_local_origins_in_production(monkeypatch):
+    monkeypatch.setattr(app_module.settings.server, "env", "production", raising=False)
+
+    csp = app_module._build_content_security_policy()
+
+    assert "connect-src 'self' https: wss:" in csp
+    assert "localhost" not in csp
+    assert "127.0.0.1" not in csp
+    assert (
+        "frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com"
+        in csp
+    )
+
+
+def test_build_content_security_policy_keeps_local_origins_in_development(monkeypatch):
+    monkeypatch.setattr(app_module.settings.server, "env", "development", raising=False)
+
+    csp = app_module._build_content_security_policy()
+
+    assert "http://localhost:8000" in csp
+    assert "http://127.0.0.1:8000" in csp
+    assert "ws://localhost:*" in csp
+    assert "ws://127.0.0.1:*" in csp
+
+
+def test_log_runtime_security_warnings_for_production_misconfiguration(monkeypatch):
+    warnings = []
+
+    monkeypatch.setattr(app_module.settings.server, "env", "production", raising=False)
+    monkeypatch.setattr(app_module.settings.features, "debug_mode", True, raising=False)
+    monkeypatch.setattr(
+        app_module.settings.server,
+        "cors_allowed_origins",
+        ["http://localhost:5173"],
+        raising=False,
+    )
+    monkeypatch.setattr(app_module.settings.cache, "enable_redis", True, raising=False)
+    monkeypatch.setattr(
+        app_module.settings.cache,
+        "redis_url",
+        "redis://localhost:6379/0",
+        raising=False,
+    )
+    monkeypatch.setattr(app_module.settings.database, "engine", "sqlite", raising=False)
+    monkeypatch.setattr(
+        app_module.logger,
+        "warning",
+        lambda message, *args: warnings.append(message % args),
+    )
+
+    app_module._log_runtime_security_warnings()
+
+    assert any("FEATURES__DEBUG_MODE=true" in warning for warning in warnings)
+    assert any("localhost/loopback" in warning for warning in warnings)
+    assert any(
+        "CACHE__REDIS_URL apontando para localhost" in warning for warning in warnings
+    )
+    assert any(
+        "DATABASE__ENGINE não está em postgresql" in warning for warning in warnings
+    )
+
+
 @pytest.mark.asyncio
 async def test_lifespan_rejects_non_local_debug_tenant_override(monkeypatch):
     shutdown_called = {"value": False}

@@ -214,6 +214,7 @@ const TERM_MARK_ATTR = 'data-text-query-highlight';
 const TERM_MARK_SELECTOR = `mark[${TERM_MARK_ATTR}="true"]`;
 const TERM_HIGHLIGHT_MAX_MATCHES = 250;
 const TERM_HIGHLIGHT_MIN_LENGTH = 2;
+const MANUAL_NAVIGATION_HIGHLIGHT_LOCK_MS = 900;
 const SKIP_HIGHLIGHT_TAGS = new Set(['SCRIPT', 'STYLE', 'MARK', 'NOSCRIPT', 'TEXTAREA']);
 
 function escapeRegex(value: string): string {
@@ -876,6 +877,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     const renderedMarkupKeyRef = useRef<string | null>(null);
     const activeAnchorIdRef = useRef<string | null>(null);
     const anchorRafRef = useRef<number | null>(null);
+    const manualNavigationLockRef = useRef<{ anchorId: string; expiresAt: number } | null>(null);
     const onContentReadyRef = useRef(onContentReady);
 
     // Sidebar collapsed state for lateral layout
@@ -1257,6 +1259,10 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             element.classList.add('flash-highlight');
             setTimeout(() => element.classList.remove('flash-highlight'), 2000);
             const nextAnchor = element.id || targetId;
+            manualNavigationLockRef.current = {
+                anchorId: nextAnchor,
+                expiresAt: Date.now() + MANUAL_NAVIGATION_HIGHLIGHT_LOCK_MS,
+            };
             setActiveAnchorId(prev => (prev === nextAnchor ? prev : nextAnchor));
         } else {
             debug.warn('[Navigate] target not found:', targetId);
@@ -1604,6 +1610,20 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             (entries) => {
                 const nextAnchorId = getNextVisibleAnchorId(entries);
                 if (!nextAnchorId) return;
+
+                const manualNavigationLock = manualNavigationLockRef.current;
+                if (manualNavigationLock) {
+                    const now = Date.now();
+                    if (now < manualNavigationLock.expiresAt) {
+                        if (nextAnchorId !== manualNavigationLock.anchorId) {
+                            return;
+                        }
+                        manualNavigationLockRef.current = null;
+                    } else {
+                        manualNavigationLockRef.current = null;
+                    }
+                }
+
                 scheduleActiveAnchorUpdate(nextAnchorId, activeAnchorIdRef, anchorRafRef, setActiveAnchorId);
             },
             {

@@ -1,12 +1,13 @@
+import asyncio
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
-import asyncio
-import backend.infrastructure.db_engine as db_engine
 import pytest
-from backend.presentation.routes import system
 from fastapi import HTTPException
 from starlette.requests import Request
+
+import backend.infrastructure.db_engine as db_engine
+from backend.presentation.routes import system
 
 pytestmark = pytest.mark.unit
 
@@ -384,6 +385,80 @@ async def test_get_cache_metrics_returns_payload_for_admin(monkeypatch):
     assert payload["tipi_code_payload_cache"] == {"hits": 3, "misses": 4}
     assert payload["nesh_internal_caches"] == {"cache": "nesh"}
     assert payload["tipi_internal_caches"] == {"cache": "tipi"}
+
+
+@pytest.mark.asyncio
+async def test_get_metrics_returns_404_when_disabled(monkeypatch):
+    monkeypatch.setattr(
+        system.settings.observability, "metrics_token", "", raising=False
+    )
+    request = _build_request("/api/metrics")
+
+    with pytest.raises(HTTPException) as exc:
+        await system.get_metrics(request)
+
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_metrics_rejects_invalid_token(monkeypatch):
+    monkeypatch.setattr(
+        system.settings.observability, "metrics_token", "metrics-secret", raising=False
+    )
+    request = _build_request("/api/metrics", headers={"X-Metrics-Token": "wrong"})
+
+    with pytest.raises(HTTPException) as exc:
+        await system.get_metrics(request)
+
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_get_metrics_returns_prometheus_payload(monkeypatch):
+    monkeypatch.setattr(
+        system.settings.observability, "metrics_token", "metrics-secret", raising=False
+    )
+    request = _build_request(
+        "/api/metrics",
+        headers={"X-Metrics-Token": "metrics-secret"},
+        state={
+            "db": _FakeDb({"status": "online", "chapters": "5", "positions": "9"}),
+            "tipi_service": _FakeTipiService(
+                {"ok": True, "chapters": "3", "positions": "4"}
+            ),
+            "nbs_service": _FakeNbsService(
+                {"status": "online", "nbs_items": "6", "nebs_entries": "2"}
+            ),
+            "service": _FakeNeshService({}),
+        },
+    )
+
+    async def _fake_collect_cache_metrics(_request):  # NOSONAR
+        return {
+            "status": "ok",
+            "search_code_payload_cache": {"hits": 1, "misses": 2},
+            "tipi_code_payload_cache": {"hits": 3, "misses": 4},
+            "nesh_internal_caches": {"chapter_cache": {"hit_rate": 0.5}},
+            "tipi_internal_caches": {"code_search_cache": {"hit_rate": 0.75}},
+        }
+
+    monkeypatch.setattr(
+        system, "_collect_cache_metrics_payload", _fake_collect_cache_metrics
+    )
+
+    response = await system.get_metrics(request)
+
+    assert response.status_code == 200
+    body = response.body.decode("utf-8")
+    assert (
+        "# HELP nesh_catalog_status Catalog health status (1=online, 0=error)." in body
+    )
+    assert 'nesh_catalog_status{catalog="nesh"} 1' in body
+    assert 'nesh_payload_cache_hits{cache="search_code_payload_cache"} 1' in body
+    assert (
+        'nesh_internal_cache_hit_rate{cache="chapter_cache",service="nesh_internal_caches"} 0.5'
+        in body
+    )
 
 
 @pytest.mark.asyncio

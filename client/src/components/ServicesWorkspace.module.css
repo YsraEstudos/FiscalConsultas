@@ -105,6 +105,7 @@
   border: none;
   background: transparent;
   overflow: visible;
+  margin: auto;
 }
 
 .chapterNotesDialog::backdrop {

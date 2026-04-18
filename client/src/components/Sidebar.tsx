@@ -1,7 +1,7 @@
 import React, { useMemo, useEffect, useRef } from "react";
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import styles from "./Sidebar.module.css";
-import { generateAnchorId, normalizeNCMQuery } from "../utils/id_utils";
+import { formatNcmTipi, generateAnchorId, normalizeNCMQuery } from "../utils/id_utils";
 import { debug } from "../utils/debug";
 
 interface Position {
@@ -57,6 +57,72 @@ const SECTION_CONFIG: Record<SectionType, { label: string; icon: string }> = {
   consideracoes: { label: "Considerações Gerais", icon: "📚" },
   definicoes: { label: "Definições Técnicas", icon: "📋" },
 };
+
+function toCodeSortSegments(code: string): number[] {
+  const normalized = formatNcmTipi(code);
+  const [firstSegment = "", ...otherSegments] = normalized.split(".");
+  const firstDigits = firstSegment.replaceAll(/\D/g, "");
+
+  const normalizedSegments: string[] = [];
+  if (firstDigits.length === 4) {
+    normalizedSegments.push(firstDigits.slice(0, 2), firstDigits.slice(2, 4));
+  } else if (firstDigits.length > 0) {
+    normalizedSegments.push(firstDigits);
+  }
+
+  otherSegments.forEach((segment) => {
+    const segmentDigits = segment.replaceAll(/\D/g, "");
+    if (segmentDigits) {
+      normalizedSegments.push(segmentDigits);
+    }
+  });
+
+  const segments = normalizedSegments
+    .map((segment) => Number.parseInt(segment, 10))
+    .filter((segment) => Number.isFinite(segment));
+
+  if (segments.length > 0) {
+    return segments;
+  }
+
+  const digits = code.replaceAll(/\D/g, "");
+  if (!digits) {
+    return [];
+  }
+
+  if (digits.length >= 4) {
+    const grouped: string[] = [digits.slice(0, 2), digits.slice(2, 4)];
+    for (let index = 4; index < digits.length; index += 2) {
+      grouped.push(digits.slice(index, index + 2));
+    }
+    return grouped
+      .map((segment) => Number.parseInt(segment, 10))
+      .filter((segment) => Number.isFinite(segment));
+  }
+
+  return [Number.parseInt(digits, 10)];
+}
+
+function comparePositionCodes(aCode: string, bCode: string): number {
+  const aSegments = toCodeSortSegments(aCode);
+  const bSegments = toCodeSortSegments(bCode);
+  const maxLength = Math.max(aSegments.length, bSegments.length);
+
+  for (let index = 0; index < maxLength; index += 1) {
+    const aValue = aSegments[index];
+    const bValue = bSegments[index];
+
+    if (aValue === undefined && bValue === undefined) break;
+    if (aValue === undefined) return -1;
+    if (bValue === undefined) return 1;
+    if (aValue !== bValue) return aValue - bValue;
+  }
+
+  return formatNcmTipi(aCode).localeCompare(formatNcmTipi(bCode), "pt-BR", {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
 
 export const Sidebar = React.memo(function Sidebar({
   results,
@@ -148,12 +214,15 @@ export const Sidebar = React.memo(function Sidebar({
         anchorMap[sectionAnchorId] = currentIndex;
       }
 
-      // Add Positions (sorted numerically by HS Code to ensure correct sequence)
-      const sortedPositions = [...chapter.posicoes].sort((a, b) => {
-        const [aMaj, aMin] = a.codigo.split(".").map(Number);
-        const [bMaj, bMin] = b.codigo.split(".").map(Number);
-        return aMaj - bMaj || aMin - bMin;
-      });
+      // Add Positions (stable sort by normalized code segments for mixed TIPI/NESH formats)
+      const sortedPositions = chapter.posicoes
+        .map((pos, originalIndex) => ({ pos, originalIndex }))
+        .sort((a, b) => {
+          const byCode = comparePositionCodes(a.pos.codigo, b.pos.codigo);
+          if (byCode !== 0) return byCode;
+          return a.originalIndex - b.originalIndex;
+        })
+        .map(({ pos }) => pos);
       sortedPositions.forEach((pos) => {
         const currentIndex = flatList.length;
         flatList.push({ type: "item", pos });

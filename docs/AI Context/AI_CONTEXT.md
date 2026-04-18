@@ -190,6 +190,7 @@ Regras de compatibilidade importantes:
   - Links só aceitam protocolos seguros e links externos recebem `rel="noopener noreferrer"`.
   - Imagens inseguras são descartadas; imagens válidas recebem `loading="lazy"`, `decoding="async"` e `referrerpolicy="no-referrer"`.
   - `api.ts` usa `withCredentials: false`; o fluxo autenticado depende do header `Authorization`, não de cookies implícitos.
+  - O Clerk permanece em `development` enquanto o projeto não tiver domínio próprio/plano pago; isso é tratado como estado temporário e o hardening do cliente deve continuar garantindo que nada sensível dependa de configuração do front-end.
 - Autorização/gating de UI no frontend:
   - `AuthContext` deriva `isAdmin` de `membership.role` do Clerk via `hasPrivilegedRole`.
   - roles reconhecidas: `admin`, `owner`, `superadmin`, inclusive formatos compostos como `org:admin`.

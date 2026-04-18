@@ -10,6 +10,7 @@
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  -webkit-backdrop-filter: blur(5px);
   backdrop-filter: blur(5px);
   opacity: 0;
   visibility: hidden;
@@ -35,6 +36,7 @@
   position: relative;
   z-index: 1;
   background: var(--bg-secondary);
+  box-sizing: border-box;
   border-radius: 20px;
   width: 800px;
   max-width: 90vw;
@@ -91,6 +93,7 @@
 .body {
   padding: 2rem;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .grid {
@@ -101,6 +104,7 @@
 
 .card {
   background: var(--bg-tertiary);
+  min-width: 0;
   border-radius: 16px;
   padding: 1.5rem;
   border: 1px solid var(--border-color);
@@ -118,6 +122,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
+  min-width: 0;
   padding: 1rem 0;
   border-bottom: 1px solid rgb(255 255 255 / 5%);
 }
@@ -126,10 +132,22 @@
   border-bottom: none;
 }
 
+.navigationBehaviorItem {
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.navigationBehaviorItem .toggleGroup {
+  flex: 0 1 230px;
+}
+
 .label {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  padding-right: 1rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .label span:first-child {
@@ -167,6 +185,7 @@
 .switch {
   display: inline-block;
   position: relative;
+  flex-shrink: 0;
   width: 44px;
   height: 24px;
 }
@@ -213,6 +232,8 @@
 .toggleGroup {
   display: flex;
   gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .toggleBtn {
@@ -224,6 +245,7 @@
   cursor: pointer;
   transition: all 0.2s;
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -285,6 +307,31 @@
 
   .content {
     width: 95vw;
+  }
+}
+
+@media (width <=560px) {
+  .navigationBehaviorItem {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .navigationBehaviorItem .label {
+    padding-right: 0;
+  }
+
+  .navigationBehaviorItem .toggleGroup {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .navigationBehaviorItem .toggleBtn {
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.2;
+    padding-inline: 0.75rem;
   }
 }
 

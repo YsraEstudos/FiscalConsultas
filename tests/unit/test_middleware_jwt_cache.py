@@ -53,6 +53,8 @@ async def test_no_jwks_in_development_rejects_without_decoding(
 
 def test_public_path_matching_does_not_allow_similar_prefixes():
     assert middleware.TenantMiddleware._is_public_path("/api/webhooks/asaas") is True
+    assert middleware.TenantMiddleware._is_public_path("/api/metrics") is True
+    assert middleware.TenantMiddleware._is_public_path("/api/cache-metrics") is True
     assert (
         middleware.TenantMiddleware._is_public_path("/api/services/nbs/search") is True
     )
