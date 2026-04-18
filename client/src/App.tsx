@@ -37,6 +37,22 @@ function splitSearchTerms(raw: string): string[] {
 
 const noop = () => { };
 
+function handleDelegatedNoteNavigation(
+    target: Element,
+    event: MouseEvent,
+    onOpenNote: (note: string, chapter?: string) => Promise<void> | void,
+): boolean {
+    const noteRef = target.closest('.note-ref');
+    if (!(noteRef instanceof HTMLElement)) return false;
+
+    const note = noteRef.dataset.note;
+    if (!note) return true;
+
+    event.preventDefault();
+    onOpenNote(note, noteRef.dataset.chapter || undefined);
+    return true;
+}
+
 function App() {
     const {
         tabs,
@@ -347,13 +363,7 @@ function App() {
             // Para referências de nota, ignoramos abertura em nova aba / botão do meio
             if (event.button === 1) return;
 
-            const noteRef = target.closest('.note-ref');
-            if (!(noteRef instanceof HTMLElement)) return;
-
-            const note = noteRef.dataset.note;
-            if (!note) return;
-
-            handleOpenNoteRef.current(note, noteRef.dataset.chapter || undefined);
+            handleDelegatedNoteNavigation(target, event, handleOpenNoteRef.current);
         };
 
         document.addEventListener('click', handleDelegatedClick);

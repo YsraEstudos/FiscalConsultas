@@ -123,6 +123,523 @@ function getExpandedPrefixBranch(
     ));
 }
 
+type OpenCatalogDoc = (targetDoc: ServiceDocType, query?: string) => void;
+
+interface NbsHierarchySectionProps {
+    readonly activeChapterNumber: string | null;
+    readonly chapterButtonHint: string;
+    readonly chapterButtonLabel: string;
+    readonly currentChapterNotesEntry: ReturnType<typeof getNbsChapterNotesEntry>;
+    readonly nbsState: ServicesWorkspaceNbsState;
+    readonly onOpenChapterNotes: () => void;
+    readonly onSelectNbs: (code: string) => void;
+    readonly visibleChildren: readonly NbsServiceItem[];
+}
+
+function NbsHierarchySection({
+    activeChapterNumber,
+    chapterButtonHint,
+    chapterButtonLabel,
+    currentChapterNotesEntry,
+    nbsState,
+    onOpenChapterNotes,
+    onSelectNbs,
+    visibleChildren,
+}: Readonly<NbsHierarchySectionProps>) {
+    return (
+        <aside className={styles.leftPanel}>
+            <div className={styles.leftPanelHeader}>
+                <div className={styles.leftPanelTitle}>
+                    <button
+                        type="button"
+                        className={styles.chapterNotesButton}
+                        onClick={onOpenChapterNotes}
+                        disabled={!currentChapterNotesEntry}
+                        title={chapterButtonHint}
+                    >
+                        <span className={styles.chapterNotesEyebrow}>Explicações</span>
+                        <span>{chapterButtonLabel}</span>
+                    </button>
+                    Hierarquia NBS
+                </div>
+                <span className={styles.sectionBadge}>
+                    {activeChapterNumber ? `Capítulo ${activeChapterNumber} ativo` : 'Capítulo ativo'}
+                </span>
+            </div>
+
+            {nbsState.isSearching ? (
+                <Loading label="Buscando catalogo..." />
+            ) : nbsState.detail ? (
+                <div className={styles.hierarchyList}>
+                    {nbsState.detail.ancestors.map((item, index) => (
+                        <div key={item.code} className={styles.hierarchyNode} style={{ paddingLeft: `${index * 1.5}rem` }}>
+                            <button type="button" className={styles.nodeCard} onClick={() => onSelectNbs(item.code)}>
+                                <div className={styles.nodeIcon}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 17 12 21 16 17"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"></path></svg>
+                                </div>
+                                <div className={styles.nodeContent}>
+                                    <span className={styles.nodeLabel}>Nível {item.level}</span>
+                                    <strong className={`${styles.nodeTitle} ${styles.interactiveCode} service-code-target`} data-service-code={item.code}>{item.code} - {item.description}</strong>
+                                </div>
+                            </button>
+                        </div>
+                    ))}
+                    <div className={styles.hierarchyNode} style={{ paddingLeft: `${nbsState.detail.ancestors.length * 1.5}rem` }}>
+                        <div className={`${styles.nodeCard} ${styles.active}`}>
+                            <div className={styles.nodeIcon}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                            </div>
+                            <div className={styles.nodeContent}>
+                                <span className={styles.nodeLabel}>Item Ativo</span>
+                                <strong className={`${styles.nodeTitle} ${styles.interactiveCode} service-code-target`} data-service-code={nbsState.detail.item.code}>{nbsState.detail.item.code} - {nbsState.detail.item.description}</strong>
+                            </div>
+                        </div>
+                        {visibleChildren.length > 0 && (
+                            <div className={styles.peerList} style={{ paddingLeft: '3.5rem' }}>
+                                {visibleChildren.map((child) => (
+                                    <button
+                                        type="button"
+                                        key={child.code}
+                                        className={styles.peerCard}
+                                        onClick={() => onSelectNbs(child.code)}
+                                        style={{
+                                            marginLeft: `${Math.max(0, child.level - nbsState.detail!.item.level - 1) * 1.25}rem`,
+                                        }}
+                                    >
+                                        <div className={styles.peerIcon}></div>
+                                        <span className={`${styles.nodeTitle} ${styles.interactiveCode} service-code-target`} data-service-code={child.code}>{child.code} - {child.description}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            ) : nbsState.results.length > 0 ? (
+                <div className={styles.resultList}>
+                    {nbsState.results.map((item) => (
+                        <button
+                            key={item.code}
+                            type="button"
+                            className={`${styles.resultCard} ${nbsState.selectedCode === item.code ? styles.resultCardActive : ''}`}
+                            onClick={() => onSelectNbs(item.code)}
+                        >
+                            <div className={styles.resultMeta}>
+                                <span className={`${styles.codeBadge} ${styles.interactiveCode} service-code-target`} data-service-code={item.code}>{item.code}</span>
+                                {item.has_nebs && <span className={styles.noteBadge}>NEBS</span>}
+                            </div>
+                            <strong className={`${styles.interactiveCode} service-code-target`} data-service-code={item.code}>{item.description}</strong>
+                            <span className={styles.levelHint}>Nivel {item.level}</span>
+                        </button>
+                    ))}
+                </div>
+            ) : (
+                <div className={styles.emptyState}>
+                    <strong>Nenhum servico encontrado</strong>
+                    <p>Tente outro codigo ou um termo mais amplo.</p>
+                </div>
+            )}
+        </aside>
+    );
+}
+
+interface NbsDetailSectionProps {
+    readonly nbsNoteBodyHtml: string;
+    readonly nbsState: ServicesWorkspaceNbsState;
+    readonly openCatalogDoc: OpenCatalogDoc;
+}
+
+function NbsDetailSection({
+    nbsNoteBodyHtml,
+    nbsState,
+    openCatalogDoc,
+}: Readonly<NbsDetailSectionProps>) {
+    return (
+        <section className={styles.rightPanel}>
+            {nbsState.isLoadingDetail ? (
+                <Loading label="Montando painel..." />
+            ) : nbsState.detail ? (
+                <>
+                    <h3 className={styles.rightPanelTitle}>Detalhamento Técnico</h3>
+
+                    <section className={styles.card}>
+                        <div className={styles.cardLabel}>Descrição</div>
+                        <p>
+                            <strong className={`${styles.interactiveCode} service-code-target`} data-service-code={nbsState.detail.item.code}>{nbsState.detail.item.code}</strong>
+                            {' - '}
+                            {nbsState.detail.item.description}
+                        </p>
+                    </section>
+
+                    <section className={styles.codeComposition}>
+                        <span className={styles.codeLabel}>COMPOSIÇÃO DO CÓDIGO</span>
+                        <div className={styles.codeBoxes}>
+                            {nbsState.detail.item.code.split('.').map((part, index) => (
+                                <React.Fragment key={index}>
+                                    <div className={styles.codeBox}>{part}</div>
+                                    {index < nbsState.detail!.item.code.split('.').length - 1 && (
+                                        <span className={styles.codeSeparator}>-</span>
+                                    )}
+                                </React.Fragment>
+                            ))}
+                        </div>
+                    </section>
+
+                    {nbsState.detail.nebs && (
+                        <section className={styles.notesCard} style={{ marginTop: "1rem" }}>
+                            <div className={styles.notesHeader}>
+                                <span className={styles.notesIcon}>i</span>
+                                <span>NOTAS EXPLICATIVAS</span>
+                            </div>
+                            <div
+                                className={styles.notesContent}
+                                dangerouslySetInnerHTML={{ __html: nbsNoteBodyHtml }}
+                            />
+                        </section>
+                    )}
+
+                    <button
+                        type="button"
+                        className={styles.primaryAction}
+                        onClick={() => openCatalogDoc('nebs', nbsState.detail?.item.code)}
+                    >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
+                        Ver NEBS
+                    </button>
+                </>
+            ) : (
+                <div className={styles.emptyDetail}>
+                    <strong>Selecione um servico</strong>
+                    <p>O painel mostra descricao, hierarquia e a disponibilidade de nota explicativa publicada.</p>
+                </div>
+            )}
+        </section>
+    );
+}
+
+interface NbsChapterNotesDialogProps {
+    readonly chapterNotesDialogRef: React.RefObject<HTMLDialogElement | null>;
+    readonly chapterNotesHtml: string;
+    readonly closeChapterNotes: () => void;
+    readonly currentChapterNotesEntry: ReturnType<typeof getNbsChapterNotesEntry>;
+}
+
+function NbsChapterNotesDialog({
+    chapterNotesDialogRef,
+    chapterNotesHtml,
+    closeChapterNotes,
+    currentChapterNotesEntry,
+}: Readonly<NbsChapterNotesDialogProps>) {
+    return (
+        <dialog
+            ref={chapterNotesDialogRef}
+            className={styles.chapterNotesDialog}
+            aria-labelledby="nbs-chapter-notes-title"
+            onClose={closeChapterNotes}
+            onCancel={closeChapterNotes}
+            onClick={(event) => {
+                if (event.target === event.currentTarget) {
+                    closeChapterNotes();
+                }
+            }}
+        >
+            {currentChapterNotesEntry && (
+                <section className={styles.chapterNotesSheet}>
+                    <div className={styles.chapterNotesSheetHeader}>
+                        <div className={styles.chapterNotesSheetCopy}>
+                            <span className={styles.chapterNotesSheetEyebrow}>NBS • Explicações do capítulo</span>
+                            <h3 id="nbs-chapter-notes-title">
+                                Capítulo {currentChapterNotesEntry.chapter} - {currentChapterNotesEntry.title}
+                            </h3>
+                            <p>
+                                Notas oficiais extraídas do Anexo I da Portaria Conjunta RFB/SCS nº 1.429, de 12 de setembro de 2018.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            className={styles.chapterNotesClose}
+                            aria-label="Fechar explicações do capítulo"
+                            onClick={closeChapterNotes}
+                        >
+                            ×
+                        </button>
+                    </div>
+
+                    <div className={styles.chapterNotesSheetBody}>
+                        <section className={styles.notesCard}>
+                            <div className={styles.notesHeader}>
+                                <span className={styles.notesIcon}>i</span>
+                                <span>NOTAS DO CAPÍTULO</span>
+                            </div>
+                            <div
+                                className={`${styles.notesContent} ${styles.chapterNotesContent}`}
+                                dangerouslySetInnerHTML={{ __html: chapterNotesHtml }}
+                            />
+                        </section>
+                    </div>
+                </section>
+            )}
+        </dialog>
+    );
+}
+
+interface NbsWorkspaceViewProps {
+    readonly activeChapterNumber: string | null;
+    readonly chapterNotesDialogRef: React.RefObject<HTMLDialogElement | null>;
+    readonly chapterNotesHtml: string;
+    readonly currentChapterNotesEntry: ReturnType<typeof getNbsChapterNotesEntry>;
+    readonly isChapterNotesOpen: boolean;
+    readonly nbsChapterNotesNewTab: boolean;
+    readonly nbsNoteBodyHtml: string;
+    readonly nbsPrefixAutoExpand: boolean;
+    readonly nbsState: ServicesWorkspaceNbsState;
+    readonly onSelectNbs: (code: string) => void;
+    readonly openCatalogDoc: OpenCatalogDoc;
+    readonly setIsChapterNotesOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+function NbsWorkspaceView({
+    activeChapterNumber,
+    chapterNotesDialogRef,
+    chapterNotesHtml,
+    currentChapterNotesEntry,
+    nbsChapterNotesNewTab,
+    nbsNoteBodyHtml,
+    nbsPrefixAutoExpand,
+    nbsState,
+    onSelectNbs,
+    openCatalogDoc,
+    setIsChapterNotesOpen,
+}: Readonly<NbsWorkspaceViewProps>) {
+    const chapterButtonLabel = activeChapterNumber
+        ? `Capítulo ${activeChapterNumber}`
+        : 'Explicações do capítulo';
+    const chapterButtonHint = currentChapterNotesEntry?.hasOfficialNotes
+        ? 'Abrir explicações oficiais do capítulo'
+        : 'Abrir resumo do capítulo';
+
+    const closeChapterNotes = () => {
+        setIsChapterNotesOpen(false);
+    };
+
+    const handleOpenChapterNotes = () => {
+        if (!currentChapterNotesEntry) return;
+        if (nbsChapterNotesNewTab) {
+            openNbsChapterNotesTab(currentChapterNotesEntry);
+            return;
+        }
+
+        setIsChapterNotesOpen(true);
+    };
+
+    const autoExpandedDescendants = (
+        nbsPrefixAutoExpand
+        && isCodeLikeNbsQuery(nbsState.query)
+        && nbsState.detail
+    )
+        ? getExpandedPrefixBranch(
+            nbsState.detail.chapter_items || nbsState.results,
+            nbsState.query,
+            nbsState.detail.item.code,
+        )
+        : [];
+    const visibleChildren = autoExpandedDescendants.length > 0
+        ? autoExpandedDescendants
+        : nbsState.detail?.children || [];
+
+    return (
+        <div className={styles.body}>
+            <NbsHierarchySection
+                activeChapterNumber={activeChapterNumber}
+                chapterButtonHint={chapterButtonHint}
+                chapterButtonLabel={chapterButtonLabel}
+                currentChapterNotesEntry={currentChapterNotesEntry}
+                nbsState={nbsState}
+                onOpenChapterNotes={handleOpenChapterNotes}
+                onSelectNbs={onSelectNbs}
+                visibleChildren={visibleChildren}
+            />
+            <NbsDetailSection
+                nbsNoteBodyHtml={nbsNoteBodyHtml}
+                nbsState={nbsState}
+                openCatalogDoc={openCatalogDoc}
+            />
+            <NbsChapterNotesDialog
+                chapterNotesDialogRef={chapterNotesDialogRef}
+                chapterNotesHtml={chapterNotesHtml}
+                closeChapterNotes={closeChapterNotes}
+                currentChapterNotesEntry={currentChapterNotesEntry}
+            />
+        </div>
+    );
+}
+
+interface NebsResultsSectionProps {
+    readonly nebsState: ServicesWorkspaceNebsState;
+    readonly onSelectNebs: (code: string) => void;
+}
+
+function NebsResultsSection({
+    nebsState,
+    onSelectNebs,
+}: Readonly<NebsResultsSectionProps>) {
+    return (
+        <aside className={styles.sidebar}>
+            <div className={styles.sidebarHeader}>
+                <span>Resultados</span>
+                <strong>{nebsState.results.length}</strong>
+            </div>
+
+            {nebsState.isSearching ? (
+                <Loading label="Buscando notas..." />
+            ) : !nebsState.hasSearched ? (
+                <div className={styles.emptyState}>
+                    <strong>Busque uma nota explicativa</strong>
+                    <p>Digite um codigo NBS ou um termo textual para pesquisar a NEBS.</p>
+                </div>
+            ) : nebsState.results.length > 0 ? (
+                <div className={styles.resultList}>
+                    {nebsState.results.map((item) => (
+                        <button
+                            key={item.code}
+                            type="button"
+                            className={`${styles.resultCard} ${nebsState.selectedCode === item.code ? styles.resultCardActive : ''}`}
+                            onClick={() => onSelectNebs(item.code)}
+                        >
+                            <div className={styles.resultMeta}>
+                                <span className={`${styles.codeBadge} ${styles.interactiveCode} service-code-target`} data-service-code={item.code}>{item.code}</span>
+                                <span className={styles.noteBadge}>NEBS</span>
+                            </div>
+                            <strong className={`${styles.interactiveCode} service-code-target`} data-service-code={item.code}>{item.code} - {item.title}</strong>
+                            <span className={styles.resultExcerpt}>{item.excerpt}</span>
+                            <span className={styles.levelHint}>Paginas {item.page_start} a {item.page_end}</span>
+                        </button>
+                    ))}
+                </div>
+            ) : (
+                <div className={styles.emptyState}>
+                    <strong>Nenhuma nota encontrada</strong>
+                    <p>Tente um termo mais amplo ou um codigo completo.</p>
+                </div>
+            )}
+        </aside>
+    );
+}
+
+interface NebsDetailSectionProps {
+    readonly nebsNoteBodyHtml: string;
+    readonly nebsState: ServicesWorkspaceNebsState;
+    readonly openCatalogDoc: OpenCatalogDoc;
+}
+
+function NebsDetailSection({
+    nebsNoteBodyHtml,
+    nebsState,
+    openCatalogDoc,
+}: Readonly<NebsDetailSectionProps>) {
+    return (
+        <section className={styles.detailPanel}>
+            {nebsState.isLoadingDetail ? (
+                <Loading label="Montando nota..." />
+            ) : nebsState.detail ? (
+                <>
+                    <div className={styles.detailHero}>
+                        <div className={`${styles.detailCode} ${styles.interactiveCode} service-code-target`} data-service-code={nebsState.detail.entry.code}>{nebsState.detail.entry.code}</div>
+                        <h3>{nebsState.detail.entry.title}</h3>
+                        <p className={styles.heroMeta}>
+                            {nebsState.detail.entry.section_title || 'Secao nao informada'} • Paginas {nebsState.detail.entry.page_start} a {nebsState.detail.entry.page_end}
+                        </p>
+                    </div>
+
+                    <div className={styles.breadcrumbs} aria-label="Hierarquia NBS">
+                        {nebsState.detail.ancestors.map((ancestor) => (
+                            <button
+                                key={ancestor.code}
+                                type="button"
+                                className={`${styles.crumb} ${styles.interactiveCode} service-code-target`}
+                                data-service-code={ancestor.code}
+                                onClick={() => openCatalogDoc('nbs', ancestor.code)}
+                            >
+                                {ancestor.code}
+                            </button>
+                        ))}
+                        <button
+                            type="button"
+                            className={`${styles.crumbCurrentButton} ${styles.interactiveCode} service-code-target`}
+                            data-service-code={nebsState.detail?.item.code}
+                            onClick={() => openCatalogDoc('nbs', nebsState.detail?.item.code)}
+                        >
+                            {nebsState.detail.item.code}
+                        </button>
+                    </div>
+
+                    <div className={styles.detailGrid}>
+                        <section className={styles.card}>
+                            <div className={styles.cardLabel}>Servico NBS vinculado</div>
+                            <p>{nebsState.detail.item.description}</p>
+                        </section>
+
+                        <section className={styles.card}>
+                            <div className={styles.cardLabel}>Origem</div>
+                            <p>{nebsState.detail.entry.section_title || 'Secao nao identificada'}</p>
+                        </section>
+                    </div>
+
+                    <section className={styles.card}>
+                        <div className={styles.cardLabel}>Conteudo da nota</div>
+                        <div
+                            className={styles.noteBody}
+                            dangerouslySetInnerHTML={{ __html: nebsNoteBodyHtml }}
+                        />
+                    </section>
+
+                    <div className={styles.detailActions}>
+                        <button
+                            type="button"
+                            className={styles.secondaryAction}
+                            onClick={() => openCatalogDoc('nbs', nebsState.detail?.item.code)}
+                        >
+                            Abrir item NBS relacionado
+                        </button>
+                    </div>
+                </>
+            ) : (
+                <div className={styles.emptyDetail}>
+                    <strong>Selecione uma nota</strong>
+                    <p>O painel mostra a nota explicativa publicada, a seção de origem e o vínculo com o serviço NBS.</p>
+                </div>
+            )}
+        </section>
+    );
+}
+
+interface NebsWorkspaceViewProps {
+    readonly nebsNoteBodyHtml: string;
+    readonly nebsState: ServicesWorkspaceNebsState;
+    readonly onSelectNebs: (code: string) => void;
+    readonly openCatalogDoc: OpenCatalogDoc;
+}
+
+function NebsWorkspaceView({
+    nebsNoteBodyHtml,
+    nebsState,
+    onSelectNebs,
+    openCatalogDoc,
+}: Readonly<NebsWorkspaceViewProps>) {
+    return (
+        <div className={styles.body}>
+            <NebsResultsSection
+                nebsState={nebsState}
+                onSelectNebs={onSelectNebs}
+            />
+            <NebsDetailSection
+                nebsNoteBodyHtml={nebsNoteBodyHtml}
+                nebsState={nebsState}
+                openCatalogDoc={openCatalogDoc}
+            />
+        </div>
+    );
+}
+
 export function ServicesWorkspace({
     doc,
     nbsState,
@@ -182,363 +699,30 @@ export function ServicesWorkspace({
     }, [currentChapterNotesEntry, isChapterNotesOpen]);
 
     if (doc === 'nbs') {
-        const chapterButtonLabel = activeChapterNumber
-            ? `Capítulo ${activeChapterNumber}`
-            : 'Explicações do capítulo';
-        const chapterButtonHint = currentChapterNotesEntry?.hasOfficialNotes
-            ? 'Abrir explicações oficiais do capítulo'
-            : 'Abrir resumo do capítulo';
-
-        const closeChapterNotes = () => {
-            setIsChapterNotesOpen(false);
-        };
-
-        const handleOpenChapterNotes = () => {
-            if (!currentChapterNotesEntry) return;
-            if (nbsChapterNotesNewTab) {
-                openNbsChapterNotesTab(currentChapterNotesEntry);
-                return;
-            }
-
-            setIsChapterNotesOpen(true);
-        };
-        const autoExpandedDescendants = (
-            nbsPrefixAutoExpand
-            && isCodeLikeNbsQuery(nbsState.query)
-            && nbsState.detail
-        )
-            ? getExpandedPrefixBranch(
-                nbsState.detail.chapter_items || nbsState.results,
-                nbsState.query,
-                nbsState.detail.item.code,
-            )
-            : [];
-        const visibleChildren = autoExpandedDescendants.length > 0
-            ? autoExpandedDescendants
-            : nbsState.detail?.children || [];
-
         return (
-            <div className={styles.body}>
-                <aside className={styles.leftPanel}>
-                    <div className={styles.leftPanelHeader}>
-                        <div className={styles.leftPanelTitle}>
-                            <button
-                                type="button"
-                                className={styles.chapterNotesButton}
-                                onClick={handleOpenChapterNotes}
-                                disabled={!currentChapterNotesEntry}
-                                title={chapterButtonHint}
-                            >
-                                <span className={styles.chapterNotesEyebrow}>Explicações</span>
-                                <span>{chapterButtonLabel}</span>
-                            </button>
-                            Hierarquia NBS
-                        </div>
-                        <span className={styles.sectionBadge}>
-                            {activeChapterNumber ? `Capítulo ${activeChapterNumber} ativo` : 'Capítulo ativo'}
-                        </span>
-                    </div>
-
-                    {nbsState.isSearching ? (
-                        <Loading label="Buscando catalogo..." />
-                    ) : nbsState.detail ? (
-                        <div className={styles.hierarchyList}>
-                            {nbsState.detail.ancestors.map((item, index) => (
-                                <div key={item.code} className={styles.hierarchyNode} style={{ paddingLeft: `${index * 1.5}rem` }}>
-                                    <button type="button" className={styles.nodeCard} onClick={() => onSelectNbs(item.code)}>
-                                        <div className={styles.nodeIcon}>
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 17 12 21 16 17"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"></path></svg>
-                                        </div>
-                                        <div className={styles.nodeContent}>
-                                            <span className={styles.nodeLabel}>Nível {item.level}</span>
-                                            <strong className={`${styles.nodeTitle} ${styles.interactiveCode} service-code-target`} data-service-code={item.code}>{item.code} - {item.description}</strong>
-                                        </div>
-                                    </button>
-                                </div>
-                            ))}
-                            <div className={styles.hierarchyNode} style={{ paddingLeft: `${nbsState.detail.ancestors.length * 1.5}rem` }}>
-                                <div className={`${styles.nodeCard} ${styles.active}`}>
-                                    <div className={styles.nodeIcon}>
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
-                                    </div>
-                                    <div className={styles.nodeContent}>
-                                        <span className={styles.nodeLabel}>Item Ativo</span>
-                                        <strong className={`${styles.nodeTitle} ${styles.interactiveCode} service-code-target`} data-service-code={nbsState.detail.item.code}>{nbsState.detail.item.code} - {nbsState.detail.item.description}</strong>
-                                    </div>
-                                </div>
-                                {visibleChildren.length > 0 && (
-                                    <div className={styles.peerList} style={{ paddingLeft: '3.5rem' }}>
-                                        {visibleChildren.map((child) => (
-                                            <button
-                                                type="button"
-                                                key={child.code}
-                                                className={styles.peerCard}
-                                                onClick={() => onSelectNbs(child.code)}
-                                                style={{
-                                                    marginLeft: `${Math.max(0, child.level - nbsState.detail!.item.level - 1) * 1.25}rem`,
-                                                }}
-                                            >
-                                                <div className={styles.peerIcon}></div>
-                                                <span className={`${styles.nodeTitle} ${styles.interactiveCode} service-code-target`} data-service-code={child.code}>{child.code} - {child.description}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    ) : nbsState.results.length > 0 ? (
-                        <div className={styles.resultList}>
-                            {nbsState.results.map((item) => (
-                                <button
-                                    key={item.code}
-                                    type="button"
-                                    className={`${styles.resultCard} ${nbsState.selectedCode === item.code ? styles.resultCardActive : ''}`}
-                                    onClick={() => onSelectNbs(item.code)}
-                                >
-                                    <div className={styles.resultMeta}>
-                                        <span className={`${styles.codeBadge} ${styles.interactiveCode} service-code-target`} data-service-code={item.code}>{item.code}</span>
-                                        {item.has_nebs && <span className={styles.noteBadge}>NEBS</span>}
-                                    </div>
-                                    <strong className={`${styles.interactiveCode} service-code-target`} data-service-code={item.code}>{item.description}</strong>
-                                    <span className={styles.levelHint}>Nivel {item.level}</span>
-                                </button>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className={styles.emptyState}>
-                            <strong>Nenhum servico encontrado</strong>
-                            <p>Tente outro codigo ou um termo mais amplo.</p>
-                        </div>
-                    )}
-                </aside>
-
-                <section className={styles.rightPanel}>
-                    {nbsState.isLoadingDetail ? (
-                        <Loading label="Montando painel..." />
-                    ) : nbsState.detail ? (
-                        <>
-                            <h3 className={styles.rightPanelTitle}>Detalhamento Técnico</h3>
-
-                            <section className={styles.card}>
-                                <div className={styles.cardLabel}>Descrição</div>
-                                <p>
-                                    <strong className={`${styles.interactiveCode} service-code-target`} data-service-code={nbsState.detail.item.code}>{nbsState.detail.item.code}</strong>
-                                    {' - '}
-                                    {nbsState.detail.item.description}
-                                </p>
-                            </section>
-
-                            <section className={styles.codeComposition}>
-                                <span className={styles.codeLabel}>COMPOSIÇÃO DO CÓDIGO</span>
-                                <div className={styles.codeBoxes}>
-                                    {nbsState.detail.item.code.split('.').map((part, index) => (
-                                        <React.Fragment key={index}>
-                                            <div className={styles.codeBox}>{part}</div>
-                                            {index < nbsState.detail!.item.code.split('.').length - 1 && (
-                                                <span className={styles.codeSeparator}>-</span>
-                                            )}
-                                        </React.Fragment>
-                                    ))}
-                                </div>
-                            </section>
-
-                            {nbsState.detail.nebs && (
-                                <section className={styles.notesCard} style={{ marginTop: "1rem" }}>
-                                    <div className={styles.notesHeader}>
-                                        <span className={styles.notesIcon}>i</span>
-                                        <span>NOTAS EXPLICATIVAS</span>
-                                    </div>
-                                    <div
-                                        className={styles.notesContent}
-                                        dangerouslySetInnerHTML={{ __html: nbsNoteBodyHtml }}
-                                    />
-                                </section>
-                            )}
-
-                            <button
-                                type="button"
-                                className={styles.primaryAction}
-                                onClick={() => openCatalogDoc('nebs', nbsState.detail?.item.code)}
-                            >
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
-                                Ver NEBS
-                            </button>
-                        </>
-                    ) : (
-                        <div className={styles.emptyDetail}>
-                            <strong>Selecione um servico</strong>
-                            <p>O painel mostra descricao, hierarquia e a disponibilidade de nota explicativa publicada.</p>
-                        </div>
-                    )}
-                </section>
-
-                <dialog
-                    ref={chapterNotesDialogRef}
-                    className={styles.chapterNotesDialog}
-                    aria-labelledby="nbs-chapter-notes-title"
-                    onClose={closeChapterNotes}
-                    onCancel={closeChapterNotes}
-                    onClick={(event) => {
-                        if (event.target === event.currentTarget) {
-                            closeChapterNotes();
-                        }
-                    }}
-                >
-                    {currentChapterNotesEntry && (
-                        <section className={styles.chapterNotesSheet}>
-                            <div className={styles.chapterNotesSheetHeader}>
-                                <div className={styles.chapterNotesSheetCopy}>
-                                    <span className={styles.chapterNotesSheetEyebrow}>NBS • Explicações do capítulo</span>
-                                    <h3 id="nbs-chapter-notes-title">
-                                        Capítulo {currentChapterNotesEntry.chapter} - {currentChapterNotesEntry.title}
-                                    </h3>
-                                    <p>
-                                        Notas oficiais extraídas do Anexo I da Portaria Conjunta RFB/SCS nº 1.429, de 12 de setembro de 2018.
-                                    </p>
-                                </div>
-                                <button
-                                    type="button"
-                                    className={styles.chapterNotesClose}
-                                    aria-label="Fechar explicações do capítulo"
-                                    onClick={closeChapterNotes}
-                                >
-                                    ×
-                                </button>
-                            </div>
-
-                            <div className={styles.chapterNotesSheetBody}>
-                                <section className={styles.notesCard}>
-                                    <div className={styles.notesHeader}>
-                                        <span className={styles.notesIcon}>i</span>
-                                        <span>NOTAS DO CAPÍTULO</span>
-                                    </div>
-                                    <div
-                                        className={`${styles.notesContent} ${styles.chapterNotesContent}`}
-                                        dangerouslySetInnerHTML={{ __html: chapterNotesHtml }}
-                                    />
-                                </section>
-                            </div>
-                        </section>
-                    )}
-                </dialog>
-            </div>
+            <NbsWorkspaceView
+                activeChapterNumber={activeChapterNumber}
+                chapterNotesDialogRef={chapterNotesDialogRef}
+                chapterNotesHtml={chapterNotesHtml}
+                currentChapterNotesEntry={currentChapterNotesEntry}
+                isChapterNotesOpen={isChapterNotesOpen}
+                nbsChapterNotesNewTab={nbsChapterNotesNewTab}
+                nbsNoteBodyHtml={nbsNoteBodyHtml}
+                nbsPrefixAutoExpand={nbsPrefixAutoExpand}
+                nbsState={nbsState}
+                onSelectNbs={onSelectNbs}
+                openCatalogDoc={openCatalogDoc}
+                setIsChapterNotesOpen={setIsChapterNotesOpen}
+            />
         );
     }
 
     return (
-        <div className={styles.body}>
-            <aside className={styles.sidebar}>
-                <div className={styles.sidebarHeader}>
-                    <span>Resultados</span>
-                    <strong>{nebsState.results.length}</strong>
-                </div>
-
-                {nebsState.isSearching ? (
-                    <Loading label="Buscando notas..." />
-                ) : !nebsState.hasSearched ? (
-                    <div className={styles.emptyState}>
-                        <strong>Busque uma nota explicativa</strong>
-                        <p>Digite um codigo NBS ou um termo textual para pesquisar a NEBS.</p>
-                    </div>
-                ) : nebsState.results.length > 0 ? (
-                    <div className={styles.resultList}>
-                        {nebsState.results.map((item) => (
-                            <button
-                                key={item.code}
-                                type="button"
-                                className={`${styles.resultCard} ${nebsState.selectedCode === item.code ? styles.resultCardActive : ''}`}
-                                onClick={() => onSelectNebs(item.code)}
-                            >
-                                <div className={styles.resultMeta}>
-                                    <span className={`${styles.codeBadge} ${styles.interactiveCode} service-code-target`} data-service-code={item.code}>{item.code}</span>
-                                    <span className={styles.noteBadge}>NEBS</span>
-                                </div>
-                                <strong className={`${styles.interactiveCode} service-code-target`} data-service-code={item.code}>{item.code} - {item.title}</strong>
-                                <span className={styles.resultExcerpt}>{item.excerpt}</span>
-                                <span className={styles.levelHint}>Paginas {item.page_start} a {item.page_end}</span>
-                            </button>
-                        ))}
-                    </div>
-                ) : (
-                    <div className={styles.emptyState}>
-                        <strong>Nenhuma nota encontrada</strong>
-                        <p>Tente um termo mais amplo ou um codigo completo.</p>
-                    </div>
-                )}
-            </aside>
-
-            <section className={styles.detailPanel}>
-                {nebsState.isLoadingDetail ? (
-                    <Loading label="Montando nota..." />
-                ) : nebsState.detail ? (
-                    <>
-                        <div className={styles.detailHero}>
-                            <div className={`${styles.detailCode} ${styles.interactiveCode} service-code-target`} data-service-code={nebsState.detail.entry.code}>{nebsState.detail.entry.code}</div>
-                            <h3>{nebsState.detail.entry.title}</h3>
-                            <p className={styles.heroMeta}>
-                                {nebsState.detail.entry.section_title || 'Secao nao informada'} • Paginas {nebsState.detail.entry.page_start} a {nebsState.detail.entry.page_end}
-                            </p>
-                        </div>
-
-                        <div className={styles.breadcrumbs} aria-label="Hierarquia NBS">
-                            {nebsState.detail.ancestors.map((ancestor) => (
-                                <button
-                                    key={ancestor.code}
-                                    type="button"
-                                    className={`${styles.crumb} ${styles.interactiveCode} service-code-target`}
-                                    data-service-code={ancestor.code}
-                                    onClick={() => openCatalogDoc('nbs', ancestor.code)}
-                                >
-                                    {ancestor.code}
-                                </button>
-                            ))}
-                            <button
-                                type="button"
-                                className={`${styles.crumbCurrentButton} ${styles.interactiveCode} service-code-target`}
-                                data-service-code={nebsState.detail?.item.code}
-                                onClick={() => openCatalogDoc('nbs', nebsState.detail?.item.code)}
-                            >
-                                {nebsState.detail.item.code}
-                            </button>
-                        </div>
-
-                        <div className={styles.detailGrid}>
-                            <section className={styles.card}>
-                                <div className={styles.cardLabel}>Servico NBS vinculado</div>
-                                <p>{nebsState.detail.item.description}</p>
-                            </section>
-
-                            <section className={styles.card}>
-                                <div className={styles.cardLabel}>Origem</div>
-                                <p>{nebsState.detail.entry.section_title || 'Secao nao identificada'}</p>
-                            </section>
-                        </div>
-
-                        <section className={styles.card}>
-                            <div className={styles.cardLabel}>Conteudo da nota</div>
-                            <div
-                                className={styles.noteBody}
-                                dangerouslySetInnerHTML={{ __html: nebsNoteBodyHtml }}
-                            />
-                        </section>
-
-                        <div className={styles.detailActions}>
-                            <button
-                                type="button"
-                                className={styles.secondaryAction}
-                                onClick={() => openCatalogDoc('nbs', nebsState.detail?.item.code)}
-                            >
-                                Abrir item NBS relacionado
-                            </button>
-                        </div>
-                    </>
-                ) : (
-                    <div className={styles.emptyDetail}>
-                        <strong>Selecione uma nota</strong>
-                        <p>O painel mostra a nota explicativa publicada, a seção de origem e o vínculo com o serviço NBS.</p>
-                    </div>
-                )}
-            </section>
-        </div>
+        <NebsWorkspaceView
+            nebsNoteBodyHtml={nebsNoteBodyHtml}
+            nebsState={nebsState}
+            onSelectNebs={onSelectNebs}
+            openCatalogDoc={openCatalogDoc}
+        />
     );
 }

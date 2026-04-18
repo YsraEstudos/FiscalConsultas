@@ -486,6 +486,25 @@ type ChapterHydrationResult = {
     failedChapters: string[];
 };
 
+function createFailedChapterBodiesUpdater(failedChapters: string[]) {
+    return (current: string[]) => Array.from(new Set([...current, ...failedChapters]));
+}
+
+function createHydratedCodeResultsUpdater(
+    codeResults: Record<string, any>,
+    chapterBodies: ChapterBodyResponse[],
+) {
+    return (current: Record<string, any> | null) => {
+        const baseResults = current ?? codeResults;
+        return mergeHydratedChapterBodies(baseResults, chapterBodies);
+    };
+}
+
+function createRecoveredChapterBodiesUpdater(chapterBodies: ChapterBodyResponse[]) {
+    const recoveredChapters = new Set(chapterBodies.map((body) => body.capitulo));
+    return (current: string[]) => current.filter((chapter) => !recoveredChapters.has(chapter));
+}
+
 async function fetchChapterBodies(chapters: string[]): Promise<ChapterHydrationResult> {
     const settledBodies = await Promise.allSettled(
         chapters.map((chapter) => getNeshChapterBody(chapter)),
@@ -1080,30 +1099,32 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         let cancelled = false;
         setIsHydratingCodeResults(true);
 
-        void fetchChapterBodies(missingChapterBodies)
-            .then(({ chapterBodies, failedChapters }) => {
-                if (cancelled) return;
-                if (failedChapters.length > 0) {
-                    startTransition(() => {
-                        setFailedChapterBodies((current) => Array.from(new Set([...current, ...failedChapters])));
-                    });
-                }
-                if (chapterBodies.length === 0) return;
+        const applyHydrationResult = ({
+            chapterBodies,
+            failedChapters,
+        }: ChapterHydrationResult) => {
+            if (cancelled) return;
+
+            if (failedChapters.length > 0) {
                 startTransition(() => {
-                    setHydratedCodeResults((current) => {
-                        const baseResults = current ?? codeResults;
-                        return mergeHydratedChapterBodies(baseResults, chapterBodies);
-                    });
-                    setFailedChapterBodies((current) =>
-                        current.filter(
-                            (chapter) =>
-                                !chapterBodies.some(
-                                    (body: ChapterBodyResponse) => body.capitulo === chapter,
-                                ),
-                        ),
-                    );
+                    setFailedChapterBodies(createFailedChapterBodiesUpdater(failedChapters));
                 });
-            })
+            }
+
+            if (chapterBodies.length === 0) return;
+
+            startTransition(() => {
+                setHydratedCodeResults(
+                    createHydratedCodeResultsUpdater(codeResults, chapterBodies),
+                );
+                setFailedChapterBodies(
+                    createRecoveredChapterBodiesUpdater(chapterBodies),
+                );
+            });
+        };
+
+        void fetchChapterBodies(missingChapterBodies)
+            .then(applyHydrationResult)
             .catch((error) => {
                 console.error('[ResultDisplay] Failed to hydrate chapter bodies', error);
             })
