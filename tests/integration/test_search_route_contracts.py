@@ -244,7 +244,9 @@ def test_nesh_chapter_notes_endpoint_returns_notes_payload(client, monkeypatch):
     }
 
 
-def test_nesh_chapter_notes_endpoint_returns_404_when_chapter_missing(client, monkeypatch):
+def test_nesh_chapter_notes_endpoint_returns_404_when_chapter_missing(
+    client, monkeypatch
+):
     monkeypatch.setattr(
         NeshService,
         "fetch_chapter_data",

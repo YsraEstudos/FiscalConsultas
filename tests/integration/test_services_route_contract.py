@@ -99,7 +99,7 @@ class _FakeServicesCatalog:
         normalized_page = max(page, 1)
         normalized_page_size = max(page_size, 1)
         start = (normalized_page - 1) * normalized_page_size
-        paginated_items = items[start:start + normalized_page_size]
+        paginated_items = items[start : start + normalized_page_size]
         return {
             "success": True,
             "item": item,
@@ -274,14 +274,18 @@ def test_services_routes_expose_nbs_and_nebs_contracts(client, monkeypatch):
     assert nbs_tree_page_1.json()["chapter_page"]["page"] == 1
     assert nbs_tree_page_1.json()["chapter_page"]["page_size"] == 1
     assert nbs_tree_page_1.json()["chapter_page"]["has_more"] is True
-    assert [item["code"] for item in nbs_tree_page_1.json()["chapter_page"]["items"]] == [
+    assert [
+        item["code"] for item in nbs_tree_page_1.json()["chapter_page"]["items"]
+    ] == [
         "1.01",
     ]
     assert nbs_tree_page_2.json()["success"] is True
     assert nbs_tree_page_2.json()["chapter_page"]["page"] == 2
     assert nbs_tree_page_2.json()["chapter_page"]["page_size"] == 1
     assert nbs_tree_page_2.json()["chapter_page"]["has_more"] is False
-    assert [item["code"] for item in nbs_tree_page_2.json()["chapter_page"]["items"]] == [
+    assert [
+        item["code"] for item in nbs_tree_page_2.json()["chapter_page"]["items"]
+    ] == [
         "1.0101",
     ]
     assert nebs_search.json()["results"][0]["page_start"] == 21
@@ -379,7 +383,9 @@ def test_services_detail_returns_retry_after_when_rate_limited(client, monkeypat
 
     assert nbs_tree_response.status_code == 429
     assert nbs_tree_response.headers["Retry-After"] == "11"
-    assert "Rate limit exceeded for services detail" in nbs_tree_response.json()["detail"]
+    assert (
+        "Rate limit exceeded for services detail" in nbs_tree_response.json()["detail"]
+    )
 
     assert nebs_response.status_code == 429
     assert nebs_response.headers["Retry-After"] == "11"

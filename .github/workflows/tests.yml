@@ -164,6 +164,7 @@ jobs:
         working-directory: client
         env:
           PLAYWRIGHT_LIVE_BASE_URL: http://offline-e2e.local:4173
+          ALLOW_TEST_CLERK_KEY: "true"
         run: >
           npx playwright test
           tests/playwright/services-tabs.spec.ts
