@@ -114,6 +114,33 @@ async function installAuthSessionMock(page: Page) {
   });
 }
 
+async function installOfflineSupportMock(page: Page) {
+  await page.addInitScript(() => {
+    try {
+      if (typeof globalThis.SharedArrayBuffer === 'undefined') {
+        Object.defineProperty(globalThis, 'SharedArrayBuffer', {
+          configurable: true,
+          value: class SharedArrayBufferShim {},
+        });
+      }
+    } catch {
+      // Some browsers expose this as a non-configurable global; ignore that.
+    }
+
+    try {
+      const storage = navigator.storage as unknown as { getDirectory?: unknown } | undefined;
+      if (storage && typeof storage.getDirectory !== 'function') {
+        Object.defineProperty(storage, 'getDirectory', {
+          configurable: true,
+          value: async () => ({}),
+        });
+      }
+    } catch {
+      // If storage is read-only, the live spec will still surface the unsupported state.
+    }
+  });
+}
+
 async function installOfflineWorkerMock(page: Page) {
   await page.addInitScript((metadata) => {
     const OFFLINE_META_KEY = 'offline-db:installed-meta';
@@ -350,6 +377,7 @@ test.describe('live offline reopen with active service worker', () => {
       download: 0,
     };
 
+    await installOfflineSupportMock(page);
     await installOfflineWorkerMock(page);
     await installAuthSessionMock(page);
     await installOfflineApiMock(page, counters);
