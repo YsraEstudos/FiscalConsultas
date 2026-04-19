@@ -274,6 +274,7 @@ def test_services_routes_expose_nbs_and_nebs_contracts(client, monkeypatch):
     assert nbs_tree_page_1.json()["chapter_page"]["page"] == 1
     assert nbs_tree_page_1.json()["chapter_page"]["page_size"] == 1
     assert nbs_tree_page_1.json()["chapter_page"]["has_more"] is True
+    assert nbs_tree_page_1.json()["chapter_page"]["total"] == 2
     assert [
         item["code"] for item in nbs_tree_page_1.json()["chapter_page"]["items"]
     ] == [
@@ -283,6 +284,7 @@ def test_services_routes_expose_nbs_and_nebs_contracts(client, monkeypatch):
     assert nbs_tree_page_2.json()["chapter_page"]["page"] == 2
     assert nbs_tree_page_2.json()["chapter_page"]["page_size"] == 1
     assert nbs_tree_page_2.json()["chapter_page"]["has_more"] is False
+    assert nbs_tree_page_2.json()["chapter_page"]["total"] == 2
     assert [
         item["code"] for item in nbs_tree_page_2.json()["chapter_page"]["items"]
     ] == [
@@ -327,7 +329,7 @@ def test_services_detail_rejects_overly_long_code(
     oversized_code = "1" * (services_routes.MAX_SERVICE_CODE_LENGTH + 1)
     called = {"value": False}
 
-    def _unexpected_call(_code: str):
+    def _unexpected_call(*args, **kwargs):
         called["value"] = True
         raise AssertionError(f"{service_method} should not be called")
 
