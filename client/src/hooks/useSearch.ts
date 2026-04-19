@@ -105,7 +105,8 @@ function normalizeLocalResults(
 function normalizeLocalCodeResults(
     doc: DocType,
     query: string,
-    results: Record<string, any>
+    results: Record<string, any>,
+    markdown?: string
 ): SearchResponse | null {
     const safeResults = results && typeof results === 'object' ? results : {};
 
@@ -115,14 +116,17 @@ function normalizeLocalCodeResults(
             results: safeResults, resultados: safeResults,
             total: Object.values(safeResults).reduce((s: number, c: any) => s + (c.posicoes?.length || 0), 0),
             total_capitulos: Object.keys(safeResults).length,
+            markdown,
         } as TipiCodeSearchResponse;
     }
 
     if (doc === 'nesh') {
+        const firstChapter = Object.values(safeResults)[0] as { conteudo?: string } | undefined;
         return {
             success: true, type: 'code', query,
             normalized: null, results: safeResults, resultados: safeResults,
             total_capitulos: Object.keys(safeResults).length,
+            markdown: markdown || firstChapter?.conteudo || '',
         } as CodeSearchResponse;
     }
 
@@ -207,10 +211,27 @@ export function useSearch(
             // === HYBRID SEARCH: Local DB first, API fallback ===
             if (dbStatus === 'ready' && isOfflineScopedDoc) {
                 try {
+                    const searchStart = performance.now();
                     const localResponse = await searchLocal(doc as any, query, tipiViewModeRef.current);
+                    const searchEnd = performance.now();
                     if (localResponse) {
+                        if (import.meta.env.DEV) {
+                            const e2e = (searchEnd - searchStart).toFixed(1);
+                            const wt = localResponse.timing;
+                            const sql = wt?.sqlDurationMs?.toFixed(1) ?? '?';
+                            const total = wt?.totalDurationMs?.toFixed(1) ?? '?';
+                            const cache = wt?.cacheHit ? '✓ HIT' : '✗ miss';
+                            console.log(
+                                `[search] ${doc}:${query} e2e=${e2e}ms worker=${total}ms sql=${sql}ms cache=${cache}`
+                            );
+                        }
                         if (localResponse.searchType === 'code') {
-                            data = normalizeLocalCodeResults(doc, query, localResponse.results as Record<string, any>);
+                            data = normalizeLocalCodeResults(
+                                doc,
+                                query,
+                                localResponse.results as Record<string, any>,
+                                localResponse.markdown
+                            );
                         } else if (Array.isArray(localResponse.results)) {
                             data = normalizeLocalResults(doc, query, localResponse.results as Record<string, unknown>[]);
                         }

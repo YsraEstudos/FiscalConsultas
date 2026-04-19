@@ -22,6 +22,7 @@ import {
 import type { NbsDetailResponse, NebsDetailResponse } from "../types/api.types";
 import {
   compareOfflineVersions,
+  formatOfflineDatabaseErrorMessage,
   sanitizeOfflineMetadata,
   type OfflineDatabaseMetadata,
 } from "../utils/offlineDatabase";
@@ -94,6 +95,8 @@ interface LocalDatabaseState {
 interface LocalSearchResult {
   results: Record<string, unknown>[] | Record<string, unknown> | null;
   searchType: "text" | "code";
+  markdown?: string;
+  timing?: { sqlDurationMs: number; totalDurationMs: number; cacheHit: boolean };
 }
 
 interface LocalDatabaseContextType extends LocalDatabaseState {
@@ -105,6 +108,9 @@ interface LocalDatabaseContextType extends LocalDatabaseState {
     query: string,
     viewMode?: string
   ) => Promise<LocalSearchResult | null>;
+  getNeshChapterNotesLocal: (
+    chapter: string
+  ) => Promise<Record<string, string> | null>;
   getNbsDetailLocal: (
     code: string,
     options?: { page?: number; pageSize?: number }
@@ -129,6 +135,7 @@ const DEFAULT_LOCAL_DATABASE_CONTEXT: LocalDatabaseContextType = {
   remove: async () => undefined,
   refreshAvailability: async () => null,
   searchLocal: async () => null,
+  getNeshChapterNotesLocal: async () => null,
   getNbsDetailLocal: async () => null,
   getNebsDetailLocal: async () => null,
 };
@@ -288,6 +295,7 @@ export function LocalDatabaseProvider({
     reject: (reason: Error) => void;
     timeout: ReturnType<typeof setTimeout>;
   } | null>(null);
+  const autoInstallModeRef = useRef<"install" | "update" | null>(null);
   const remoteCheckRef = useRef<Promise<OfflineDatabaseMetadata | null> | null>(
     null
   );
@@ -481,7 +489,7 @@ export function LocalDatabaseProvider({
         setLocalVersion((payload.version as string) || null);
         setDbSizeBytes((payload.sizeBytes as number) || null);
         if (nextStatus === "error") {
-          setError((payload.error as string) || "Unknown error");
+          setError(formatOfflineDatabaseErrorMessage(payload.error));
         }
         if (nextStatus === "ready") {
           setProgress(100);
@@ -509,14 +517,13 @@ export function LocalDatabaseProvider({
       }
 
       if (type === "ERROR") {
-        setError((payload.error as string) || "Unknown error");
+        const normalizedError = formatOfflineDatabaseErrorMessage(payload.error);
+        setError(normalizedError);
         setStatus("error");
         if (!id || !pending) return;
         clearTimeout(pending.timeout);
         pendingRef.current.delete(id);
-        pending.reject(
-          new Error((payload.error as string) || "Worker error")
-        );
+        pending.reject(new Error(normalizedError));
       }
     },
     []
@@ -532,7 +539,7 @@ export function LocalDatabaseProvider({
     workerRef.current = worker;
     worker.onmessage = handleWorkerMessage;
     worker.onerror = (event) => {
-      setError(`Worker error: ${event.message}`);
+      setError(formatOfflineDatabaseErrorMessage(`Worker error: ${event.message}`));
       setStatus("error");
     };
 
@@ -618,8 +625,9 @@ export function LocalDatabaseProvider({
       }
 
       if (message.type === "ERROR") {
-        setError(message.payload.message);
-        rejectSyncWaiter(message.payload.message);
+        const normalizedError = formatOfflineDatabaseErrorMessage(message.payload.message);
+        setError(normalizedError);
+        rejectSyncWaiter(normalizedError);
       }
     };
 
@@ -701,8 +709,7 @@ export function LocalDatabaseProvider({
         payload: { metadata: effectiveMetadata },
       });
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Installation failed unexpectedly";
+      const message = formatOfflineDatabaseErrorMessage(err);
       setStatus("error");
       setError(message);
       broadcast({
@@ -710,7 +717,7 @@ export function LocalDatabaseProvider({
         source: lockOwner,
         payload: { message },
       });
-      throw err;
+      throw new Error(message);
     } finally {
       clearInstallLock(lockOwner);
     }
@@ -724,6 +731,33 @@ export function LocalDatabaseProvider({
     sendToWorker,
     waitForOtherTabSync,
   ]);
+
+  useEffect(() => {
+    if (!isSupported) return;
+
+    let autoMode: "install" | "update" | null = null;
+    if (status === "not_installed") {
+      autoMode = "install";
+    } else if (status === "ready" && updateAvailable) {
+      autoMode = "update";
+    }
+
+    if (!autoMode) {
+      autoInstallModeRef.current = null;
+      return;
+    }
+
+    if (autoInstallModeRef.current === autoMode) {
+      return;
+    }
+
+    autoInstallModeRef.current = autoMode;
+    runInBackground(
+      install().catch(() => {
+        // Install lifecycle errors are already captured in shared state.
+      })
+    );
+  }, [install, isSupported, status, updateAvailable]);
 
   const remove = useCallback(async () => {
     setIsRemoving(true);
@@ -742,7 +776,7 @@ export function LocalDatabaseProvider({
         payload: {},
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Removal failed");
+      setError(formatOfflineDatabaseErrorMessage(err));
     } finally {
       setIsRemoving(false);
     }
@@ -772,12 +806,39 @@ export function LocalDatabaseProvider({
               | null) || null,
           searchType:
             ((response.payload?.searchType as "text" | "code") || "text"),
+          markdown:
+            (response.payload?.markdown as string | undefined) || undefined,
+          timing:
+            (response.payload?.timing as LocalSearchResult["timing"]) || undefined,
         };
       } catch {
         return null;
       }
     },
     [sendToWorker, status]
+  );
+
+  const getNeshChapterNotesLocal = useCallback(
+    async (chapter: string): Promise<Record<string, string> | null> => {
+      if (status !== "ready") return null;
+
+      const response = await searchLocal("nesh", chapter);
+      if (!response || response.searchType !== "code") {
+        return null;
+      }
+
+      const results = response.results;
+      if (!results || Array.isArray(results)) {
+        return null;
+      }
+
+      const chapterResult = results[chapter] as
+        | { notas_parseadas?: Record<string, string> | null }
+        | undefined;
+
+      return chapterResult?.notas_parseadas || null;
+    },
+    [searchLocal, status]
   );
 
   const getNbsDetailLocal = useCallback(
@@ -841,6 +902,7 @@ export function LocalDatabaseProvider({
       remove,
       refreshAvailability,
       searchLocal,
+      getNeshChapterNotesLocal,
       getNbsDetailLocal,
       getNebsDetailLocal,
     }),
@@ -856,6 +918,7 @@ export function LocalDatabaseProvider({
       progress,
       progressStep,
       refreshAvailability,
+      getNeshChapterNotesLocal,
       remoteVersion,
       remove,
       searchLocal,
