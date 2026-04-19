@@ -100,6 +100,20 @@ async function installOfflineApiMock(page: Page, counters: OfflineApiCounters) {
   });
 }
 
+async function installAuthSessionMock(page: Page) {
+  await page.route('**/api/auth/me*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        authenticated: true,
+        can_use_ai_chat: false,
+        can_use_restricted_ui: false,
+      }),
+    });
+  });
+}
+
 async function installOfflineWorkerMock(page: Page) {
   await page.addInitScript((metadata) => {
     const OFFLINE_META_KEY = 'offline-db:installed-meta';
@@ -337,6 +351,7 @@ test.describe('live offline reopen with active service worker', () => {
     };
 
     await installOfflineWorkerMock(page);
+    await installAuthSessionMock(page);
     await installOfflineApiMock(page, counters);
 
     await page.goto('/');

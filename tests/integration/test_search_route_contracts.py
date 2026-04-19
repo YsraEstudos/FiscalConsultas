@@ -3,11 +3,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from backend.infrastructure.database import DatabaseAdapter
+from backend.infrastructure.repositories.chapter_repository import ChapterRepository
 from backend.presentation.routes import search as search_route
 from backend.presentation.routes import tipi as tipi_route
+from backend.server.app import app
 from backend.services.nesh_service import NeshService
 from backend.services.tipi_service import TipiService
-from backend.server.app import app
 
 pytestmark = pytest.mark.integration
 
@@ -206,18 +208,24 @@ def test_search_chapter_body_allows_anonymous_access(client, monkeypatch):
 
 
 def test_search_chapters_endpoint_returns_available_chapters(client, monkeypatch):
-    class _FakeDb:
-        async def get_all_chapters_list(self):
-            return ["01", "02", "84"]
-
-    monkeypatch.setattr(app.state, "db", _FakeDb(), raising=False)
+    expected_chapters = ["01", "02", "84"]
+    monkeypatch.setattr(
+        DatabaseAdapter,
+        "get_all_chapters_list",
+        AsyncMock(return_value=expected_chapters),
+    )
+    monkeypatch.setattr(
+        ChapterRepository,
+        "get_all_nums",
+        AsyncMock(return_value=expected_chapters),
+    )
 
     response = client.get("/api/chapters")
 
     assert response.status_code == 200
     assert response.json() == {
         "success": True,
-        "capitulos": ["01", "02", "84"],
+        "capitulos": expected_chapters,
     }
 
 
