@@ -362,6 +362,7 @@ test.describe('live offline reopen with active service worker', () => {
     expect(hostname).not.toBe('127.0.0.1');
 
     await page.reload();
+    await page.waitForFunction(() => window.crossOriginIsolated === true);
 
     await installOfflineFromSettings(page);
     expect(counters.token).toBe(1);
