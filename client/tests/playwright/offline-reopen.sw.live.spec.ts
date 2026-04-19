@@ -130,10 +130,21 @@ async function installOfflineSupportMock(page: Page) {
     try {
       const cryptoObject = globalThis.crypto as Crypto & { subtle?: unknown } | undefined;
       if (cryptoObject && typeof cryptoObject.subtle === 'undefined') {
-        Object.defineProperty(cryptoObject, 'subtle', {
-          configurable: true,
-          value: {},
-        });
+        const subtleShim = {};
+        try {
+          Object.defineProperty(cryptoObject, 'subtle', {
+            configurable: true,
+            value: subtleShim,
+          });
+        } catch {
+          const cryptoPrototype = Object.getPrototypeOf(cryptoObject);
+          if (cryptoPrototype) {
+            Object.defineProperty(cryptoPrototype, 'subtle', {
+              configurable: true,
+              value: subtleShim,
+            });
+          }
+        }
       }
     } catch {
       // If crypto is read-only, the live spec will still surface the unsupported state.
@@ -145,13 +156,24 @@ async function installOfflineSupportMock(page: Page) {
       };
       const storage = navigatorWithStorage.storage;
       if (!storage || typeof storage.getDirectory !== 'function') {
-        Object.defineProperty(navigatorWithStorage, 'storage', {
-          configurable: true,
-          value: {
-            ...(storage && typeof storage === 'object' ? storage : {}),
-            getDirectory: async () => ({}),
-          },
-        });
+        const storageShim = {
+          ...(storage && typeof storage === 'object' ? storage : {}),
+          getDirectory: async () => ({}),
+        };
+        try {
+          Object.defineProperty(navigatorWithStorage, 'storage', {
+            configurable: true,
+            value: storageShim,
+          });
+        } catch {
+          const navigatorPrototype = Object.getPrototypeOf(navigatorWithStorage);
+          if (navigatorPrototype) {
+            Object.defineProperty(navigatorPrototype, 'storage', {
+              configurable: true,
+              value: storageShim,
+            });
+          }
+        }
       }
     } catch {
       // If storage is read-only, the live spec will still surface the unsupported state.
