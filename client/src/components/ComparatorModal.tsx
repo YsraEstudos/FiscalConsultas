@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { searchNCM, searchTipi } from '../services/api';
+import { searchNCMFull, searchTipi } from '../services/api';
+import { useLocalDatabase } from '../context/LocalDatabaseContext';
 import { useSettings } from '../context/SettingsContext';
+import { buildLocalCodeSearchResponse, resolveSearchResponseMarkup } from '../utils/searchResultMarkup';
 import { MarkdownPane } from './MarkdownPane';
 import { Loading } from './Loading';
 import styles from './ComparatorModal.module.css';
@@ -28,6 +30,7 @@ const emptyPanel = (title: string): PanelState => ({
 
 export function ComparatorModal({ isOpen, onClose, defaultDoc = 'nesh' }: ComparatorModalProps) {
     const { tipiViewMode } = useSettings();
+    const { status: dbStatus, searchLocal } = useLocalDatabase();
 
     const [doc, setDoc] = useState<DocType>(defaultDoc);
     const [leftQuery, setLeftQuery] = useState('');
@@ -77,11 +80,37 @@ export function ComparatorModal({ isOpen, onClose, defaultDoc = 'nesh' }: Compar
         setPanel(prev => ({ ...prev, loading: true, title: `Buscando ${clean}...` }));
 
         try {
-            const data = doc === 'nesh'
-                ? await searchNCM(clean)
-                : await searchTipi(clean, tipiViewMode);
+            let markdown: string | null = null;
 
-            const markdown = data?.markdown || data?.resultados || null;
+            if (dbStatus === 'ready') {
+                const localResponse = await searchLocal(
+                    doc,
+                    clean,
+                    doc === 'tipi' ? tipiViewMode : undefined,
+                );
+
+                if (localResponse?.searchType === 'code' && localResponse.results && typeof localResponse.results === 'object') {
+                    const normalizedLocalResponse = buildLocalCodeSearchResponse(
+                        doc,
+                        clean,
+                        localResponse.results as Record<string, any>,
+                    );
+                    markdown = resolveSearchResponseMarkup(doc, normalizedLocalResponse);
+                }
+            }
+
+            if (!markdown) {
+                const data = doc === 'nesh'
+                    ? await searchNCMFull(clean)
+                    : await searchTipi(clean, tipiViewMode);
+
+                markdown = resolveSearchResponseMarkup(doc, data);
+            }
+
+            if (!markdown || typeof markdown !== 'string') {
+                throw new Error('Nenhum conteúdo renderizável retornado para a comparação.');
+            }
+
             setPanel({
                 title: `${doc.toUpperCase()} ${clean}`,
                 markdown,
@@ -97,7 +126,7 @@ export function ComparatorModal({ isOpen, onClose, defaultDoc = 'nesh' }: Compar
             }));
             toast.error('Erro ao comparar. Verifique a API.');
         }
-    }, [doc, tipiViewMode]);
+    }, [dbStatus, doc, searchLocal, tipiViewMode]);
 
     const onCompare = useCallback(async () => {
         if (!canCompare) {

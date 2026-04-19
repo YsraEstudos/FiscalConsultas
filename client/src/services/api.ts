@@ -900,7 +900,7 @@ export const searchNCM = async (query: string): Promise<any> => {
     const cached = getCached<any>(cacheKey);
     if (cached) return cached;
 
-    return withInFlightDedup(`ncm:${query}`, async () => {
+    return withInFlightDedup(`ncm:${query}:summary`, async () => {
         const response = await api.get(
             withDevCacheBust(`/search?ncm=${encodeURIComponent(query)}&shape=summary`),
         );
@@ -911,6 +911,15 @@ export const searchNCM = async (query: string): Promise<any> => {
             setCache(cacheKey, data);
         }
         return data;
+    });
+};
+
+export const searchNCMFull = async (query: string): Promise<any> => {
+    return withInFlightDedup(`ncm:${query}:full`, async () => {
+        const response = await api.get(
+            withDevCacheBust(`/search?ncm=${encodeURIComponent(query)}&shape=full`),
+        );
+        return normalizeCodeResponseAliases(response.data);
     });
 };
 

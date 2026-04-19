@@ -7,8 +7,9 @@ import { useHistory } from './useHistory';
 import { useSettings } from '../context/SettingsContext';
 import { useLocalDatabase } from '../context/LocalDatabaseContext';
 import { extractChapter, isSameChapter } from '../utils/chapterDetection';
-import type { SearchResponse, NbsSearchResponse, NebsSearchResponse, TipiTextSearchResponse, TextSearchResponse, TipiCodeSearchResponse, CodeSearchResponse } from '../types/api.types';
+import type { SearchResponse, NbsSearchResponse, NebsSearchResponse, TipiTextSearchResponse, TextSearchResponse } from '../types/api.types';
 import { isCodeSearchResponse } from '../types/api.types';
+import { buildLocalCodeSearchResponse } from '../utils/searchResultMarkup';
 import {
     getServiceCatalogErrorInfo,
     isServiceCatalogDoc,
@@ -98,37 +99,6 @@ function normalizeLocalResults(
     }
 }
 
-/**
- * Normalize local Worker CODE search results (hierarchical) into API response format.
- * Used when the Worker reconstructs chapter hierarchy for TIPI/NESH code queries.
- */
-function normalizeLocalCodeResults(
-    doc: DocType,
-    query: string,
-    results: Record<string, any>
-): SearchResponse | null {
-    const safeResults = results && typeof results === 'object' ? results : {};
-
-    if (doc === 'tipi') {
-        return {
-            success: true, type: 'code', query,
-            results: safeResults, resultados: safeResults,
-            total: Object.values(safeResults).reduce((s: number, c: any) => s + (c.posicoes?.length || 0), 0),
-            total_capitulos: Object.keys(safeResults).length,
-        } as TipiCodeSearchResponse;
-    }
-
-    if (doc === 'nesh') {
-        return {
-            success: true, type: 'code', query,
-            normalized: null, results: safeResults, resultados: safeResults,
-            total_capitulos: Object.keys(safeResults).length,
-        } as CodeSearchResponse;
-    }
-
-    return null;
-}
-
 export function useSearch(
     tabsById: ReturnType<typeof useTabs>['tabsById'],
     updateTab: ReturnType<typeof useTabs>['updateTab'],
@@ -210,7 +180,9 @@ export function useSearch(
                     const localResponse = await searchLocal(doc as any, query, tipiViewModeRef.current);
                     if (localResponse) {
                         if (localResponse.searchType === 'code') {
-                            data = normalizeLocalCodeResults(doc, query, localResponse.results as Record<string, any>);
+                            data = doc === 'nesh' || doc === 'tipi'
+                                ? buildLocalCodeSearchResponse(doc, query, localResponse.results as Record<string, any>)
+                                : null;
                         } else if (Array.isArray(localResponse.results)) {
                             data = normalizeLocalResults(doc, query, localResponse.results as Record<string, unknown>[]);
                         }
