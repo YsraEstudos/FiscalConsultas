@@ -70,18 +70,14 @@ function handleDelegatedSearchNavigation(
 
 function handleDelegatedNoteNavigation(
     target: Element,
+    event: MouseEvent,
     onOpenNote: (note: string, chapter?: string) => Promise<void> | void,
 ): boolean {
     const noteRef = target.closest('.note-ref');
-    if (!(noteRef instanceof HTMLElement)) {
-        return false;
-    }
-
+    if (!(noteRef instanceof HTMLElement)) return false;
     const note = noteRef.dataset.note;
-    if (!note) {
-        return true;
-    }
-
+    if (!note) return true;
+    event.preventDefault();
     onOpenNote(note, noteRef.dataset.chapter || undefined);
     return true;
 }
@@ -426,7 +422,7 @@ function App() {
                 return;
             }
 
-            handleDelegatedNoteNavigation(target, handleOpenNoteRef.current);
+            handleDelegatedNoteNavigation(target, event, handleOpenNoteRef.current);
         };
 
         document.addEventListener('mousedown', handleDelegatedMiddleMouseDown);
