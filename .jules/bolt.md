@@ -1,0 +1,3 @@
+## 2024-04-19 - Cache NLP Stemming at the Module/Static Level
+**Learning:** Adding `@functools.lru_cache` to instance methods in NLP stemmers or text processors is an anti-pattern. Because `self` is part of the cache key, every new instance of the stemmer gets a separate cache, negating the benefits of cross-document or cross-query caching, and potentially leaking memory if instances are discarded.
+**Action:** When memoizing static text operations (like word stemming), convert the method to a `@staticmethod` or module-level function before applying the `lru_cache`. This binds the cache to the logic globally, drastically improving hit rates for common words in FTS queries and bulk document processing while saving memory.
