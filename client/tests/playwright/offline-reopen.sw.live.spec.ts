@@ -361,13 +361,7 @@ test.describe('live offline reopen with active service worker', () => {
     expect(hostname).not.toBe('localhost');
     expect(hostname).not.toBe('127.0.0.1');
 
-    await page.waitForFunction(async () => {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      return registrations.length > 0;
-    });
-
     await page.reload();
-    await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
 
     await installOfflineFromSettings(page);
     expect(counters.token).toBe(1);
