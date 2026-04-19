@@ -16,6 +16,7 @@ const OFFLINE_METADATA = {
   chunk_size: 65536,
   pbkdf2_iterations: 600000,
 };
+const APP_SHELL_CACHE = 'app-shell-v3';
 
 function isNonLocalHostBaseUrlConfigured(): boolean {
   const rawBaseUrl = process.env.PLAYWRIGHT_LIVE_BASE_URL || '';
@@ -407,6 +408,31 @@ async function installOfflineFromSettings(page: Page) {
   await expect(page.locator('#db-installer-remove')).toBeVisible({ timeout: 15_000 });
 }
 
+async function waitForOfflineShellCache(page: Page) {
+  await page.waitForFunction(
+    async (cacheName) => {
+      if (!navigator.serviceWorker.controller) return false;
+      if (!('caches' in globalThis)) return false;
+
+      const cache = await caches.open(cacheName);
+      const urls = [
+        globalThis.location.href,
+        new URL('./', globalThis.location.href).toString(),
+        new URL('./index.html', globalThis.location.href).toString(),
+      ];
+
+      for (const url of urls) {
+        if (await cache.match(url)) {
+          return true;
+        }
+      }
+
+      return false;
+    },
+    APP_SHELL_CACHE,
+  );
+}
+
 test.describe('live offline reopen with active service worker', () => {
   test.skip(!isNonLocalHostBaseUrlConfigured(), 'Set PLAYWRIGHT_LIVE_BASE_URL to a non-localhost host (e.g. http://offline-e2e.local:4173).');
 
@@ -438,6 +464,7 @@ test.describe('live offline reopen with active service worker', () => {
 
     await page.keyboard.press('Escape');
     await expect(page.getByTitle('Buscas Offline configuradas!')).toBeVisible();
+    await waitForOfflineShellCache(page);
 
     await page.unroute('**/api/**');
     await context.setOffline(true);
