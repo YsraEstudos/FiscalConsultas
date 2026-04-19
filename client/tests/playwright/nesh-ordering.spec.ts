@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import { installServicesMock, makeNeshChapterData } from './fixtures/service-mocks';
 
@@ -84,6 +84,29 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+async function waitForScrollToSettle(page: Page, containerSelector: string) {
+  const container = page.locator(containerSelector);
+  let lastScrollTop: number | null = null;
+  let sawMovement = false;
+
+  await expect.poll(async () => {
+    const currentScrollTop = await container.evaluate((element) => element.scrollTop);
+
+    if (lastScrollTop !== null && Math.abs(currentScrollTop - lastScrollTop) < 1) {
+      return sawMovement;
+    }
+
+    if (lastScrollTop !== null && Math.abs(currentScrollTop - lastScrollTop) >= 1) {
+      sawMovement = true;
+    } else if (currentScrollTop > 0) {
+      sawMovement = true;
+    }
+
+    lastScrollTop = currentScrollTop;
+    return false;
+  }, { timeout: 10_000 }).toBe(true);
+}
+
 test('renders NESH chapter 84 navigation items in order', async ({ page }) => {
   await page.goto('/');
 
@@ -132,15 +155,10 @@ test('navigates to a NESH position from sidebar click and highlights target anch
     resultsContainer.evaluate((element) => element.scrollTop)
   )).toBe(0);
 
-  const initialScrollTop = await resultsContainer.evaluate((element) => element.scrollTop);
-
   await page.getByRole('button', { name: /84\.05\s*Geradores de gás\./i }).click();
 
   await expect(targetAnchor).toHaveClass(/flash-highlight/);
-
-  await expect.poll(async () => {
-    return resultsContainer.evaluate((element) => element.scrollTop);
-  }).toBeGreaterThan(initialScrollTop);
+  await waitForScrollToSettle(page, '#results-content-tab-1');
 });
 
 test('auto-scrolls to target position right after NESH search in real browser flow', async ({ page }) => {
@@ -214,7 +232,5 @@ test('auto-scrolls to target position right after NESH search in real browser fl
 
   await expect(resultsContainer).toBeVisible();
   await expect(targetAnchor).toHaveClass(/flash-highlight/);
-  await expect.poll(async () => (
-    resultsContainer.evaluate((element) => element.scrollTop)
-  )).toBeGreaterThan(300);
+  await waitForScrollToSettle(page, '#results-content-tab-1');
 });

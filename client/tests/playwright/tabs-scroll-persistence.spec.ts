@@ -9,7 +9,7 @@ import {
 async function getActiveTabDocument(page: Page): Promise<string | null> {
   return page.locator('div[draggable="true"][data-document]').evaluateAll((tabs) => {
     const activeTab = tabs.find((tab): tab is HTMLElement => (
-      tab.className.includes('tabButtonActive') && tab instanceof HTMLElement
+      tab.getAttribute('data-active') === 'true' && tab instanceof HTMLElement
     ));
     return activeTab?.dataset.document ?? null;
   });
@@ -53,11 +53,35 @@ async function setAndCaptureScrollTop(page: Page, containerId: string, targetScr
     attempts += 1;
   }
 
+  expect(currentScrollTop, `Expected #${containerId} to reach at least ${targetScrollTop}px`).toBeGreaterThanOrEqual(targetScrollTop);
   return currentScrollTop;
 }
 
 async function waitForInitialAutoScroll(page: Page, selector: string) {
   await expect(page.locator(selector)).toHaveClass(/flash-highlight/);
+}
+
+async function waitForScrollToSettle(page: Page, containerId: string) {
+  const container = page.locator(`#${containerId}`);
+  let lastScrollTop: number | null = null;
+  let sawMovement = false;
+
+  await expect.poll(async () => {
+    const currentScrollTop = await container.evaluate((element) => element.scrollTop);
+
+    if (lastScrollTop !== null && Math.abs(currentScrollTop - lastScrollTop) < 1) {
+      return sawMovement;
+    }
+
+    if (lastScrollTop !== null && Math.abs(currentScrollTop - lastScrollTop) >= 1) {
+      sawMovement = true;
+    } else if (currentScrollTop > 0) {
+      sawMovement = true;
+    }
+
+    lastScrollTop = currentScrollTop;
+    return false;
+  }, { timeout: 10_000 }).toBe(true);
 }
 
 async function installCodeCatalogMocks(page: Page) {
@@ -146,7 +170,7 @@ async function searchNeshInDefaultTab(page: Page) {
   await request;
   await expect(page.locator('#results-content-tab-1')).toBeVisible();
   await waitForInitialAutoScroll(page, '#pos-84-05');
-  await page.waitForTimeout(700);
+  await waitForScrollToSettle(page, 'results-content-tab-1');
 }
 
 async function createTipiTabAndSearch(page: Page) {
@@ -164,7 +188,8 @@ async function createTipiTabAndSearch(page: Page) {
 
   await expect.poll(async () => getActiveTabDocument(page)).toBe('tipi');
   await waitForInitialAutoScroll(page, '#pos-11-02-40');
-  await page.waitForTimeout(700);
+  const tipiContainerId = await getActiveResultsContainerId(page);
+  await waitForScrollToSettle(page, tipiContainerId);
 }
 
 test.beforeEach(async ({ page }) => {

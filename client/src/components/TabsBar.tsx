@@ -86,6 +86,7 @@ export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch
                     tabIndex={0}
                     className={`${styles.tabButton} ${activeTabId === tab.id ? styles.tabButtonActive : ''}`}
                     data-document={tab.document}
+                    data-active={activeTabId === tab.id ? 'true' : 'false'}
                     onClick={() => onSwitch(tab.id)}
                     onMouseDown={(event) => handleTabMouseDown(event, tab.id)}
                     onDragStart={(e) => {

@@ -95,16 +95,21 @@ class _FakeServicesCatalog:
             "level": 1,
             "has_nebs": True,
         }
+        items = [item, child]
+        normalized_page = max(page, 1)
+        normalized_page_size = max(page_size, 1)
+        start = (normalized_page - 1) * normalized_page_size
+        paginated_items = items[start:start + normalized_page_size]
         return {
             "success": True,
             "item": item,
             "chapter_root": item,
             "chapter_page": {
-                "items": [item, child],
-                "page": page,
-                "page_size": page_size,
-                "total": 2,
-                "has_more": False,
+                "items": paginated_items,
+                "page": normalized_page,
+                "page_size": normalized_page_size,
+                "total": len(items),
+                "has_more": (start + len(paginated_items)) < len(items),
             },
         }
 
@@ -243,13 +248,15 @@ def test_services_routes_expose_nbs_and_nebs_contracts(client, monkeypatch):
 
     nbs_search = client.get("/api/services/nbs/search?q=construcao")
     nbs_detail = client.get("/api/services/nbs/1.01")
-    nbs_tree = client.get("/api/services/nbs/1.01/tree?page=2&page_size=1")
+    nbs_tree_page_1 = client.get("/api/services/nbs/1.01/tree?page=1&page_size=1")
+    nbs_tree_page_2 = client.get("/api/services/nbs/1.01/tree?page=2&page_size=1")
     nebs_search = client.get("/api/services/nebs/search?q=energia")
     nebs_detail = client.get("/api/services/nebs/1.0102.61")
 
     assert nbs_search.status_code == 200
     assert nbs_detail.status_code == 200
-    assert nbs_tree.status_code == 200
+    assert nbs_tree_page_1.status_code == 200
+    assert nbs_tree_page_2.status_code == 200
     assert nebs_search.status_code == 200
     assert nebs_detail.status_code == 200
 
@@ -261,13 +268,20 @@ def test_services_routes_expose_nbs_and_nebs_contracts(client, monkeypatch):
         "1.01",
         "1.0101",
     ]
-    assert nbs_tree.json()["success"] is True
-    assert nbs_tree.json()["item"]["code"] == "1.01"
-    assert nbs_tree.json()["chapter_root"]["code"] == "1.01"
-    assert nbs_tree.json()["chapter_page"]["page"] == 2
-    assert nbs_tree.json()["chapter_page"]["page_size"] == 1
-    assert [item["code"] for item in nbs_tree.json()["chapter_page"]["items"]] == [
+    assert nbs_tree_page_1.json()["success"] is True
+    assert nbs_tree_page_1.json()["item"]["code"] == "1.01"
+    assert nbs_tree_page_1.json()["chapter_root"]["code"] == "1.01"
+    assert nbs_tree_page_1.json()["chapter_page"]["page"] == 1
+    assert nbs_tree_page_1.json()["chapter_page"]["page_size"] == 1
+    assert nbs_tree_page_1.json()["chapter_page"]["has_more"] is True
+    assert [item["code"] for item in nbs_tree_page_1.json()["chapter_page"]["items"]] == [
         "1.01",
+    ]
+    assert nbs_tree_page_2.json()["success"] is True
+    assert nbs_tree_page_2.json()["chapter_page"]["page"] == 2
+    assert nbs_tree_page_2.json()["chapter_page"]["page_size"] == 1
+    assert nbs_tree_page_2.json()["chapter_page"]["has_more"] is False
+    assert [item["code"] for item in nbs_tree_page_2.json()["chapter_page"]["items"]] == [
         "1.0101",
     ]
     assert nebs_search.json()["results"][0]["page_start"] == 21

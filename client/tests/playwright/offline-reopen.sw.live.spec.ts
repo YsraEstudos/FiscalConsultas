@@ -361,6 +361,7 @@ test.describe('live offline reopen with active service worker', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByTitle('Buscas Offline configuradas!')).toBeVisible();
 
+    await page.unroute('**/api/**');
     await context.setOffline(true);
     try {
       await page.reload();

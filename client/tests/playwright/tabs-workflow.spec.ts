@@ -10,7 +10,7 @@ async function getTabDocuments(page: Page): Promise<string[]> {
 
 async function getActiveTabDocument(page: Page): Promise<string | null> {
   return page.locator('div[draggable="true"][data-document]').evaluateAll((tabs) => {
-    const activeTab = tabs.find((tab) => tab.className.includes('tabButtonActive'));
+    const activeTab = tabs.find((tab) => tab.getAttribute('data-active') === 'true');
     return activeTab?.getAttribute('data-document') ?? null;
   });
 }

@@ -97,7 +97,7 @@ test('updates NBS detail when clicking an ancestor in the hierarchy', async ({ p
   await openServicesModal(page);
   await searchServices(page, '1.0101.11.00');
 
-  const activeNode = page.locator('div').filter({ has: page.getByText('Item Ativo') }).first();
+  const activeNode = page.locator('[data-service-state="active"]');
   await expect(activeNode).toContainText('1.0101.11.00');
 
   const detailRequest = page.waitForRequest((request) =>
@@ -133,7 +133,7 @@ test('updates NBS detail when clicking a child node in the hierarchy', async ({ 
   await openServicesModal(page);
   await searchServices(page, '1.0101.11.00');
 
-  const activeNode = page.locator('div').filter({ has: page.getByText('Item Ativo') }).first();
+  const activeNode = page.locator('[data-service-state="active"]');
   await expect(activeNode).toContainText('1.0101.11.00');
 
   const detailRequest = page.waitForRequest((request) =>

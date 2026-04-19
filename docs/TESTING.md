@@ -35,13 +35,14 @@
 ### Critério de classificação
 - `Coberto`: há suíte determinística protegendo o comportamento crítico (unit e/ou integration), com boa sinalização de regressão.
 - `Parcial`: há cobertura relevante, mas falta validação em camada crítica do risco (geralmente E2E browser ou contrato ponta a ponta).
-- `Nao coberto`: não há cobertura suficiente para o risco principal.
+- `Não coberto`: não há cobertura suficiente para o risco principal.
 
 ### Matriz risco x cobertura atual
+
 | # | Área de risco | Unit | Integration | E2E Playwright | Status | Prioridade |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Instalação offline (`/api/database/version`, `/token`, `/download`) | Forte | Limitada | Ausente | Parcial | P0 |
-| 2 | App shell offline + reabertura sem rede | Limitada | Ausente | Ausente | Nao coberto | P0 |
+| 2 | App shell offline + reabertura sem rede | Limitada | Ausente | Ausente | Não coberto | P0 |
 | 3 | Busca/detalhe local (`NESH`, `TIPI`, `NBS`, `NEBS`) | Forte | Forte | Parcial | Parcial | P0 |
 | 4 | Sanitização de HTML renderizado | Forte | Limitada | Ausente | Coberto | P1 |
 | 5 | Gating de moderação/admin por role | Forte | Limitada | Ausente | Parcial | P1 |
@@ -78,17 +79,18 @@
 ## Fase 0C Report (2026-04-17): Matriz de Interações para Cobertura Total de Fluxo
 
 ### Escopo da Fase 0C
-- Consolidar um checklist unico de interacoes criticas de clique, abas e scroll para `NESH`, `TIPI`, `NBS` e `NEBS`.
+- Consolidar um checklist único de interações críticas de clique, abas e scroll para `NESH`, `TIPI`, `NBS` e `NEBS`.
 - Marcar a cobertura atual por camada (Playwright vs unit/integration).
-- Definir lacunas obrigatorias para fechamento de cobertura E2E de fluxo completo.
+- Definir lacunas obrigatórias para fechamento de cobertura E2E de fluxo completo.
 
 ### Definition of Done (Fase 0C)
-- Cada interacao critica da matriz esta classificada como `Coberto E2E`, `Parcial` ou `Nao coberto E2E`.
-- Cada item `Parcial` ou `Nao coberto E2E` aponta para uma fase de execucao com dono claro.
+- Cada interação crítica da matriz está classificada como `Coberto E2E`, `Parcial` ou `Não coberto E2E`.
+- Cada item `Parcial` ou `Não coberto E2E` aponta para uma fase de execução com dono claro.
 - Existe ao menos uma evidencia de teste por item marcado como `Coberto E2E`.
-- O gate de saida desta fase esta versionado e auditavel neste documento.
+- O gate de saída desta fase está versionado e auditável neste documento.
 
-### Matriz unica de interacoes (estado atual)
+### Matriz única de interações (estado atual)
+
 | Domínio | Interação crítica | Playwright atual | Unit/Integration atual | Status Fase 0C | Próxima fase |
 | --- | --- | --- | --- | --- | --- |
 | NESH | Busca por código + ordenação de itens do capítulo | Sim (`nesh-ordering.spec.ts`) | Sim | Coberto E2E | Manter |

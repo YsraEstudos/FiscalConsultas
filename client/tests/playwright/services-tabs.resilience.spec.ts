@@ -36,7 +36,21 @@ test('allows signed-out users to open the services catalog without Clerk', async
 });
 
 test('keeps the services entry point available while status is unknown', async ({ page }) => {
-  await installServicesMock(page);
+  await installServicesMock(page, {
+    statusResponses: [{
+      body: {
+        status: 'online',
+        database: { status: 'online', latency_ms: 1 },
+        tipi: { status: 'online' },
+        catalogs: {
+          nesh: { status: 'online', latency_ms: 1 },
+          tipi: { status: 'online' },
+          nbs: { status: 'unknown' },
+          nebs: { status: 'unknown' },
+        },
+      },
+    }],
+  });
   await page.goto('/');
   await expect(page.getByRole('button', { name: /Menu/, exact: true })).toBeVisible();
 
