@@ -74,8 +74,8 @@ describe('CrossChapterNoteContext', () => {
 
         const { result } = renderHook(() => useCrossChapterNotes(), { wrapper });
 
-        let p1: Promise<Record<string, string>>;
-        let p2: Promise<Record<string, string>>;
+        let p1: Promise<Record<string, string>> = Promise.resolve({});
+        let p2: Promise<Record<string, string>> = Promise.resolve({});
 
         await act(async () => {
             p1 = result.current.fetchNotes('73');
@@ -92,7 +92,7 @@ describe('CrossChapterNoteContext', () => {
                 notas_parseadas: { '2': 'Nota 2 do capitulo 73' },
                 notas_gerais: null,
             });
-            await Promise.all([p1!, p2!]);
+            await Promise.all([p1, p2]);
         });
 
         expect(result.current.isLoading('73')).toBe(false);
@@ -118,6 +118,35 @@ describe('CrossChapterNoteContext', () => {
         expect(fetchChapterNotes).not.toHaveBeenCalled();
         expect(notes).toEqual({ '1': 'Nota local do capitulo 84' });
         expect(result.current.getNote('84', '1')).toBe('Nota local do capitulo 84');
+    });
+
+    it('uses offline notes after database status changes to ready post-mount', async () => {
+        vi.mocked(fetchChapterNotes).mockResolvedValue({
+            success: true,
+            capitulo: '85',
+            notas_parseadas: { '2': 'Nota da API (fallback)' },
+            notas_gerais: null,
+        });
+
+        const { result, rerender } = renderHook(() => useCrossChapterNotes(), { wrapper });
+
+        localDatabaseState.status = 'ready';
+        localDatabaseState.getNeshChapterNotesLocal.mockResolvedValue({
+            '2': 'Nota local do capitulo 85',
+        });
+
+        rerender();
+
+        let notes: Record<string, string> = {};
+
+        await act(async () => {
+            notes = await result.current.fetchNotes('85');
+        });
+
+        expect(localDatabaseState.getNeshChapterNotesLocal).toHaveBeenCalledTimes(1);
+        expect(localDatabaseState.getNeshChapterNotesLocal).toHaveBeenCalledWith('85');
+        expect(fetchChapterNotes).not.toHaveBeenCalled();
+        expect(notes).toEqual({ '2': 'Nota local do capitulo 85' });
     });
 
     it('falls back to API when local database is unavailable', async () => {

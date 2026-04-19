@@ -1364,12 +1364,8 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
     const handleAutoScrollComplete = useCallback((success?: boolean) => {
         if (!success) return;
-        // Wrap in RAF to ensure DOM has updated/painted the scroll action
-        // before we capture the final position and update app state.
-        requestAnimationFrame(() => {
-            const currentScroll = containerRef.current?.scrollTop || 0;
-            consumeNewSearchScroll(currentScroll);
-        });
+        const currentScroll = containerRef.current?.scrollTop || 0;
+        consumeNewSearchScroll(currentScroll);
     }, [consumeNewSearchScroll]);
 
     const handleHighlightScrollComplete = useCallback((scrollTop: number) => {
@@ -1403,27 +1399,38 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         if (!element) return;
 
         const handleScroll = () => {
-            latestScrollTopRef.current = element.scrollTop;
+            const currentScroll = element.scrollTop;
+            latestScrollTopRef.current = currentScroll;
+
+            if (!isActive) return;
+
+            const persist = onPersistScrollRef.current;
+            if (!persist) return;
+            if (lastPersistedScrollRef.current === currentScroll) return;
+
+            lastPersistedScrollRef.current = currentScroll;
+            persist(tabId, currentScroll);
         };
 
         element.addEventListener('scroll', handleScroll, { passive: true });
-        return () => element.removeEventListener('scroll', handleScroll);
-    }, [data?.type, data?.markdown, renderableCodeResults]);
+        return () => {
+            element.removeEventListener('scroll', handleScroll);
+        };
+    }, [data?.type, data?.markdown, renderableCodeResults, isActive, tabId]);
 
-    // Persist scroll when tab becomes inactive
     useEffect(() => {
         if (isActive) return;
+
         const persist = onPersistScrollRef.current;
         if (!persist) return;
 
-        const currentScroll = latestScrollTopRef.current;
-        if (lastPersistedScrollRef.current === currentScroll) return;
+        const currentScrollTop = latestScrollTopRef.current;
 
-        lastPersistedScrollRef.current = currentScroll;
-        persist(tabId, currentScroll);
+        if (lastPersistedScrollRef.current === currentScrollTop) return;
+
+        lastPersistedScrollRef.current = currentScrollTop;
+        persist(tabId, currentScrollTop);
     }, [isActive, tabId]);
-
-
 
     // Restore scroll when tab becomes active (only if NOT a new search)
     const hasRestoredInitialScrollRef = useRef(false);
@@ -1441,12 +1448,19 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         if (hasRestoredInitialScrollRef.current) return;
         if (Math.abs(element.scrollTop - targetScrollTop) < 1) return;
 
-        requestAnimationFrame(() => {
+        let cancelled = false;
+        const frameId = requestAnimationFrame(() => {
+            if (cancelled) return;
             if (!containerRef.current) return;
             containerRef.current.scrollTop = targetScrollTop;
             latestScrollTopRef.current = targetScrollTop;
             hasRestoredInitialScrollRef.current = true;
         });
+
+        return () => {
+            cancelled = true;
+            cancelAnimationFrame(frameId);
+        };
     }, [isActive, initialScrollTop, isNewSearch, isContentReady]);
 
     // Reset restored flag when inactive so it can restore again when returning

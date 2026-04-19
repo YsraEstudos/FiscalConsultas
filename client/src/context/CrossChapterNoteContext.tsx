@@ -39,7 +39,7 @@ const MAX_CACHED_CHAPTERS = 20;
  * - Cache persiste no estado (evita re-fetches)
  * - useCallback estável para evitar re-renders
  */
-export function CrossChapterNoteProvider({ children }: CrossChapterNoteProviderProps) {
+export function CrossChapterNoteProvider({ children }: Readonly<CrossChapterNoteProviderProps>) {
     const [cache, setCache] = useState<NotesCache>({});
     const cacheRef = useRef<NotesCache>({});
     const cacheOrderRef = useRef<string[]>([]);
@@ -109,7 +109,7 @@ export function CrossChapterNoteProvider({ children }: CrossChapterNoteProviderP
 
         inFlightRef.current.set(chapter, request);
         return request;
-    }, []);
+    }, [dbStatus, getNeshChapterNotesLocal]);
 
     /**
      * Obtém uma nota específica do cache (síncrono).
