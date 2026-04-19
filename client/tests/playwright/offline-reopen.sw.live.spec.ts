@@ -362,6 +362,7 @@ test.describe('live offline reopen with active service worker', () => {
     expect(hostname).not.toBe('127.0.0.1');
 
     await page.reload();
+    await expect(page.getByTitle('Baixar BD para habilitar as buscas')).toBeVisible();
 
     await installOfflineFromSettings(page);
     expect(counters.token).toBe(1);
