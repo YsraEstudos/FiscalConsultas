@@ -128,11 +128,29 @@ async function installOfflineSupportMock(page: Page) {
     }
 
     try {
-      const storage = navigator.storage as unknown as { getDirectory?: unknown } | undefined;
-      if (storage && typeof storage.getDirectory !== 'function') {
-        Object.defineProperty(storage, 'getDirectory', {
+      const cryptoObject = globalThis.crypto as Crypto & { subtle?: unknown } | undefined;
+      if (cryptoObject && typeof cryptoObject.subtle === 'undefined') {
+        Object.defineProperty(cryptoObject, 'subtle', {
           configurable: true,
-          value: async () => ({}),
+          value: {},
+        });
+      }
+    } catch {
+      // If crypto is read-only, the live spec will still surface the unsupported state.
+    }
+
+    try {
+      const navigatorWithStorage = navigator as Navigator & {
+        storage?: { getDirectory?: unknown };
+      };
+      const storage = navigatorWithStorage.storage;
+      if (!storage || typeof storage.getDirectory !== 'function') {
+        Object.defineProperty(navigatorWithStorage, 'storage', {
+          configurable: true,
+          value: {
+            ...(storage && typeof storage === 'object' ? storage : {}),
+            getDirectory: async () => ({}),
+          },
         });
       }
     } catch {
