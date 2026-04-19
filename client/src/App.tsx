@@ -145,36 +145,6 @@ function App() {
         });
     }, []);
 
-    const persistActiveTabScroll = useCallback(() => {
-        const containerId = `results-content-${activeTabId}`;
-        const container = globalThis.document.getElementById(containerId);
-        if (!(container instanceof HTMLElement)) return;
-
-        updateTab(activeTabId, { scrollTop: container.scrollTop });
-    }, [activeTabId, updateTab]);
-
-    const handleSwitchTab = useCallback((tabId: string) => {
-        if (tabId !== activeTabId) {
-            const targetScrollTop = tabsById.get(tabId)?.scrollTop;
-            persistActiveTabScroll();
-            switchTab(tabId);
-
-            if (typeof targetScrollTop === 'number' && targetScrollTop > 0) {
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        const container = globalThis.document.getElementById(`results-content-${tabId}`);
-                        if (container instanceof HTMLElement) {
-                            container.scrollTop = targetScrollTop;
-                        }
-                    });
-                });
-            }
-            return;
-        }
-        switchTab(tabId);
-    }, [activeTabId, persistActiveTabScroll, switchTab, tabsById]);
-
-
     // Atalhos globais de teclado
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -663,7 +633,7 @@ function App() {
                 <TabsBar
                     tabs={tabs}
                     activeTabId={activeTabId}
-                    onSwitch={handleSwitchTab}
+                    onSwitch={switchTab}
                     onClose={closeTab}
                     onReorder={reorderTabs}
                     onNewTab={() => createTab(activeTab?.document || 'nesh')}
