@@ -411,7 +411,7 @@ async function installOfflineFromSettings(page: Page) {
 async function waitForOfflineShellCache(page: Page) {
   await page.waitForFunction(
     async (cacheName) => {
-      if (!navigator.serviceWorker.controller) return false;
+      if (!navigator.serviceWorker?.controller) return false;
       if (!('caches' in globalThis)) return false;
 
       const cache = await caches.open(cacheName);
