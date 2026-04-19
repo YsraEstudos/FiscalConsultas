@@ -49,9 +49,7 @@ export default function DatabaseInstaller() {
     error,
     dbSizeBytes,
     isSupported,
-    isRemoving,
     install,
-    remove,
   } = useLocalDatabase();
 
   const progressWidth = progress > 0 ? Math.max(progress, 2) : 0;
@@ -63,14 +61,6 @@ export default function DatabaseInstaller() {
       // Error is managed by the context
     }
   }, [install]);
-
-  const handleRemove = useCallback(async () => {
-    try {
-      await remove();
-    } finally {
-      // Removal lifecycle is tracked in the shared context.
-    }
-  }, [remove]);
 
   // ---------- Unsupported browser ----------
   if (!isSupported) {
@@ -193,15 +183,6 @@ export default function DatabaseInstaller() {
               🔄 Atualizar Banco Offline
             </button>
           )}
-          <button
-            type="button"
-            className={styles.btnRemove}
-            onClick={handleRemove}
-            disabled={isRemoving}
-            id="db-installer-remove"
-          >
-            🗑️ {isRemoving ? "Removendo…" : "Remover Dados Locais"}
-          </button>
         </div>
       </div>
     );

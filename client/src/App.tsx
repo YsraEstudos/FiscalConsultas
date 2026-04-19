@@ -145,6 +145,35 @@ function App() {
         });
     }, []);
 
+    const persistActiveTabScroll = useCallback(() => {
+        const containerId = `results-content-${activeTabId}`;
+        const container = globalThis.document.getElementById(containerId);
+        if (!(container instanceof HTMLElement)) return;
+
+        updateTab(activeTabId, { scrollTop: container.scrollTop });
+    }, [activeTabId, updateTab]);
+
+    const handleSwitchTab = useCallback((tabId: string) => {
+        if (tabId !== activeTabId) {
+            const targetScrollTop = tabsById.get(tabId)?.scrollTop;
+            persistActiveTabScroll();
+            switchTab(tabId);
+
+            if (typeof targetScrollTop === 'number' && targetScrollTop > 0) {
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        const container = globalThis.document.getElementById(`results-content-${tabId}`);
+                        if (container instanceof HTMLElement) {
+                            container.scrollTop = targetScrollTop;
+                        }
+                    });
+                });
+            }
+            return;
+        }
+        switchTab(tabId);
+    }, [activeTabId, persistActiveTabScroll, switchTab, tabsById]);
+
 
     // Atalhos globais de teclado
     useEffect(() => {
@@ -203,11 +232,7 @@ function App() {
 
     const renderOfflineStatusAction = useCallback(() => {
         if (localDbStatus === 'ready') {
-            return (
-                <div title="Buscas Offline configuradas!" className={`${styles.minimalDownloadBtn} ${styles.installed}`}>
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                </div>
-            );
+            return null;
         }
 
         if (localDbStatus === 'checking' || localDbStatus === 'installing' || localDbStatus === 'updating') {
@@ -638,7 +663,7 @@ function App() {
                 <TabsBar
                     tabs={tabs}
                     activeTabId={activeTabId}
-                    onSwitch={switchTab}
+                    onSwitch={handleSwitchTab}
                     onClose={closeTab}
                     onReorder={reorderTabs}
                     onNewTab={() => createTab(activeTab?.document || 'nesh')}
