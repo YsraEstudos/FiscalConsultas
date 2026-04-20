@@ -72,6 +72,47 @@ class _FakeServicesCatalog:
             "total": 1,
         }
 
+    async def get_item_tree_page(
+        self,
+        code: str,
+        *,
+        page: int = 1,
+        page_size: int = 50,
+    ):
+        item = {
+            "code": code,
+            "code_clean": "101",
+            "description": "Serviços de construção",
+            "parent_code": None,
+            "level": 0,
+            "has_nebs": False,
+        }
+        child = {
+            "code": "1.0101",
+            "code_clean": "10101",
+            "description": "Serviços de construção de edificações",
+            "parent_code": code,
+            "level": 1,
+            "has_nebs": True,
+        }
+        items = [item, child]
+        normalized_page = max(page, 1)
+        normalized_page_size = max(page_size, 1)
+        start = (normalized_page - 1) * normalized_page_size
+        paginated_items = items[start : start + normalized_page_size]
+        return {
+            "success": True,
+            "item": item,
+            "chapter_root": item,
+            "chapter_page": {
+                "items": paginated_items,
+                "page": normalized_page,
+                "page_size": normalized_page_size,
+                "total": len(items),
+                "has_more": (start + len(paginated_items)) < len(items),
+            },
+        }
+
     async def get_nebs_details(self, code: str):
         return {
             "success": True,
@@ -139,6 +180,11 @@ def _setup_fake_services_catalog(monkeypatch):
     )
     monkeypatch.setattr(
         NbsService,
+        "get_item_tree_page",
+        AsyncMock(side_effect=fake_service.get_item_tree_page),
+    )
+    monkeypatch.setattr(
+        NbsService,
         "get_nebs_details",
         AsyncMock(side_effect=fake_service.get_nebs_details),
     )
@@ -148,11 +194,13 @@ def test_services_routes_allow_anonymous_access(client, monkeypatch):
     _setup_fake_services_catalog(monkeypatch)
     nbs_search = client.get("/api/services/nbs/search?q=construcao")
     nbs_detail = client.get("/api/services/nbs/1.01")
+    nbs_tree = client.get("/api/services/nbs/1.01/tree")
     nebs_search = client.get("/api/services/nebs/search?q=energia")
     nebs_detail = client.get("/api/services/nebs/1.0102.61")
 
     assert nbs_search.status_code == 200
     assert nbs_detail.status_code == 200
+    assert nbs_tree.status_code == 200
     assert nebs_search.status_code == 200
     assert nebs_detail.status_code == 200
 
@@ -163,11 +211,13 @@ def test_services_routes_ignore_invalid_authorization_headers(client, monkeypatc
 
     nbs_search = client.get("/api/services/nbs/search?q=construcao", headers=headers)
     nbs_detail = client.get("/api/services/nbs/1.01", headers=headers)
+    nbs_tree = client.get("/api/services/nbs/1.01/tree", headers=headers)
     nebs_search = client.get("/api/services/nebs/search?q=energia", headers=headers)
     nebs_detail = client.get("/api/services/nebs/1.0102.61", headers=headers)
 
     assert nbs_search.status_code == 200
     assert nbs_detail.status_code == 200
+    assert nbs_tree.status_code == 200
     assert nebs_search.status_code == 200
     assert nebs_detail.status_code == 200
 
@@ -198,11 +248,15 @@ def test_services_routes_expose_nbs_and_nebs_contracts(client, monkeypatch):
 
     nbs_search = client.get("/api/services/nbs/search?q=construcao")
     nbs_detail = client.get("/api/services/nbs/1.01")
+    nbs_tree_page_1 = client.get("/api/services/nbs/1.01/tree?page=1&page_size=1")
+    nbs_tree_page_2 = client.get("/api/services/nbs/1.01/tree?page=2&page_size=1")
     nebs_search = client.get("/api/services/nebs/search?q=energia")
     nebs_detail = client.get("/api/services/nebs/1.0102.61")
 
     assert nbs_search.status_code == 200
     assert nbs_detail.status_code == 200
+    assert nbs_tree_page_1.status_code == 200
+    assert nbs_tree_page_2.status_code == 200
     assert nebs_search.status_code == 200
     assert nebs_detail.status_code == 200
 
@@ -212,6 +266,28 @@ def test_services_routes_expose_nbs_and_nebs_contracts(client, monkeypatch):
     assert nbs_detail.json()["chapter_root"]["code"] == "1.01"
     assert [item["code"] for item in nbs_detail.json()["chapter_items"]] == [
         "1.01",
+        "1.0101",
+    ]
+    assert nbs_tree_page_1.json()["success"] is True
+    assert nbs_tree_page_1.json()["item"]["code"] == "1.01"
+    assert nbs_tree_page_1.json()["chapter_root"]["code"] == "1.01"
+    assert nbs_tree_page_1.json()["chapter_page"]["page"] == 1
+    assert nbs_tree_page_1.json()["chapter_page"]["page_size"] == 1
+    assert nbs_tree_page_1.json()["chapter_page"]["has_more"] is True
+    assert nbs_tree_page_1.json()["chapter_page"]["total"] == 2
+    assert [
+        item["code"] for item in nbs_tree_page_1.json()["chapter_page"]["items"]
+    ] == [
+        "1.01",
+    ]
+    assert nbs_tree_page_2.json()["success"] is True
+    assert nbs_tree_page_2.json()["chapter_page"]["page"] == 2
+    assert nbs_tree_page_2.json()["chapter_page"]["page_size"] == 1
+    assert nbs_tree_page_2.json()["chapter_page"]["has_more"] is False
+    assert nbs_tree_page_2.json()["chapter_page"]["total"] == 2
+    assert [
+        item["code"] for item in nbs_tree_page_2.json()["chapter_page"]["items"]
+    ] == [
         "1.0101",
     ]
     assert nebs_search.json()["results"][0]["page_start"] == 21
@@ -228,6 +304,7 @@ def test_services_routes_document_public_rate_limit_responses():
         "/api/services/nbs/search": "Limite de requisições para busca de serviços excedido.",
         "/api/services/nebs/search": "Limite de requisições para busca de serviços excedido.",
         "/api/services/nbs/{code}": "Limite de requisições para detalhes de serviços excedido.",
+        "/api/services/nbs/{code}/tree": "Limite de requisições para detalhes de serviços excedido.",
         "/api/services/nebs/{code}": "Limite de requisições para detalhes de serviços excedido.",
     }
 
@@ -241,6 +318,7 @@ def test_services_routes_document_public_rate_limit_responses():
     ("endpoint", "service_method"),
     [
         ("/api/services/nbs/{code}", "get_item_details"),
+        ("/api/services/nbs/{code}/tree", "get_item_tree_page"),
         ("/api/services/nebs/{code}", "get_nebs_details"),
     ],
 )
@@ -251,7 +329,7 @@ def test_services_detail_rejects_overly_long_code(
     oversized_code = "1" * (services_routes.MAX_SERVICE_CODE_LENGTH + 1)
     called = {"value": False}
 
-    def _unexpected_call(_code: str):
+    def _unexpected_call(*args, **kwargs):
         called["value"] = True
         raise AssertionError(f"{service_method} should not be called")
 
@@ -298,11 +376,18 @@ def test_services_detail_returns_retry_after_when_rate_limited(client, monkeypat
     )
 
     nbs_response = client.get("/api/services/nbs/1.01")
+    nbs_tree_response = client.get("/api/services/nbs/1.01/tree")
     nebs_response = client.get("/api/services/nebs/1.0102.61")
 
     assert nbs_response.status_code == 429
     assert nbs_response.headers["Retry-After"] == "11"
     assert "Rate limit exceeded for services detail" in nbs_response.json()["detail"]
+
+    assert nbs_tree_response.status_code == 429
+    assert nbs_tree_response.headers["Retry-After"] == "11"
+    assert (
+        "Rate limit exceeded for services detail" in nbs_tree_response.json()["detail"]
+    )
 
     assert nebs_response.status_code == 429
     assert nebs_response.headers["Retry-After"] == "11"
