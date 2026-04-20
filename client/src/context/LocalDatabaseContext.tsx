@@ -225,6 +225,30 @@ async function primeOfflineShellCache() {
     return;
   }
 
+  const urls = new Set<string>([
+    globalThis.location.pathname,
+    globalThis.location.origin,
+    globalThis.location.href,
+  ]);
+
+  if (typeof document !== "undefined") {
+    const scriptElements = document.querySelectorAll<HTMLScriptElement>(
+      "script[src]"
+    );
+    const linkElements = document.querySelectorAll<HTMLLinkElement>(
+      'link[rel="stylesheet"][href], link[rel="modulepreload"][href]'
+    );
+
+    scriptElements.forEach((element) => {
+      if (!element.src) return;
+      urls.add(new URL(element.src, globalThis.location.href).toString());
+    });
+    linkElements.forEach((element) => {
+      if (!element.href) return;
+      urls.add(new URL(element.href, globalThis.location.href).toString());
+    });
+  }
+
   try {
     const registration = await Promise.race([
       navigator.serviceWorker.ready,
@@ -238,11 +262,7 @@ async function primeOfflineShellCache() {
     registration.active?.postMessage({
       type: "CACHE_APP_SHELL",
       payload: {
-        urls: [
-          globalThis.location.pathname,
-          globalThis.location.origin,
-          globalThis.location.href,
-        ],
+        urls: [...urls],
       },
     });
   } catch {
