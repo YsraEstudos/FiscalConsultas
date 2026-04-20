@@ -953,7 +953,7 @@ function getNeshChapterSearchData(chapterNum) {
   };
 }
 
-function buildOfflineNeshMarkdown(results, chapterHtmlByChapter) {
+function buildOfflineNeshMarkup(results, chapterHtmlByChapter) {
   const orderedChapters = Object.keys(results).sort(
     (left, right) => Number(left) - Number(right)
   );
@@ -1107,37 +1107,7 @@ function searchNeshByCode(query) {
     results,
     total_capitulos: Object.keys(results).length,
     success: true,
-    markdown: buildOfflineNeshMarkdown(results, renderedHtmlByChapter),
-  };
-}
-
-function getLocalNeshChapterNotes(chapter) {
-  if (!_db) return null;
-
-  const notesData = queryFirstOptionalRow(
-    `SELECT notes_content, parsed_notes_json
-     FROM nesh_chapter_notes
-     WHERE chapter_num = ?`,
-    [String(chapter || "").trim()]
-  );
-
-  if (!notesData) return null;
-
-  let parsedNotes = {};
-  if (typeof notesData.parsed_notes_json === "string") {
-    try {
-      parsedNotes = JSON.parse(notesData.parsed_notes_json);
-    } catch {
-      parsedNotes = {};
-    }
-  }
-
-  return {
-    notas_parseadas: parsedNotes,
-    notas_gerais:
-      typeof notesData.notes_content === "string"
-        ? notesData.notes_content
-        : null,
+    markdown: buildOfflineNeshMarkup(results, renderedHtmlByChapter),
   };
 }
 
@@ -1408,16 +1378,6 @@ function handleNebsDetailMessage(id, payload) {
   postWorkerResult(id, { detail, source: "local" });
 }
 
-function handleNeshChapterNotesMessage(id, payload) {
-  if (!_db || _status !== "ready") {
-    postWorkerResult(id, { notes: null, source: "not_ready" });
-    return;
-  }
-
-  const notes = getLocalNeshChapterNotes(String(payload.chapter || ""));
-  postWorkerResult(id, { notes, source: "local" });
-}
-
 function handleGetStatusMessage(id) {
   postWorkerStatus(id, {
     status: _status,
@@ -1457,9 +1417,6 @@ async function dispatchWorkerMessage(type, id, payload) {
       return;
     case "GET_NEBS_DETAIL":
       handleNebsDetailMessage(id, payload);
-      return;
-    case "GET_NESH_CHAPTER_NOTES":
-      handleNeshChapterNotesMessage(id, payload);
       return;
     case "GET_STATUS":
       handleGetStatusMessage(id);

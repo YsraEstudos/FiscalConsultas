@@ -24,7 +24,6 @@ import struct
 import sys
 import time
 from pathlib import Path
-from typing import Any
 
 try:
     from cryptography.hazmat.primitives import hashes
@@ -84,99 +83,87 @@ def _resolve_app_seed() -> str:
 APP_SEED = _resolve_app_seed()
 
 
-def _load_html_renderer():
-    if str(PROJECT_ROOT) not in sys.path:
-        sys.path.insert(0, str(PROJECT_ROOT))
+def _get_html_renderer():
+    project_root_str = str(PROJECT_ROOT)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
 
     from backend.presentation.renderer import HtmlRenderer
 
     return HtmlRenderer
 
 
-def _parse_notes_json(raw_value: Any) -> dict[str, str]:
-    if not raw_value:
+def _load_precomputed_notes(parsed_notes_json: object) -> dict[str, str]:
+    if not parsed_notes_json:
         return {}
 
-    try:
-        parsed = json.loads(str(raw_value))
-    except (TypeError, json.JSONDecodeError):
+    raw_value = parsed_notes_json
+    if isinstance(raw_value, bytes):
+        raw_value = raw_value.decode("utf-8", errors="ignore")
+
+    if isinstance(raw_value, str):
+        try:
+            raw_value = json.loads(raw_value)
+        except json.JSONDecodeError:
+            return {}
+
+    if not isinstance(raw_value, dict):
         return {}
 
-    return parsed if isinstance(parsed, dict) else {}
+    return {
+        str(note_id): str(note_value)
+        for note_id, note_value in raw_value.items()
+        if note_value is not None
+    }
 
 
 def _build_nesh_sections(notes_row: sqlite3.Row | None) -> dict[str, str | None] | None:
-    if not notes_row:
+    if notes_row is None:
         return None
 
     sections = {
-        "titulo": notes_row["titulo"] or None,
-        "notas": notes_row["notas"] or None,
-        "consideracoes": notes_row["consideracoes"] or None,
-        "definicoes": notes_row["definicoes"] or None,
+        "titulo": notes_row["titulo"],
+        "notas": notes_row["notas"],
+        "consideracoes": notes_row["consideracoes"],
+        "definicoes": notes_row["definicoes"],
     }
-
-    if any(value for value in sections.values()):
-        return sections
-
-    return None
+    if not any(str(value or "").strip() for value in sections.values()):
+        return None
+    return sections
 
 
-def _render_nesh_chapters(cursor: sqlite3.Cursor) -> None:
-    HtmlRenderer = _load_html_renderer()
-    chapter_rows = cursor.execute(
-        "SELECT chapter_num, content FROM nesh_chapters ORDER BY chapter_num"
-    ).fetchall()
+def _render_nesh_chapter_html(
+    chapter_row: sqlite3.Row,
+    notes_row: sqlite3.Row | None,
+    positions: list[sqlite3.Row],
+) -> str:
+    content = str(chapter_row["content"] or "")
+    if not content.strip():
+        return ""
 
-    _log("Rendering NESH chapter HTML for offline bundle...")
-
-    for chapter_row in chapter_rows:
-        chapter_num = str(chapter_row["chapter_num"])
-        content = str(chapter_row["content"] or "")
-        position_rows = cursor.execute(
-            """
-            SELECT codigo, descricao
-            FROM nesh_positions
-            WHERE chapter_num = ?
-            ORDER BY codigo
-            """,
-            (chapter_num,),
-        ).fetchall()
-        notes_row = cursor.execute(
-            """
-            SELECT notes_content, titulo, notas, consideracoes, definicoes, parsed_notes_json
-            FROM nesh_chapter_notes
-            WHERE chapter_num = ?
-            """,
-            (chapter_num,),
-        ).fetchone()
-
-        chapter_payload = {
-            "ncm_buscado": chapter_num,
-            "capitulo": chapter_num,
-            "posicao_alvo": None,
-            "posicoes": [
-                {
-                    "codigo": str(position_row["codigo"] or ""),
-                    "descricao": str(position_row["descricao"] or ""),
-                }
-                for position_row in position_rows
-            ],
-            "notas_gerais": notes_row["notes_content"] if notes_row else None,
-            "notas_parseadas": _parse_notes_json(
-                notes_row["parsed_notes_json"] if notes_row else None
-            ),
-            "conteudo": content,
-            "real_content_found": bool(content),
-            "erro": None,
-            "secoes": _build_nesh_sections(notes_row),
-        }
-
-        rendered_html = HtmlRenderer.render_chapter(chapter_payload)
-        cursor.execute(
-            "UPDATE nesh_chapters SET rendered_html = ? WHERE chapter_num = ?",
-            (rendered_html, chapter_num),
-        )
+    html_renderer = _get_html_renderer()
+    chapter_num = str(chapter_row["chapter_num"])
+    chapter_payload = {
+        "capitulo": chapter_num,
+        "conteudo": content,
+        "notas_gerais": notes_row["notes_content"] if notes_row else None,
+        "notas_parseadas": _load_precomputed_notes(
+            notes_row["parsed_notes_json"] if notes_row else None
+        ),
+        "posicoes": [
+            {
+                "codigo": str(position["codigo"]),
+                "descricao": str(position["descricao"] or ""),
+                "anchor_id": f'pos-{str(position["codigo"]).replace(".", "-")}',
+            }
+            for position in positions
+        ],
+        "posicao_alvo": None,
+        "real_content_found": True,
+        "erro": None,
+        "secoes": _build_nesh_sections(notes_row),
+    }
+    return html_renderer.render_chapter(chapter_payload)
 
 
 # ---------------------------------------------------------------------------
@@ -381,19 +368,62 @@ def _consolidate_databases(output_path: Path) -> None:
 
     # NESH chapters (full content for offline rendering)
     cursor.execute("""
-            INSERT OR IGNORE INTO nesh_chapters (chapter_num, content)
-            SELECT chapter_num, content
-            FROM nesh.chapters
-    """)
-    nesh_ch_count = cursor.rowcount
-    _log(f"  Inserted {nesh_ch_count} NESH chapters")
-
-    # NESH chapter notes (structured sections)
-    cursor.execute("""
             SELECT 1 FROM nesh.sqlite_master
             WHERE type='table' AND name='chapter_notes' LIMIT 1
     """)
-    if cursor.fetchone():
+    has_notes_table = cursor.fetchone() is not None
+
+    notes_by_chapter: dict[str, sqlite3.Row] = {}
+    if has_notes_table:
+        for row in conn.execute(
+            """
+            SELECT chapter_num, notes_content, titulo, notas,
+                   consideracoes, definicoes, parsed_notes_json
+            FROM nesh.chapter_notes
+            """
+        ):
+            notes_by_chapter[str(row["chapter_num"])] = row
+
+    positions_by_chapter: dict[str, list[sqlite3.Row]] = {}
+    for row in conn.execute(
+        """
+        SELECT chapter_num, codigo, descricao
+        FROM nesh.positions
+        ORDER BY chapter_num, codigo
+        """
+    ):
+        positions_by_chapter.setdefault(str(row["chapter_num"]), []).append(row)
+
+    chapter_rows = conn.execute(
+        """
+        SELECT chapter_num, content
+        FROM nesh.chapters
+        ORDER BY chapter_num
+        """
+    ).fetchall()
+    cursor.executemany(
+        """
+        INSERT OR IGNORE INTO nesh_chapters (chapter_num, content, rendered_html)
+        VALUES (?, ?, ?)
+        """,
+        [
+            (
+                str(row["chapter_num"]),
+                row["content"],
+                _render_nesh_chapter_html(
+                    row,
+                    notes_by_chapter.get(str(row["chapter_num"])),
+                    positions_by_chapter.get(str(row["chapter_num"]), []),
+                ),
+            )
+            for row in chapter_rows
+        ],
+    )
+    nesh_ch_count = len(chapter_rows)
+    _log(f"  Inserted {nesh_ch_count} NESH chapters")
+
+    # NESH chapter notes (structured sections)
+    if has_notes_table:
         cursor.execute("""
                 INSERT OR IGNORE INTO nesh_chapter_notes
                     (chapter_num, notes_content, titulo, notas,
@@ -408,9 +438,6 @@ def _consolidate_databases(output_path: Path) -> None:
     conn.commit()
     cursor.execute("DETACH DATABASE nesh")
 
-    conn.commit()
-
-    _render_nesh_chapters(cursor)
     conn.commit()
 
     # === Create FTS5 Indices ===

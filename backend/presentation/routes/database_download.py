@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from backend.config.settings import settings
 from backend.infrastructure.redis_client import redis_cache
 from backend.server.rate_limit import SlidingWindowRateLimiter
-from backend.utils.auth import _is_trusted_proxy, extract_client_ip
+from backend.utils.auth import extract_client_ip, is_trusted_proxy
 
 logger = logging.getLogger("routes.database_download")
 
@@ -94,7 +94,7 @@ def _is_local_request(request: Request) -> bool:
     direct_ip = request.client.host if request.client else None
     forwarded_host = request.headers.get("x-forwarded-host", "").strip()
     host_header = (
-        forwarded_host if forwarded_host and _is_trusted_proxy(direct_ip) else ""
+        forwarded_host if forwarded_host and is_trusted_proxy(direct_ip) else ""
     ) or request.headers.get("host", "")
     host = host_header.split(":", maxsplit=1)[0].strip().lower()
     client_host = (direct_ip or "").strip().lower()
@@ -108,9 +108,16 @@ def _is_local_request(request: Request) -> bool:
 def _resolve_request_scheme(request: Request) -> str:
     direct_ip = request.client.host if request.client else None
     forwarded_proto = request.headers.get("x-forwarded-proto", "").strip()
-    if forwarded_proto and _is_trusted_proxy(direct_ip):
+    if forwarded_proto and is_trusted_proxy(direct_ip):
         return forwarded_proto.split(",", maxsplit=1)[0].strip().lower()
     return request.url.scheme.lower()
+
+
+def _should_rate_limit_token_request(request: Request) -> bool:
+    """Keep strict limits outside explicitly local development/test workflows."""
+    if settings.server.env.lower() not in {"development", "test"}:
+        return True
+    return not _is_local_request(request)
 
 
 def _enforce_secure_request(request: Request) -> None:
@@ -123,13 +130,6 @@ def _enforce_secure_request(request: Request) -> None:
     raise HTTPException(
         status_code=400,
         detail="Offline database download requires HTTPS in production",
-    )
-
-
-def _should_rate_limit_token_request(request: Request) -> bool:
-    """Keep strict limits in production, but avoid locking local dev/test sessions."""
-    return settings.server.env.lower() == "production" or not _is_local_request(
-        request
     )
 
 

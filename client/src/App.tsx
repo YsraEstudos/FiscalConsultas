@@ -755,6 +755,9 @@ function App() {
                                             if (!hydratedResults || !tab.results || !isCodeSearchResponse(tab.results)) {
                                                 return;
                                             }
+                                            if (incomingTabId !== tab.id) {
+                                                return;
+                                            }
 
                                             updateTab(incomingTabId, {
                                                 results: {

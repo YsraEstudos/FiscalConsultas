@@ -94,12 +94,8 @@ interface LocalDatabaseState {
 interface LocalSearchResult {
   results: Record<string, unknown>[] | Record<string, unknown> | null;
   searchType: "text" | "code";
-  markdown?: string | null;
-}
-
-interface LocalNeshChapterNotesResult {
-  notas_parseadas: Record<string, string>;
-  notas_gerais: string | null;
+  // Offline code search may carry backend-rendered HTML or legacy markdown text.
+  markdown?: string;
 }
 
 interface LocalDatabaseContextType extends LocalDatabaseState {
@@ -111,14 +107,14 @@ interface LocalDatabaseContextType extends LocalDatabaseState {
     query: string,
     viewMode?: string
   ) => Promise<LocalSearchResult | null>;
+  getNeshChapterNotesLocal: (
+    chapter: string
+  ) => Promise<Record<string, string> | null>;
   getNbsDetailLocal: (
     code: string,
     options?: { page?: number; pageSize?: number }
   ) => Promise<NbsDetailResponse | null>;
   getNebsDetailLocal: (code: string) => Promise<NebsDetailResponse | null>;
-  getNeshChapterNotesLocal: (
-    chapter: string
-  ) => Promise<LocalNeshChapterNotesResult | null>;
 }
 
 const DEFAULT_LOCAL_DATABASE_CONTEXT: LocalDatabaseContextType = {
@@ -138,9 +134,9 @@ const DEFAULT_LOCAL_DATABASE_CONTEXT: LocalDatabaseContextType = {
   remove: async () => undefined,
   refreshAvailability: async () => null,
   searchLocal: async () => null,
+  getNeshChapterNotesLocal: async () => null,
   getNbsDetailLocal: async () => null,
   getNebsDetailLocal: async () => null,
-  getNeshChapterNotesLocal: async () => null,
 };
 
 const LocalDatabaseContext = createContext<LocalDatabaseContextType>(
@@ -230,6 +226,30 @@ async function primeOfflineShellCache() {
     return;
   }
 
+  const urls = new Set<string>([
+    globalThis.location.pathname,
+    globalThis.location.origin,
+    globalThis.location.href,
+  ]);
+
+  if (typeof document !== "undefined") {
+    const scriptElements = document.querySelectorAll<HTMLScriptElement>(
+      "script[src]"
+    );
+    const linkElements = document.querySelectorAll<HTMLLinkElement>(
+      'link[rel="stylesheet"][href], link[rel="modulepreload"][href]'
+    );
+
+    scriptElements.forEach((element) => {
+      if (!element.src) return;
+      urls.add(new URL(element.src, globalThis.location.href).toString());
+    });
+    linkElements.forEach((element) => {
+      if (!element.href) return;
+      urls.add(new URL(element.href, globalThis.location.href).toString());
+    });
+  }
+
   try {
     const registration = await Promise.race([
       navigator.serviceWorker.ready,
@@ -243,11 +263,7 @@ async function primeOfflineShellCache() {
     registration.active?.postMessage({
       type: "CACHE_APP_SHELL",
       payload: {
-        urls: [
-          globalThis.location.pathname,
-          globalThis.location.origin,
-          globalThis.location.href,
-        ],
+        urls: [...urls],
       },
     });
   } catch {
@@ -783,15 +799,36 @@ export function LocalDatabaseProvider({
           searchType:
             ((response.payload?.searchType as "text" | "code") || "text"),
           markdown:
-            typeof response.payload?.markdown === "string"
-              ? response.payload.markdown
-              : null,
+            (response.payload?.markdown as string | undefined) || undefined,
         };
       } catch {
         return null;
       }
     },
     [sendToWorker, status]
+  );
+
+  const getNeshChapterNotesLocal = useCallback(
+    async (chapter: string): Promise<Record<string, string> | null> => {
+      if (status !== "ready") return null;
+
+      const response = await searchLocal("nesh", chapter);
+      if (!response || response.searchType !== "code") {
+        return null;
+      }
+
+      const results = response.results;
+      if (!results || Array.isArray(results)) {
+        return null;
+      }
+
+      const chapterResult = results[chapter] as
+        | { notas_parseadas?: Record<string, string> | null }
+        | undefined;
+
+      return chapterResult?.notas_parseadas || null;
+    },
+    [searchLocal, status]
   );
 
   const getNbsDetailLocal = useCallback(
@@ -839,27 +876,6 @@ export function LocalDatabaseProvider({
     [sendToWorker, status]
   );
 
-  const getNeshChapterNotesLocal = useCallback(
-    async (chapter: string): Promise<LocalNeshChapterNotesResult | null> => {
-      if (status !== "ready") return null;
-
-      try {
-        const response = (await sendToWorker(
-          "GET_NESH_CHAPTER_NOTES",
-          { chapter },
-          10_000
-        )) as WorkerMessage;
-
-        return (
-          (response.payload.notes as LocalNeshChapterNotesResult | null) || null
-        );
-      } catch {
-        return null;
-      }
-    },
-    [sendToWorker, status]
-  );
-
   const contextValue = useMemo<LocalDatabaseContextType>(
     () => ({
       status,
@@ -876,15 +892,14 @@ export function LocalDatabaseProvider({
       remove,
       refreshAvailability,
       searchLocal,
+      getNeshChapterNotesLocal,
       getNbsDetailLocal,
       getNebsDetailLocal,
-      getNeshChapterNotesLocal,
     }),
     [
       dbSizeBytes,
       error,
       getNebsDetailLocal,
-      getNeshChapterNotesLocal,
       getNbsDetailLocal,
       install,
       isRemoving,
@@ -893,6 +908,7 @@ export function LocalDatabaseProvider({
       progress,
       progressStep,
       refreshAvailability,
+      getNeshChapterNotesLocal,
       remoteVersion,
       remove,
       searchLocal,
