@@ -29,6 +29,8 @@ export type ServicesMockOptions = {
   nbsSearchResponses?: MockResponseEntry[];
   tipiSearchResponses?: MockResponseEntry[];
   statusResponses?: MockResponseEntry[];
+  nbsDetailResponses?: Record<string, NbsDetailResponse>;
+  nebsDetailResponses?: Record<string, NebsDetailResponse>;
   unmatchedApiStrategy?: 'abort' | 'continue';
 };
 
@@ -288,12 +290,20 @@ async function handleNeshSearch(route: Route, query: string, neshQueue: MockResp
   await fulfillSearchRoute(route, query, neshQueue, makeNeshCodeSearchResponse);
 }
 
-async function handleNbsDetail(route: Route, code: string) {
-  await route.fulfill({ json: makeNbsDetail(code) });
+async function handleNbsDetail(
+  route: Route,
+  code: string,
+  detailResponses: Record<string, NbsDetailResponse>,
+) {
+  await route.fulfill({ json: detailResponses[code] ?? makeNbsDetail(code) });
 }
 
-async function handleNebsDetail(route: Route, code: string) {
-  await route.fulfill({ json: makeNebsDetail(code) });
+async function handleNebsDetail(
+  route: Route,
+  code: string,
+  detailResponses: Record<string, NebsDetailResponse>,
+) {
+  await route.fulfill({ json: detailResponses[code] ?? makeNebsDetail(code) });
 }
 
 function getDetailCode(path: string, doc: 'nbs' | 'nebs'): string | null {
@@ -307,6 +317,8 @@ export async function installServicesMock(page: Page, options: ServicesMockOptio
   const nebsQueue = [...(options.nebsSearchResponses ?? [])];
   const tipiQueue = [...(options.tipiSearchResponses ?? [])];
   const statusQueue = [...(options.statusResponses ?? [])];
+  const nbsDetailResponses = options.nbsDetailResponses ?? {};
+  const nebsDetailResponses = options.nebsDetailResponses ?? {};
 
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
@@ -352,13 +364,13 @@ export async function installServicesMock(page: Page, options: ServicesMockOptio
 
     const nbsCode = getDetailCode(path, 'nbs');
     if (nbsCode) {
-      await handleNbsDetail(route, nbsCode);
+      await handleNbsDetail(route, nbsCode, nbsDetailResponses);
       return;
     }
 
     const nebsCode = getDetailCode(path, 'nebs');
     if (nebsCode) {
-      await handleNebsDetail(route, nebsCode);
+      await handleNebsDetail(route, nebsCode, nebsDetailResponses);
       return;
     }
 

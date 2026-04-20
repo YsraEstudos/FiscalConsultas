@@ -189,7 +189,7 @@ function NbsHierarchySection({
                         </div>
                     ))}
                     <div className={styles.hierarchyNode} style={{ paddingLeft: `${nbsState.detail.ancestors.length * 1.5}rem` }}>
-                        <div className={`${styles.nodeCard} ${styles.active}`}>
+                        <div className={`${styles.nodeCard} ${styles.active}`} data-service-state="active">
                             <div className={styles.nodeIcon}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
                             </div>

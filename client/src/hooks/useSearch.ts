@@ -181,7 +181,12 @@ export function useSearch(
                     if (localResponse) {
                         if (localResponse.searchType === 'code') {
                             data = doc === 'nesh' || doc === 'tipi'
-                                ? buildLocalCodeSearchResponse(doc, query, localResponse.results as Record<string, any>)
+                                ? buildLocalCodeSearchResponse(
+                                    doc,
+                                    query,
+                                    localResponse.results as Record<string, any>,
+                                    localResponse.markdown,
+                                )
                                 : null;
                         } else if (Array.isArray(localResponse.results)) {
                             data = normalizeLocalResults(doc, query, localResponse.results as Record<string, unknown>[]);

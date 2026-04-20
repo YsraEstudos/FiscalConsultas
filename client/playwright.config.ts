@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const liveBaseUrl = process.env.PLAYWRIGHT_LIVE_BASE_URL || 'http://127.0.0.1:4173';
+const liveSecureOrigin = new URL(liveBaseUrl).origin;
 
 export default defineConfig({
   testDir: './tests/playwright',
@@ -40,6 +41,12 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         baseURL: liveBaseUrl,
+        launchOptions: {
+          args: [
+            `--unsafely-treat-insecure-origin-as-secure=${liveSecureOrigin}`,
+            '--host-resolver-rules=MAP offline-e2e.local 127.0.0.1',
+          ],
+        },
       },
     },
   ],

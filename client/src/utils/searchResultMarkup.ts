@@ -133,6 +133,7 @@ export function buildLocalCodeSearchResponse(
     doc: SupportedDocType,
     query: string,
     results: CodeResults,
+    markdown?: string | null,
 ): CodeSearchResponse | TipiCodeSearchResponse {
     const safeResults = results && typeof results === 'object' ? results : {};
 
@@ -148,6 +149,7 @@ export function buildLocalCodeSearchResponse(
                 0,
             ),
             total_capitulos: Object.keys(safeResults).length,
+            markdown: markdown || undefined,
         };
     }
 
@@ -159,6 +161,7 @@ export function buildLocalCodeSearchResponse(
         results: safeResults,
         resultados: safeResults,
         total_capitulos: Object.keys(safeResults).length,
+        markdown: markdown || undefined,
     };
 }
 

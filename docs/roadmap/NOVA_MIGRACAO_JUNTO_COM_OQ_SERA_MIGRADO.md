@@ -1,34 +1,36 @@
-# Guia Gradual: Unificar a Logica de Parsing em `backend/pkg/nesh_parser`
+# Backlog Exclusivo de Refatoracoes: Unificar a Logica de Parsing em `backend/pkg/nesh_parser`
 
-## Titulo do refactor
-Unificar regex e parsing de NCM/Notas em um nucleo unico (`backend/pkg/nesh_parser`), com migracao gradual e valida, sem regressao silenciosa de dados.
+## Objetivo da refatoracao
+Unificar regex e parsing de NCM/Notas em um nucleo unico (`backend/pkg/nesh_parser`), com transicao gradual e valida, sem regressao silenciosa de dados.
 
-## Explicacao simples (para quem nao e tecnico)
+## Resumo da refatoracao (para quem nao e tecnico)
 Hoje, o sistema "entende" o texto em varios pontos diferentes.  
 Quando uma regra muda, precisamos ajustar em varios arquivos e isso aumenta risco de erro.  
 Com um parser central, a regra e escrita uma vez e reaproveitada em todo lugar.
 
-## O que nao muda para o usuario final
-- Endpoints e contrato externo da API.
-- Fluxo geral de busca e renderizacao.
-- Objetivo da entrega e interno (qualidade e consistencia), nao uma feature nova.
+## Fora de escopo
+- Deploy, SEO, billing, observabilidade e go-live.
+- Mudancas de contrato externo da API.
+- Mudancas de fluxo funcional que nao sejam necessarias para a refatoracao.
+- O foco aqui e exclusivamente a limpeza e consolidacao de codigo.
 
 ## Ajustes incorporados neste plano (consenso tecnico)
 1. Variacoes de regex podem ser intencionais e precisam de decisao, nao "deduplicacao cega".
 2. Os scripts usam formatos de entrada diferentes (`txt`, `txt com markdown`, `md puro`).
-3. `ingest_markdown.py` pode ser legado e deve ser classificado antes de migrar.
+3. `ingest_markdown.py` pode ser legado e deve ser classificado antes de ser refatorado ou arquivado.
 4. `RegexPatterns` em `backend/config/constants.py` nao pode virar segunda fonte da verdade.
 5. Parsing de definicao de nota e referencia inline de nota sao coisas diferentes.
 6. `backend/utils/nesh_sections.py` precisa entrar explicitamente no escopo.
 7. Divergencia entre `_parse_notes_for_precompute` e runtime e risco critico de dados.
 8. Contratos de saida devem ser definidos de forma concreta (nao abstrata).
-9. Migracao de consumidores deve separar direta vs indireta.
-10. `renderer` tem regex semantico (migra) e regex visual (fica no renderer).
+9. Refatoracao de consumidores deve separar direta vs indireta.
+10. `renderer` tem regex semantico (entra no parser central) e regex visual (fica no renderer).
 11. Criacao de regex e parser deve entrar no mesmo ciclo de entrega (pattern + uso + teste).
 12. Regra de reordenacao de secoes do `setup_database.py` e caso especial obrigatorio.
 13. Etapa 1 precisa de entregaveis objetivos e mensuraveis.
 14. Rollback deve usar wrappers/delegacao para reversao segura.
 15. Performance deve preservar pre-compilacao e caches existentes.
+16. Critério de aceite de teste: todo arquivo ou fluxo alterado neste plano deve fechar com 100% de cobertura nos testes, incluindo linhas e branches relevantes.
 
 ## Contexto tecnico consolidado
 
@@ -46,6 +48,75 @@ Com um parser central, a regra e escrita uma vez e reaproveitada em todo lugar.
 | `scripts/setup_database.py` | `data/Nesh.txt` ou `.zip` | texto plano |
 | `scripts/rebuild_index.py` | `data/debug_nesh/Nesh.txt` | texto com possivel markdown |
 | `scripts/ingest_markdown.py` | `raw_data/nesh.md` | markdown puro |
+
+## Inventario consolidado de refatoracao
+
+### Arquivos de parsing e scripts centrais
+- `scripts/setup_database.py` - regra especial de reorganizacao de secoes e ingestao.
+- `scripts/rebuild_index.py` - parsing misturado com indexacao e normalizacao.
+- `scripts/ingest_markdown.py` - precisa ser classificado como ativo ou legado.
+- `backend/config/constants.py` - ainda funciona como segunda fonte temporaria de regex.
+- `backend/presentation/renderer.py` - separa regex visual, regex semantico e transformacoes HTML.
+- `backend/services/nesh_service.py` - busca, cache, fallback e compatibilidade legada.
+- `backend/services/tipi_service.py` - mesma pressao de acoplamento no fluxo TIPI.
+- `backend/utils/ncm_utils.py` - wrapper intermediario que deve delegar ao parser central.
+- `backend/utils/nesh_sections.py` - precisa entrar explicitamente no escopo do parser central.
+- `backend/utils/text_processor.py` - normalizacao e stemming ainda concentram regra demais.
+
+### Rotas, contratos e camada de aplicacao
+- `backend/presentation/routes/search.py` - resposta, cache, compatibilidade de contrato e gzip.
+- `backend/presentation/routes/system.py` - status, fallback Redis e agregacao de saude.
+- `backend/presentation/routes/database_download.py` - token one-shot, HTTPS, rate limit e arquivo criptografado.
+- `backend/presentation/routes/comments.py` - auth, tenant e traducao de erro repetidos em varios endpoints.
+- `backend/presentation/routes/profile.py` - perfil, paginacao e contrato da API concentrados na rota.
+- `backend/presentation/routes/auth.py` - extracao de claims, acesso a IA e rate limit de chat.
+- `backend/presentation/routes/webhooks.py` - validacao, persistencia e regra de negocio de billing.
+- `backend/config/settings.py` - validacao de env, coercao de tipos e regras de seguranca.
+- `backend/services/profile_service.py` - lookup, estatisticas, paginacao e soft-delete.
+- `backend/services/nbs_service.py` - modo dual, cache e normalizacao de payload.
+
+### Repositorios e acesso a dados
+- `backend/infrastructure/database.py` - adaptacao de schema, SQL dinamico e health checks.
+- `backend/infrastructure/redis_client.py` - wrapper de cache e tokens com multiplas responsabilidades.
+- `backend/infrastructure/repositories/nbs_repository.py` - SQL grande, tenant filter, aliases e FTS.
+- `backend/infrastructure/repositories/chapter_repository.py` - ORM loading, FTS e scoring dual-mode.
+- `backend/infrastructure/repositories/tipi_repository.py` - bifurcacao SQLite/Postgres e shape de resposta.
+- `backend/infrastructure/repositories/position_repository.py` - mesma duplicacao dual-mode para NCM.
+
+### Utilitarios de suporte e validacao
+- `backend/utils/nbs_parser.py` - base de normalizacao do catalogo NBS.
+- `backend/utils/nebs_parser.py` - parsing de PDF, auditoria e artefatos de confianca.
+- `backend/utils/auth.py` - bearer token, roles e proxy trust.
+- `backend/utils/cache.py` - cache scope e ETag.
+- `backend/utils/payload_cache_metrics.py` - metricas de hit/miss e observabilidade de payload.
+- `backend/utils/frontend_check.py` - validacao heuristica do build do frontend.
+- `backend/utils/id_utils.py` - geracao de anchor ids e utilitarios derivados.
+- `backend/utils/hash_util.py` - hashing de arquivo usado por fluxos de validacao.
+
+### Frontend e estado local
+- `client/src/workers/db.worker.js` - lifecycle do banco offline, crypto e estado do worker.
+- `client/src/context/LocalDatabaseContext.tsx` - locks, metadata, worker e API local.
+- `client/src/components/ServicesWorkspace.tsx` - renderizacao, navegacao e notas oficiais.
+- `client/src/components/ServicesTabContent.tsx` - fetch, hidratacao e controle de concorrencia.
+- `client/src/components/ResultDisplay.tsx` - scroll, selection, comments e highlight no mesmo fluxo.
+- `client/src/components/Header.tsx` - menu, auth, troca de documento e acoes de admin.
+- `client/src/components/SearchBar.tsx` - estado de busca, dropdown e interacao de teclado/mouse.
+- `client/src/components/Sidebar.tsx` - ordenacao, mapeamento de abas e sincronizacao de scroll.
+- `client/src/components/CommentPanel.tsx` - fluxo de comentarios e estado local da UI.
+- `client/src/components/CommentDrawer.tsx` - modal/drawer de comentarios com regras de exibicao.
+- `client/src/context/GlossaryContext.tsx` - estado compartilhado e consultas do glossario.
+- `client/src/context/SettingsContext.tsx` - configuracao global e persistencia de preferencias.
+- `client/src/hooks/useSearch.ts` - busca hibrida, normalizacao e mutacao de tabs.
+- `client/src/hooks/useTabs.ts` - ciclo de vida das abas, ordenacao e estado derivado.
+- `client/src/hooks/useComments.ts` - updates otimistas, cache de anchors e erros.
+- `client/src/hooks/useRobustScroll.ts` - scroll resiliente com observers e timeouts.
+- `client/src/hooks/useServicesAccess.ts` - regras de acesso ao catalogo de servicos.
+- `client/src/hooks/useTextSelection.ts` - selecao de texto e contexto de ancoragem.
+
+### Requisito de testes para esta frente
+- Nenhuma mudanca neste plano pode ser aceita com cobertura abaixo de 100% nos arquivos e fluxos alterados.
+- Os testes precisam cobrir caminho feliz, fallback, erro e compatibilidade legada quando o codigo tiver branching.
+- Se um arquivo tocar cache, concorrencia, DOM ou SQL, o teste deve validar o comportamento e nao apenas a assinatura.
 
 ## Escopo semantico do `nesh_parser`
 
@@ -127,7 +198,7 @@ Decisao padrao: usar A.
 B so quando A perder informacao importante.  
 C apenas como excecao controlada para legado.
 
-## Plano gradual por etapas
+## Plano de refatoracao por etapas
 
 ### Etapa 1: Diagnostico objetivo + baseline de verdade
 1. Motivo para leigo:
@@ -169,16 +240,16 @@ Nao adianta criar apenas "a tabela" sem criar "o manual de uso". Os dois nascem 
 - Parsers novos reproduzem baseline aprovado da etapa 1.
 - Nao ha dependencia circular entre parser e renderer.
 
-### Etapa 3: Migrar consumidores backend (direto e indireto)
+### Etapa 3: Refatorar consumidores backend (direto e indireto)
 1. Motivo para leigo:
 Com a central pronta, os sistemas precisam comecar a consumir a central sem desligar o antigo de imediato.
 2. O que sera feito tecnicamente:
-- Migracao direta:
+- Refatoracao direta:
   - `backend/services/nesh_service.py`
   - `backend/presentation/renderer.py` (apenas parte semantica)
-- Migracao indireta:
+- Refatoracao indireta:
   - `backend/utils/ncm_utils.py` vira wrapper/delegacao para `nesh_parser`.
-  - `backend/services/tipi_service.py` e `backend/presentation/routes/search.py` migram via `ncm_utils`.
+  - `backend/services/tipi_service.py` e `backend/presentation/routes/search.py` seguem via `ncm_utils`.
 - `backend/config/constants.py` passa a delegar patterns para `nesh_parser` (wrapper temporario).
 3. Como fazer da melhor forma:
 - Commits pequenos por consumidor.
@@ -189,15 +260,15 @@ Com a central pronta, os sistemas precisam comecar a consumir a central sem desl
 - Consumidores indiretos continuam estaveis via wrapper.
 - Contratos e testes de rota/servico permanecem verdes.
 
-### Etapa 4: Migrar scripts ativos e tratar legado
+### Etapa 4: Refatorar scripts ativos e tratar legado
 1. Motivo para leigo:
 Se o sistema online e os scripts de carga usam regras diferentes, os dados entram errados mesmo com backend correto.
 2. O que sera feito tecnicamente:
-- Migrar scripts ativos para `nesh_parser`:
+- Refatorar scripts ativos para `nesh_parser`:
   - `scripts/setup_database.py`
   - `scripts/rebuild_index.py`
 - Para `scripts/ingest_markdown.py`:
-  - se ativo: migrar;
+  - se ativo: refatorar;
   - se legado: marcar deprecated, remover do escopo ativo e documentar.
 - Centralizar a regra de reordenacao de secoes entre capitulos no parser central (se aplicavel aos fluxos ativos).
 3. Como fazer da melhor forma:
@@ -211,7 +282,7 @@ Se o sistema online e os scripts de carga usam regras diferentes, os dados entra
 
 ### Etapa 5: Hardening de consistencia de dados e performance
 1. Motivo para leigo:
-Depois da migracao, precisamos garantir que os dados pre-calculados e os dados em tempo real continuam falando a mesma lingua.
+Depois da refatoracao, precisamos garantir que os dados pre-calculados e os dados em tempo real continuam falando a mesma lingua.
 2. O que sera feito tecnicamente:
 - Garantir unica implementacao de parsing de nota para ingestao e runtime.
 - Eliminar risco de divergencia em `parsed_notes_json`.
@@ -227,7 +298,7 @@ Depois da migracao, precisamos garantir que os dados pre-calculados e os dados e
 - Metricas de performance ficam dentro do baseline aceitavel.
 - Nenhum cache critico foi removido sem substituto equivalente.
 
-### Etapa 6: Limpeza final e fechamento de transicao
+### Etapa 6: Limpeza final e encerramento da refatoracao
 1. Motivo para leigo:
 Quando tudo esta estavel, removemos pecas antigas para evitar que voltem por acidente.
 2. O que sera feito tecnicamente:
@@ -253,14 +324,14 @@ Quando tudo esta estavel, removemos pecas antigas para evitar que voltem por aci
 - Medio: regressao de performance por recompilacao/caches removidos.
   - Mitigacao: pre-compilacao em modulo + cache para dinamicos + benchmark.
 - Medio: escopo inflado por script legado.
-  - Mitigacao: classificar legado na etapa 1 e migrar apenas ativos.
+  - Mitigacao: classificar legado na etapa 1 e refatorar apenas ativos.
 
 ## Plano de rollback seguro (nao generico)
-1. Manter modulos antigos funcionais ate a etapa 6.
+1. Manter modulos antigos funcionais ate o encerramento da refatoracao.
 2. Usar delegacao/wrapper durante a transicao:
    - `ncm_utils` delega ao `nesh_parser`.
    - `RegexPatterns` delega ao `nesh_parser`.
-3. Se falhar um consumidor, desativar a delegacao daquele ponto sem perder restante da migracao.
+3. Se falhar um consumidor, desativar a delegacao daquele ponto sem perder restante da refatoracao.
 4. Reverter por modulo/feature, nao apenas por "PR inteiro", para evitar mismatch runtime x script.
 
 ## Checklist final de conclusao
@@ -269,12 +340,13 @@ Quando tudo esta estavel, removemos pecas antigas para evitar que voltem por aci
 - [ ] `backend/pkg/nesh_parser/regex.py` e `backend/pkg/nesh_parser/parser.py` entregues no mesmo ciclo com testes.
 - [ ] Contratos de saida do parser formalizados e adotados.
 - [ ] `backend/utils/nesh_sections.py` incorporado ou re-exportado com plano de remocao.
-- [ ] Migracao direta concluida (`NeshService`, parte semantica do `renderer`).
-- [ ] Migracao indireta concluida (`ncm_utils` delegando; impacto em `TipiService` e `routes/search` validado).
-- [ ] Scripts ativos migrados; `ingest_markdown.py` classificado e tratado.
+- [ ] Refatoracao direta concluida (`NeshService`, parte semantica do `renderer`).
+- [ ] Refatoracao indireta concluida (`ncm_utils` delegando; impacto em `TipiService` e `routes/search` validado).
+- [ ] Scripts ativos refatorados; `ingest_markdown.py` classificado e tratado.
 - [ ] Consistencia `parsed_notes_json` x runtime comprovada.
 - [ ] Performance validada sem regressao material.
 - [ ] Wrappers temporarios removidos (ou mantidos por decisao formal registrada).
+- [ ] Cobertura de testes em 100% para os arquivos e fluxos alterados nesta refatoracao.
 
 ## Resultado esperado
 Ao final, o projeto passa a ter uma unica logica semantica de parsing, com menor risco de inconsistencias entre ingestao, runtime e renderizacao, e com caminho seguro de manutencao e rollback.

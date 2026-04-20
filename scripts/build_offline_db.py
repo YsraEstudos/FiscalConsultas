@@ -83,6 +83,89 @@ def _resolve_app_seed() -> str:
 APP_SEED = _resolve_app_seed()
 
 
+def _get_html_renderer():
+    project_root_str = str(PROJECT_ROOT)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+
+    from backend.presentation.renderer import HtmlRenderer
+
+    return HtmlRenderer
+
+
+def _load_precomputed_notes(parsed_notes_json: object) -> dict[str, str]:
+    if not parsed_notes_json:
+        return {}
+
+    raw_value = parsed_notes_json
+    if isinstance(raw_value, bytes):
+        raw_value = raw_value.decode("utf-8", errors="ignore")
+
+    if isinstance(raw_value, str):
+        try:
+            raw_value = json.loads(raw_value)
+        except json.JSONDecodeError:
+            return {}
+
+    if not isinstance(raw_value, dict):
+        return {}
+
+    return {
+        str(note_id): str(note_value)
+        for note_id, note_value in raw_value.items()
+        if note_value is not None
+    }
+
+
+def _build_nesh_sections(notes_row: sqlite3.Row | None) -> dict[str, str | None] | None:
+    if notes_row is None:
+        return None
+
+    sections = {
+        "titulo": notes_row["titulo"],
+        "notas": notes_row["notas"],
+        "consideracoes": notes_row["consideracoes"],
+        "definicoes": notes_row["definicoes"],
+    }
+    if not any(str(value or "").strip() for value in sections.values()):
+        return None
+    return sections
+
+
+def _render_nesh_chapter_html(
+    chapter_row: sqlite3.Row,
+    notes_row: sqlite3.Row | None,
+    positions: list[sqlite3.Row],
+) -> str:
+    content = str(chapter_row["content"] or "")
+    if not content.strip():
+        return ""
+
+    html_renderer = _get_html_renderer()
+    chapter_num = str(chapter_row["chapter_num"])
+    chapter_payload = {
+        "capitulo": chapter_num,
+        "conteudo": content,
+        "notas_gerais": notes_row["notes_content"] if notes_row else None,
+        "notas_parseadas": _load_precomputed_notes(
+            notes_row["parsed_notes_json"] if notes_row else None
+        ),
+        "posicoes": [
+            {
+                "codigo": str(position["codigo"]),
+                "descricao": str(position["descricao"] or ""),
+                "anchor_id": f"pos-{str(position['codigo']).replace('.', '-')}",
+            }
+            for position in positions
+        ],
+        "posicao_alvo": None,
+        "real_content_found": True,
+        "erro": None,
+        "secoes": _build_nesh_sections(notes_row),
+    }
+    return html_renderer.render_chapter(chapter_payload)
+
+
 # ---------------------------------------------------------------------------
 # Step 1: Consolidate — Read from source DBs and write to a single offline DB
 # ---------------------------------------------------------------------------
@@ -99,6 +182,7 @@ def _consolidate_databases(output_path: Path) -> None:
         output_path.unlink()
 
     conn = sqlite3.connect(str(output_path))
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
     # Performance pragmas
@@ -170,7 +254,8 @@ def _consolidate_databases(output_path: Path) -> None:
     cursor.execute("""
         CREATE TABLE nesh_chapters (
             chapter_num TEXT PRIMARY KEY,
-            content TEXT NOT NULL
+            content TEXT NOT NULL,
+            rendered_html TEXT
         )
     """)
 
@@ -283,19 +368,62 @@ def _consolidate_databases(output_path: Path) -> None:
 
     # NESH chapters (full content for offline rendering)
     cursor.execute("""
-            INSERT OR IGNORE INTO nesh_chapters (chapter_num, content)
-            SELECT chapter_num, content
-            FROM nesh.chapters
-    """)
-    nesh_ch_count = cursor.rowcount
-    _log(f"  Inserted {nesh_ch_count} NESH chapters")
-
-    # NESH chapter notes (structured sections)
-    cursor.execute("""
             SELECT 1 FROM nesh.sqlite_master
             WHERE type='table' AND name='chapter_notes' LIMIT 1
     """)
-    if cursor.fetchone():
+    has_notes_table = cursor.fetchone() is not None
+
+    notes_by_chapter: dict[str, sqlite3.Row] = {}
+    if has_notes_table:
+        for row in conn.execute(
+            """
+            SELECT chapter_num, notes_content, titulo, notas,
+                   consideracoes, definicoes, parsed_notes_json
+            FROM nesh.chapter_notes
+            """
+        ):
+            notes_by_chapter[str(row["chapter_num"])] = row
+
+    positions_by_chapter: dict[str, list[sqlite3.Row]] = {}
+    for row in conn.execute(
+        """
+        SELECT chapter_num, codigo, descricao
+        FROM nesh.positions
+        ORDER BY chapter_num, codigo
+        """
+    ):
+        positions_by_chapter.setdefault(str(row["chapter_num"]), []).append(row)
+
+    chapter_rows = conn.execute(
+        """
+        SELECT chapter_num, content
+        FROM nesh.chapters
+        ORDER BY chapter_num
+        """
+    ).fetchall()
+    cursor.executemany(
+        """
+        INSERT OR IGNORE INTO nesh_chapters (chapter_num, content, rendered_html)
+        VALUES (?, ?, ?)
+        """,
+        [
+            (
+                str(row["chapter_num"]),
+                row["content"],
+                _render_nesh_chapter_html(
+                    row,
+                    notes_by_chapter.get(str(row["chapter_num"])),
+                    positions_by_chapter.get(str(row["chapter_num"]), []),
+                ),
+            )
+            for row in chapter_rows
+        ],
+    )
+    nesh_ch_count = len(chapter_rows)
+    _log(f"  Inserted {nesh_ch_count} NESH chapters")
+
+    # NESH chapter notes (structured sections)
+    if has_notes_table:
         cursor.execute("""
                 INSERT OR IGNORE INTO nesh_chapter_notes
                     (chapter_num, notes_content, titulo, notas,

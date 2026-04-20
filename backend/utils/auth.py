@@ -66,7 +66,7 @@ def _load_trusted_proxy_networks() -> list[Any]:
     return networks
 
 
-def _is_trusted_proxy(ip_text: str | None) -> bool:
+def is_trusted_proxy(ip_text: str | None) -> bool:
     if not ip_text:
         return False
     try:
@@ -79,12 +79,16 @@ def _is_trusted_proxy(ip_text: str | None) -> bool:
     return False
 
 
+# Backward-compatible alias for older imports while callers migrate.
+_is_trusted_proxy = is_trusted_proxy
+
+
 def extract_client_ip(request: Request) -> str:
     direct_ip = request.client.host if request.client and request.client.host else None
     forwarded_for = request.headers.get("X-Forwarded-For", "").strip()
 
     # We only trust X-Forwarded-For when the immediate peer is a trusted proxy.
-    if forwarded_for and _is_trusted_proxy(direct_ip):
+    if forwarded_for and is_trusted_proxy(direct_ip):
         first_hop = forwarded_for.split(",", 1)[0].strip()
         try:
             ipaddress.ip_address(first_hop)

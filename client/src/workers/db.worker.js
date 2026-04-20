@@ -935,22 +935,58 @@ function collectNeshChapterTargets(query) {
   return chapterTargets;
 }
 
+function isLegacyNeshChapterSchemaError(error) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /no such column|rendered_html|schema/i.test(message);
+}
+
 function getNeshChapterSearchData(chapterNum) {
+  let chapterData;
+
+  try {
+    chapterData = queryFirstOptionalRow(
+      `SELECT content, rendered_html FROM nesh_chapters WHERE chapter_num = ?`,
+      [chapterNum]
+    );
+  } catch (error) {
+    if (!isLegacyNeshChapterSchemaError(error)) {
+      throw error;
+    }
+
+    chapterData = queryFirstOptionalRow(
+      `SELECT content, NULL AS rendered_html FROM nesh_chapters WHERE chapter_num = ?`,
+      [chapterNum]
+    );
+  }
+
   return {
     positions: queryResultRows(
       `SELECT codigo, descricao FROM nesh_positions WHERE chapter_num = ? ORDER BY codigo`,
       [chapterNum]
     ),
-    chapterData: queryFirstOptionalRow(
-      `SELECT content FROM nesh_chapters WHERE chapter_num = ?`,
-      [chapterNum]
-    ),
+    chapterData,
     notesData: queryFirstOptionalRow(
       `SELECT notes_content, titulo, notas, consideracoes, definicoes, parsed_notes_json
        FROM nesh_chapter_notes WHERE chapter_num = ?`,
       [chapterNum]
     ),
   };
+}
+
+function buildOfflineNeshMarkup(results, chapterHtmlByChapter) {
+  const orderedChapters = Object.keys(results).sort(
+    (left, right) => Number(left) - Number(right)
+  );
+  const htmlParts = [];
+
+  for (const chapterNum of orderedChapters) {
+    const chapterHtml = chapterHtmlByChapter[chapterNum];
+    if (typeof chapterHtml === "string" && chapterHtml.trim()) {
+      htmlParts.push(chapterHtml.trim());
+    }
+  }
+
+  return htmlParts.join("\n\n");
 }
 
 function buildMissingNeshChapterResult(chapterNum, ncmBuscado) {
@@ -1031,7 +1067,13 @@ function searchTipiByCode(query, viewMode = "family") {
  */
 function searchNeshByCode(query) {
   if (!_db)
-    return { type: "code", results: {}, total_capitulos: 0, success: true };
+    return {
+      type: "code",
+      results: {},
+      total_capitulos: 0,
+      success: true,
+      markdown: "",
+    };
 
   const chapterTargets = collectNeshChapterTargets(query);
 
@@ -1043,11 +1085,14 @@ function searchNeshByCode(query) {
       results: {},
       total_capitulos: 0,
       success: true,
+      markdown: "",
     };
   }
 
   /** @type {Record<string, any>} */
   const results = {};
+  /** @type {Record<string, string>} */
+  const renderedHtmlByChapter = {};
 
   for (const [chapterNum, [ncmBuscado, targetPos]] of chapterTargets) {
     const { positions, chapterData, notesData } =
@@ -1069,6 +1114,10 @@ function searchNeshByCode(query) {
       chapterData,
       notesData
     );
+
+    if (typeof chapterData?.rendered_html === "string") {
+      renderedHtmlByChapter[chapterNum] = chapterData.rendered_html;
+    }
   }
 
   return {
@@ -1078,6 +1127,7 @@ function searchNeshByCode(query) {
     results,
     total_capitulos: Object.keys(results).length,
     success: true,
+    markdown: buildOfflineNeshMarkup(results, renderedHtmlByChapter),
   };
 }
 
@@ -1285,10 +1335,14 @@ function runStructuredSearch(docType, query, viewMode) {
         searchType: "code",
       };
     case "nesh":
-      return {
-        results: searchNeshByCode(query).results,
-        searchType: "code",
-      };
+      {
+        const neshCodeResponse = searchNeshByCode(query);
+        return {
+          results: neshCodeResponse.results,
+          searchType: "code",
+          markdown: neshCodeResponse.markdown || "",
+        };
+      }
     case "nbs":
       return { results: searchNbsByCode(query), searchType: "text" };
     case "nebs":
@@ -1305,13 +1359,18 @@ function handleSearchMessage(id, payload) {
   }
 
   const { docType, query, viewMode } = payload;
-  const { results, searchType } = runStructuredSearch(docType, query, viewMode);
+  const { results, searchType, markdown } = runStructuredSearch(
+    docType,
+    query,
+    viewMode
+  );
   postWorkerResult(id, {
     results,
     source: "local",
     docType,
     query,
     searchType,
+    markdown: typeof markdown === "string" ? markdown : undefined,
   });
 }
 

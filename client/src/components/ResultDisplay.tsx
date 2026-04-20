@@ -347,6 +347,7 @@ interface ResultDisplayProps {
     onConsumeNewSearch: (tabId: string, finalScrollTop?: number) => void;
     /** Callback to notify parent when content is ready (for coordinated loading) */
     onContentReady?: (tabId: string) => void;
+    onHydratedResults?: (tabId: string, results: Record<string, any>) => void;
 }
 
 type MarkupRenderRefs = {
@@ -489,16 +490,6 @@ type ChapterHydrationResult = {
 
 function createFailedChapterBodiesUpdater(failedChapters: string[]) {
     return (current: string[]) => Array.from(new Set([...current, ...failedChapters]));
-}
-
-function createHydratedCodeResultsUpdater(
-    codeResults: Record<string, any>,
-    chapterBodies: ChapterBodyResponse[],
-) {
-    return (current: Record<string, any> | null) => {
-        const baseResults = current ?? codeResults;
-        return mergeHydratedChapterBodies(baseResults, chapterBodies);
-    };
 }
 
 function createRecoveredChapterBodiesUpdater(chapterBodies: ChapterBodyResponse[]) {
@@ -852,7 +843,8 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     latestTextQuery,
     isNewSearch,
     onConsumeNewSearch,
-    onContentReady
+    onContentReady,
+    onHydratedResults
 }: ResultDisplayProps) {
     const { sidebarPosition } = useSettings();
     const {
@@ -1094,7 +1086,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     }, [failedChapterBodies, renderableCodeResults, shouldHydrateCodeResults]);
 
     useEffect(() => {
-        if (!isActive || !shouldHydrateCodeResults || !codeResults || missingChapterBodies.length === 0) {
+        if (!isActive || !shouldHydrateCodeResults || !renderableCodeResults || missingChapterBodies.length === 0) {
             return;
         }
 
@@ -1115,13 +1107,17 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
             if (chapterBodies.length === 0) return;
 
+            const mergedResults = mergeHydratedChapterBodies(
+                renderableCodeResults,
+                chapterBodies,
+            );
+
             startTransition(() => {
-                setHydratedCodeResults(
-                    createHydratedCodeResultsUpdater(codeResults, chapterBodies),
-                );
+                setHydratedCodeResults(mergedResults);
                 setFailedChapterBodies(
                     createRecoveredChapterBodiesUpdater(chapterBodies),
                 );
+                onHydratedResults?.(tabId, mergedResults);
             });
         };
 
@@ -1140,10 +1136,12 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             cancelled = true;
         };
     }, [
-        codeResults,
         isActive,
         missingChapterBodies,
+        onHydratedResults,
+        renderableCodeResults,
         shouldHydrateCodeResults,
+        tabId,
     ]);
 
     const findAnchorIdForQuery = useCallback((resultados: any, query: string) => {
@@ -1325,12 +1323,20 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
     const onPersistScrollRef = useRef(onPersistScroll);
     const hasConsumedNewSearchRef = useRef(false);
+    const isActiveRef = useRef(isActive);
+    const isNewSearchRef = useRef(isNewSearch);
     useEffect(() => {
         onPersistScrollRef.current = onPersistScroll;
     }, [onPersistScroll]);
     useEffect(() => {
         hasConsumedNewSearchRef.current = false;
     }, [consumeNewSearchKey]);
+    useEffect(() => {
+        isActiveRef.current = isActive;
+    }, [isActive]);
+    useEffect(() => {
+        isNewSearchRef.current = isNewSearch;
+    }, [isNewSearch]);
     useEffect(() => {
         onContentReadyRef.current = onContentReady;
     }, [onContentReady]);
@@ -1356,8 +1362,9 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         setActiveTerm(prev => (prev === normalizedLatestTextQuery ? prev : normalizedLatestTextQuery));
     }, [latestTextQuery, data?.query, tabId]);
 
-    const consumeNewSearchScroll = useCallback((scrollTop?: number) => {
+    const consumeNewSearchScroll = useCallback((scrollTop?: number, force = false) => {
         if (hasConsumedNewSearchRef.current) return;
+        if (!force && (!isActiveRef.current || !isNewSearchRef.current)) return;
         hasConsumedNewSearchRef.current = true;
         onConsumeNewSearchRef.current(tabId, scrollTop);
     }, [tabId]);
@@ -1367,15 +1374,16 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         // Wrap in RAF to ensure DOM has updated/painted the scroll action
         // before we capture the final position and update app state.
         requestAnimationFrame(() => {
+            if (!isActiveRef.current || !isNewSearchRef.current) return;
             const currentScroll = containerRef.current?.scrollTop || 0;
             consumeNewSearchScroll(currentScroll);
         });
     }, [consumeNewSearchScroll]);
 
     const handleHighlightScrollComplete = useCallback((scrollTop: number) => {
-        if (!isActive || !isNewSearch) return;
+        if (!isActiveRef.current || !isNewSearchRef.current) return;
         consumeNewSearchScroll(scrollTop);
-    }, [consumeNewSearchScroll, isActive, isNewSearch]);
+    }, [consumeNewSearchScroll]);
 
     // `isContentReady` means the tab can render, but auto-scroll only starts
     // once at least one candidate anchor is actually present in the DOM.
@@ -1403,12 +1411,22 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         if (!element) return;
 
         const handleScroll = () => {
-            latestScrollTopRef.current = element.scrollTop;
+            const currentScroll = element.scrollTop;
+            latestScrollTopRef.current = currentScroll;
+
+            if (!isActive) return;
+
+            const persist = onPersistScrollRef.current;
+            if (!persist) return;
+            if (lastPersistedScrollRef.current === currentScroll) return;
+
+            lastPersistedScrollRef.current = currentScroll;
+            persist(tabId, currentScroll);
         };
 
         element.addEventListener('scroll', handleScroll, { passive: true });
         return () => element.removeEventListener('scroll', handleScroll);
-    }, [data?.type, data?.markdown, renderableCodeResults]);
+    }, [data?.type, data?.markdown, renderableCodeResults, isActive, tabId]);
 
     // Persist scroll when tab becomes inactive
     useEffect(() => {
@@ -1417,11 +1435,15 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         if (!persist) return;
 
         const currentScroll = latestScrollTopRef.current;
+        if (isNewSearchRef.current && !hasConsumedNewSearchRef.current) {
+            consumeNewSearchScroll(currentScroll, true);
+            return;
+        }
         if (lastPersistedScrollRef.current === currentScroll) return;
 
         lastPersistedScrollRef.current = currentScroll;
         persist(tabId, currentScroll);
-    }, [isActive, tabId]);
+    }, [consumeNewSearchScroll, isActive, tabId]);
 
 
 
@@ -1441,12 +1463,55 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         if (hasRestoredInitialScrollRef.current) return;
         if (Math.abs(element.scrollTop - targetScrollTop) < 1) return;
 
-        requestAnimationFrame(() => {
-            if (!containerRef.current) return;
-            containerRef.current.scrollTop = targetScrollTop;
+        let cancelled = false;
+        let attempts = 0;
+        let frameId = 0;
+        const maxAttempts = 20;
+
+        const tryRestore = () => {
+            if (cancelled) return;
+
+            const currentContainer = containerRef.current;
+            if (!currentContainer) return;
+
+            if (Math.abs(currentContainer.scrollTop - targetScrollTop) < 1) {
+                latestScrollTopRef.current = targetScrollTop;
+                lastPersistedScrollRef.current = targetScrollTop;
+                hasRestoredInitialScrollRef.current = true;
+                return;
+            }
+
+            const hasScrollableContent = currentContainer.scrollHeight > currentContainer.clientHeight;
+            if (!hasScrollableContent && attempts < maxAttempts) {
+                attempts += 1;
+                frameId = requestAnimationFrame(tryRestore);
+                return;
+            }
+
+            currentContainer.scrollTop = targetScrollTop;
             latestScrollTopRef.current = targetScrollTop;
+            lastPersistedScrollRef.current = targetScrollTop;
+
+            if (Math.abs(currentContainer.scrollTop - targetScrollTop) < 1) {
+                hasRestoredInitialScrollRef.current = true;
+                return;
+            }
+
+            if (attempts < maxAttempts) {
+                attempts += 1;
+                frameId = requestAnimationFrame(tryRestore);
+                return;
+            }
+
             hasRestoredInitialScrollRef.current = true;
-        });
+        };
+
+        frameId = requestAnimationFrame(tryRestore);
+
+        return () => {
+            cancelled = true;
+            cancelAnimationFrame(frameId);
+        };
     }, [isActive, initialScrollTop, isNewSearch, isContentReady]);
 
     // Reset restored flag when inactive so it can restore again when returning
@@ -1786,5 +1851,3 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         </div>
     );
 });
-
-
