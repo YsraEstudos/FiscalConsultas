@@ -42,7 +42,10 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         baseURL: liveBaseUrl,
         launchOptions: {
-          args: [`--unsafely-treat-insecure-origin-as-secure=${liveSecureOrigin}`],
+          args: [
+            `--unsafely-treat-insecure-origin-as-secure=${liveSecureOrigin}`,
+            '--host-resolver-rules=MAP offline-e2e.local 127.0.0.1',
+          ],
         },
       },
     },

@@ -131,6 +131,10 @@ function isOfflineNavigationError(error: unknown): boolean {
   return error instanceof Error && error.message.includes('ERR_INTERNET_DISCONNECTED');
 }
 
+async function hasServiceWorkerSupport(page: Page): Promise<boolean> {
+  return page.evaluate(() => globalThis.isSecureContext && 'serviceWorker' in navigator);
+}
+
 test.describe('live offline reopen with active service worker', () => {
   test.skip(!isNonLocalHostBaseUrlConfigured(), 'Set PLAYWRIGHT_LIVE_BASE_URL to a non-localhost host (e.g. http://offline-e2e.local:4173).');
 
@@ -148,6 +152,7 @@ test.describe('live offline reopen with active service worker', () => {
 
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+    test.skip(!(await hasServiceWorkerSupport(page)), 'Current browser environment does not expose service workers for this origin.');
 
     const hostname = await page.evaluate(() => globalThis.location.hostname);
     expect(hostname).not.toBe('localhost');
@@ -155,6 +160,7 @@ test.describe('live offline reopen with active service worker', () => {
 
     await page.reload();
     await page.waitForFunction(() => window.crossOriginIsolated === true);
+    test.skip(!(await hasServiceWorkerSupport(page)), 'Current browser environment lost service worker support after reload.');
 
     await installOfflineFromSettings(page, 15_000);
     expect(counters.token).toBe(1);
