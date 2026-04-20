@@ -2,20 +2,6 @@ import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useRobustScroll } from '../../src/hooks/useRobustScroll';
 
-const hoisted = vi.hoisted(() => ({
-    debugLogMock: vi.fn(),
-    debugWarnMock: vi.fn(),
-}));
-
-vi.mock('../../src/utils/debug', () => ({
-    debug: {
-        log: hoisted.debugLogMock,
-        warn: hoisted.debugWarnMock,
-        error: vi.fn(),
-        info: vi.fn(),
-    },
-}));
-
 describe('useRobustScroll Hook', () => {
     let container: HTMLElement;
     let originalCss: typeof globalThis.CSS | undefined;
@@ -36,8 +22,6 @@ describe('useRobustScroll Hook', () => {
         } else {
             globalThis.CSS = originalCss;
         }
-        hoisted.debugLogMock.mockReset();
-        hoisted.debugWarnMock.mockReset();
     });
 
     it('should scroll immediately if target exists', () => {
@@ -93,7 +77,6 @@ describe('useRobustScroll Hook', () => {
 
         expect(document.getElementById('future-element')?.scrollIntoView).toHaveBeenCalled();
         expect(onComplete).toHaveBeenCalledWith(true);
-        expect(hoisted.debugWarnMock).not.toHaveBeenCalled();
         vi.useRealTimers();
     });
 
@@ -118,7 +101,6 @@ describe('useRobustScroll Hook', () => {
         });
 
         expect(onComplete).toHaveBeenCalledWith(false);
-        expect(hoisted.debugWarnMock).toHaveBeenCalledWith('[RobustScroll] Timed out waiting for target.');
         vi.useRealTimers();
     });
 

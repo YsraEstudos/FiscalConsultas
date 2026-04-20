@@ -54,15 +54,23 @@ async function setAndCaptureScrollTop(page: Page, containerId: string, targetScr
   }
 
   expect(currentScrollTop, `Expected #${containerId} to reach at least ${targetScrollTop}px`).toBeGreaterThanOrEqual(targetScrollTop);
-  await page.evaluate(async () => {
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  });
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  }));
   return currentScrollTop;
 }
 
 async function waitForInitialAutoScroll(page: Page, selector: string) {
   await expect(page.locator(selector)).toHaveClass(/flash-highlight/);
+}
+
+async function expectScrollTopNear(page: Page, selector: string, expectedScrollTop: number, tolerance = 1) {
+  await expect.poll(async () => {
+    const currentScrollTop = await page.locator(selector).evaluate((element) => element.scrollTop);
+    return Math.abs(currentScrollTop - expectedScrollTop);
+  }).toBeLessThanOrEqual(tolerance);
 }
 
 async function waitForScrollToSettle(page: Page, containerId: string) {
@@ -86,13 +94,6 @@ async function waitForScrollToSettle(page: Page, containerId: string) {
     lastScrollTop = currentScrollTop;
     return false;
   }, { timeout: 10_000 }).toBe(true);
-}
-
-async function expectScrollTopNear(page: Page, selector: string, expectedScrollTop: number, tolerance = 1) {
-  await expect.poll(async () => {
-    const currentScrollTop = await page.locator(selector).evaluate((element) => element.scrollTop);
-    return Math.abs(currentScrollTop - expectedScrollTop);
-  }).toBeLessThanOrEqual(tolerance);
 }
 
 async function installCodeCatalogMocks(page: Page) {
@@ -226,6 +227,7 @@ test('restores saved scroll when returning to a tab with a different document', 
   await page.locator('div[draggable="true"][data-document="tipi"]').first().click();
   await expect.poll(async () => getActiveTabDocument(page)).toBe('tipi');
   await expect(page.locator(`#${tipiContainerId}`)).toBeVisible();
+  await expectScrollTopNear(page, `#${tipiContainerId}`, savedTipiScrollTop);
 });
 
 test('preserves independent scroll positions after rapid tab switching', async ({ page }) => {
@@ -245,6 +247,7 @@ test('preserves independent scroll positions after rapid tab switching', async (
   await page.locator('div[draggable="true"][data-document="tipi"]').first().click();
   await expect.poll(async () => getActiveTabDocument(page)).toBe('tipi');
   await expect(page.locator(`#${tipiContainerId}`)).toBeVisible();
+  await expectScrollTopNear(page, `#${tipiContainerId}`, savedTipiScrollTop);
 
   await page.locator('div[draggable="true"][data-document="nesh"]').first().click();
   await expectScrollTopNear(page, '#results-content-tab-1', savedNeshScrollTop);

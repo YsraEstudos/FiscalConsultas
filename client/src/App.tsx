@@ -350,6 +350,31 @@ function App() {
         handleOpenNoteRef.current = handleOpenNote;
     }, [handleOpenNote]);
 
+    const handleHydratedResults = useCallback((incomingTabId: string, hydratedResults: Record<string, any> | null | undefined) => {
+        if (!hydratedResults) {
+            return;
+        }
+
+        updateTab(incomingTabId, (currentTab) => {
+            if (!currentTab || currentTab.id !== incomingTabId) {
+                return undefined;
+            }
+
+            const currentResults = currentTab.results;
+            if (!currentResults || !isCodeSearchResponse(currentResults)) {
+                return undefined;
+            }
+
+            return {
+                results: {
+                    ...currentResults,
+                    results: hydratedResults,
+                    resultados: hydratedResults,
+                },
+            };
+        });
+    }, [updateTab]);
+
     // Handler único de clique com delegação (smart-link + note-ref)
     useEffect(() => {
         const handleDelegatedMiddleMouseDown = (event: MouseEvent) => {
@@ -746,6 +771,7 @@ function App() {
                                                 updateTab(tab.id, { isContentReady: true });
                                             }
                                         }}
+                                        onHydratedResults={handleHydratedResults}
                                     />
                                 )}
                                 {/* Esconder visualmente ResultDisplay se nao estiver pronto? Nao, manter montado para o IntersectionObserver rodar,

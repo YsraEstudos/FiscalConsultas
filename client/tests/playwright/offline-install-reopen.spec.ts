@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
 
+import { expectOfflineMetadataPersisted } from './helpers/offlineInstallFlow';
 import {
-  expectOfflineMetadataPersisted,
   installOfflineApiMock,
   installOfflineFromSettings,
   installOfflineWorkerMock,
   type OfflineApiCounters,
-} from './helpers/offlineInstallFlow';
+} from './helpers/offlineHarness';
 
 test.describe('offline install and reopen flow', () => {
   test('installs offline database using version/token/download endpoints', async ({ page }) => {
@@ -29,6 +29,7 @@ test.describe('offline install and reopen flow', () => {
     expect(counters.download).toBe(1);
 
     await page.keyboard.press('Escape');
+    await expect(page.getByTitle('Buscas Offline configuradas!')).toBeVisible();
     await expectOfflineMetadataPersisted(page);
   });
 
@@ -44,6 +45,8 @@ test.describe('offline install and reopen flow', () => {
 
     await page.goto('/');
     await installOfflineFromSettings(page);
+    await page.keyboard.press('Escape');
+    await expect(page.getByTitle('Buscas Offline configuradas!')).toBeVisible();
     await expectOfflineMetadataPersisted(page);
 
     await page.unroute('**/api/**');
@@ -54,6 +57,7 @@ test.describe('offline install and reopen flow', () => {
     await page.reload();
 
     await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+    await expect(page.getByTitle('Buscas Offline configuradas!')).toBeVisible();
     await expectOfflineMetadataPersisted(page);
   });
 });

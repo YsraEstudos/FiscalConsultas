@@ -23,6 +23,7 @@ const DB_OPFS_FILENAME = "fiscal_offline.enc";
 const DB_VERSION_KEY = "fiscal_offline_version";
 const MULTI_CODE_MAX_PARTS = 25;
 const MAX_ANCESTOR_DEPTH = 64;
+const SEARCH_CACHE_MAX = 32;
 
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import {
@@ -49,6 +50,38 @@ let _db = null;
 let _currentVersion = null;
 /** @type {'not_installed' | 'ready' | 'installing' | 'error' | 'checking'} */
 let _status = "checking";
+
+// ---------------------------------------------------------------------------
+// LRU Search Cache — avoids re-executing identical queries
+// ---------------------------------------------------------------------------
+/** @type {Map<string, {results: any, searchType: string, markdown?: string}>} */
+const _searchCache = new Map();
+
+function _getCacheKey(docType, query, viewMode) {
+  return `${docType}\0${query}\0${viewMode || ''}`;
+}
+
+function _getCachedResult(key) {
+  if (!_searchCache.has(key)) return null;
+  const value = _searchCache.get(key);
+  // Move to end (MRU position)
+  _searchCache.delete(key);
+  _searchCache.set(key, value);
+  return value;
+}
+
+function _setCachedResult(key, value) {
+  if (_searchCache.size >= SEARCH_CACHE_MAX) {
+    // Evict oldest (first key in Map iteration order)
+    const oldest = _searchCache.keys().next().value;
+    _searchCache.delete(oldest);
+  }
+  _searchCache.set(key, value);
+}
+
+function _clearSearchCache() {
+  _searchCache.clear();
+}
 
 // ---------------------------------------------------------------------------
 // Logging controls (avoid noisy worker logs in production builds)
@@ -379,6 +412,10 @@ async function loadDatabaseFromBytes(dbBytes) {
     throw new Error(`sqlite3_deserialize failed with code ${rc}`);
   }
 
+  // Read-optimized PRAGMAs for in-memory DB
+  _db.exec("PRAGMA cache_size = -4000");   // 4 MB page cache
+  _db.exec("PRAGMA temp_store = MEMORY");   // temp tables in WASM heap
+
   // Verify DB is usable
   const testResult = _db.exec("SELECT value FROM db_metadata WHERE key='version'", {
     returnValue: "resultRows",
@@ -386,6 +423,9 @@ async function loadDatabaseFromBytes(dbBytes) {
   if (testResult && testResult.length > 0) {
     _currentVersion = testResult[0][0];
   }
+
+  // Invalidate search cache when a new DB is loaded
+  _clearSearchCache();
 }
 
 // ---------------------------------------------------------------------------
@@ -417,17 +457,17 @@ function ftsSearch(table, query, columns, contentTable, limit = 50) {
   if (terms.length === 0) return [];
 
   const matchExpr = terms.map((t) => `"${t}"*`).join(" ");
-  const colList = columns.join(", ");
+  const colList = columns.map((c) => `ct.${c}`).join(", ");
 
   try {
+    // Use table-valued FTS5 syntax so the search still targets the virtual
+    // table when we alias it for the content-table join.
     const sql = `
       SELECT ${colList}
-      FROM ${contentTable}
-      WHERE rowid IN (
-        SELECT rowid FROM ${table} WHERE ${table} MATCH ?
-        ORDER BY rank
-        LIMIT ?
-      )
+      FROM ${table}(?) AS ft
+      JOIN ${contentTable} AS ct ON ct.rowid = ft.rowid
+      ORDER BY rank
+      LIMIT ?
     `;
     const rows = _db.exec(sql, {
       bind: [matchExpr, limit],
@@ -442,7 +482,8 @@ function ftsSearch(table, query, columns, contentTable, limit = 50) {
         .map(() => `${columns.slice(-1)[0]} LIKE ?`)
         .join(" AND ");
       const likeParams = terms.map((t) => `%${t}%`);
-      const sql = `SELECT ${colList} FROM ${contentTable} WHERE ${likeClause} LIMIT ?`;
+      const fallbackColList = columns.join(", ");
+      const sql = `SELECT ${fallbackColList} FROM ${contentTable} WHERE ${likeClause} LIMIT ?`;
       const rows = _db.exec(sql, {
         bind: [...likeParams, limit],
         returnValue: "resultRows",
@@ -935,22 +976,78 @@ function collectNeshChapterTargets(query) {
   return chapterTargets;
 }
 
+function isLegacyNeshChapterSchemaError(error) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /no such column|rendered_html|schema/i.test(message);
+}
+
 function getNeshChapterSearchData(chapterNum) {
+  let chapterData;
+
+  try {
+    chapterData = queryFirstOptionalRow(
+      `SELECT c.content, c.rendered_html,
+              n.notes_content, n.titulo, n.notas,
+              n.consideracoes, n.definicoes, n.parsed_notes_json
+       FROM nesh_chapters c
+       LEFT JOIN nesh_chapter_notes n ON n.chapter_num = c.chapter_num
+       WHERE c.chapter_num = ?`,
+      [chapterNum]
+    );
+  } catch (error) {
+    if (!isLegacyNeshChapterSchemaError(error)) {
+      throw error;
+    }
+
+    chapterData = queryFirstOptionalRow(
+      `SELECT c.content, NULL AS rendered_html,
+              n.notes_content, n.titulo, n.notas,
+              n.consideracoes, n.definicoes, n.parsed_notes_json
+       FROM nesh_chapters c
+       LEFT JOIN nesh_chapter_notes n ON n.chapter_num = c.chapter_num
+       WHERE c.chapter_num = ?`,
+      [chapterNum]
+    );
+  }
+
   return {
     positions: queryResultRows(
       `SELECT codigo, descricao FROM nesh_positions WHERE chapter_num = ? ORDER BY codigo`,
       [chapterNum]
     ),
-    chapterData: queryFirstOptionalRow(
-      `SELECT content FROM nesh_chapters WHERE chapter_num = ?`,
-      [chapterNum]
-    ),
-    notesData: queryFirstOptionalRow(
-      `SELECT notes_content, titulo, notas, consideracoes, definicoes, parsed_notes_json
-       FROM nesh_chapter_notes WHERE chapter_num = ?`,
-      [chapterNum]
-    ),
+    chapterData: chapterData
+      ? {
+          content: chapterData.content,
+          rendered_html: chapterData.rendered_html,
+        }
+      : null,
+    notesData: chapterData
+      ? {
+          notes_content: chapterData.notes_content,
+          titulo: chapterData.titulo,
+          notas: chapterData.notas,
+          consideracoes: chapterData.consideracoes,
+          definicoes: chapterData.definicoes,
+          parsed_notes_json: chapterData.parsed_notes_json,
+        }
+      : null,
   };
+}
+
+function buildOfflineNeshMarkup(results, chapterHtmlByChapter) {
+  const orderedChapters = Object.keys(results).sort(
+    (left, right) => Number(left) - Number(right)
+  );
+  const htmlParts = [];
+
+  for (const chapterNum of orderedChapters) {
+    const chapterHtml = chapterHtmlByChapter[chapterNum];
+    if (typeof chapterHtml === "string" && chapterHtml.trim()) {
+      htmlParts.push(chapterHtml.trim());
+    }
+  }
+
+  return htmlParts.join("\n\n");
 }
 
 function buildMissingNeshChapterResult(chapterNum, ncmBuscado) {
@@ -1031,7 +1128,13 @@ function searchTipiByCode(query, viewMode = "family") {
  */
 function searchNeshByCode(query) {
   if (!_db)
-    return { type: "code", results: {}, total_capitulos: 0, success: true };
+    return {
+      type: "code",
+      results: {},
+      total_capitulos: 0,
+      success: true,
+      markdown: "",
+    };
 
   const chapterTargets = collectNeshChapterTargets(query);
 
@@ -1043,11 +1146,14 @@ function searchNeshByCode(query) {
       results: {},
       total_capitulos: 0,
       success: true,
+      markdown: "",
     };
   }
 
   /** @type {Record<string, any>} */
   const results = {};
+  /** @type {Record<string, string>} */
+  const renderedHtmlByChapter = {};
 
   for (const [chapterNum, [ncmBuscado, targetPos]] of chapterTargets) {
     const { positions, chapterData, notesData } =
@@ -1069,6 +1175,10 @@ function searchNeshByCode(query) {
       chapterData,
       notesData
     );
+
+    if (typeof chapterData?.rendered_html === "string") {
+      renderedHtmlByChapter[chapterNum] = chapterData.rendered_html;
+    }
   }
 
   return {
@@ -1078,6 +1188,7 @@ function searchNeshByCode(query) {
     results,
     total_capitulos: Object.keys(results).length,
     success: true,
+    markdown: buildOfflineNeshMarkup(results, renderedHtmlByChapter),
   };
 }
 
@@ -1142,7 +1253,7 @@ async function handleInitMessage(id, payload) {
   });
 }
 
-async function readEncryptedDownload(dlResp, id) {
+async function readEncryptedDatabaseBlob(dlResp, id) {
   const contentLength = parseInt(dlResp.headers.get("content-length") || "0", 10);
   const reader = dlResp.body?.getReader();
   if (!reader) throw new Error("No response body");
@@ -1158,7 +1269,7 @@ async function readEncryptedDownload(dlResp, id) {
 
     if (contentLength > 0) {
       const dlProgress = 10 + Math.round((received / contentLength) * 60);
-      postWorkerProgress(id, dlProgress, "downloading");
+      postWorkerProgress(id, dlProgress, "fetching_database");
     }
   }
 
@@ -1186,7 +1297,7 @@ async function requestInstallToken(apiBase) {
   return tokenResp.json();
 }
 
-async function downloadEncryptedDatabase(apiBase, token) {
+async function fetchEncryptedDatabase(apiBase, token) {
   const dlResp = await fetch(`${apiBase}/database/download`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1195,7 +1306,7 @@ async function downloadEncryptedDatabase(apiBase, token) {
 
   if (!dlResp.ok) {
     const errText = await dlResp.text();
-    throw new Error(`Download failed (${dlResp.status}): ${errText}`);
+    throw new Error(`Offline database retrieval failed (${dlResp.status}): ${errText}`);
   }
 
   return dlResp;
@@ -1228,16 +1339,16 @@ async function handleInstallMessage(id, payload) {
     pbkdf2_iterations: iterations = 600000,
   } = tokenData;
 
-  postWorkerProgress(id, 10, "downloading");
+  postWorkerProgress(id, 10, "fetching_database");
 
-  const dlResp = await downloadEncryptedDatabase(apiBase, token);
-  const encryptedBlob = await readEncryptedDownload(dlResp, id);
+  const dlResp = await fetchEncryptedDatabase(apiBase, token);
+  const encryptedBlob = await readEncryptedDatabaseBlob(dlResp, id);
 
   if (expectedEncryptedSha256) {
-    postWorkerProgress(id, 72, "verifying_download");
+    postWorkerProgress(id, 72, "verifying_integrity");
     const actualEncryptedSha256 = await sha256Hex(encryptedBlob);
     if (actualEncryptedSha256 !== expectedEncryptedSha256) {
-      throw new Error("Download integrity verification failed");
+      throw new Error("Offline database integrity verification failed");
     }
   }
 
@@ -1285,10 +1396,14 @@ function runStructuredSearch(docType, query, viewMode) {
         searchType: "code",
       };
     case "nesh":
-      return {
-        results: searchNeshByCode(query).results,
-        searchType: "code",
-      };
+      {
+        const neshCodeResponse = searchNeshByCode(query);
+        return {
+          results: neshCodeResponse.results,
+          searchType: "code",
+          markdown: neshCodeResponse.markdown || "",
+        };
+      }
     case "nbs":
       return { results: searchNbsByCode(query), searchType: "text" };
     case "nebs":
@@ -1304,14 +1419,42 @@ function handleSearchMessage(id, payload) {
     return;
   }
 
+  const t0 = performance.now();
   const { docType, query, viewMode } = payload;
-  const { results, searchType } = runStructuredSearch(docType, query, viewMode);
+  const cacheKey = _getCacheKey(docType, query, viewMode);
+
+  // Check LRU cache first
+  const cached = _getCachedResult(cacheKey);
+  if (cached) {
+    const totalDurationMs = performance.now() - t0;
+    postWorkerResult(id, {
+      results: cached.results,
+      source: "local",
+      docType,
+      query,
+      searchType: cached.searchType,
+      markdown: cached.markdown,
+      timing: { sqlDurationMs: 0, totalDurationMs, cacheHit: true },
+    });
+    return;
+  }
+
+  const sqlStart = performance.now();
+  const { results, searchType, markdown } = runStructuredSearch(docType, query, viewMode);
+  const sqlDurationMs = performance.now() - sqlStart;
+
+  // Store in LRU cache
+  _setCachedResult(cacheKey, { results, searchType, markdown });
+
+  const totalDurationMs = performance.now() - t0;
   postWorkerResult(id, {
     results,
     source: "local",
     docType,
     query,
     searchType,
+    markdown: typeof markdown === "string" ? markdown : undefined,
+    timing: { sqlDurationMs, totalDurationMs, cacheHit: false },
   });
 }
 
@@ -1357,6 +1500,7 @@ async function handleRemoveMessage(id) {
   }
   _currentVersion = null;
   _status = "not_installed";
+  _clearSearchCache();
 
   await removeFromOpfs();
   postWorkerStatus(id, { status: "not_installed" });

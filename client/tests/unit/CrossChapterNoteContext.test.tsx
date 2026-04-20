@@ -29,6 +29,12 @@ describe('CrossChapterNoteContext', () => {
         localDatabaseState.getNeshChapterNotesLocal.mockResolvedValue(null);
     });
 
+    it('does not expose a default export that can destabilize Fast Refresh', async () => {
+        const moduleExports = await import('../../src/context/CrossChapterNoteContext');
+
+        expect('default' in moduleExports).toBe(false);
+    });
+
     it('caches chapter notes after first fetch', async () => {
         vi.mocked(fetchChapterNotes).mockResolvedValue({
             success: true,

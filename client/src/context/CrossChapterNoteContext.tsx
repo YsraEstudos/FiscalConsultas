@@ -39,12 +39,12 @@ const MAX_CACHED_CHAPTERS = 20;
  * - Cache persiste no estado (evita re-fetches)
  * - useCallback estável para evitar re-renders
  */
-export function CrossChapterNoteProvider({ children }: Readonly<CrossChapterNoteProviderProps>) {
+export function CrossChapterNoteProvider({ children }: CrossChapterNoteProviderProps) {
+    const { status: dbStatus, getNeshChapterNotesLocal } = useLocalDatabase();
     const [cache, setCache] = useState<NotesCache>({});
     const cacheRef = useRef<NotesCache>({});
     const cacheOrderRef = useRef<string[]>([]);
     const inFlightRef = useRef<Map<string, Promise<Record<string, string>>>>(new Map());
-    const { status: dbStatus, getNeshChapterNotesLocal } = useLocalDatabase();
 
     /**
      * Busca notas de um capítulo específico.
@@ -62,24 +62,25 @@ export function CrossChapterNoteProvider({ children }: Readonly<CrossChapterNote
         }
 
         const request = (async () => {
-            if (dbStatus === 'ready') {
-                const localNotes = await getNeshChapterNotesLocal(chapter);
-                if (localNotes) {
-                    const nextCache: NotesCache = { ...cacheRef.current, [chapter]: localNotes };
-                    const nextOrder = [...cacheOrderRef.current.filter(id => id !== chapter), chapter];
+            const localNotes =
+                dbStatus === 'ready'
+                    ? await getNeshChapterNotesLocal(chapter)
+                    : null;
+            if (localNotes) {
+                const nextCache: NotesCache = { ...cacheRef.current, [chapter]: localNotes };
+                const nextOrder = [...cacheOrderRef.current.filter(id => id !== chapter), chapter];
 
-                    while (nextOrder.length > MAX_CACHED_CHAPTERS) {
-                        const oldest = nextOrder.shift();
-                        if (oldest) {
-                            delete nextCache[oldest];
-                        }
+                while (nextOrder.length > MAX_CACHED_CHAPTERS) {
+                    const oldest = nextOrder.shift();
+                    if (oldest) {
+                        delete nextCache[oldest];
                     }
-
-                    cacheOrderRef.current = nextOrder;
-                    cacheRef.current = nextCache;
-                    setCache(nextCache);
-                    return localNotes;
                 }
+
+                cacheOrderRef.current = nextOrder;
+                cacheRef.current = nextCache;
+                setCache(nextCache);
+                return localNotes;
             }
 
             const response = await fetchChapterNotes(chapter);
@@ -151,5 +152,3 @@ export function useCrossChapterNotes(): CrossChapterNoteContextValue {
     }
     return context;
 }
-
-export default CrossChapterNoteContext;

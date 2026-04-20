@@ -1,12 +1,16 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
+import { expectOfflineMetadataPersisted } from './helpers/offlineInstallFlow';
 import {
-  expectOfflineMetadataPersisted,
+  installAuthSessionMock,
   installOfflineApiMock,
   installOfflineFromSettings,
   installOfflineWorkerMock,
   type OfflineApiCounters,
-} from './helpers/offlineInstallFlow';
+} from './helpers/offlineHarness';
+
+const APP_SHELL_CACHE = 'app-shell-v3';
+const RUNTIME_CACHE = 'runtime-assets-v3';
 
 function isNonLocalHostBaseUrlConfigured(): boolean {
   const rawBaseUrl = process.env.PLAYWRIGHT_LIVE_BASE_URL || '';
@@ -20,6 +24,119 @@ function isNonLocalHostBaseUrlConfigured(): boolean {
   }
 }
 
+async function installOfflineSupportMock(page: Page) {
+  await page.addInitScript(() => {
+    try {
+      if (globalThis.SharedArrayBuffer === undefined) {
+        Object.defineProperty(globalThis, 'SharedArrayBuffer', {
+          configurable: true,
+          value: class SharedArrayBufferShim {},
+        });
+      }
+    } catch {
+      // Some browsers expose this as a non-configurable global; ignore that.
+    }
+
+    try {
+      const cryptoObject = globalThis.crypto as Crypto & { subtle?: unknown } | undefined;
+      if (cryptoObject && cryptoObject.subtle === undefined) {
+        const subtleShim = {};
+        try {
+          Object.defineProperty(cryptoObject, 'subtle', {
+            configurable: true,
+            value: subtleShim,
+          });
+        } catch {
+          const cryptoPrototype = Object.getPrototypeOf(cryptoObject);
+          if (cryptoPrototype) {
+            Object.defineProperty(cryptoPrototype, 'subtle', {
+              configurable: true,
+              value: subtleShim,
+            });
+          }
+        }
+      }
+    } catch {
+      // If crypto is read-only, the live spec will still surface the unsupported state.
+    }
+
+    try {
+      const navigatorWithStorage = navigator as Navigator & {
+        storage?: { getDirectory?: unknown };
+      };
+      const storage = navigatorWithStorage.storage;
+      if (!storage || typeof storage.getDirectory !== 'function') {
+        const storageShim = {
+          ...(storage && typeof storage === 'object' ? storage : {}),
+          getDirectory: async () => ({}),
+        };
+        try {
+          Object.defineProperty(navigatorWithStorage, 'storage', {
+            configurable: true,
+            value: storageShim,
+          });
+        } catch {
+          const navigatorPrototype = Object.getPrototypeOf(navigatorWithStorage);
+          if (navigatorPrototype) {
+            Object.defineProperty(navigatorPrototype, 'storage', {
+              configurable: true,
+              value: storageShim,
+            });
+          }
+        }
+      }
+    } catch {
+      // If storage is read-only, the live spec will still surface the unsupported state.
+    }
+  });
+}
+
+async function waitForOfflineShellCache(page: Page) {
+  await page.waitForFunction(
+    async ({ appShellCacheName, runtimeCacheName }) => {
+      if (!navigator.serviceWorker?.controller) return false;
+      if (!('caches' in globalThis)) return false;
+
+      const [appShellCache, runtimeCache] = await Promise.all([
+        caches.open(appShellCacheName),
+        caches.open(runtimeCacheName),
+      ]);
+      const assetUrls = Array.from(
+        document.querySelectorAll<HTMLScriptElement | HTMLLinkElement>(
+          'script[src], link[rel="stylesheet"][href], link[rel="modulepreload"][href]',
+        ),
+      ).map((element) => new URL(element.src || element.href, globalThis.location.href).toString());
+      const urls = [
+        globalThis.location.href,
+        new URL('./', globalThis.location.href).toString(),
+        new URL('./index.html', globalThis.location.href).toString(),
+        ...assetUrls,
+      ];
+
+      for (const url of urls) {
+        if ((await appShellCache.match(url)) || (await runtimeCache.match(url))) {
+          continue;
+        }
+        return false;
+      }
+
+      return true;
+    },
+    {
+      appShellCacheName: APP_SHELL_CACHE,
+      runtimeCacheName: RUNTIME_CACHE,
+    },
+  );
+}
+
+function isOfflineNavigationError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('ERR_INTERNET_DISCONNECTED');
+}
+
+async function hasServiceWorkerSupport(page: Page): Promise<boolean> {
+  return page.evaluate(() => globalThis.isSecureContext && 'serviceWorker' in navigator);
+}
+
 test.describe('live offline reopen with active service worker', () => {
   test.skip(!isNonLocalHostBaseUrlConfigured(), 'Set PLAYWRIGHT_LIVE_BASE_URL to a non-localhost host (e.g. http://offline-e2e.local:4173).');
 
@@ -30,39 +147,58 @@ test.describe('live offline reopen with active service worker', () => {
       download: 0,
     };
 
+    await installOfflineSupportMock(page);
     await installOfflineWorkerMock(page);
+    await installAuthSessionMock(page);
     await installOfflineApiMock(page, counters);
 
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+    test.skip(!(await hasServiceWorkerSupport(page)), 'Current browser environment does not expose service workers for this origin.');
 
     const hostname = await page.evaluate(() => globalThis.location.hostname);
     expect(hostname).not.toBe('localhost');
     expect(hostname).not.toBe('127.0.0.1');
-
-    const isSecureContext = await page.evaluate(() => globalThis.isSecureContext);
-    expect(isSecureContext).toBe(true);
-
-    await page.waitForFunction(async () => {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      return registrations.length > 0;
-    });
-
     await page.reload();
-    await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+    await page.waitForFunction(() => window.crossOriginIsolated === true);
+    test.skip(!(await hasServiceWorkerSupport(page)), 'Current browser environment lost service worker support after reload.');
 
-    await installOfflineFromSettings(page);
+    await installOfflineFromSettings(page, 15_000);
     expect(counters.token).toBe(1);
     expect(counters.download).toBe(1);
 
     await page.keyboard.press('Escape');
+    await expect(page.getByTitle('Buscas Offline configuradas!')).toBeVisible();
     await expectOfflineMetadataPersisted(page);
+    await waitForOfflineShellCache(page);
 
     await page.unroute('**/api/**');
     await context.setOffline(true);
     try {
-      await page.reload();
+      await page.evaluate(() => {
+        (globalThis as typeof globalThis & { __offlineReloadSentinel?: string }).__offlineReloadSentinel = 'before-reload';
+      });
+
+      try {
+        await page.reload({ waitUntil: 'domcontentloaded' });
+      } catch (error) {
+        if (!isOfflineNavigationError(error)) {
+          throw error;
+        }
+      }
+
+      await expect.poll(async () => {
+        try {
+          return await page.evaluate(
+            () => (globalThis as typeof globalThis & { __offlineReloadSentinel?: string }).__offlineReloadSentinel ?? null,
+          );
+        } catch {
+          return 'navigating';
+        }
+      }).toBe(null);
+
       await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+      await expect(page.getByTitle('Buscas Offline configuradas!')).toBeVisible();
       await expectOfflineMetadataPersisted(page);
     } finally {
       await context.setOffline(false);
