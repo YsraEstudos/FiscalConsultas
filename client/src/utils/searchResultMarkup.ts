@@ -32,25 +32,29 @@ function normalizeTipiLevel(value: unknown): number {
 
 function getAliquotClass(aliquota: string) {
     const normalized = (aliquota || '').toString().trim().toUpperCase();
-    if (!normalized || normalized === '0' || normalized === '0%') {
-        return { className: 'aliquot-zero', tooltip: 'Isento de IPI', display: normalized || '0%' };
+    if (!normalized) {
+        return { className: 'aliquot-unknown', tooltip: 'Nao informado', display: 'N/I' };
     }
+
     if (normalized === 'NT') {
-        return { className: 'aliquot-nt', tooltip: 'Não Tributável', display: 'NT' };
+        return { className: 'aliquot-nt', tooltip: 'Nao Tributavel', display: 'NT' };
     }
 
     const numeric = Number(normalized.replace('%', '').replace(',', '.'));
     if (!Number.isNaN(numeric)) {
+        if (numeric === 0) {
+            return { className: 'aliquot-zero', tooltip: 'Isento de IPI', display: '0%' };
+        }
         if (numeric <= 5) {
-            return { className: 'aliquot-low', tooltip: 'Alíquota Reduzida (1-5%)', display: `${numeric}%` };
+            return { className: 'aliquot-low', tooltip: 'Aliquota Reduzida (1-5%)', display: `${numeric}%` };
         }
         if (numeric <= 10) {
-            return { className: 'aliquot-med', tooltip: 'Alíquota Média (6-10%)', display: `${numeric}%` };
+            return { className: 'aliquot-med', tooltip: 'Aliquota Media (6-10%)', display: `${numeric}%` };
         }
-        return { className: 'aliquot-high', tooltip: 'Alíquota Elevada (>10%)', display: `${numeric}%` };
+        return { className: 'aliquot-high', tooltip: 'Aliquota Elevada (>10%)', display: `${numeric}%` };
     }
 
-    return { className: 'aliquot-zero', tooltip: 'Isento de IPI', display: normalized };
+    return { className: 'aliquot-unknown', tooltip: 'Nao informado', display: 'N/I' };
 }
 
 function renderTipiPosition(pos: any): string {
@@ -75,14 +79,18 @@ function renderTipiPosition(pos: any): string {
 </article>`;
 }
 
-function renderTipiChapter(chapter: any): string {
+function renderTipiChapter(chapter: any): string | null {
     const capitulo = chapter?.capitulo || '';
-    const titulo = chapter?.titulo || `Capítulo ${capitulo}`;
+    const titulo = chapter?.titulo || (capitulo ? `Capitulo ${capitulo}` : '');
     const chapterId = escapeMarkupAttr(`cap-${capitulo}`);
     const safeCapitulo = escapeMarkupText(capitulo);
     const safeTitulo = escapeMarkupText(titulo);
     const posicoes = Array.isArray(chapter?.posicoes) ? chapter.posicoes : [];
     const positionsHtml = posicoes.map(renderTipiPosition).join('');
+
+    if (!safeCapitulo && !safeTitulo && !positionsHtml) {
+        return null;
+    }
 
     return `
 <div class="tipi-chapter" id="${chapterId}">
@@ -96,11 +104,23 @@ function renderTipiChapter(chapter: any): string {
 </div>`;
 }
 
-function renderTipiFallback(resultados: CodeResults): string {
+function renderTipiFallback(resultados: CodeResults): string | null {
     const chapters = Object.values(resultados)
         .sort((a: any, b: any) => parseInt(a?.capitulo || '0', 10) - parseInt(b?.capitulo || '0', 10));
 
-    return chapters.map(renderTipiChapter).join('\n');
+    if (chapters.length === 0) {
+        return null;
+    }
+
+    const renderedChapters = chapters
+        .map(renderTipiChapter)
+        .filter((chapter): chapter is string => Boolean(chapter));
+
+    if (renderedChapters.length === 0) {
+        return null;
+    }
+
+    return renderedChapters.join('\n');
 }
 
 function hasRenderableNeshContent(results: CodeResults): boolean {
@@ -115,7 +135,8 @@ function renderTextSearchItem(item: any): string {
     const description = item?.descricao || item?.description || item?.title || '';
     const safeCode = escapeMarkupText(code);
     const safeDescription = escapeMarkupText(description);
-    const extra = item?.aliquota ? ` <strong>${escapeMarkupText(item.aliquota)}</strong>` : '';
+    const hasAliquota = item?.aliquota !== undefined && item?.aliquota !== null;
+    const extra = hasAliquota ? ` <strong>${escapeMarkupText(item.aliquota)}</strong>` : '';
 
     return `<li><strong>${safeCode}</strong> - ${safeDescription}${extra}</li>`;
 }

@@ -63,6 +63,69 @@ describe('searchResultMarkup', () => {
     expect(markup).toContain('6.5%');
   });
 
+  it('returns null for TIPI code payloads without renderable chapters', () => {
+    const response = buildLocalCodeSearchResponse('tipi', '2203', {
+      empty: {
+        capitulo: '',
+        titulo: '',
+        posicoes: [],
+      },
+    });
+
+    const markup = resolveSearchResponseMarkup('tipi', response);
+
+    expect(markup).toBeNull();
+  });
+
+  it('classifies decimal zero aliquota as exempt instead of reduced', () => {
+    const response = buildLocalCodeSearchResponse('tipi', '2203', {
+      '22': {
+        capitulo: '22',
+        titulo: 'Bebidas',
+        posicao_alvo: '2203',
+        posicoes: [
+          {
+            codigo: '2203.00.00',
+            ncm: '22030000',
+            descricao: 'Cervejas de malte',
+            aliquota: '0,0',
+            nivel: 1,
+          },
+        ],
+      },
+    });
+
+    const markup = resolveSearchResponseMarkup('tipi', response);
+
+    expect(markup).toContain('aliquot-zero');
+    expect(markup).not.toContain('aliquot-low');
+    expect(markup).toContain('>0%</span>');
+  });
+
+  it('classifies missing or invalid aliquota as unknown', () => {
+    const response = buildLocalCodeSearchResponse('tipi', '2203', {
+      '22': {
+        capitulo: '22',
+        titulo: 'Bebidas',
+        posicao_alvo: '2203',
+        posicoes: [
+          {
+            codigo: '2203.00.00',
+            ncm: '22030000',
+            descricao: 'Cervejas de malte',
+            aliquota: 'desconhecida',
+            nivel: 1,
+          },
+        ],
+      },
+    });
+
+    const markup = resolveSearchResponseMarkup('tipi', response);
+
+    expect(markup).toContain('aliquot-unknown');
+    expect(markup).toContain('>N/I</span>');
+  });
+
   it('escapes dynamic values in TIPI fallback markup', () => {
     const response = buildLocalCodeSearchResponse('tipi', '2203', {
       '22': {
@@ -110,6 +173,23 @@ describe('searchResultMarkup', () => {
     expect(markup).toContain('&lt;img src=x onerror=alert(1)&gt;');
     expect(markup).not.toContain('<script>alert(1)</script>');
     expect(markup).not.toContain('<img src=x onerror=alert(1)>');
+  });
+
+  it('preserves zero aliquota in text search fallback markup', () => {
+    const markup = resolveSearchResponseMarkup('tipi', {
+      success: true,
+      type: 'text',
+      query: 'vinho',
+      results: [
+        {
+          ncm: '2204',
+          descricao: 'Vinhos',
+          aliquota: 0,
+        },
+      ],
+    });
+
+    expect(markup).toContain('<strong>0</strong>');
   });
 
   it('returns null for invalid or non-renderable code payloads', () => {
