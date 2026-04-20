@@ -158,7 +158,8 @@ test.describe('live offline reopen with active service worker', () => {
     await expectOfflineMetadataPersisted(page);
     await waitForOfflineShellCache(page);
 
-    await page.unroute('**/api/**');
+    await context.unroute('**/api/**');
+    await context.unroute('**/api/auth/me*');
     await context.setOffline(true);
     try {
       await page.evaluate(() => {

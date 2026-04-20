@@ -33,7 +33,7 @@ test.describe('offline install and reopen flow', () => {
     await expectOfflineMetadataPersisted(page);
   });
 
-  test('reopens with offline DB ready when backend API is unavailable', async ({ page }) => {
+  test('reopens with offline DB ready when backend API is unavailable', async ({ page, context }) => {
     const counters: OfflineApiCounters = {
       version: 0,
       token: 0,
@@ -48,7 +48,8 @@ test.describe('offline install and reopen flow', () => {
     await page.keyboard.press('Escape');
     await expectOfflineMetadataPersisted(page);
 
-    await page.unroute('**/api/**');
+    await context.unroute('**/api/**');
+    await context.unroute('**/api/auth/me*');
     await page.route('**/api/**', async (route) => {
       await route.abort('failed');
     });

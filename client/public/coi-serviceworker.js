@@ -274,12 +274,15 @@ if (typeof window === "undefined") {
 
     if ("serviceWorker" in navigator) {
       // -------------------------------------------------------------
-      // FIX para dev local: O Vite já envia headers COOP/COEP nativamente.
-      // E o SW atrapalha o Hot Reload do Vite (@vite/client).
-      // Desativamos a interceptação localmente e desregistramos resíduos.
+      // FIX para dev local: o SW atrapalha o Hot Reload do Vite (@vite/client).
+      // Mantemos o bypass apenas quando o cliente de dev do Vite está presente.
+      // Em preview/testes locais ainda precisamos do SW ativo para validar o app shell offline.
       // -------------------------------------------------------------
       const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-      if (isLocalhost) {
+      const isViteDevClientPresent = Boolean(
+        document.querySelector('script[src*="/@vite/client"]')
+      );
+      if (isLocalhost && isViteDevClientPresent) {
         console.info("[coi] Local dev detected. Bypassing SW to prevent Vite conflicts.");
         navigator.serviceWorker.getRegistrations().then((registrations) => {
           for (const reg of registrations) {

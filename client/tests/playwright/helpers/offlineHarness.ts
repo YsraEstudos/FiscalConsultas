@@ -19,8 +19,9 @@ export const OFFLINE_METADATA = {
 
 export async function installOfflineApiMock(page: Page, counters: OfflineApiCounters) {
   const encryptedBytes = Buffer.from('mock-encrypted-offline-bundle', 'utf-8');
+  const routeScope = page.context();
 
-  await page.route('**/api/**', async (route) => {
+  await routeScope.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
@@ -84,12 +85,12 @@ export async function installOfflineApiMock(page: Page, counters: OfflineApiCoun
       return;
     }
 
-    await route.continue();
+    await route.fallback();
   });
 }
 
 export async function installAuthSessionMock(page: Page) {
-  await page.route('**/api/auth/me*', async (route) => {
+  await page.context().route('**/api/auth/me*', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
