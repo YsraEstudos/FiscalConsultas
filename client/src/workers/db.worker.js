@@ -54,7 +54,7 @@ let _status = "checking";
 // ---------------------------------------------------------------------------
 // LRU Search Cache — avoids re-executing identical queries
 // ---------------------------------------------------------------------------
-/** @type {Map<string, {results: any, searchType: string}>} */
+/** @type {Map<string, {results: any, searchType: string, markdown?: string}>} */
 const _searchCache = new Map();
 
 function _getCacheKey(docType, query, viewMode) {
@@ -446,7 +446,7 @@ function ftsSearch(table, query, columns, contentTable, limit = 50) {
 
   // Sanitize query for FTS5 - escape special characters
   const sanitized = query
-    .replace(/["\\']/, "")
+    .replace(/["\\']/g, "")
     .replace(/[{}()[\]^~*?:!]/g, " ")
     .trim();
 
@@ -976,35 +976,78 @@ function collectNeshChapterTargets(query) {
   return chapterTargets;
 }
 
+function isLegacyNeshChapterSchemaError(error) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /no such column|rendered_html|schema/i.test(message);
+}
+
 function getNeshChapterSearchData(chapterNum) {
-  // Consolidated: fetch chapter content + notes in a single query
-  const chapterAndNotes = queryFirstOptionalRow(
-    `SELECT c.content,
-            n.notes_content, n.titulo, n.notas,
-            n.consideracoes, n.definicoes, n.parsed_notes_json
-     FROM nesh_chapters c
-     LEFT JOIN nesh_chapter_notes n ON n.chapter_num = c.chapter_num
-     WHERE c.chapter_num = ?`,
-    [chapterNum]
-  );
+  let chapterData;
+
+  try {
+    chapterData = queryFirstOptionalRow(
+      `SELECT c.content, c.rendered_html,
+              n.notes_content, n.titulo, n.notas,
+              n.consideracoes, n.definicoes, n.parsed_notes_json
+       FROM nesh_chapters c
+       LEFT JOIN nesh_chapter_notes n ON n.chapter_num = c.chapter_num
+       WHERE c.chapter_num = ?`,
+      [chapterNum]
+    );
+  } catch (error) {
+    if (!isLegacyNeshChapterSchemaError(error)) {
+      throw error;
+    }
+
+    chapterData = queryFirstOptionalRow(
+      `SELECT c.content, NULL AS rendered_html,
+              n.notes_content, n.titulo, n.notas,
+              n.consideracoes, n.definicoes, n.parsed_notes_json
+       FROM nesh_chapters c
+       LEFT JOIN nesh_chapter_notes n ON n.chapter_num = c.chapter_num
+       WHERE c.chapter_num = ?`,
+      [chapterNum]
+    );
+  }
 
   return {
     positions: queryResultRows(
       `SELECT codigo, descricao FROM nesh_positions WHERE chapter_num = ? ORDER BY codigo`,
       [chapterNum]
     ),
-    chapterData: chapterAndNotes ? { content: chapterAndNotes.content } : null,
-    notesData: chapterAndNotes
+    chapterData: chapterData
       ? {
-          notes_content: chapterAndNotes.notes_content,
-          titulo: chapterAndNotes.titulo,
-          notas: chapterAndNotes.notas,
-          consideracoes: chapterAndNotes.consideracoes,
-          definicoes: chapterAndNotes.definicoes,
-          parsed_notes_json: chapterAndNotes.parsed_notes_json,
+          content: chapterData.content,
+          rendered_html: chapterData.rendered_html,
+        }
+      : null,
+    notesData: chapterData
+      ? {
+          notes_content: chapterData.notes_content,
+          titulo: chapterData.titulo,
+          notas: chapterData.notas,
+          consideracoes: chapterData.consideracoes,
+          definicoes: chapterData.definicoes,
+          parsed_notes_json: chapterData.parsed_notes_json,
         }
       : null,
   };
+}
+
+function buildOfflineNeshMarkup(results, chapterHtmlByChapter) {
+  const orderedChapters = Object.keys(results).sort(
+    (left, right) => Number(left) - Number(right)
+  );
+  const htmlParts = [];
+
+  for (const chapterNum of orderedChapters) {
+    const chapterHtml = chapterHtmlByChapter[chapterNum];
+    if (typeof chapterHtml === "string" && chapterHtml.trim()) {
+      htmlParts.push(chapterHtml.trim());
+    }
+  }
+
+  return htmlParts.join("\n\n");
 }
 
 function buildMissingNeshChapterResult(chapterNum, ncmBuscado) {
@@ -1085,7 +1128,13 @@ function searchTipiByCode(query, viewMode = "family") {
  */
 function searchNeshByCode(query) {
   if (!_db)
-    return { type: "code", results: {}, total_capitulos: 0, success: true };
+    return {
+      type: "code",
+      results: {},
+      total_capitulos: 0,
+      success: true,
+      markdown: "",
+    };
 
   const chapterTargets = collectNeshChapterTargets(query);
 
@@ -1097,11 +1146,14 @@ function searchNeshByCode(query) {
       results: {},
       total_capitulos: 0,
       success: true,
+      markdown: "",
     };
   }
 
   /** @type {Record<string, any>} */
   const results = {};
+  /** @type {Record<string, string>} */
+  const renderedHtmlByChapter = {};
 
   for (const [chapterNum, [ncmBuscado, targetPos]] of chapterTargets) {
     const { positions, chapterData, notesData } =
@@ -1123,6 +1175,10 @@ function searchNeshByCode(query) {
       chapterData,
       notesData
     );
+
+    if (typeof chapterData?.rendered_html === "string") {
+      renderedHtmlByChapter[chapterNum] = chapterData.rendered_html;
+    }
   }
 
   return {
@@ -1132,6 +1188,7 @@ function searchNeshByCode(query) {
     results,
     total_capitulos: Object.keys(results).length,
     success: true,
+    markdown: buildOfflineNeshMarkup(results, renderedHtmlByChapter),
   };
 }
 
@@ -1339,10 +1396,14 @@ function runStructuredSearch(docType, query, viewMode) {
         searchType: "code",
       };
     case "nesh":
-      return {
-        results: searchNeshByCode(query).results,
-        searchType: "code",
-      };
+      {
+        const neshCodeResponse = searchNeshByCode(query);
+        return {
+          results: neshCodeResponse.results,
+          searchType: "code",
+          markdown: neshCodeResponse.markdown || "",
+        };
+      }
     case "nbs":
       return { results: searchNbsByCode(query), searchType: "text" };
     case "nebs":
@@ -1372,17 +1433,18 @@ function handleSearchMessage(id, payload) {
       docType,
       query,
       searchType: cached.searchType,
+      markdown: cached.markdown,
       timing: { sqlDurationMs: 0, totalDurationMs, cacheHit: true },
     });
     return;
   }
 
   const sqlStart = performance.now();
-  const { results, searchType } = runStructuredSearch(docType, query, viewMode);
+  const { results, searchType, markdown } = runStructuredSearch(docType, query, viewMode);
   const sqlDurationMs = performance.now() - sqlStart;
 
   // Store in LRU cache
-  _setCachedResult(cacheKey, { results, searchType });
+  _setCachedResult(cacheKey, { results, searchType, markdown });
 
   const totalDurationMs = performance.now() - t0;
   postWorkerResult(id, {
@@ -1391,6 +1453,7 @@ function handleSearchMessage(id, payload) {
     docType,
     query,
     searchType,
+    markdown: typeof markdown === "string" ? markdown : undefined,
     timing: { sqlDurationMs, totalDurationMs, cacheHit: false },
   });
 }

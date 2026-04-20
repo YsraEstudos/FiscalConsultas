@@ -4,8 +4,17 @@ import type React from 'react';
 import { CrossChapterNoteProvider, useCrossChapterNotes } from '../../src/context/CrossChapterNoteContext';
 import { fetchChapterNotes } from '../../src/services/api';
 
+const localDatabaseState = vi.hoisted(() => ({
+    status: 'not_installed',
+    getNeshChapterNotesLocal: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('../../src/services/api', () => ({
     fetchChapterNotes: vi.fn(),
+}));
+
+vi.mock('../../src/context/LocalDatabaseContext', () => ({
+    useLocalDatabase: () => localDatabaseState,
 }));
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -15,6 +24,15 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 describe('CrossChapterNoteContext', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        localDatabaseState.status = 'not_installed';
+        localDatabaseState.getNeshChapterNotesLocal.mockReset();
+        localDatabaseState.getNeshChapterNotesLocal.mockResolvedValue(null);
+    });
+
+    it('does not expose a default export that can destabilize Fast Refresh', async () => {
+        const moduleExports = await import('../../src/context/CrossChapterNoteContext');
+
+        expect('default' in moduleExports).toBe(false);
     });
 
     it('caches chapter notes after first fetch', async () => {
@@ -85,6 +103,49 @@ describe('CrossChapterNoteContext', () => {
 
         expect(result.current.isLoading('73')).toBe(false);
         expect(result.current.getNote('73', '2')).toBe('Nota 2 do capitulo 73');
+    });
+
+    it('uses offline chapter notes when local database is ready', async () => {
+        localDatabaseState.status = 'ready';
+        localDatabaseState.getNeshChapterNotesLocal.mockResolvedValue({
+            '1': 'Nota local do capitulo 84',
+        });
+
+        const { result } = renderHook(() => useCrossChapterNotes(), { wrapper });
+
+        let notes: Record<string, string> = {};
+
+        await act(async () => {
+            notes = await result.current.fetchNotes('84');
+        });
+
+        expect(localDatabaseState.getNeshChapterNotesLocal).toHaveBeenCalledTimes(1);
+        expect(localDatabaseState.getNeshChapterNotesLocal).toHaveBeenCalledWith('84');
+        expect(fetchChapterNotes).not.toHaveBeenCalled();
+        expect(notes).toEqual({ '1': 'Nota local do capitulo 84' });
+        expect(result.current.getNote('84', '1')).toBe('Nota local do capitulo 84');
+    });
+
+    it('falls back to API when local database is unavailable', async () => {
+        vi.mocked(fetchChapterNotes).mockResolvedValue({
+            success: true,
+            capitulo: '84',
+            notas_parseadas: { '1': 'Nota 1 da API' },
+            notas_gerais: null,
+        });
+
+        const { result } = renderHook(() => useCrossChapterNotes(), { wrapper });
+
+        let notes: Record<string, string> = {};
+
+        await act(async () => {
+            notes = await result.current.fetchNotes('84');
+        });
+
+        expect(localDatabaseState.getNeshChapterNotesLocal).not.toHaveBeenCalled();
+        expect(fetchChapterNotes).toHaveBeenCalledTimes(1);
+        expect(fetchChapterNotes).toHaveBeenCalledWith('84');
+        expect(notes).toEqual({ '1': 'Nota 1 da API' });
     });
 
     it('returns null for missing notes', () => {

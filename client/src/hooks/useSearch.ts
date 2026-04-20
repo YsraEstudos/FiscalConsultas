@@ -7,8 +7,9 @@ import { useHistory } from './useHistory';
 import { useSettings } from '../context/SettingsContext';
 import { useLocalDatabase } from '../context/LocalDatabaseContext';
 import { extractChapter, isSameChapter } from '../utils/chapterDetection';
-import type { SearchResponse, NbsSearchResponse, NebsSearchResponse, TipiTextSearchResponse, TextSearchResponse, TipiCodeSearchResponse, CodeSearchResponse } from '../types/api.types';
+import type { SearchResponse, NbsSearchResponse, NebsSearchResponse, TipiTextSearchResponse, TextSearchResponse } from '../types/api.types';
 import { isCodeSearchResponse } from '../types/api.types';
+import { buildLocalCodeSearchResponse } from '../utils/searchResultMarkup';
 import {
     getServiceCatalogErrorInfo,
     isServiceCatalogDoc,
@@ -96,41 +97,6 @@ function normalizeLocalResults(
         default:
             return null;
     }
-}
-
-/**
- * Normalize local Worker CODE search results (hierarchical) into API response format.
- * Used when the Worker reconstructs chapter hierarchy for TIPI/NESH code queries.
- */
-function normalizeLocalCodeResults(
-    doc: DocType,
-    query: string,
-    results: Record<string, any>,
-    markdown?: string
-): SearchResponse | null {
-    const safeResults = results && typeof results === 'object' ? results : {};
-
-    if (doc === 'tipi') {
-        return {
-            success: true, type: 'code', query,
-            results: safeResults, resultados: safeResults,
-            total: Object.values(safeResults).reduce((s: number, c: any) => s + (c.posicoes?.length || 0), 0),
-            total_capitulos: Object.keys(safeResults).length,
-            markdown,
-        } as TipiCodeSearchResponse;
-    }
-
-    if (doc === 'nesh') {
-        const firstChapter = Object.values(safeResults)[0] as { conteudo?: string } | undefined;
-        return {
-            success: true, type: 'code', query,
-            normalized: null, results: safeResults, resultados: safeResults,
-            total_capitulos: Object.keys(safeResults).length,
-            markdown: markdown || firstChapter?.conteudo || '',
-        } as CodeSearchResponse;
-    }
-
-    return null;
 }
 
 export function useSearch(
@@ -226,12 +192,14 @@ export function useSearch(
                             );
                         }
                         if (localResponse.searchType === 'code') {
-                            data = normalizeLocalCodeResults(
-                                doc,
-                                query,
-                                localResponse.results as Record<string, any>,
-                                localResponse.markdown
-                            );
+                            data = doc === 'nesh' || doc === 'tipi'
+                                ? buildLocalCodeSearchResponse(
+                                    doc,
+                                    query,
+                                    localResponse.results as Record<string, any>,
+                                    localResponse.markdown,
+                                )
+                                : null;
                         } else if (Array.isArray(localResponse.results)) {
                             data = normalizeLocalResults(doc, query, localResponse.results as Record<string, unknown>[]);
                         }

@@ -370,7 +370,7 @@ describe('useSearch Hook', () => {
 
         // Verify cache hit is logged
         expect(consoleSpy).toHaveBeenCalledWith(
-            expect.stringContaining('✓ HIT')
+            expect.stringContaining('HIT')
         );
 
         // Verify results are still correctly set on the tab

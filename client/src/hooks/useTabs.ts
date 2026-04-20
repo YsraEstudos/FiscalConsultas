@@ -83,6 +83,10 @@ const isTabIndexWithinBounds = (tabs: Tab[], tabIndex: number): boolean =>
 const hasTabUpdates = (current: Tab, updates: Partial<Tab>): boolean =>
   Object.entries(updates).some(([key, value]) => current[key as keyof Tab] !== value);
 
+type TabUpdateInput =
+  | Partial<Tab>
+  | ((currentTab: Tab | undefined) => Partial<Tab> | undefined);
+
 export function useTabs() {
   const [tabs, setTabs] = useState<Tab[]>([
     {
@@ -142,12 +146,19 @@ export function useTabs() {
     setActiveTabId((current) => (current === tabId ? current : tabId));
   }, []);
 
-  const updateTab = useCallback((tabId: string, updates: Partial<Tab>) => {
+  const updateTab = useCallback((tabId: string, updatesOrUpdater: TabUpdateInput) => {
     setTabs((prev) => {
       const targetIndex = prev.findIndex((tab) => tab.id === tabId);
       if (targetIndex < 0) return prev;
 
       const current = prev[targetIndex];
+      const updates =
+        typeof updatesOrUpdater === "function"
+          ? updatesOrUpdater(current)
+          : updatesOrUpdater;
+
+      if (!updates) return prev;
+
       if (!hasTabUpdates(current, updates)) return prev;
 
       const next = [...prev];

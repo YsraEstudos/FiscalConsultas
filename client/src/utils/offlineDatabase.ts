@@ -32,6 +32,28 @@ export function compareOfflineVersions(
   return 0;
 }
 
+export function formatOfflineDatabaseErrorMessage(
+  error: unknown,
+  fallbackMessage = "Unknown error"
+): string {
+  if (typeof error === "string") {
+    return error.trim() || fallbackMessage;
+  }
+
+  if (error instanceof Error) {
+    return error.message || fallbackMessage;
+  }
+
+  if (error && typeof error === "object") {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+  }
+
+  return fallbackMessage;
+}
+
 export function sanitizeOfflineMetadata(
   metadata: Partial<OfflineDatabaseMetadata> | null | undefined
 ): OfflineDatabaseMetadata | null {

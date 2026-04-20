@@ -3,11 +3,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from backend.infrastructure.database import DatabaseAdapter
+from backend.infrastructure.repositories.chapter_repository import ChapterRepository
 from backend.presentation.routes import search as search_route
 from backend.presentation.routes import tipi as tipi_route
+from backend.server.app import app
 from backend.services.nesh_service import NeshService
 from backend.services.tipi_service import TipiService
-from backend.server.app import app
 
 pytestmark = pytest.mark.integration
 
@@ -203,6 +205,106 @@ def test_search_chapter_body_allows_anonymous_access(client, monkeypatch):
     assert payload["conteudo"] == "Conteudo detalhado"
     assert payload["notas_parseadas"] == {"N1": "Nota"}
     assert payload["notas_gerais"] == "Notas gerais"
+
+
+def test_search_chapters_endpoint_returns_available_chapters(client, monkeypatch):
+    expected_chapters = ["01", "02", "84"]
+    monkeypatch.setattr(
+        DatabaseAdapter,
+        "get_all_chapters_list",
+        AsyncMock(return_value=expected_chapters),
+    )
+    monkeypatch.setattr(
+        ChapterRepository,
+        "get_all_nums",
+        AsyncMock(return_value=expected_chapters),
+    )
+
+    response = client.get("/api/chapters")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "capitulos": expected_chapters,
+    }
+
+
+def test_nesh_chapter_notes_endpoint_returns_notes_payload(client, monkeypatch):
+    monkeypatch.setattr(
+        NeshService,
+        "fetch_chapter_data",
+        AsyncMock(
+            return_value={
+                "parsed_notes": {"N1": "Nota 1", "N2": "Nota 2"},
+                "notes": "Notas gerais",
+            }
+        ),
+    )
+
+    response = client.get("/api/nesh/chapter/84/notes")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "capitulo": "84",
+        "notas_parseadas": {"N1": "Nota 1", "N2": "Nota 2"},
+        "notas_gerais": "Notas gerais",
+    }
+
+
+def test_nesh_chapter_notes_endpoint_returns_404_when_chapter_missing(
+    client, monkeypatch
+):
+    monkeypatch.setattr(
+        NeshService,
+        "fetch_chapter_data",
+        AsyncMock(return_value=None),
+    )
+
+    response = client.get("/api/nesh/chapter/99/notes")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Capítulo 99 não encontrado"
+
+
+def test_glossary_endpoint_returns_found_and_not_found_contracts(client, monkeypatch):
+    monkeypatch.setattr(
+        search_route.glossary_manager,
+        "get_definition",
+        lambda term: {"definicao": f"def-{term}"} if term == "drawback" else None,
+    )
+
+    found = client.get("/api/glossary?term=drawback")
+    not_found = client.get("/api/glossary?term=termo-inexistente")
+
+    assert found.status_code == 200
+    assert found.json() == {
+        "found": True,
+        "term": "drawback",
+        "data": {"definicao": "def-drawback"},
+    }
+
+    assert not_found.status_code == 200
+    assert not_found.json() == {
+        "found": False,
+        "term": "termo-inexistente",
+    }
+
+
+def test_tipi_chapters_endpoint_returns_available_chapters(client, monkeypatch):
+    monkeypatch.setattr(
+        TipiService,
+        "get_all_chapters",
+        AsyncMock(return_value=["01", "02", "11"]),
+    )
+
+    response = client.get("/api/tipi/chapters")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "capitulos": ["01", "02", "11"],
+    }
 
 
 def test_tipi_code_response_enforces_compatibility_fields(client, monkeypatch):
