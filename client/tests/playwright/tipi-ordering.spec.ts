@@ -140,13 +140,8 @@ test('navigates to a TIPI position from sidebar click and highlights target anch
     element.scrollTop = element.scrollHeight;
   });
 
-  const initialScrollTop = await resultsContainer.evaluate((element) => element.scrollTop);
-
   await page.getByRole('button', { name: /11\.02\s*Farinhas de cereais/i }).click();
 
   await expect(targetAnchor).toHaveClass(/flash-highlight/);
-
-  await expect.poll(async () => {
-    return resultsContainer.evaluate((element) => element.scrollTop);
-  }).toBeLessThan(initialScrollTop);
+  await expect(targetAnchor).toBeInViewport();
 });

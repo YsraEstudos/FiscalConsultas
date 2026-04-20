@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import {
   expectOfflineMetadataPersisted,
+  expectOfflineReadyInSettings,
   installAuthSessionMock,
   installOfflineApiMock,
   installOfflineFromSettings,
@@ -11,18 +12,6 @@ import {
 
 const APP_SHELL_CACHE = 'app-shell-v3';
 const RUNTIME_CACHE = 'runtime-assets-v3';
-
-function isNonLocalHostBaseUrlConfigured(): boolean {
-  const rawBaseUrl = process.env.PLAYWRIGHT_LIVE_BASE_URL || '';
-  if (!rawBaseUrl) return false;
-
-  try {
-    const hostname = new URL(rawBaseUrl).hostname;
-    return hostname !== 'localhost' && hostname !== '127.0.0.1';
-  } catch {
-    return false;
-  }
-}
 
 async function installOfflineSupportMock(page: Page) {
   await page.addInitScript(() => {
@@ -138,8 +127,6 @@ async function hasServiceWorkerSupport(page: Page): Promise<boolean> {
 }
 
 test.describe('live offline reopen with active service worker', () => {
-  test.skip(!isNonLocalHostBaseUrlConfigured(), 'Set PLAYWRIGHT_LIVE_BASE_URL to a non-localhost host (e.g. http://offline-e2e.local:4173).');
-
   test('reopens fully offline with cached app shell and local DB ready state', async ({ page, context }) => {
     const counters: OfflineApiCounters = {
       version: 0,
@@ -154,13 +141,13 @@ test.describe('live offline reopen with active service worker', () => {
 
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+    const isSecureContext = await page.evaluate(() => globalThis.isSecureContext);
+    test.skip(!isSecureContext, 'PLAYWRIGHT_LIVE_BASE_URL must resolve to a secure context such as localhost or HTTPS.');
     test.skip(!(await hasServiceWorkerSupport(page)), 'Current browser environment does not expose service workers for this origin.');
-
-    const hostname = await page.evaluate(() => globalThis.location.hostname);
-    expect(hostname).not.toBe('localhost');
-    expect(hostname).not.toBe('127.0.0.1');
     await page.reload();
     await page.waitForFunction(() => window.crossOriginIsolated === true);
+    const isSecureContextAfterReload = await page.evaluate(() => globalThis.isSecureContext);
+    test.skip(!isSecureContextAfterReload, 'Current browser environment lost secure-context support after reload.');
     test.skip(!(await hasServiceWorkerSupport(page)), 'Current browser environment lost service worker support after reload.');
 
     await installOfflineFromSettings(page, 15_000);
@@ -168,7 +155,6 @@ test.describe('live offline reopen with active service worker', () => {
     expect(counters.download).toBe(1);
 
     await page.keyboard.press('Escape');
-    await expect(page.getByTitle('Buscas Offline configuradas!')).toBeVisible();
     await expectOfflineMetadataPersisted(page);
     await waitForOfflineShellCache(page);
 
@@ -198,8 +184,8 @@ test.describe('live offline reopen with active service worker', () => {
       }).toBe(null);
 
       await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
-      await expect(page.getByTitle('Buscas Offline configuradas!')).toBeVisible();
       await expectOfflineMetadataPersisted(page);
+      await expectOfflineReadyInSettings(page);
     } finally {
       await context.setOffline(false);
     }

@@ -25,6 +25,9 @@ async function setNavigationBehavior(page: Page, mode: 'same-tab' | 'new-tab') {
 
 async function openNbsWithSmartLink(page: Page, targetCode = '1.0101.12.00') {
   const detailWithSmartLink = makeNbsDetail('1.0101.11.00');
+  if (!detailWithSmartLink.nebs) {
+    throw new Error('Expected makeNbsDetail to include a NEBS payload for smart-link tests.');
+  }
   detailWithSmartLink.nebs = {
     ...detailWithSmartLink.nebs,
     body_markdown: `Consulte também o código ${targetCode} para serviço correlato.`,

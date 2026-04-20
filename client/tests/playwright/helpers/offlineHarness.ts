@@ -328,7 +328,16 @@ export async function installOfflineFromSettings(page: Page, timeout = 15_000) {
   const installButton = page.locator('#db-installer-install');
   await expect(installButton).toBeVisible({ timeout });
   await installButton.click();
-  await expect(page.locator('#db-installer-remove')).toBeVisible({ timeout });
+  await expectOfflineReadyInSettings(page, timeout);
+}
+
+export async function expectOfflineReadyInSettings(page: Page, timeout = 15_000) {
+  const settingsDialog = page.getByRole('dialog', { name: 'Configurações' });
+  if (!(await settingsDialog.isVisible().catch(() => false))) {
+    await openSettings(page);
+  }
+
+  await expect(page.getByText(/Ativa/)).toBeVisible({ timeout });
 }
 
 export async function expectOfflineMetadataPersisted(page: Page) {

@@ -11,7 +11,7 @@ type AuthSessionPayload = {
 async function installAuthSessionMock(page: Page, payload: AuthSessionPayload) {
   await page.route('**/api/auth/me*', async (route) => {
     await route.fulfill({
-      status: payload.authenticated ? 200 : 401,
+      status: 200,
       contentType: 'application/json',
       body: JSON.stringify(payload),
     });
