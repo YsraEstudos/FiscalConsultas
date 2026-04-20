@@ -433,6 +433,10 @@ async function waitForOfflineShellCache(page: Page) {
   );
 }
 
+function isOfflineNavigationError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('ERR_INTERNET_DISCONNECTED');
+}
+
 test.describe('live offline reopen with active service worker', () => {
   test.skip(!isNonLocalHostBaseUrlConfigured(), 'Set PLAYWRIGHT_LIVE_BASE_URL to a non-localhost host (e.g. http://offline-e2e.local:4173).');
 
@@ -468,15 +472,32 @@ test.describe('live offline reopen with active service worker', () => {
 
     await page.unroute('**/api/**');
     await context.setOffline(true);
-    const reopenedPage = await context.newPage();
-    await installOfflineSupportMock(reopenedPage);
-    await installOfflineWorkerMock(reopenedPage);
     try {
-      await reopenedPage.goto(page.url(), { waitUntil: 'domcontentloaded' });
-      await expect(reopenedPage.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
-      await expect(reopenedPage.getByTitle('Buscas Offline configuradas!')).toBeVisible();
+      await page.evaluate(() => {
+        (window as Window & { __offlineReloadSentinel?: string }).__offlineReloadSentinel = 'before-reload';
+      });
+
+      try {
+        await page.reload({ waitUntil: 'domcontentloaded' });
+      } catch (error) {
+        if (!isOfflineNavigationError(error)) {
+          throw error;
+        }
+      }
+
+      await expect.poll(async () => {
+        try {
+          return await page.evaluate(
+            () => (window as Window & { __offlineReloadSentinel?: string }).__offlineReloadSentinel ?? null,
+          );
+        } catch {
+          return 'navigating';
+        }
+      }).toBe(null);
+
+      await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+      await expect(page.getByTitle('Buscas Offline configuradas!')).toBeVisible();
     } finally {
-      await reopenedPage.close();
       await context.setOffline(false);
     }
   });
