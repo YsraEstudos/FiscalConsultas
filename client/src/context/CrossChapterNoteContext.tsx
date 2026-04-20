@@ -40,10 +40,7 @@ const MAX_CACHED_CHAPTERS = 20;
  * - useCallback estável para evitar re-renders
  */
 export function CrossChapterNoteProvider({ children }: CrossChapterNoteProviderProps) {
-    const {
-        status: localDbStatus,
-        getNeshChapterNotesLocal,
-    } = useLocalDatabase();
+    const { status: dbStatus, getNeshChapterNotesLocal } = useLocalDatabase();
     const [cache, setCache] = useState<NotesCache>({});
     const cacheRef = useRef<NotesCache>({});
     const cacheOrderRef = useRef<string[]>([]);
@@ -66,15 +63,28 @@ export function CrossChapterNoteProvider({ children }: CrossChapterNoteProviderP
 
         const request = (async () => {
             const localNotes =
-                localDbStatus === 'ready'
+                dbStatus === 'ready'
                     ? await getNeshChapterNotesLocal(chapter)
                     : null;
-            const response = localNotes || await fetchChapterNotes(chapter);
-            const notesData = response?.notas_parseadas || {};
-            if (cacheRef.current[chapter]) {
-                return cacheRef.current[chapter];
+            if (localNotes) {
+                const nextCache: NotesCache = { ...cacheRef.current, [chapter]: localNotes };
+                const nextOrder = [...cacheOrderRef.current.filter(id => id !== chapter), chapter];
+
+                while (nextOrder.length > MAX_CACHED_CHAPTERS) {
+                    const oldest = nextOrder.shift();
+                    if (oldest) {
+                        delete nextCache[oldest];
+                    }
+                }
+
+                cacheOrderRef.current = nextOrder;
+                cacheRef.current = nextCache;
+                setCache(nextCache);
+                return localNotes;
             }
 
+            const response = await fetchChapterNotes(chapter);
+            const notesData = response?.notas_parseadas || {};
             const nextCache: NotesCache = { ...cacheRef.current, [chapter]: notesData };
             const nextOrder = [...cacheOrderRef.current.filter(id => id !== chapter), chapter];
 
@@ -100,7 +110,7 @@ export function CrossChapterNoteProvider({ children }: CrossChapterNoteProviderP
 
         inFlightRef.current.set(chapter, request);
         return request;
-    }, [getNeshChapterNotesLocal, localDbStatus]);
+    }, [dbStatus, getNeshChapterNotesLocal]);
 
     /**
      * Obtém uma nota específica do cache (síncrono).

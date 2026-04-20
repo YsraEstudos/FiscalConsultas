@@ -108,8 +108,7 @@ describe('CrossChapterNoteContext', () => {
     it('uses offline chapter notes when local database is ready', async () => {
         localDatabaseState.status = 'ready';
         localDatabaseState.getNeshChapterNotesLocal.mockResolvedValue({
-            notas_parseadas: { '1': 'Nota local do capitulo 84' },
-            notas_gerais: null,
+            '1': 'Nota local do capitulo 84',
         });
 
         const { result } = renderHook(() => useCrossChapterNotes(), { wrapper });

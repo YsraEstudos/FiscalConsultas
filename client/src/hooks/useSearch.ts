@@ -121,11 +121,12 @@ function normalizeLocalCodeResults(
     }
 
     if (doc === 'nesh') {
+        const firstChapter = Object.values(safeResults)[0] as { conteudo?: string } | undefined;
         return {
             success: true, type: 'code', query,
             normalized: null, results: safeResults, resultados: safeResults,
             total_capitulos: Object.keys(safeResults).length,
-            markdown: markdown || undefined,
+            markdown: markdown || firstChapter?.conteudo || '',
         } as CodeSearchResponse;
     }
 

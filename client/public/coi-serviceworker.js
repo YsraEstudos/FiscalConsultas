@@ -4,6 +4,18 @@ const APP_SHELL_CACHE = "app-shell-v3";
 const RUNTIME_CACHE = "runtime-assets-v3";
 const CORE_URLS = ["./", "./index.html", "./coi-serviceworker.js", "./vite.svg"];
 
+function shouldWarmRuntimeCache(absoluteUrl) {
+  try {
+    const { origin, pathname } = new URL(absoluteUrl, self.registration.scope);
+    if (origin !== self.location.origin) {
+      return false;
+    }
+    return pathname.startsWith("/assets/") || /\.(?:css|js|mjs|svg|png|jpe?g|webp|woff2?|ttf)$/i.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
 function resolveCredentiallessValue(payload) {
   return Boolean(payload?.credentialless);
 }
@@ -49,7 +61,10 @@ function withCoiHeaders(response) {
 }
 
 async function cacheUrls(urls) {
-  const cache = await caches.open(APP_SHELL_CACHE);
+  const [appShellCache, runtimeCache] = await Promise.all([
+    caches.open(APP_SHELL_CACHE),
+    caches.open(RUNTIME_CACHE),
+  ]);
   const uniqueUrls = [...new Set(urls.filter(Boolean))];
 
   await Promise.all(
@@ -58,7 +73,10 @@ async function cacheUrls(urls) {
         const absoluteUrl = new URL(url, self.registration.scope).toString();
         const response = await fetch(absoluteUrl, { cache: "no-cache" });
         if (response.ok) {
-          await cache.put(absoluteUrl, response.clone());
+          await appShellCache.put(absoluteUrl, response.clone());
+          if (shouldWarmRuntimeCache(absoluteUrl)) {
+            await runtimeCache.put(absoluteUrl, response.clone());
+          }
         }
       } catch {
         // Best-effort cache warmup only.

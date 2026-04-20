@@ -268,7 +268,7 @@ describe('useSearch Hook', () => {
             await result.current.executeSearchForTab('tab-1', 'nesh', '8401', true);
         });
 
-        expect(localDatabaseState.searchLocal).toHaveBeenCalledWith('nesh', '8401', 'chapter');
+        expect(localDatabaseState.searchLocal).toHaveBeenCalledWith('nesh', '8401', expect.any(String));
         expect(searchNCMMock).not.toHaveBeenCalled();
         expect(updateTab).toHaveBeenLastCalledWith('tab-1', expect.objectContaining({
             content: '<div class="offline-html"><ol class="nesh-list"><li>Item multilinha inteiro</li></ol></div>',

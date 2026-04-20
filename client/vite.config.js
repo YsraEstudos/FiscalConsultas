@@ -44,6 +44,9 @@ export default defineConfig(({ mode }) => {
         }
       }
     },
+    preview: {
+      allowedHosts: ['offline-e2e.local'],
+    },
     optimizeDeps: {
       exclude: ['@sqlite.org/sqlite-wasm'],
     },
