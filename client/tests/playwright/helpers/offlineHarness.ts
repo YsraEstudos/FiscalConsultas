@@ -330,3 +330,9 @@ export async function installOfflineFromSettings(page: Page, timeout = 15_000) {
   await installButton.click();
   await expect(page.locator('#db-installer-remove')).toBeVisible({ timeout });
 }
+
+export async function expectOfflineMetadataPersisted(page: Page) {
+  await expect.poll(async () => (
+    page.evaluate(() => Boolean(globalThis.localStorage.getItem('offline-db:installed-meta')))
+  )).toBe(true);
+}

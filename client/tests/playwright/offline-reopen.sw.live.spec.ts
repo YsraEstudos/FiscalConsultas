@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { expectOfflineMetadataPersisted } from './helpers/offlineInstallFlow';
 import {
+  expectOfflineMetadataPersisted,
   installAuthSessionMock,
   installOfflineApiMock,
   installOfflineFromSettings,
