@@ -1,10 +1,11 @@
 {
-  "version": "2026.04.15.001",
-  "sha256": "13db9dafddc04d0deb607c4f3d4b46b56570be6e3f10975c2c46470fee2c43e4",
-  "salt": "9cd0a86083bb4a62c911fb6450e6a19a2835f60289f0e8f1359b84ea2d84cdce",
-  "size_bytes": 4745282,
-  "chunks": 73,
-  "built_at": "2026-04-15T14:50:45Z",
+  "version": "2026.04.18.112906",
+  "sha256": "d1044a3f0646826faab4f3441a526d93572980a45123b7d42d93d57be9d1b6fd",
+  "encrypted_sha256": "24585e364011ec823b2fc339ec2d0aba7a22c7e79021c2a0b571fe9b684fb646",
+  "salt": "0e06682311b909a5b8c8299964aa040e561aee84c6ea240022b8a2c59e308537",
+  "size_bytes": 23558054,
+  "chunks": 360,
+  "built_at": "2026-04-18T11:29:06Z",
   "format_version": 1,
   "chunk_size": 65536,
   "pbkdf2_iterations": 600000

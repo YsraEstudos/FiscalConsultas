@@ -106,7 +106,7 @@ function normalizeLocalCodeResults(
     doc: DocType,
     query: string,
     results: Record<string, any>,
-    markdown?: string
+    markdown?: string | null,
 ): SearchResponse | null {
     const safeResults = results && typeof results === 'object' ? results : {};
 
@@ -116,7 +116,7 @@ function normalizeLocalCodeResults(
             results: safeResults, resultados: safeResults,
             total: Object.values(safeResults).reduce((s: number, c: any) => s + (c.posicoes?.length || 0), 0),
             total_capitulos: Object.keys(safeResults).length,
-            markdown,
+            markdown: markdown || undefined,
         } as TipiCodeSearchResponse;
     }
 
@@ -218,7 +218,7 @@ export function useSearch(
                                 doc,
                                 query,
                                 localResponse.results as Record<string, any>,
-                                localResponse.markdown
+                                localResponse.markdown,
                             );
                         } else if (Array.isArray(localResponse.results)) {
                             data = normalizeLocalResults(doc, query, localResponse.results as Record<string, unknown>[]);

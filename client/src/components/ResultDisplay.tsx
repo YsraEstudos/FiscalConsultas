@@ -347,6 +347,7 @@ interface ResultDisplayProps {
     onConsumeNewSearch: (tabId: string, finalScrollTop?: number) => void;
     /** Callback to notify parent when content is ready (for coordinated loading) */
     onContentReady?: (tabId: string) => void;
+    onHydratedResults?: (tabId: string, results: Record<string, any>) => void;
 }
 
 type MarkupRenderRefs = {
@@ -489,16 +490,6 @@ type ChapterHydrationResult = {
 
 function createFailedChapterBodiesUpdater(failedChapters: string[]) {
     return (current: string[]) => Array.from(new Set([...current, ...failedChapters]));
-}
-
-function createHydratedCodeResultsUpdater(
-    codeResults: Record<string, any>,
-    chapterBodies: ChapterBodyResponse[],
-) {
-    return (current: Record<string, any> | null) => {
-        const baseResults = current ?? codeResults;
-        return mergeHydratedChapterBodies(baseResults, chapterBodies);
-    };
 }
 
 function createRecoveredChapterBodiesUpdater(chapterBodies: ChapterBodyResponse[]) {
@@ -852,7 +843,8 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     latestTextQuery,
     isNewSearch,
     onConsumeNewSearch,
-    onContentReady
+    onContentReady,
+    onHydratedResults
 }: ResultDisplayProps) {
     const { sidebarPosition } = useSettings();
     const {
@@ -1094,7 +1086,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     }, [failedChapterBodies, renderableCodeResults, shouldHydrateCodeResults]);
 
     useEffect(() => {
-        if (!isActive || !shouldHydrateCodeResults || !codeResults || missingChapterBodies.length === 0) {
+        if (!isActive || !shouldHydrateCodeResults || !renderableCodeResults || missingChapterBodies.length === 0) {
             return;
         }
 
@@ -1115,13 +1107,17 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
             if (chapterBodies.length === 0) return;
 
+            const mergedResults = mergeHydratedChapterBodies(
+                renderableCodeResults,
+                chapterBodies,
+            );
+
             startTransition(() => {
-                setHydratedCodeResults(
-                    createHydratedCodeResultsUpdater(codeResults, chapterBodies),
-                );
+                setHydratedCodeResults(mergedResults);
                 setFailedChapterBodies(
                     createRecoveredChapterBodiesUpdater(chapterBodies),
                 );
+                onHydratedResults?.(tabId, mergedResults);
             });
         };
 
@@ -1140,10 +1136,12 @@ export const ResultDisplay = React.memo(function ResultDisplay({
             cancelled = true;
         };
     }, [
-        codeResults,
         isActive,
         missingChapterBodies,
+        onHydratedResults,
+        renderableCodeResults,
         shouldHydrateCodeResults,
+        tabId,
     ]);
 
     const findAnchorIdForQuery = useCallback((resultados: any, query: string) => {
@@ -1853,5 +1851,3 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         </div>
     );
 });
-
-

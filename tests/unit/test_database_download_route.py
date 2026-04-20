@@ -153,8 +153,25 @@ async def test_download_token_expires_after_ttl(offline_bundle):
 
 
 @pytest.mark.asyncio
-async def test_download_token_rate_limit_returns_retry_after(offline_bundle):
+async def test_local_development_requests_are_not_rate_limited_for_download_tokens(
+    offline_bundle,
+):
     request = _build_request("/api/database/token", client_host="127.0.0.1")
+
+    for _ in range(database_download._TOKEN_LIMIT_PER_HOUR + 2):
+        payload = await database_download.create_download_token(request)
+        assert payload["token"]
+
+
+@pytest.mark.asyncio
+async def test_nonlocal_development_requests_are_rate_limited_for_download_tokens(
+    offline_bundle,
+):
+    request = _build_request(
+        "/api/database/token",
+        headers={"host": "fiscal.example.com"},
+        client_host="203.0.113.10",
+    )
 
     for _ in range(database_download._TOKEN_LIMIT_PER_HOUR):
         payload = await database_download.create_download_token(request)

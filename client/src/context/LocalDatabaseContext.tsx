@@ -94,6 +94,7 @@ interface LocalDatabaseState {
 interface LocalSearchResult {
   results: Record<string, unknown>[] | Record<string, unknown> | null;
   searchType: "text" | "code";
+  // Offline code search may carry backend-rendered HTML or legacy markdown text.
   markdown?: string;
 }
 
