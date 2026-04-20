@@ -468,11 +468,15 @@ test.describe('live offline reopen with active service worker', () => {
 
     await page.unroute('**/api/**');
     await context.setOffline(true);
+    const reopenedPage = await context.newPage();
+    await installOfflineSupportMock(reopenedPage);
+    await installOfflineWorkerMock(reopenedPage);
     try {
-      await page.reload();
-      await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
-      await expect(page.getByTitle('Buscas Offline configuradas!')).toBeVisible();
+      await reopenedPage.goto(page.url(), { waitUntil: 'domcontentloaded' });
+      await expect(reopenedPage.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+      await expect(reopenedPage.getByTitle('Buscas Offline configuradas!')).toBeVisible();
     } finally {
+      await reopenedPage.close();
       await context.setOffline(false);
     }
   });
