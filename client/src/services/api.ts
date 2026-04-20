@@ -681,6 +681,11 @@ function sanitizeStringForStorage(value: string): string {
     return value.split('\0').join('');
 }
 
+function sanitizeCacheStorageKey(key: string): string {
+    // Browser storage should only see normalized keys, not raw user input.
+    return sanitizeStringForStorage(key);
+}
+
 function sanitizeValueForStorage(value: unknown): StorageSafeValue | undefined {
     if (value == null) {
         return null;
@@ -800,22 +805,23 @@ function getCached<T>(key: string): T | null {
     // 2. Check localStorage (survives page reloads)
     try {
         const index = getCacheIndex();
-        const raw = localStorage.getItem(CACHE_PREFIX + key);
+        const storageKey = sanitizeCacheStorageKey(key);
+        const raw = localStorage.getItem(CACHE_PREFIX + storageKey);
         if (raw) {
             const entry: CacheEntry<T> = JSON.parse(raw);
             if (Date.now() - entry.timestamp < CACHE_TTL_MS) {
                 // Promote to memory cache
                 setMemoryCacheEntry(key, entry);
-                if (index[key] !== entry.timestamp) {
-                    index[key] = entry.timestamp;
+                if (index[storageKey] !== entry.timestamp) {
+                    index[storageKey] = entry.timestamp;
                     saveCacheIndex(index);
                 }
                 return normalizeCodeResponseAliases(entry.data);
             }
-            removeLocalStorageCacheEntry(key, index);
+            removeLocalStorageCacheEntry(storageKey, index);
             saveCacheIndex(index);
-        } else if (index[key]) {
-            delete index[key];
+        } else if (index[storageKey]) {
+            delete index[storageKey];
             saveCacheIndex(index);
         }
     } catch {
@@ -842,6 +848,7 @@ function setCache<T>(key: string, data: T): void {
         if (!sanitizedEntry) {
             return;
         }
+        const storageKey = sanitizeCacheStorageKey(key);
 
         // Cleanup stale index entries without parsing full payloads
         for (const indexedKey of Object.keys(index)) {
@@ -850,7 +857,7 @@ function setCache<T>(key: string, data: T): void {
             }
         }
 
-        const isNewKey = !hasOwn(index, key);
+        const isNewKey = !hasOwn(index, storageKey);
         if (isNewKey && Object.keys(index).length >= CACHE_MAX_ENTRIES) {
             const oldestKeys = Object.keys(index)
                 .sort((a, b) => index[a] - index[b])
@@ -861,8 +868,8 @@ function setCache<T>(key: string, data: T): void {
             }
         }
 
-        index[key] = entry.timestamp;
-        localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(sanitizedEntry));
+        index[storageKey] = entry.timestamp;
+        localStorage.setItem(CACHE_PREFIX + storageKey, JSON.stringify(sanitizedEntry));
         saveCacheIndex(index);
     } catch {
         // localStorage full or unavailable - memory cache still works
@@ -900,7 +907,7 @@ export const searchNCM = async (query: string): Promise<any> => {
     const cached = getCached<any>(cacheKey);
     if (cached) return cached;
 
-    return withInFlightDedup(`ncm:${query}`, async () => {
+    return withInFlightDedup(`ncm:${query}:summary`, async () => {
         const response = await api.get(
             withDevCacheBust(`/search?ncm=${encodeURIComponent(query)}&shape=summary`),
         );
@@ -911,6 +918,15 @@ export const searchNCM = async (query: string): Promise<any> => {
             setCache(cacheKey, data);
         }
         return data;
+    });
+};
+
+export const searchNCMFull = async (query: string): Promise<any> => {
+    return withInFlightDedup(`ncm:${query}:full`, async () => {
+        const response = await api.get(
+            withDevCacheBust(`/search?ncm=${encodeURIComponent(query)}&shape=full`),
+        );
+        return normalizeCodeResponseAliases(response.data);
     });
 };
 
