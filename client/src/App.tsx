@@ -714,7 +714,7 @@ function App() {
                                         </div>
                                         <h3 className={styles.emptyStateTitle}>Pronto para buscar</h3>
                                         <p>{tab.document === 'nbs' || tab.document === 'nebs'
-                                            ? (servicesUnavailableReason || 'Digite um codigo de servico ou termo textual acima')
+                                            ? (servicesUnavailableReason || 'Digite um código NEBS ou termo textual acima')
                                             : 'Digite um NCM acima ou use o histórico'}</p>
                                         <p className={styles.emptyStateHint}>
                                             Dica: Pressione <kbd>/</kbd> para buscar
@@ -753,6 +753,7 @@ function App() {
                                         latestTextQuery={tab.latestTextQuery}
                                         mobileMenuOpen={tab.id === activeTabId ? mobileMenuOpen : false}
                                         onCloseMobileMenu={tab.id === activeTabId ? closeMobileMenu : noop}
+                                        onToggleMobileMenu={tab.id === activeTabId ? () => setMobileMenuOpen(prev => !prev) : noop}
                                         isActive={tab.id === activeTabId}
                                         tabId={tab.id}
                                         isNewSearch={tab.isNewSearch || false}

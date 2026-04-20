@@ -835,7 +835,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     data,
     mobileMenuOpen,
     onCloseMobileMenu,
-    onToggleMobileMenu: _onToggleMobileMenu,
+    onToggleMobileMenu,
     isActive,
     tabId,
     initialScrollTop,
@@ -875,7 +875,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
     // Sidebar collapsed state for lateral layout
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-    const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), []);
+    const toggleSidebar = useCallback(() => { if (window.innerWidth <= 1024) { if (onToggleMobileMenu) onToggleMobileMenu(); else if (onCloseMobileMenu && mobileMenuOpen) onCloseMobileMenu(); } else { setSidebarCollapsed(prev => !prev); } }, [onToggleMobileMenu, onCloseMobileMenu, mobileMenuOpen]);
 
     // ── Sistema de Comentários (Google Docs Style) ─────────────────────────
     const [commentsEnabled, setCommentsEnabled] = useState(false);
@@ -1835,6 +1835,14 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                     onEdit={editComment}
                     onDelete={removeComment}
                     currentUserId={userId}
+                />
+            )}
+
+            {/* Mobile Sidebar Overlay */}
+            {shouldRenderSidebar && (
+                <div 
+                    className={`${styles.mobileOverlay || ''} ${mobileMenuOpen ? (styles.mobileOverlayOpen || '') : ''}`}
+                    onClick={onCloseMobileMenu}
                 />
             )}
 

@@ -1,27 +1,4 @@
-.sidebarOverlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgb(0 0 0 / 50%);
-  z-index: 999;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
 
-  /* Prevent blocking clicks when hidden */
-  transition: all 0.3s;
-  backdrop-filter: blur(2px);
-}
-
-.sidebarOverlay.open {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-
-  /* Enable clicks when visible */
-}
 
 .navSidebar {
   width: 250px;
@@ -74,19 +51,16 @@
 }
 
 /* Mobile specific styles for the sidebar itself */
-@media (width <= 768px) {
+@media (width <= 1024px) {
   .navSidebar {
-    position: fixed;
-    top: 0;
-    left: -280px;
-    height: 100vh;
-    z-index: 1000;
-    transition: left 0.3s ease;
-    box-shadow: 5px 0 15px rgb(0 0 0 / 50%);
+    width: 100%;
+    min-width: 0;
+    border-right: none;
   }
 
-  .navSidebar.mobileOpen {
-    left: 0;
+  .navSidebarTipi {
+    width: 100%;
+    min-width: 0;
   }
 
   .closeSidebarBtn {

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { SearchBar } from './SearchBar';
 import { HistoryItem } from '../hooks/useHistory';
 import { useAuth } from '../context/AuthContext';
@@ -8,7 +9,6 @@ import styles from './Header.module.css';
 
 const DOC_SUBTITLES: Record<string, string> = {
     nbs: 'Classificação Brasileira de Serviços',
-    nebs: 'Classificação Brasileira de Serviços',
     nesh: 'Notas Explicativas do Sistema Harmonizado',
     tipi: 'Tabela de Incidência do IPI',
 };
@@ -64,7 +64,7 @@ export function Header({
         logout
     } = useAuth();
     const isAdmin = useIsAdmin();
-    const isServiceDoc = doc === 'nbs' || doc === 'nebs';
+    const isServiceDoc = doc === 'nbs';
     const titleSubtitle = DOC_SUBTITLES[doc] || DOC_SUBTITLES.tipi;
 
     // Close menu when clicking outside
@@ -138,13 +138,20 @@ export function Header({
                         className={`${styles.docButton} ${doc === (isServiceDoc ? 'nbs' : 'nesh') ? styles.docButtonActive : ''}`}
                         onClick={() => setDoc(isServiceDoc ? 'nbs' : 'nesh')}
                     >
-                        {isServiceDoc ? 'NBS' : 'NESH'}
+                        {isServiceDoc ? 'NEBS' : 'NESH'}
                     </button>
                     <button
-                        className={`${styles.docButton} ${doc === (isServiceDoc ? 'nebs' : 'tipi') ? styles.docButtonActive : ''}`}
-                        onClick={() => setDoc(isServiceDoc ? 'nebs' : 'tipi')}
+                        className={`${styles.docButton} ${doc === 'tipi' ? styles.docButtonActive : ''}`}
+                        onClick={() => setDoc('tipi')}
                     >
-                        {isServiceDoc ? 'NEBS' : 'TIPI'}
+                        TIPI
+                    </button>
+                    <button
+                        className={`${styles.docButton} ${styles.docButtonLocked}`}
+                        onClick={() => toast('UNSPSC estará disponível em breve! 🔒\nEstamos trabalhando para trazer esta classificação internacional.', { icon: '🚧', duration: 4000, style: { background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', fontSize: '0.9rem', lineHeight: '1.5' } })}
+                    >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6 }}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                        UNSPSC
                     </button>
                 </div>
 
@@ -178,7 +185,7 @@ export function Header({
                                 className={servicesUnavailableReason ? styles.menuButtonDisabled : ''}
                                 title={servicesUnavailableReason ?? undefined}
                             >
-                                <span>🧭</span> {servicesUnavailableReason ? 'Serviços (NBS) indisponível' : 'Serviços (NBS)'}
+                                <span>🧭</span> {servicesUnavailableReason ? 'Serviços (NEBS) indisponível' : 'Serviços (NEBS)'}
                             </button>
                         )}
                         <div className={styles.menuDivider}></div>

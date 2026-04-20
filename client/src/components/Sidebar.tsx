@@ -333,14 +333,7 @@ export const Sidebar = React.memo(function Sidebar({
   return (
     <>
       <div
-        className={`${styles.sidebarOverlay} ${isOpen ? styles.open : ""}`}
-        onMouseDown={(e) => {
-          if (e.target === e.currentTarget) onClose();
-        }}
-      />
-
-      <div
-        className={`${styles.navSidebar} ${styles.active} ${isOpen ? styles.mobileOpen : ""} ${isTipi ? styles.navSidebarTipi : ""}`}
+        className={`${styles.navSidebar} ${styles.active} ${isTipi ? styles.navSidebarTipi : ""}`}
       >
         <div className={styles.navHeader}>
           <h3>Navegação</h3>
