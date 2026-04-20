@@ -13,6 +13,23 @@ type SupportedDocType = 'nesh' | 'tipi';
 
 type CodeResults = Record<string, any>;
 
+function escapeMarkupText(value: unknown): string {
+    return NeshRenderer.escapeHtml(String(value ?? ''));
+}
+
+function escapeMarkupAttr(value: unknown): string {
+    return escapeMarkupText(value);
+}
+
+function normalizeTipiLevel(value: unknown): number {
+    const numericLevel = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(numericLevel)) {
+        return 1;
+    }
+
+    return Math.min(Math.max(Math.trunc(numericLevel), 1), 5);
+}
+
 function getAliquotClass(aliquota: string) {
     const normalized = (aliquota || '').toString().trim().toUpperCase();
     if (!normalized || normalized === '0' || normalized === '0%') {
@@ -36,43 +53,54 @@ function getAliquotClass(aliquota: string) {
     return { className: 'aliquot-zero', tooltip: 'Isento de IPI', display: normalized };
 }
 
-function renderTipiFallback(resultados: CodeResults): string {
-    const chapters = Object.values(resultados)
-        .sort((a: any, b: any) => parseInt(a?.capitulo || '0', 10) - parseInt(b?.capitulo || '0', 10));
+function renderTipiPosition(pos: any): string {
+    const codigo = pos?.codigo || pos?.ncm || '';
+    const ncm = pos?.ncm || codigo;
+    const descricao = pos?.descricao || '';
+    const indentClass = `tipi-nivel-${normalizeTipiLevel(pos?.nivel)}`;
+    const { className, tooltip, display } = getAliquotClass(pos?.aliquota);
+    const elementId = escapeMarkupAttr(generateAnchorId(codigo));
+    const safeCodigo = escapeMarkupText(codigo);
+    const safeNcm = escapeMarkupAttr(ncm);
+    const safeDescricao = escapeMarkupText(descricao);
+    const safeTooltip = escapeMarkupAttr(tooltip);
+    const safeDisplay = escapeMarkupText(display);
+    const safeAriaLabel = escapeMarkupAttr(`NCM ${codigo}`);
 
-    return chapters.map((chapter: any) => {
-        const capitulo = chapter?.capitulo || '';
-        const titulo = chapter?.titulo || `Capítulo ${capitulo}`;
-        const posicoes = Array.isArray(chapter?.posicoes) ? chapter.posicoes : [];
-
-        const positionsHtml = posicoes.map((pos: any) => {
-            const codigo = pos?.codigo || pos?.ncm || '';
-            const ncm = pos?.ncm || codigo;
-            const descricao = pos?.descricao || '';
-            const nivel = typeof pos?.nivel === 'number' ? pos.nivel : 1;
-            const indentClass = `tipi-nivel-${Math.min(nivel, 5)}`;
-            const { className, tooltip, display } = getAliquotClass(pos?.aliquota);
-            const elementId = generateAnchorId(codigo);
-
-            return `
-<article class="tipi-position ${indentClass}" id="${elementId}" data-ncm="${ncm}" aria-label="NCM ${codigo}">
-    <span class="tipi-ncm smart-link" data-ncm="${ncm}" role="link" tabindex="0">${codigo}</span>
-    <span class="tipi-desc">${descricao}</span>
-    <span class="tipi-aliquota ${className}" data-tooltip="${tooltip}" aria-label="${tooltip}">${display}</span>
+    return `
+<article class="tipi-position ${indentClass}" id="${elementId}" data-ncm="${safeNcm}" aria-label="${safeAriaLabel}">
+    <span class="tipi-ncm smart-link" data-ncm="${safeNcm}" role="link" tabindex="0">${safeCodigo}</span>
+    <span class="tipi-desc">${safeDescricao}</span>
+    <span class="tipi-aliquota ${className}" data-tooltip="${safeTooltip}" aria-label="${safeTooltip}">${safeDisplay}</span>
 </article>`;
-        }).join('');
+}
 
-        return `
-<div class="tipi-chapter" id="cap-${capitulo}">
+function renderTipiChapter(chapter: any): string {
+    const capitulo = chapter?.capitulo || '';
+    const titulo = chapter?.titulo || `Capítulo ${capitulo}`;
+    const chapterId = escapeMarkupAttr(`cap-${capitulo}`);
+    const safeCapitulo = escapeMarkupText(capitulo);
+    const safeTitulo = escapeMarkupText(titulo);
+    const posicoes = Array.isArray(chapter?.posicoes) ? chapter.posicoes : [];
+    const positionsHtml = posicoes.map(renderTipiPosition).join('');
+
+    return `
+<div class="tipi-chapter" id="${chapterId}">
     <h2 class="tipi-chapter-header">
-        <span class="tipi-cap-badge">${capitulo}</span>
-        ${titulo}
+        <span class="tipi-cap-badge">${safeCapitulo}</span>
+        ${safeTitulo}
     </h2>
     <div class="tipi-positions">
         ${positionsHtml}
     </div>
 </div>`;
-    }).join('\n');
+}
+
+function renderTipiFallback(resultados: CodeResults): string {
+    const chapters = Object.values(resultados)
+        .sort((a: any, b: any) => parseInt(a?.capitulo || '0', 10) - parseInt(b?.capitulo || '0', 10));
+
+    return chapters.map(renderTipiChapter).join('\n');
 }
 
 function hasRenderableNeshContent(results: CodeResults): boolean {
@@ -82,18 +110,22 @@ function hasRenderableNeshContent(results: CodeResults): boolean {
     });
 }
 
+function renderTextSearchItem(item: any): string {
+    const code = item?.ncm || item?.code || '';
+    const description = item?.descricao || item?.description || item?.title || '';
+    const safeCode = escapeMarkupText(code);
+    const safeDescription = escapeMarkupText(description);
+    const extra = item?.aliquota ? ` <strong>${escapeMarkupText(item.aliquota)}</strong>` : '';
+
+    return `<li><strong>${safeCode}</strong> - ${safeDescription}${extra}</li>`;
+}
+
 function renderTextSearchFallback(response: TextSearchResponse | TipiTextSearchResponse): string | null {
     if (!Array.isArray(response.results) || response.results.length === 0) {
         return null;
     }
 
-    const itemsHtml = response.results.map((item: any) => {
-        const code = item?.ncm || item?.code || '';
-        const description = item?.descricao || item?.description || item?.title || '';
-        const extra = item?.aliquota ? ` <strong>${item.aliquota}</strong>` : '';
-        return `<li><strong>${code}</strong> - ${description}${extra}</li>`;
-    }).join('');
-
+    const itemsHtml = response.results.map(renderTextSearchItem).join('');
     return `<ul class="compare-text-results">${itemsHtml}</ul>`;
 }
 

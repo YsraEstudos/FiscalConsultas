@@ -63,6 +63,55 @@ describe('searchResultMarkup', () => {
     expect(markup).toContain('6.5%');
   });
 
+  it('escapes dynamic values in TIPI fallback markup', () => {
+    const response = buildLocalCodeSearchResponse('tipi', '2203', {
+      '22': {
+        capitulo: '22"><script>alert(1)</script>',
+        titulo: 'Bebidas <script>alert(1)</script>',
+        posicao_alvo: '2203',
+        posicoes: [
+          {
+            codigo: '2203.00.00"><img src=x onerror=alert(1)>',
+            ncm: '22030000" onclick="alert(1)',
+            descricao: 'Cervejas <b>fortes</b>',
+            aliquota: '6.5"><script>alert(1)</script>',
+            nivel: 99,
+          },
+        ],
+      },
+    });
+
+    const markup = resolveSearchResponseMarkup('tipi', response);
+
+    expect(markup).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(markup).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(markup).toContain('Cervejas &lt;b&gt;fortes&lt;/b&gt;');
+    expect(markup).not.toContain('<script>alert(1)</script>');
+    expect(markup).not.toContain('<img src=x onerror=alert(1)>');
+    expect(markup).toContain('tipi-nivel-5');
+  });
+
+  it('escapes dynamic values in text search fallback markup', () => {
+    const markup = resolveSearchResponseMarkup('tipi', {
+      success: true,
+      type: 'text',
+      query: 'vinho',
+      results: [
+        {
+          ncm: '2204"><script>alert(1)</script>',
+          descricao: 'Vinhos <em>espumantes</em>',
+          aliquota: '10"><img src=x onerror=alert(1)>',
+        },
+      ],
+    });
+
+    expect(markup).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(markup).toContain('Vinhos &lt;em&gt;espumantes&lt;/em&gt;');
+    expect(markup).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(markup).not.toContain('<script>alert(1)</script>');
+    expect(markup).not.toContain('<img src=x onerror=alert(1)>');
+  });
+
   it('returns null for invalid or non-renderable code payloads', () => {
     const markup = resolveSearchResponseMarkup('nesh', {
       success: true,

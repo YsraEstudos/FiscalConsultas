@@ -11,6 +11,23 @@ const refs = vi.hoisted(() => ({
   localDbStatus: 'unsupported',
 }));
 
+const localDatabaseDefaults = {
+  progress: 0,
+  progressStep: '',
+  localVersion: null,
+  remoteVersion: null,
+  updateAvailable: false,
+  error: null,
+  dbSizeBytes: null,
+  isSupported: false,
+  isRemoving: false,
+  install: async () => undefined,
+  remove: async () => undefined,
+  refreshAvailability: async () => null,
+  getNbsDetailLocal: async () => null,
+  getNebsDetailLocal: async () => null,
+};
+
 vi.mock('../../src/services/api', () => ({
   searchNCM: vi.fn(),
   searchNCMFull: vi.fn(),
@@ -23,6 +40,7 @@ vi.mock('../../src/context/SettingsContext', () => ({
 
 vi.mock('../../src/context/LocalDatabaseContext', () => ({
   useLocalDatabase: () => ({
+    ...localDatabaseDefaults,
     status: refs.localDbStatus,
     searchLocal: refs.searchLocalMock,
   }),

@@ -81,12 +81,14 @@ export function ComparatorModal({ isOpen, onClose, defaultDoc = 'nesh' }: Compar
 
         try {
             let markdown: string | null = null;
+            // The worker currently uses viewMode only for TIPI code search.
+            const viewModeForDoc = doc === 'tipi' ? tipiViewMode : undefined;
 
             if (dbStatus === 'ready') {
                 const localResponse = await searchLocal(
                     doc,
                     clean,
-                    doc === 'tipi' ? tipiViewMode : undefined,
+                    viewModeForDoc,
                 );
 
                 if (localResponse?.searchType === 'code' && localResponse.results && typeof localResponse.results === 'object') {
