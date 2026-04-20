@@ -123,6 +123,37 @@ describe("useTabs", () => {
     uuidSpy.mockRestore();
   });
 
+  it("supports functional tab updates against the live snapshot", () => {
+    const uuidSpy = mockRandomUuid("301");
+    const { result } = renderHook(() => useTabs());
+
+    act(() => {
+      result.current.createTab("tipi");
+    });
+
+    act(() => {
+      result.current.updateTab("tab-301", (currentTab) => {
+        expect(currentTab).toEqual(expect.objectContaining({
+          id: "tab-301",
+          document: "tipi",
+        }));
+
+        return {
+          title: "Nova busca hidratada",
+          scrollTop: 42,
+        };
+      });
+    });
+
+    expect(result.current.tabsById.get("tab-301")).toEqual(
+      expect.objectContaining({
+        title: "Nova busca hidratada",
+        scrollTop: 42,
+      }),
+    );
+    uuidSpy.mockRestore();
+  });
+
   it("avoids state updates when updateTab receives unchanged values", () => {
     const { result } = renderHook(() => useTabs());
     const previousTabs = result.current.tabs;

@@ -935,16 +935,36 @@ function collectNeshChapterTargets(query) {
   return chapterTargets;
 }
 
+function isLegacyNeshChapterSchemaError(error) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /no such column|rendered_html|schema/i.test(message);
+}
+
 function getNeshChapterSearchData(chapterNum) {
+  let chapterData;
+
+  try {
+    chapterData = queryFirstOptionalRow(
+      `SELECT content, rendered_html FROM nesh_chapters WHERE chapter_num = ?`,
+      [chapterNum]
+    );
+  } catch (error) {
+    if (!isLegacyNeshChapterSchemaError(error)) {
+      throw error;
+    }
+
+    chapterData = queryFirstOptionalRow(
+      `SELECT content, NULL AS rendered_html FROM nesh_chapters WHERE chapter_num = ?`,
+      [chapterNum]
+    );
+  }
+
   return {
     positions: queryResultRows(
       `SELECT codigo, descricao FROM nesh_positions WHERE chapter_num = ? ORDER BY codigo`,
       [chapterNum]
     ),
-    chapterData: queryFirstOptionalRow(
-      `SELECT content, rendered_html FROM nesh_chapters WHERE chapter_num = ?`,
-      [chapterNum]
-    ),
+    chapterData,
     notesData: queryFirstOptionalRow(
       `SELECT notes_content, titulo, notas, consideracoes, definicoes, parsed_notes_json
        FROM nesh_chapter_notes WHERE chapter_num = ?`,

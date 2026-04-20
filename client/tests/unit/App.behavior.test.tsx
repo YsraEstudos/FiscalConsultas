@@ -796,7 +796,21 @@ describe('App behavior', () => {
       },
     };
 
-    mocks.updateTabMock.mockImplementation((tabId: string, updates: Partial<MockTab>) => {
+    mocks.updateTabMock.mockImplementation((
+      tabId: string,
+      updatesOrUpdater:
+        | Partial<MockTab>
+        | ((currentTab: MockTab | undefined) => Partial<MockTab> | undefined),
+    ) => {
+      const currentTab = mocks.tabsStateRef.value.tabsById.get(tabId);
+      const updates = typeof updatesOrUpdater === 'function'
+        ? updatesOrUpdater(currentTab)
+        : updatesOrUpdater;
+
+      if (!currentTab || !updates) {
+        return;
+      }
+
       const nextTabs = mocks.tabsStateRef.value.tabs.map((tab) =>
         tab.id === tabId ? { ...tab, ...updates } : tab
       );
@@ -808,11 +822,7 @@ describe('App behavior', () => {
     fireEvent.click(screen.getByTestId('result-hydrate-tab-1'));
 
     await waitFor(() => {
-      expect(mocks.updateTabMock).toHaveBeenCalledWith('tab-1', {
-        results: expect.objectContaining({
-          results: mocks.hydratedResultsRef.value,
-        }),
-      });
+      expect(mocks.updateTabMock).toHaveBeenCalledWith('tab-1', expect.any(Function));
     });
     rerender(<App />);
 

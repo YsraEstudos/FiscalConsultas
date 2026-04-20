@@ -355,6 +355,26 @@ function App() {
         handleOpenNoteRef.current = handleOpenNote;
     }, [handleOpenNote]);
 
+    const handleHydratedResults = useCallback((incomingTabId: string, hydratedResults: Record<string, any> | null | undefined) => {
+        if (!hydratedResults) {
+            return;
+        }
+
+        updateTab(incomingTabId, (currentTab) => {
+            if (!currentTab || currentTab.id !== incomingTabId || !isCodeSearchResponse(currentTab.results)) {
+                return undefined;
+            }
+
+            return {
+                results: {
+                    ...currentTab.results,
+                    results: hydratedResults,
+                    resultados: hydratedResults,
+                },
+            };
+        });
+    }, [updateTab]);
+
     // Handler único de clique com delegação (smart-link + note-ref)
     useEffect(() => {
         const handleDelegatedMiddleMouseDown = (event: MouseEvent) => {
@@ -751,22 +771,7 @@ function App() {
                                                 updateTab(tab.id, { isContentReady: true });
                                             }
                                         }}
-                                        onHydratedResults={(incomingTabId, hydratedResults) => {
-                                            if (!hydratedResults || !tab.results || !isCodeSearchResponse(tab.results)) {
-                                                return;
-                                            }
-                                            if (incomingTabId !== tab.id) {
-                                                return;
-                                            }
-
-                                            updateTab(incomingTabId, {
-                                                results: {
-                                                    ...tab.results,
-                                                    results: hydratedResults,
-                                                    resultados: hydratedResults,
-                                                },
-                                            });
-                                        }}
+                                        onHydratedResults={handleHydratedResults}
                                     />
                                 )}
                                 {/* Esconder visualmente ResultDisplay se nao estiver pronto? Nao, manter montado para o IntersectionObserver rodar,
