@@ -319,8 +319,9 @@ export async function installServicesMock(page: Page, options: ServicesMockOptio
   const statusQueue = [...(options.statusResponses ?? [])];
   const nbsDetailResponses = options.nbsDetailResponses ?? {};
   const nebsDetailResponses = options.nebsDetailResponses ?? {};
+  const routeScope = page.context();
 
-  await page.route('**/api/**', async (route) => {
+  await routeScope.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
     const isCodeCatalogSearch = path.endsWith('/tipi/search') || (path.endsWith('/search') && !path.includes('/services/'));
@@ -375,7 +376,7 @@ export async function installServicesMock(page: Page, options: ServicesMockOptio
     }
 
     if (options.unmatchedApiStrategy === 'continue') {
-      await route.continue();
+      await route.fallback();
       return;
     }
 

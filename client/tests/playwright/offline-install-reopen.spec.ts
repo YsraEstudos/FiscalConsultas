@@ -50,7 +50,7 @@ test.describe('offline install and reopen flow', () => {
 
     await context.unroute('**/api/**');
     await context.unroute('**/api/auth/me*');
-    await page.route('**/api/**', async (route) => {
+    await context.route('**/api/**', async (route) => {
       await route.abort('failed');
     });
 

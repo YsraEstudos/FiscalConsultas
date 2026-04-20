@@ -36,7 +36,7 @@ test.beforeEach(async ({ page }) => {
     ],
   });
 
-  await page.route('**/api/search/chapter/84/body', async (route) => {
+  await page.context().route('**/api/search/chapter/84/body', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

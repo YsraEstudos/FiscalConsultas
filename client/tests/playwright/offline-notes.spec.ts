@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { installServicesMock } from './fixtures/service-mocks';
+import { expectOfflineReadyInSettings } from './helpers/offlineHarness';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const offlineMeta = JSON.parse(
@@ -18,7 +19,7 @@ test('opens local and cross-chapter notes without /api after offline install', a
     unmatchedApiStrategy: 'continue',
   });
 
-  await page.route('**/api/database/version', async (route) => {
+  await page.context().route('**/api/database/version', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -26,7 +27,7 @@ test('opens local and cross-chapter notes without /api after offline install', a
     });
   });
 
-  await page.route('**/api/database/token', async (route) => {
+  await page.context().route('**/api/database/token', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -39,7 +40,7 @@ test('opens local and cross-chapter notes without /api after offline install', a
     });
   });
 
-  await page.route('**/api/database/download', async (route) => {
+  await page.context().route('**/api/database/download', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/octet-stream',
@@ -56,12 +57,11 @@ test('opens local and cross-chapter notes without /api after offline install', a
   await expect(installButton).toBeVisible();
   await installButton.click();
 
-  await expect(page.getByTitle('Buscas Offline configuradas!')).toBeVisible({
-    timeout: 120_000,
-  });
+  await expectOfflineReadyInSettings(page, 120_000);
+  await page.keyboard.press('Escape');
 
   const apiRequestsAfterOffline: string[] = [];
-  await page.route('**/api/**', async (route) => {
+  await page.context().route('**/api/**', async (route) => {
     apiRequestsAfterOffline.push(route.request().url());
     await route.abort('failed');
   });
