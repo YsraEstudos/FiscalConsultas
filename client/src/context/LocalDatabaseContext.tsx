@@ -315,7 +315,6 @@ export function LocalDatabaseProvider({
     reject: (reason: Error) => void;
     timeout: ReturnType<typeof setTimeout>;
   } | null>(null);
-  const autoInstallModeRef = useRef<"install" | "update" | null>(null);
   const remoteCheckRef = useRef<Promise<OfflineDatabaseMetadata | null> | null>(
     null
   );
@@ -753,25 +752,8 @@ export function LocalDatabaseProvider({
   ]);
 
   useEffect(() => {
-    if (!isSupported) return;
+    if (!isSupported || status !== "ready" || !updateAvailable) return;
 
-    let autoMode: "install" | "update" | null = null;
-    if (status === "not_installed") {
-      autoMode = "install";
-    } else if (status === "ready" && updateAvailable) {
-      autoMode = "update";
-    }
-
-    if (!autoMode) {
-      autoInstallModeRef.current = null;
-      return;
-    }
-
-    if (autoInstallModeRef.current === autoMode) {
-      return;
-    }
-
-    autoInstallModeRef.current = autoMode;
     runInBackground(
       install().catch(() => {
         // Install lifecycle errors are already captured in shared state.

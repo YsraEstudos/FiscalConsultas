@@ -41,13 +41,13 @@ export function formatOfflineDatabaseErrorMessage(
   }
 
   if (error instanceof Error) {
-    return error.message || fallbackMessage;
+    return error.message.trim() || fallbackMessage;
   }
 
   if (error && typeof error === "object") {
     const message = (error as { message?: unknown }).message;
     if (typeof message === "string" && message.trim()) {
-      return message;
+      return message.trim();
     }
   }
 
