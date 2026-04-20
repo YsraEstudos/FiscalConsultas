@@ -361,13 +361,18 @@ function App() {
         }
 
         updateTab(incomingTabId, (currentTab) => {
-            if (!currentTab || currentTab.id !== incomingTabId || !isCodeSearchResponse(currentTab.results)) {
+            if (!currentTab || currentTab.id !== incomingTabId) {
+                return undefined;
+            }
+
+            const currentResults = currentTab.results;
+            if (!currentResults || !isCodeSearchResponse(currentResults)) {
                 return undefined;
             }
 
             return {
                 results: {
-                    ...currentTab.results,
+                    ...currentResults,
                     results: hydratedResults,
                     resultados: hydratedResults,
                 },

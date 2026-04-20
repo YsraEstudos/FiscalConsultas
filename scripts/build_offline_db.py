@@ -154,7 +154,7 @@ def _render_nesh_chapter_html(
             {
                 "codigo": str(position["codigo"]),
                 "descricao": str(position["descricao"] or ""),
-                "anchor_id": f'pos-{str(position["codigo"]).replace(".", "-")}',
+                "anchor_id": f"pos-{str(position['codigo']).replace('.', '-')}",
             }
             for position in positions
         ],
