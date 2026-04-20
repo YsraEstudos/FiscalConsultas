@@ -460,13 +460,13 @@ function ftsSearch(table, query, columns, contentTable, limit = 50) {
   const colList = columns.map((c) => `ct.${c}`).join(", ");
 
   try {
-    // Optimized: JOIN instead of IN(subquery) — lets SQLite use FTS index directly
+    // Use table-valued FTS5 syntax so the search still targets the virtual
+    // table when we alias it for the content-table join.
     const sql = `
       SELECT ${colList}
-      FROM ${table} AS ft
+      FROM ${table}(?) AS ft
       JOIN ${contentTable} AS ct ON ct.rowid = ft.rowid
-      WHERE ft MATCH ?
-      ORDER BY ft.rank
+      ORDER BY rank
       LIMIT ?
     `;
     const rows = _db.exec(sql, {
