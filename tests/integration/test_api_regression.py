@@ -105,9 +105,9 @@ def test_search_regression(client, snapshot_data, query):
         if expected_count == 0:
             # For text queries that previously returned empty, we allow only a small
             # amount of drift (ranking/index updates), but prevent large explosions.
-            assert current_len <= 3, (  # nosec B101
+            assert current_len <= 1, (  # nosec B101
                 f"Count mismatch for '{query}' (text empty baseline). "
-                f"Expected near 0, got {current_len}"
+                f"Expected near 0 with at most 1 result, got {current_len}"
             )
         else:
             # For non-empty baselines, require non-empty output and cap growth.

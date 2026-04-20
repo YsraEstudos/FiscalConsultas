@@ -19,8 +19,9 @@ export const OFFLINE_METADATA = {
 
 export async function installOfflineApiMock(page: Page, counters: OfflineApiCounters) {
   const encryptedBytes = Buffer.from('mock-encrypted-offline-bundle', 'utf-8');
+  const routeScope = page.context();
 
-  await page.route('**/api/**', async (route) => {
+  await routeScope.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
@@ -84,12 +85,12 @@ export async function installOfflineApiMock(page: Page, counters: OfflineApiCoun
       return;
     }
 
-    await route.continue();
+    await route.fallback();
   });
 }
 
 export async function installAuthSessionMock(page: Page) {
-  await page.route('**/api/auth/me*', async (route) => {
+  await page.context().route('**/api/auth/me*', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -328,5 +329,20 @@ export async function installOfflineFromSettings(page: Page, timeout = 15_000) {
   const installButton = page.locator('#db-installer-install');
   await expect(installButton).toBeVisible({ timeout });
   await installButton.click();
-  await expect(page.locator('#db-installer-remove')).toBeVisible({ timeout });
+  await expectOfflineReadyInSettings(page, timeout);
+}
+
+export async function expectOfflineReadyInSettings(page: Page, timeout = 15_000) {
+  const settingsDialog = page.getByRole('dialog', { name: 'Configurações' });
+  if (!(await settingsDialog.isVisible().catch(() => false))) {
+    await openSettings(page);
+  }
+
+  await expect(page.getByText(/Ativa/)).toBeVisible({ timeout });
+}
+
+export async function expectOfflineMetadataPersisted(page: Page) {
+  await expect.poll(async () => (
+    page.evaluate(() => Boolean(globalThis.localStorage.getItem('offline-db:installed-meta')))
+  )).toBe(true);
 }

@@ -161,8 +161,8 @@ test('navigates to a NESH position from sidebar click and highlights target anch
   await waitForScrollToSettle(page, '#results-content-tab-1');
 });
 
-test('auto-scrolls to target position right after NESH search in real browser flow', async ({ page }) => {
-  await page.unroute('**/api/**');
+test('auto-scrolls to target position right after NESH search in real browser flow', async ({ page, context }) => {
+  await context.unroute('**/api/**');
   await installServicesMock(page, {
     neshSearchResponses: [
       {

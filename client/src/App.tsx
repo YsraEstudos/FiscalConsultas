@@ -145,7 +145,6 @@ function App() {
         });
     }, []);
 
-
     // Atalhos globais de teclado
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -203,11 +202,7 @@ function App() {
 
     const renderOfflineStatusAction = useCallback(() => {
         if (localDbStatus === 'ready') {
-            return (
-                <div title="Buscas Offline configuradas!" className={`${styles.minimalDownloadBtn} ${styles.installed}`}>
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                </div>
-            );
+            return null;
         }
 
         if (localDbStatus === 'checking' || localDbStatus === 'installing' || localDbStatus === 'updating') {

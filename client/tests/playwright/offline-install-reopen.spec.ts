@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 
 import {
+  expectOfflineMetadataPersisted,
+  expectOfflineReadyInSettings,
   installOfflineApiMock,
   installOfflineFromSettings,
   installOfflineWorkerMock,
@@ -28,10 +30,10 @@ test.describe('offline install and reopen flow', () => {
     expect(counters.download).toBe(1);
 
     await page.keyboard.press('Escape');
-    await expect(page.getByTitle('Buscas Offline configuradas!')).toBeVisible();
+    await expectOfflineMetadataPersisted(page);
   });
 
-  test('reopens with offline DB ready when backend API is unavailable', async ({ page }) => {
+  test('reopens with offline DB ready when backend API is unavailable', async ({ page, context }) => {
     const counters: OfflineApiCounters = {
       version: 0,
       token: 0,
@@ -43,16 +45,19 @@ test.describe('offline install and reopen flow', () => {
 
     await page.goto('/');
     await installOfflineFromSettings(page);
-    await expect(page.getByTitle('Buscas Offline configuradas!')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expectOfflineMetadataPersisted(page);
 
-    await page.unroute('**/api/**');
-    await page.route('**/api/**', async (route) => {
+    await context.unroute('**/api/**');
+    await context.unroute('**/api/auth/me*');
+    await context.route('**/api/**', async (route) => {
       await route.abort('failed');
     });
 
     await page.reload();
 
     await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
-    await expect(page.getByTitle('Buscas Offline configuradas!')).toBeVisible();
+    await expectOfflineMetadataPersisted(page);
+    await expectOfflineReadyInSettings(page);
   });
 });

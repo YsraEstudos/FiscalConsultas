@@ -155,15 +155,10 @@ jobs:
         working-directory: client
         run: npx playwright install --with-deps chromium
 
-      - name: Configure non-localhost alias for service worker tests
-        run: |
-          echo "127.0.0.1 offline-e2e.local" | sudo tee -a /etc/hosts
-          getent hosts offline-e2e.local
-
       - name: Run Playwright P0 offline/service/scroll/auth specs
         working-directory: client
         env:
-          PLAYWRIGHT_LIVE_BASE_URL: http://offline-e2e.local:4173
+          PLAYWRIGHT_LIVE_BASE_URL: http://localhost:4173
           ALLOW_TEST_CLERK_KEY: "true"
         run: >
           npx playwright test

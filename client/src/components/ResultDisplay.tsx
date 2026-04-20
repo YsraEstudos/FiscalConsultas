@@ -856,7 +856,8 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         canUseRestrictedUi,
     } = useAuth();
     const containerRef = useRef<HTMLDivElement>(null);
-    const latestScrollTopRef = useRef(0);
+    const latestScrollTopRef = useRef(initialScrollTop ?? 0);
+    const hasScrollSnapshotRef = useRef(typeof initialScrollTop === 'number');
     const lastPersistedScrollRef = useRef<number | null>(null);
     const [isContentReady, setIsContentReady] = useState(false);
     const [isFullyRendered, setIsFullyRendered] = useState(false);
@@ -1413,6 +1414,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         const handleScroll = () => {
             const currentScroll = element.scrollTop;
             latestScrollTopRef.current = currentScroll;
+            hasScrollSnapshotRef.current = true;
 
             if (!isActive) return;
 
@@ -1428,11 +1430,12 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         return () => element.removeEventListener('scroll', handleScroll);
     }, [data?.type, data?.markdown, renderableCodeResults, isActive, tabId]);
 
-    // Persist scroll when tab becomes inactive
     useEffect(() => {
         if (isActive) return;
+
         const persist = onPersistScrollRef.current;
         if (!persist) return;
+        if (!hasScrollSnapshotRef.current) return;
 
         const currentScroll = latestScrollTopRef.current;
         if (isNewSearchRef.current && !hasConsumedNewSearchRef.current) {
@@ -1444,8 +1447,6 @@ export const ResultDisplay = React.memo(function ResultDisplay({
         lastPersistedScrollRef.current = currentScroll;
         persist(tabId, currentScroll);
     }, [consumeNewSearchScroll, isActive, tabId]);
-
-
 
     // Restore scroll when tab becomes active (only if NOT a new search)
     const hasRestoredInitialScrollRef = useRef(false);
@@ -1476,6 +1477,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
             if (Math.abs(currentContainer.scrollTop - targetScrollTop) < 1) {
                 latestScrollTopRef.current = targetScrollTop;
+                hasScrollSnapshotRef.current = true;
                 lastPersistedScrollRef.current = targetScrollTop;
                 hasRestoredInitialScrollRef.current = true;
                 return;
@@ -1490,6 +1492,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
             currentContainer.scrollTop = targetScrollTop;
             latestScrollTopRef.current = targetScrollTop;
+            hasScrollSnapshotRef.current = true;
             lastPersistedScrollRef.current = targetScrollTop;
 
             if (Math.abs(currentContainer.scrollTop - targetScrollTop) < 1) {

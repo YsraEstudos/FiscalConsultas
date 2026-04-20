@@ -104,7 +104,7 @@ describe('DatabaseInstaller', () => {
     expect(screen.queryByRole('button', { name: /Atualizar Banco Offline/i })).not.toBeInTheDocument();
   });
 
-  it('renders the ready state with update information and handles install/remove clicks', async () => {
+  it('renders the ready state with update information and handles update click', async () => {
     localDatabaseState.status = 'ready';
     localDatabaseState.localVersion = '2026.04';
     localDatabaseState.remoteVersion = '2026.05';
@@ -113,21 +113,22 @@ describe('DatabaseInstaller', () => {
     render(<DatabaseInstaller />);
 
     fireEvent.click(screen.getByRole('button', { name: /Atualizar Banco Offline/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Remover Dados Locais/i }));
 
     expect(screen.getByText(/Nova versão:/)).toBeInTheDocument();
     expect(screen.getByText('2026.05')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Remover Dados Locais/i })).not.toBeInTheDocument();
     expect(installMock).toHaveBeenCalledTimes(1);
-    expect(removeMock).toHaveBeenCalledTimes(1);
+    expect(removeMock).not.toHaveBeenCalled();
   });
 
-  it('renders the removing label while the remove action is in progress', () => {
+  it('does not render remove action while the remove flag is set', () => {
     localDatabaseState.status = 'ready';
     localDatabaseState.isRemoving = true;
 
     render(<DatabaseInstaller />);
 
-    expect(screen.getByRole('button', { name: /Removendo…/i })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /Removendo…/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Remover Dados Locais/i })).not.toBeInTheDocument();
   });
 
   it('renders the error state and retries installation', () => {

@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock
 import pytest
 
 from backend.infrastructure.database import DatabaseAdapter
-from backend.infrastructure.repositories.chapter_repository import ChapterRepository
 from backend.presentation.routes import search as search_route
 from backend.presentation.routes import tipi as tipi_route
 from backend.server.app import app
@@ -212,11 +211,6 @@ def test_search_chapters_endpoint_returns_available_chapters(client, monkeypatch
     monkeypatch.setattr(
         DatabaseAdapter,
         "get_all_chapters_list",
-        AsyncMock(return_value=expected_chapters),
-    )
-    monkeypatch.setattr(
-        ChapterRepository,
-        "get_all_nums",
         AsyncMock(return_value=expected_chapters),
     )
 

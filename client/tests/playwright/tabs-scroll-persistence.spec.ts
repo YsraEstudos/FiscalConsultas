@@ -226,7 +226,7 @@ test('restores saved scroll when returning to a tab with a different document', 
 
   await page.locator('div[draggable="true"][data-document="tipi"]').first().click();
   await expect.poll(async () => getActiveTabDocument(page)).toBe('tipi');
-
+  await expect(page.locator(`#${tipiContainerId}`)).toBeVisible();
   await expectScrollTopNear(page, `#${tipiContainerId}`, savedTipiScrollTop);
 });
 
@@ -246,6 +246,7 @@ test('preserves independent scroll positions after rapid tab switching', async (
 
   await page.locator('div[draggable="true"][data-document="tipi"]').first().click();
   await expect.poll(async () => getActiveTabDocument(page)).toBe('tipi');
+  await expect(page.locator(`#${tipiContainerId}`)).toBeVisible();
   await expectScrollTopNear(page, `#${tipiContainerId}`, savedTipiScrollTop);
 
   await page.locator('div[draggable="true"][data-document="nesh"]').first().click();

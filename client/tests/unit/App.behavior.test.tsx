@@ -491,12 +491,12 @@ describe('App behavior', () => {
     });
   });
 
-  it('does not ask for download again when offline DB is ready', async () => {
+  it('does not render the configured-offline status icon when offline DB is ready', async () => {
     mocks.localDbStatusRef.value = 'ready';
 
     render(<App />);
 
-    expect(screen.getByTitle('Buscas Offline configuradas!')).toBeInTheDocument();
+    expect(screen.queryByTitle('Buscas Offline configuradas!')).not.toBeInTheDocument();
     expect(screen.queryByTitle('Baixar BD para habilitar as buscas')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('layout-search-single'));
