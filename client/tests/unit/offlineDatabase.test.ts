@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { compareOfflineVersions, sanitizeOfflineMetadata } from '../../src/utils/offlineDatabase';
+import {
+  compareOfflineVersions,
+  formatOfflineDatabaseErrorMessage,
+  sanitizeOfflineMetadata,
+} from '../../src/utils/offlineDatabase';
 
 describe('offlineDatabase utils', () => {
   it('compares missing and dotted versions consistently', () => {
@@ -58,5 +62,12 @@ describe('offlineDatabase utils', () => {
       chunk_size: 65536,
       pbkdf2_iterations: 600000,
     });
+  });
+
+  it('normalizes offline error messages consistently', () => {
+    expect(formatOfflineDatabaseErrorMessage('  boom  ')).toBe('boom');
+    expect(formatOfflineDatabaseErrorMessage(new Error('  boom  '))).toBe('boom');
+    expect(formatOfflineDatabaseErrorMessage({ message: '  boom  ' })).toBe('boom');
+    expect(formatOfflineDatabaseErrorMessage({ message: '   ' })).toBe('Unknown error');
   });
 });

@@ -177,8 +177,20 @@ export function useSearch(
             // === HYBRID SEARCH: Local DB first, API fallback ===
             if (dbStatus === 'ready' && isOfflineScopedDoc) {
                 try {
+                    const searchStart = performance.now();
                     const localResponse = await searchLocal(doc as any, query, tipiViewModeRef.current);
+                    const searchEnd = performance.now();
                     if (localResponse) {
+                        if (import.meta.env.DEV) {
+                            const e2e = (searchEnd - searchStart).toFixed(1);
+                            const wt = localResponse.timing;
+                            const sql = wt?.sqlDurationMs?.toFixed(1) ?? '?';
+                            const total = wt?.totalDurationMs?.toFixed(1) ?? '?';
+                            const cache = wt?.cacheHit ? '✓ HIT' : '✗ miss';
+                            console.log(
+                                `[search] ${doc}:${query} e2e=${e2e}ms worker=${total}ms sql=${sql}ms cache=${cache}`
+                            );
+                        }
                         if (localResponse.searchType === 'code') {
                             data = doc === 'nesh' || doc === 'tipi'
                                 ? buildLocalCodeSearchResponse(

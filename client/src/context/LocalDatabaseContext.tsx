@@ -22,6 +22,7 @@ import {
 import type { NbsDetailResponse, NebsDetailResponse } from "../types/api.types";
 import {
   compareOfflineVersions,
+  formatOfflineDatabaseErrorMessage,
   sanitizeOfflineMetadata,
   type OfflineDatabaseMetadata,
 } from "../utils/offlineDatabase";
@@ -94,8 +95,8 @@ interface LocalDatabaseState {
 interface LocalSearchResult {
   results: Record<string, unknown>[] | Record<string, unknown> | null;
   searchType: "text" | "code";
-  // Offline code search may carry backend-rendered HTML or legacy markdown text.
   markdown?: string;
+  timing?: { sqlDurationMs: number; totalDurationMs: number; cacheHit: boolean };
 }
 
 interface LocalDatabaseContextType extends LocalDatabaseState {
@@ -507,7 +508,7 @@ export function LocalDatabaseProvider({
         setLocalVersion((payload.version as string) || null);
         setDbSizeBytes((payload.sizeBytes as number) || null);
         if (nextStatus === "error") {
-          setError((payload.error as string) || "Unknown error");
+          setError(formatOfflineDatabaseErrorMessage(payload.error));
         }
         if (nextStatus === "ready") {
           setProgress(100);
@@ -535,14 +536,13 @@ export function LocalDatabaseProvider({
       }
 
       if (type === "ERROR") {
-        setError((payload.error as string) || "Unknown error");
+        const normalizedError = formatOfflineDatabaseErrorMessage(payload.error);
+        setError(normalizedError);
         setStatus("error");
         if (!id || !pending) return;
         clearTimeout(pending.timeout);
         pendingRef.current.delete(id);
-        pending.reject(
-          new Error((payload.error as string) || "Worker error")
-        );
+        pending.reject(new Error(normalizedError));
       }
     },
     []
@@ -558,7 +558,7 @@ export function LocalDatabaseProvider({
     workerRef.current = worker;
     worker.onmessage = handleWorkerMessage;
     worker.onerror = (event) => {
-      setError(`Worker error: ${event.message}`);
+      setError(formatOfflineDatabaseErrorMessage(`Worker error: ${event.message}`));
       setStatus("error");
     };
 
@@ -644,8 +644,9 @@ export function LocalDatabaseProvider({
       }
 
       if (message.type === "ERROR") {
-        setError(message.payload.message);
-        rejectSyncWaiter(message.payload.message);
+        const normalizedError = formatOfflineDatabaseErrorMessage(message.payload.message);
+        setError(normalizedError);
+        rejectSyncWaiter(normalizedError);
       }
     };
 
@@ -727,8 +728,7 @@ export function LocalDatabaseProvider({
         payload: { metadata: effectiveMetadata },
       });
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Installation failed unexpectedly";
+      const message = formatOfflineDatabaseErrorMessage(err);
       setStatus("error");
       setError(message);
       broadcast({
@@ -736,7 +736,7 @@ export function LocalDatabaseProvider({
         source: lockOwner,
         payload: { message },
       });
-      throw err;
+      throw new Error(message);
     } finally {
       clearInstallLock(lockOwner);
     }
@@ -750,6 +750,16 @@ export function LocalDatabaseProvider({
     sendToWorker,
     waitForOtherTabSync,
   ]);
+
+  useEffect(() => {
+    if (!isSupported || status !== "ready" || !updateAvailable) return;
+
+    runInBackground(
+      install().catch(() => {
+        // Install lifecycle errors are already captured in shared state.
+      })
+    );
+  }, [install, isSupported, status, updateAvailable]);
 
   const remove = useCallback(async () => {
     setIsRemoving(true);
@@ -768,7 +778,7 @@ export function LocalDatabaseProvider({
         payload: {},
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Removal failed");
+      setError(formatOfflineDatabaseErrorMessage(err));
     } finally {
       setIsRemoving(false);
     }
@@ -800,6 +810,8 @@ export function LocalDatabaseProvider({
             ((response.payload?.searchType as "text" | "code") || "text"),
           markdown:
             (response.payload?.markdown as string | undefined) || undefined,
+          timing:
+            (response.payload?.timing as LocalSearchResult["timing"]) || undefined,
         };
       } catch {
         return null;
