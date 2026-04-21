@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TypeAlias, TypedDict
+from typing import TypedDict
 
 NBS_REPOSITORY_ALLOWED_TABLES = {"nbs_items", "nebs_entries", "catalog_metadata"}
 NBS_REPOSITORY_MAX_ANCESTOR_DEPTH = 64
@@ -102,4 +102,4 @@ class NbsCatalogCountsSnapshot(TypedDict):
     nebs_entries: int
 
 
-NbsCatalogMetadataSnapshot: TypeAlias = dict[str, str]
+type NbsCatalogMetadataSnapshot = dict[str, str]

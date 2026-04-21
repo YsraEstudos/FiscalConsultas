@@ -123,7 +123,7 @@ def _request_accepts_tipi_gzip_encoding(request: Request) -> bool:
     return wildcard_q is not None and wildcard_q > 0
 
 
-def snapshotTipiCodePayloadCacheMetrics() -> dict[str, str | float | int]:
+def snapshot_tipi_code_payload_cache_metrics() -> dict[str, str | float | int]:
     snapshot = tipi_payload_cache_metrics.snapshot(
         current_size=len(_tipi_code_payload_cache),
         max_size=_TIPI_CODE_PAYLOAD_CACHE_MAX,
@@ -144,7 +144,7 @@ def snapshotTipiCodePayloadCacheMetrics() -> dict[str, str | float | int]:
 
 def get_payload_cache_metrics() -> dict[str, str | float | int]:
     """Alias compatível com a API anterior do módulo."""
-    return snapshotTipiCodePayloadCacheMetrics()
+    return snapshot_tipi_code_payload_cache_metrics()
 
 
 def _build_tipi_payload_cache_headers(
@@ -226,9 +226,10 @@ def _build_tipi_payload_response(
 
 
 router = APIRouter()
+INVALID_TIPI_RESPONSE_DETAIL = "Formato de resposta inválido do serviço"
 TIPI_SEARCH_RESPONSES = {
     429: {"description": "Limite de requisições para busca pública excedido."},
-    500: {"description": "Formato de resposta inválido do serviço"},
+    500: {"description": INVALID_TIPI_RESPONSE_DETAIL},
 }
 
 
@@ -375,7 +376,7 @@ def _build_tipi_text_search_response(
 
 
 @router.get("/search", responses=TIPI_SEARCH_RESPONSES)
-async def handleTipiSearchRequest(
+async def handle_tipi_search_request(
     request: Request,
     tipi_service: Annotated[TipiService, Depends(get_tipi_service)],
     ncm: Annotated[
@@ -447,7 +448,7 @@ async def handleTipiSearchRequest(
                 type(result).__name__,
             )
             raise HTTPException(
-                status_code=500, detail="Formato de resposta inválido do serviço"
+                status_code=500, detail=INVALID_TIPI_RESPONSE_DETAIL
             )
 
         result = _apply_tipi_code_search_contract(result)
@@ -469,7 +470,7 @@ async def handleTipiSearchRequest(
             safe_ncm,
             type(result).__name__,
         )
-        raise HTTPException(status_code=500, detail="Formato de resposta inválido do serviço")
+        raise HTTPException(status_code=500, detail=INVALID_TIPI_RESPONSE_DETAIL)
 
     result.setdefault("normalized", result.get("query", ""))
     result.setdefault("warning", None)
@@ -485,7 +486,7 @@ async def handleTipiSearchRequest(
 
 
 @router.get("/chapters")
-async def listTipiChapters(
+async def list_tipi_chapters(
     tipi_service: Annotated[TipiService, Depends(get_tipi_service)],
 ):
     """
@@ -495,3 +496,8 @@ async def listTipiChapters(
     """
     chapters = await tipi_service.fetchTipiChapterCatalog()
     return {"success": True, "capitulos": chapters}
+
+
+snapshotTipiCodePayloadCacheMetrics = snapshot_tipi_code_payload_cache_metrics
+handleTipiSearchRequest = handle_tipi_search_request
+listTipiChapters = list_tipi_chapters

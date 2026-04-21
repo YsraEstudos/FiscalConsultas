@@ -157,7 +157,7 @@ async def load_nesh_chapter_raw_data(
 
 
 def hydrate_nesh_chapter_payload(
-    service: "NeshService", raw_data: NeshChapterRawPayload
+    raw_data: NeshChapterRawPayload,
 ) -> NeshChapterRawPayload:
     precomputed_json = raw_data.pop("parsed_notes_json", None)
     if precomputed_json:
@@ -198,7 +198,7 @@ async def fetch_nesh_chapter_payload(
     raw_data = await load_nesh_chapter_raw_data(service, chapter_num)
     if not raw_data:
         return None
-    hydrated = hydrate_nesh_chapter_payload(service, raw_data)
+    hydrated = hydrate_nesh_chapter_payload(raw_data)
 
     if redis_cache.available:
         await redis_cache.set_chapter(chapter_num, hydrated)

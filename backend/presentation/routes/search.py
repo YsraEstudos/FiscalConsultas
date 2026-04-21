@@ -126,7 +126,7 @@ def _request_accepts_gzip_encoding(request: Request) -> bool:
     return wildcard_q is not None and wildcard_q > 0
 
 
-def snapshotSearchCodePayloadCacheMetrics() -> dict[str, str | float | int]:
+def snapshot_search_code_payload_cache_metrics() -> dict[str, str | float | int]:
     with _code_payload_cache_lock:
         current_size = len(_code_payload_cache)
     snapshot = search_payload_cache_metrics.snapshot(
@@ -149,7 +149,7 @@ def snapshotSearchCodePayloadCacheMetrics() -> dict[str, str | float | int]:
 
 def get_payload_cache_metrics() -> dict[str, str | float | int]:
     """Alias compatível com a API anterior do módulo."""
-    return snapshotSearchCodePayloadCacheMetrics()
+    return snapshot_search_code_payload_cache_metrics()
 
 
 def _build_search_payload_cache_headers(
@@ -360,7 +360,7 @@ def _build_text_search_response(
         500: {"description": "Formato de resposta inválido do serviço"},
     },
 )
-async def handleGlobalFiscalSearchRequest(
+async def handle_global_fiscal_search_request(
     request: Request,
     service: Annotated[NeshService, Depends(get_nesh_service)],
     ncm: Annotated[
@@ -469,7 +469,7 @@ async def handleGlobalFiscalSearchRequest(
 
 
 @router.get("/chapters")
-async def listNeshChapters(request: Request):
+async def list_nesh_chapters(request: Request):
     """
     Lista todos os capítulos do sistema Harmonizado (NESH).
 
@@ -498,7 +498,7 @@ async def listNeshChapters(request: Request):
     "/nesh/chapter/{chapter}/notes",
     responses={404: {"description": "Capítulo não encontrado"}},
 )
-async def fetchNeshChapterNotes(
+async def fetch_nesh_chapter_notes(
     chapter: str, service: Annotated[NeshService, Depends(get_nesh_service)]
 ):
     """
@@ -538,7 +538,7 @@ async def fetchNeshChapterNotes(
     "/search/chapter/{chapter}/body",
     responses={404: {"description": "Capítulo não encontrado"}},
 )
-async def fetchNeshChapterBody(
+async def fetch_nesh_chapter_body(
     chapter: str,
     service: Annotated[NeshService, Depends(get_nesh_service)],
 ):
@@ -566,7 +566,7 @@ async def fetchNeshChapterBody(
 
 
 @router.get("/glossary")
-async def lookupGlossaryDefinition(
+async def lookup_glossary_definition(
     term: Annotated[str, Query(..., description="Termo para consultar no glossário")],
 ):
     """
@@ -579,3 +579,12 @@ async def lookupGlossaryDefinition(
         return {"found": True, "term": term, "data": definition}
     else:
         return {"found": False, "term": term}
+
+
+snapshotSearchCodePayloadCacheMetrics = snapshot_search_code_payload_cache_metrics
+handleGlobalFiscalSearchRequest = handle_global_fiscal_search_request
+handle_global_fiscal_search_request.__name__ = "handleGlobalFiscalSearchRequest"
+listNeshChapters = list_nesh_chapters
+fetchNeshChapterNotes = fetch_nesh_chapter_notes
+fetchNeshChapterBody = fetch_nesh_chapter_body
+lookupGlossaryDefinition = lookup_glossary_definition

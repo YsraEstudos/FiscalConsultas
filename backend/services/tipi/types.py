@@ -1,4 +1,4 @@
-from typing import TypeAlias, TypedDict
+from typing import TypedDict
 
 
 class TipiPositionRow(TypedDict, total=False):
@@ -26,9 +26,9 @@ class TipiCodeChapterPayload(TypedDict):
     posicoes: list[TipiCodePositionPayload]
 
 
-TipiChapterResultsMap: TypeAlias = dict[str, TipiCodeChapterPayload]
-TipiRowBatch: TypeAlias = tuple[TipiPositionRow, ...]
-TipiCodeCacheKey: TypeAlias = tuple[str, str]
+type TipiChapterResultsMap = dict[str, TipiCodeChapterPayload]
+type TipiRowBatch = tuple[TipiPositionRow, ...]
+type TipiCodeCacheKey = tuple[str, str]
 
 
 class TipiCodeSearchPayload(TypedDict):
@@ -80,4 +80,4 @@ class TipiSqliteHealthPayload(TypedDict, total=False):
     error: str
 
 
-TipiHealthPayload: TypeAlias = TipiRepositoryHealthPayload | TipiSqliteHealthPayload
+type TipiHealthPayload = TipiRepositoryHealthPayload | TipiSqliteHealthPayload

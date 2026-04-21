@@ -1,8 +1,8 @@
-from typing import Any, TypeAlias, TypedDict
+from typing import Any, TypedDict
 
 from ...domain import ServiceResponse
 
-NeshFtsCacheKey: TypeAlias = tuple[str, int, int, int, int]
+type NeshFtsCacheKey = tuple[str, int, int, int, int]
 
 
 class NeshChapterSectionPayload(TypedDict, total=False):
@@ -35,7 +35,7 @@ class NeshChapterSearchResult(TypedDict, total=False):
     secoes: dict[str, str | None] | None
 
 
-NeshChapterSearchResultMap: TypeAlias = dict[str, NeshChapterSearchResult]
+type NeshChapterSearchResultMap = dict[str, NeshChapterSearchResult]
 
 
 class NeshChapterSearchResponse(TypedDict):
@@ -86,4 +86,4 @@ class NeshFtsMatchMetadata(TypedDict):
     best_tier: int
 
 
-NeshServiceResponse: TypeAlias = ServiceResponse
+type NeshServiceResponse = ServiceResponse
