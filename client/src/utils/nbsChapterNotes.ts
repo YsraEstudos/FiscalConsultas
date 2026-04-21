@@ -233,3 +233,8 @@ export function openNbsChapterNotesTab(entry: NbsChapterNotesEntry): void {
 </html>`);
     chapterWindow.document.close();
 }
+
+export const buildNbsChapterNotesMarkup = renderNbsChapterNotesHtml;
+export const lookupNbsChapterNotesEntry = getNbsChapterNotesEntry;
+export const openNbsChapterNotesPreviewWindow = openNbsChapterNotesTab;
+export const resolveNbsChapterNumberFromCode = getNbsChapterNumber;

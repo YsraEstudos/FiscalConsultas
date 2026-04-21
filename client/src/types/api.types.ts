@@ -255,6 +255,13 @@ export interface NebsDetailResponse extends BaseApiResponse {
     entry: NebsEntry;
 }
 
+export type NbsCatalogItem = NbsServiceItem;
+export type NbsCatalogSearchApiResponse = NbsSearchResponse;
+export type NbsCatalogDetailApiResponse = NbsDetailResponse;
+export type NebsExplanatorySearchItem = NebsSearchItem;
+export type NebsExplanatorySearchApiResponse = NebsSearchResponse;
+export type NebsExplanatoryDetailApiResponse = NebsDetailResponse;
+
 export interface AuthSessionResponse {
     authenticated: boolean;
     can_use_ai_chat?: boolean;
@@ -327,6 +334,42 @@ export interface LoginResponse extends BaseApiResponse {
     success: boolean;
     token?: string;
     message: string;
+}
+
+export interface UserProfileCardApiResponse {
+    user_id?: string | null;
+    full_name?: string | null;
+    bio?: string | null;
+    image_url?: string | null;
+    comment_count: number;
+}
+
+export interface MyProfileApiResponse {
+    email: string;
+    org_name?: string | null;
+    bio?: string | null;
+    comment_count: number;
+    approved_comment_count: number;
+    pending_comment_count: number;
+}
+
+export interface UpdateMyProfileRequest {
+    bio: string | null;
+}
+
+export interface UserContributionListItem {
+    id: string;
+    anchor_key: string;
+    status: string;
+    body: string;
+    created_at: string;
+}
+
+export interface MyContributionHistoryApiResponse {
+    items: UserContributionListItem[];
+    total: number;
+    has_next: boolean;
+    page: number;
 }
 
 // --------------------------------------------

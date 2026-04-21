@@ -151,6 +151,29 @@ describe('Header', () => {
     expect(screen.getByText('Classificação Brasileira de Serviços')).toBeInTheDocument();
   });
 
+  it('shows the service subtitle when the active document is NEBS', () => {
+    render(
+      <Header
+        onSearch={vi.fn()}
+        doc="nebs"
+        setDoc={vi.fn()}
+        searchKey="search-1"
+        onOpenSettings={vi.fn()}
+        onOpenTutorial={vi.fn()}
+        onOpenStats={vi.fn()}
+        onOpenComparator={vi.fn()}
+        onOpenModerate={vi.fn()}
+        onOpenProfile={vi.fn()}
+        history={[]}
+        onClearHistory={vi.fn()}
+        onRemoveHistory={vi.fn()}
+        onMenuOpen={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Classificação Brasileira de Serviços')).toBeInTheDocument();
+  });
+
   it('opens menu, calls actions and closes when clicking outside', async () => {
     const setDoc = vi.fn();
     const onOpenSettings = vi.fn();

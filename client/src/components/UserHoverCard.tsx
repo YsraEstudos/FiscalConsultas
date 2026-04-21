@@ -61,7 +61,7 @@ export function UserHoverCard({ userId, children, imageUrl }: Readonly<UserHover
                                 />
                             ) : (
                                 <span className={styles.avatarPlaceholder}>
-                                    {getInitials(card.full_name)}
+                                    {getInitials(card.full_name ?? null)}
                                 </span>
                             )}
                             <span className={styles.name}>{card.full_name || 'Usuário'}</span>
