@@ -15,6 +15,12 @@ import {
     getMyContributions,
     deleteMyAccount,
 } from '../services/api';
+import type {
+    MyContributionHistoryApiResponse,
+    MyProfileApiResponse,
+    UpdateMyProfileRequest,
+    UserContributionListItem,
+} from '../types/api.types';
 import styles from './UserProfilePage.module.css';
 import { sanitizeImageUrl } from '../utils/contentSecurity';
 
@@ -24,31 +30,6 @@ interface UserProfilePageProps {
 }
 
 type TabKey = 'profile' | 'contributions' | 'sessions' | 'organization';
-
-interface ProfileData {
-    user_id: string;
-    email: string;
-    full_name: string | null;
-    bio: string | null;
-    image_url: string | null;
-    tenant_id: string;
-    org_name: string | null;
-    is_active: boolean;
-    comment_count: number;
-    pending_comment_count: number;
-    approved_comment_count: number;
-}
-
-interface ContributionItem {
-    id: number;
-    type: string;
-    anchor_key: string;
-    selected_text: string;
-    body: string;
-    status: string;
-    created_at: string;
-    updated_at: string;
-}
 
 // ─── Module-level helpers ─────────────────────────────────────────────────
 
@@ -90,7 +71,7 @@ function formatDate(iso: string): string {
 // ─── ContributionsSection ────────────────────────────────────────────────
 
 interface ContributionsSectionProps {
-    contributions: ContributionItem[];
+    contributions: UserContributionListItem[];
     contribLoading: boolean;
     contribSearch: string;
     onSearchChange: (value: string) => void;
@@ -171,14 +152,14 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
     const safeUserImageUrl = sanitizeImageUrl(userImageUrl);
 
     const [activeTab, setActiveTab] = useState<TabKey>('profile');
-    const [profile, setProfile] = useState<ProfileData | null>(null);
+    const [profile, setProfile] = useState<MyProfileApiResponse | null>(null);
     const [bio, setBio] = useState('');
     const [bioSaving, setBioSaving] = useState(false);
     const [bioSaved, setBioSaved] = useState(false);
     const [loading, setLoading] = useState(true);
 
     // Contributions state
-    const [contributions, setContributions] = useState<ContributionItem[]>([]);
+    const [contributions, setContributions] = useState<UserContributionListItem[]>([]);
     const [contribTotal, setContribTotal] = useState(0);
     const [contribPage, setContribPage] = useState(1);
     const [contribHasNext, setContribHasNext] = useState(false);
@@ -236,7 +217,7 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
         if (!isOpen) return;
         setLoading(true);
         getMyProfile()
-            .then((data) => {
+            .then((data: MyProfileApiResponse) => {
                 setProfile(data);
                 setBio(data.bio || '');
             })
@@ -250,7 +231,11 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
         const requestId = latestContribReqRef.current;
         setContribLoading(true);
         try {
-            const data = await getMyContributions({ page, page_size: 15, search: search || undefined });
+            const data: MyContributionHistoryApiResponse = await getMyContributions({
+                page,
+                page_size: 15,
+                search: search || undefined,
+            });
             if (requestId === latestContribReqRef.current) {
                 setContributions(data.items);
                 setContribTotal(data.total);
@@ -289,7 +274,8 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
         setBioSaving(true);
         setBioSaved(false);
         try {
-            const updated = await updateMyProfile({ bio: bio || null });
+            const payload: UpdateMyProfileRequest = { bio: bio || null };
+            const updated = await updateMyProfile(payload);
             setProfile(updated);
             setBioSaved(true);
             setTimeout(() => setBioSaved(false), 3000);

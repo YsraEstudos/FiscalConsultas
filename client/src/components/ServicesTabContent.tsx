@@ -7,11 +7,11 @@ import {
 } from '../services/api';
 import { useLocalDatabase } from '../context/LocalDatabaseContext';
 import type {
-    NbsDetailResponse,
-    NbsServiceItem,
-    NbsSearchResponse,
-    NebsDetailResponse,
-    NebsSearchResponse,
+    NbsCatalogDetailApiResponse,
+    NbsCatalogItem,
+    NbsCatalogSearchApiResponse,
+    NebsExplanatoryDetailApiResponse,
+    NebsExplanatorySearchApiResponse,
     ServiceDocType,
 } from '../types/api.types';
 import {
@@ -25,7 +25,7 @@ import {
 } from './ServicesWorkspace';
 import styles from './ServicesTabContent.module.css';
 
-type ServicesSearchResponse = NbsSearchResponse | NebsSearchResponse;
+type ServicesSearchResponse = NbsCatalogSearchApiResponse | NebsExplanatorySearchApiResponse;
 type DetailStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 interface ServicesTabContentProps {
@@ -61,9 +61,9 @@ function runInBackground(task: Promise<unknown>) {
 }
 
 function mergeNbsChapterItems(
-    existingItems: readonly NbsDetailResponse['item'][],
-    incomingItems: readonly NbsDetailResponse['item'][],
-): NbsDetailResponse['item'][] {
+    existingItems: readonly NbsCatalogDetailApiResponse['item'][],
+    incomingItems: readonly NbsCatalogDetailApiResponse['item'][],
+): NbsCatalogDetailApiResponse['item'][] {
     const mergedItems = [...existingItems];
     const seenCodes = new Set(existingItems.map((item) => item.code));
 
@@ -80,11 +80,11 @@ async function fetchLocalNbsDetailPage(
     getNbsDetailLocal: (
         code: string,
         options?: { page?: number; pageSize?: number },
-    ) => Promise<NbsDetailResponse | null>,
+    ) => Promise<NbsCatalogDetailApiResponse | null>,
     code: string,
     page: number,
     pageSize: number,
-): Promise<NbsDetailResponse | null> {
+): Promise<NbsCatalogDetailApiResponse | null> {
     try {
         return await getNbsDetailLocal(code, { page, pageSize });
     } catch {
@@ -99,8 +99,8 @@ async function fetchInitialNbsDetailPage(
     getNbsDetailLocal: (
         code: string,
         options?: { page?: number; pageSize?: number },
-    ) => Promise<NbsDetailResponse | null>,
-): Promise<NbsDetailResponse | null> {
+    ) => Promise<NbsCatalogDetailApiResponse | null>,
+): Promise<NbsCatalogDetailApiResponse | null> {
     if (preferLocal) {
         const localResponse = await fetchLocalNbsDetailPage(
             getNbsDetailLocal,
@@ -126,9 +126,9 @@ async function fetchNextNbsDetailPage(
     getNbsDetailLocal: (
         code: string,
         options?: { page?: number; pageSize?: number },
-    ) => Promise<NbsDetailResponse | null>,
+    ) => Promise<NbsCatalogDetailApiResponse | null>,
 ): Promise<
-    Pick<NbsDetailResponse, 'chapter_root' | 'chapter_page'> | null
+    Pick<NbsCatalogDetailApiResponse, 'chapter_root' | 'chapter_page'> | null
 > {
     if (preferLocal) {
         const localResponse = await fetchLocalNbsDetailPage(
@@ -144,12 +144,12 @@ async function fetchNextNbsDetailPage(
 }
 
 function buildHydratedNbsResponse(
-    response: NbsDetailResponse,
-    chapterRoot: NbsDetailResponse['chapter_root'],
-    mergedItems: NbsServiceItem[],
+    response: NbsCatalogDetailApiResponse,
+    chapterRoot: NbsCatalogDetailApiResponse['chapter_root'],
+    mergedItems: NbsCatalogItem[],
     currentPage: number,
-    lastPage: NonNullable<NbsDetailResponse['chapter_page']>,
-): NbsDetailResponse {
+    lastPage: NonNullable<NbsCatalogDetailApiResponse['chapter_page']>,
+): NbsCatalogDetailApiResponse {
     const firstPage = response.chapter_page!;
     return {
         ...response,
@@ -163,7 +163,7 @@ function buildHydratedNbsResponse(
             total: firstPage.total,
             has_more: false,
         },
-    } as NbsDetailResponse;
+    } as NbsCatalogDetailApiResponse;
 }
 
 export function ServicesTabContent({
@@ -174,8 +174,8 @@ export function ServicesTabContent({
     onContentReady,
 }: Readonly<ServicesTabContentProps>) {
     const [selectedCode, setSelectedCode] = useState<string | null>(null);
-    const [nbsDetail, setNbsDetail] = useState<NbsDetailResponse | null>(null);
-    const [nebsDetail, setNebsDetail] = useState<NebsDetailResponse | null>(null);
+    const [nbsDetail, setNbsDetail] = useState<NbsCatalogDetailApiResponse | null>(null);
+    const [nebsDetail, setNebsDetail] = useState<NebsExplanatoryDetailApiResponse | null>(null);
     const [detailStatus, setDetailStatus] = useState<DetailStatus>('idle');
     const [isWorkspaceReady, setIsWorkspaceReady] = useState(false);
     const detailRequestRef = useRef(0);
@@ -194,10 +194,10 @@ export function ServicesTabContent({
     const hydrateNbsDetailResponse = useCallback(
         async (
             code: string,
-            response: NbsDetailResponse,
+            response: NbsCatalogDetailApiResponse,
             requestId: number,
             preferLocal: boolean,
-        ): Promise<NbsDetailResponse | null> => {
+        ): Promise<NbsCatalogDetailApiResponse | null> => {
             const firstPage = response.chapter_page;
             if (!firstPage?.has_more) {
                 return response;
@@ -295,7 +295,7 @@ export function ServicesTabContent({
         setDetailStatus('loading');
 
         try {
-            let response: NebsDetailResponse | null = null;
+            let response: NebsExplanatoryDetailApiResponse | null = null;
             if (localDbStatus === 'ready') {
                 try {
                     response = await getNebsDetailLocal(code);
@@ -348,7 +348,7 @@ export function ServicesTabContent({
             return firstResultCode;
         }
 
-        const exactMatch = (data.results as NbsSearchResponse['results']).find(
+        const exactMatch = (data.results as NbsCatalogSearchApiResponse['results']).find(
             (item) => item.code === rawQuery || item.code_clean === cleanQuery.replaceAll('.', ''),
         );
 
@@ -394,7 +394,7 @@ export function ServicesTabContent({
     const nbsState = useMemo<ServicesWorkspaceNbsState>(() => (
         doc === 'nbs'
             ? {
-                results: data.results as NbsSearchResponse['results'],
+                results: data.results as NbsCatalogSearchApiResponse['results'],
                 selectedCode,
                 detail: nbsDetail,
                 isSearching: false,
@@ -407,7 +407,7 @@ export function ServicesTabContent({
     const nebsState = useMemo<ServicesWorkspaceNebsState>(() => (
         doc === 'nebs'
             ? {
-                results: data.results as NebsSearchResponse['results'],
+                results: data.results as NebsExplanatorySearchApiResponse['results'],
                 selectedCode,
                 detail: nebsDetail,
                 isSearching: false,
@@ -417,7 +417,7 @@ export function ServicesTabContent({
             : EMPTY_NEBS_STATE
     ), [data.results, detailStatus, doc, nebsDetail, selectedCode]);
 
-    const title = doc === 'nbs' ? 'Resultados NEBS' : 'Resultados NEBS';
+    const title = doc === 'nbs' ? 'Resultados NBS' : 'Resultados NEBS';
     const countLabel = `${data.total} ${doc === 'nbs' ? 'itens' : 'notas'}`;
     const queryLabel = data.query.trim() || 'catalogo raiz';
     const shellClassName = `${styles.shell} ${isWorkspaceReady ? styles.shellVisible : styles.shellHidden}`;

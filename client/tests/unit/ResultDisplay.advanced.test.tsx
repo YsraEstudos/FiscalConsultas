@@ -224,6 +224,11 @@ describe('ResultDisplay advanced behavior', () => {
     // @ts-expect-error - test bridge
     globalThis.nesh = { smartLinkSearch: vi.fn(), openTextResultInNewTab: vi.fn() };
 
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 1440,
+      writable: true,
+    });
     scrollIntoViewMock = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoViewMock;
 
@@ -355,10 +360,47 @@ describe('ResultDisplay advanced behavior', () => {
     expect(document.querySelector('.aliquot-med')).toBeTruthy();
     expect(document.querySelector('.aliquot-high')).toBeTruthy();
     expect(document.querySelector('.tipi-nivel-5')).toBeTruthy();
+    expect(document.querySelector('article.tipi-position[data-ncm="10.01"]')).toBeTruthy();
 
     const toggle = screen.getByRole('button', { name: 'Recolher navegação' });
     fireEvent.click(toggle);
     expect(screen.getByRole('button', { name: 'Expandir navegação' })).toBeInTheDocument();
+  });
+
+  it('sorts TIPI fallback chapters by chapter number before rendering', async () => {
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '1001',
+          resultados: {
+            '10': {
+              capitulo: '10',
+              titulo: 'Cereais',
+              posicoes: [{ codigo: '10.01', ncm: '10.01', descricao: 'Cereais', aliquota: '0', nivel: 1 }],
+            },
+            '2': {
+              capitulo: '2',
+              titulo: 'Produtos hortícolas',
+              posicoes: [{ codigo: '02.01', ncm: '02.01', descricao: 'Produtos hortícolas', aliquota: '0', nivel: 1 }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-tipi-sorted"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      const chapters = Array.from(document.querySelectorAll('.tipi-chapter'));
+      expect(chapters).toHaveLength(2);
+      expect(chapters[0]).toHaveAttribute('id', 'cap-2');
+      expect(chapters[1]).toHaveAttribute('id', 'cap-10');
+    });
   });
 
   it('keeps TIPI sidebar highlight on the clicked item while smooth scroll settles', async () => {
@@ -414,6 +456,87 @@ describe('ResultDisplay advanced behavior', () => {
     await waitFor(() => {
       expect(screen.getByTestId('sidebar-active-anchor')).toHaveTextContent('pos-1108-1');
     });
+  });
+
+  it('releases the manual navigation lock after it expires and resumes observer updates', async () => {
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '1108.1',
+          resultados: {
+            '11': {
+              capitulo: '11',
+              titulo: 'Amidos e féculas',
+              posicoes: [
+                { codigo: '1108.1', ncm: '1108.1', descricao: 'Amidos e féculas', aliquota: '0', nivel: 2 },
+                { codigo: '1108.2', ncm: '1108.2', descricao: 'Inulina', aliquota: '0', nivel: 2 },
+              ],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-tipi-lock-expiry"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.getElementById('pos-1108-1')).not.toBeNull();
+      expect(document.getElementById('pos-1108-2')).not.toBeNull();
+      expect(intersectionCallbacks.length).toBeGreaterThan(0);
+    });
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-21T12:00:00.000Z'));
+
+    fireEvent.click(screen.getByTestId('sidebar-nav-tipi'));
+    expect(screen.getByTestId('sidebar-active-anchor')).toHaveTextContent('pos-1108-1');
+
+    const sameTarget = document.getElementById('pos-1108-1');
+    if (!sameTarget) {
+      throw new Error('Expected pos-1108-1 to exist for intersection test');
+    }
+
+    act(() => {
+      intersectionCallbacks[0]([
+        {
+          isIntersecting: true,
+          target: sameTarget,
+          boundingClientRect: { top: 0 },
+        },
+      ] as any[]);
+    });
+
+    expect(screen.getByTestId('sidebar-active-anchor')).toHaveTextContent('pos-1108-1');
+
+    fireEvent.click(screen.getByTestId('sidebar-nav-tipi'));
+
+    const nextTarget = document.getElementById('pos-1108-2');
+    if (!nextTarget) {
+      throw new Error('Expected pos-1108-2 to exist for intersection test');
+    }
+
+    act(() => {
+      vi.advanceTimersByTime(901);
+    });
+
+    act(() => {
+      intersectionCallbacks[0]([
+        {
+          isIntersecting: true,
+          target: nextTarget,
+          boundingClientRect: { top: 0 },
+        },
+      ] as any[]);
+    });
+
+    expect(screen.getByTestId('sidebar-active-anchor')).toHaveTextContent('pos-1108-2');
+
+    vi.clearAllTimers();
   });
 
   it('uses NeshRenderer fallback and resolves sidebar navigation ids', async () => {
@@ -472,6 +595,97 @@ describe('ResultDisplay advanced behavior', () => {
     expect(hoisted.debugWarnMock).toHaveBeenCalledWith('[Navigate] target not found:', 'missing-anchor');
 
     warnSpy.mockRestore();
+  });
+
+  it('assigns an id to the nearest section wrapper when section selectors are missing', async () => {
+    const renderFallbackSpy = vi
+      .spyOn(NeshRenderer, 'renderFullResponse')
+      .mockReturnValue('<section><h3>Considerações gerais</h3><p>Bloco sem id</p></section><h3 id="pos-84-13">Bombas</h3>');
+
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '8413',
+          resultados: {
+            '84': {
+              capitulo: '84',
+              secoes: {
+                consideracoes: 'Bloco sem id',
+              },
+              posicoes: [{ codigo: '84.13', anchor_id: 'pos-84-13', descricao: 'Bombas' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-nesh-section-wrapper"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Bombas')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('sidebar-nav-section'));
+
+    await waitFor(() => {
+      const sectionAnchor = document.getElementById('chapter-84-consideracoes');
+      expect(sectionAnchor).not.toBeNull();
+      expect(sectionAnchor?.tagName).toBe('SECTION');
+      expect(sectionAnchor?.classList.contains('flash-highlight')).toBe(true);
+      expect(screen.getByTestId('sidebar-active-anchor')).toHaveTextContent('chapter-84-consideracoes');
+    });
+
+    renderFallbackSpy.mockRestore();
+  });
+
+  it('skips section candidates that fall beyond the next chapter boundary', async () => {
+    const renderFallbackSpy = vi
+      .spyOn(NeshRenderer, 'renderFullResponse')
+      .mockReturnValue('<span id="chapter-84"></span><section><h3>Considerações gerais</h3><p>Bloco interno</p></section><span id="chapter-85"></span><div class="section-consideracoes">Bloco fora do capítulo</div><h3 id="pos-84-13">Bombas</h3>');
+
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '8413',
+          resultados: {
+            '84': {
+              capitulo: '84',
+              secoes: {
+                consideracoes: 'Bloco interno',
+              },
+              posicoes: [{ codigo: '84.13', anchor_id: 'pos-84-13', descricao: 'Bombas' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-nesh-section-bounds"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Bombas')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('sidebar-nav-section'));
+
+    await waitFor(() => {
+      const sectionAnchor = document.getElementById('chapter-84-consideracoes');
+      expect(sectionAnchor).not.toBeNull();
+      expect(sectionAnchor?.tagName).toBe('SECTION');
+      expect(screen.getByTestId('sidebar-active-anchor')).toHaveTextContent('chapter-84-consideracoes');
+    });
+
+    renderFallbackSpy.mockRestore();
   });
 
   it('prefers offline rendered HTML over NeshRenderer fallback for multiline note lists', async () => {
@@ -565,6 +779,238 @@ describe('ResultDisplay advanced behavior', () => {
       shouldScrollCall?.onComplete(false);
     });
     expect(onConsumeNewSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it('consumes the stored new-search scroll position after the tab becomes inactive', async () => {
+    const onConsumeNewSearch = vi.fn();
+    const onPersistScroll = vi.fn();
+
+    const { container, rerender } = render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '8517',
+          markdown: '<h3 id="pos-85-17">Item 8517</h3>',
+          resultados: {
+            '85': {
+              capitulo: '85',
+              posicao_alvo: '85.17',
+              posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-new-search-store"
+        isNewSearch={false}
+        onConsumeNewSearch={onConsumeNewSearch}
+        onPersistScroll={onPersistScroll}
+      />,
+    );
+
+    const contentContainer = container.querySelector('#results-content-tab-new-search-store') as HTMLElement;
+    expect(contentContainer).not.toBeNull();
+
+    contentContainer.scrollTop = 333;
+    fireEvent.scroll(contentContainer);
+
+    rerender(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '8517',
+          markdown: '<h3 id="pos-85-17">Item 8517</h3>',
+          resultados: {
+            '85': {
+              capitulo: '85',
+              posicao_alvo: '85.17',
+              posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={false}
+        tabId="tab-new-search-store"
+        isNewSearch={true}
+        onConsumeNewSearch={onConsumeNewSearch}
+        onPersistScroll={onPersistScroll}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onConsumeNewSearch).toHaveBeenCalledWith('tab-new-search-store', 333);
+    });
+  });
+
+  it('returns early from scroll restoration when the target scroll position is already settled', async () => {
+    const originalScrollTopDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop');
+    const readCounts = new WeakMap<HTMLElement, number>();
+
+    try {
+      Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
+        configurable: true,
+        get(this: HTMLElement) {
+          if (this.id === 'results-content-tab-scroll-restored') {
+            const reads = readCounts.get(this) ?? 0;
+            readCounts.set(this, reads + 1);
+            return reads === 0 ? 0 : 120;
+          }
+
+          return originalScrollTopDescriptor?.get?.call(this) ?? 0;
+        },
+        set(this: HTMLElement, value: number) {
+          if (this.id === 'results-content-tab-scroll-restored') {
+            return;
+          }
+
+          originalScrollTopDescriptor?.set?.call(this, value);
+        },
+      });
+
+      const { container } = render(
+        <ResultDisplay
+          data={{
+            type: 'code',
+            query: '8517',
+            markdown: '<h3 id="pos-85-17">Item 8517</h3>',
+            resultados: {
+              '85': {
+                capitulo: '85',
+                posicao_alvo: '85.17',
+                posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+              },
+            },
+          }}
+          mobileMenuOpen={false}
+          onCloseMobileMenu={vi.fn()}
+          isActive={true}
+          tabId="tab-scroll-restored"
+          initialScrollTop={120}
+          isNewSearch={false}
+          onConsumeNewSearch={vi.fn()}
+        />,
+      );
+
+      const contentContainer = container.querySelector('#results-content-tab-scroll-restored') as HTMLElement;
+      expect(contentContainer).not.toBeNull();
+      expect(readCounts.get(contentContainer) ?? 0).toBeGreaterThanOrEqual(2);
+    } finally {
+      if (originalScrollTopDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollTop', originalScrollTopDescriptor);
+      }
+    }
+  });
+
+  it('retries scroll restoration when the scroll position does not stick', async () => {
+    const originalScrollTopDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop');
+    const originalScrollHeightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+    const originalClientHeightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+    const readCounts = new WeakMap<HTMLElement, number>();
+
+    try {
+      Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
+        configurable: true,
+        get(this: HTMLElement) {
+          if (this.id === 'results-content-tab-scroll-retry') {
+            const reads = readCounts.get(this) ?? 0;
+            readCounts.set(this, reads + 1);
+            return 0;
+          }
+
+          return originalScrollTopDescriptor?.get?.call(this) ?? 0;
+        },
+        set(this: HTMLElement, value: number) {
+          if (this.id === 'results-content-tab-scroll-retry') {
+            return;
+          }
+
+          originalScrollTopDescriptor?.set?.call(this, value);
+        },
+      });
+      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+        configurable: true,
+        get(this: HTMLElement) {
+          return this.id === 'results-content-tab-scroll-retry' ? 2000 : (originalScrollHeightDescriptor?.get?.call(this) ?? 0);
+        },
+      });
+      Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+        configurable: true,
+        get(this: HTMLElement) {
+          return this.id === 'results-content-tab-scroll-retry' ? 500 : (originalClientHeightDescriptor?.get?.call(this) ?? 0);
+        },
+      });
+
+      const { container } = render(
+        <ResultDisplay
+          data={{
+            type: 'code',
+            query: '8517',
+            markdown: '<h3 id="pos-85-17">Item 8517</h3>',
+            resultados: {
+              '85': {
+                capitulo: '85',
+                posicao_alvo: '85.17',
+                posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+              },
+            },
+          }}
+          mobileMenuOpen={false}
+          onCloseMobileMenu={vi.fn()}
+          isActive={true}
+          tabId="tab-scroll-retry"
+          initialScrollTop={120}
+          isNewSearch={false}
+          onConsumeNewSearch={vi.fn()}
+        />,
+      );
+
+      const contentContainer = container.querySelector('#results-content-tab-scroll-retry') as HTMLElement;
+      expect(contentContainer).not.toBeNull();
+
+      await waitFor(() => {
+        expect(contentContainer).toHaveTextContent('Item 8517');
+      });
+
+      expect(readCounts.get(contentContainer) ?? 0).toBeGreaterThan(2);
+    } finally {
+      if (originalScrollTopDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollTop', originalScrollTopDescriptor);
+      }
+      if (originalScrollHeightDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeightDescriptor);
+      }
+      if (originalClientHeightDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeightDescriptor);
+      }
+    }
+  });
+
+  it('treats whitespace-only queries as invalid auto-scroll targets', async () => {
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '   ',
+          markdown: '<h3>Espaços ignorados</h3>',
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-whitespace-query"
+        isNewSearch={true}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Espaços ignorados')).toBeInTheDocument();
+    });
+
+    expect(
+      hoisted.robustCallsRef.value.some((call) => call.shouldScroll === true),
+    ).toBe(false);
   });
 
   it('waits for the target anchor before enabling robust auto-scroll on chunked renders', async () => {
@@ -747,6 +1193,167 @@ describe('ResultDisplay advanced behavior', () => {
     });
   });
 
+  it('falls back to the chapter key when hydrated chapter entries omit capitulo and renders note anchors', async () => {
+    hoisted.getNeshChapterBodyMock.mockResolvedValue({
+      success: true,
+      capitulo: '84',
+      conteudo: 'Conteudo hidratado 84',
+      notas_parseadas: { '4': 'Nota 4 hidratada' },
+      notas_gerais: 'Notas gerais hidratadas',
+      secoes: null,
+    });
+
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '8413',
+          resultados: {
+            '84': {
+              capitulo: '',
+              titulo: 'Capitulo 84',
+              conteudo: '',
+              notas_parseadas: {},
+              notas_gerais: '',
+              posicoes: [{ codigo: '84.13', anchor_id: 'pos-84-13', descricao: 'Bombas' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-hydrated-fallback"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(hoisted.getNeshChapterBodyMock).toHaveBeenCalledWith('84');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Conteudo hidratado 84')).toBeInTheDocument();
+      expect(document.getElementById('chapter--notas')).not.toBeNull();
+    });
+  });
+
+  it('skips hydration merges when the fetched chapter does not match an existing result entry', async () => {
+    const onHydratedResults = vi.fn();
+
+    hoisted.getNeshChapterBodyMock.mockResolvedValue({
+      success: true,
+      capitulo: '99',
+      conteudo: 'Conteudo hidratado 99',
+      notas_parseadas: {},
+      notas_gerais: null,
+      secoes: null,
+    });
+
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '8413',
+          resultados: {
+            '84': {
+              capitulo: '',
+              titulo: 'Capitulo 84',
+              conteudo: '',
+              notas_parseadas: {},
+              notas_gerais: '',
+              posicoes: [{ codigo: '84.13', anchor_id: 'pos-84-13', descricao: 'Bombas' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-hydrated-mismatch"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+        onHydratedResults={onHydratedResults}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(hoisted.getNeshChapterBodyMock).toHaveBeenCalledWith('84');
+    });
+
+    await waitFor(() => {
+      expect(onHydratedResults).toHaveBeenCalled();
+      expect(screen.queryByText('Conteudo hidratado 99')).not.toBeInTheDocument();
+    });
+  });
+
+  it('logs hydration failures when applying merged chapter bodies throws', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const onHydratedResults = vi.fn();
+
+    const brokenChapterBody: Record<string, unknown> = {};
+    Object.defineProperty(brokenChapterBody, 'capitulo', {
+      enumerable: true,
+      get() {
+        throw new Error('Falha ao aplicar hidratação');
+      },
+    });
+    Object.defineProperty(brokenChapterBody, 'conteudo', {
+      enumerable: true,
+      value: 'Conteudo hidratado 84',
+    });
+    Object.defineProperty(brokenChapterBody, 'notas_parseadas', {
+      enumerable: true,
+      value: { '4': 'Nota 4 hidratada' },
+    });
+    Object.defineProperty(brokenChapterBody, 'notas_gerais', {
+      enumerable: true,
+      value: 'Notas gerais hidratadas',
+    });
+    Object.defineProperty(brokenChapterBody, 'secoes', {
+      enumerable: true,
+      value: null,
+    });
+    hoisted.getNeshChapterBodyMock.mockResolvedValue(brokenChapterBody as any);
+
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '8413',
+          resultados: {
+            '84': {
+              capitulo: '84',
+              titulo: 'Capitulo 84',
+              conteudo: '',
+              notas_parseadas: {},
+              posicoes: [{ codigo: '84.13', anchor_id: 'pos-84-13', descricao: 'Bombas' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-hydration-error"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+        onHydratedResults={onHydratedResults}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(hoisted.getNeshChapterBodyMock).toHaveBeenCalledWith('84');
+    });
+
+    await waitFor(() => {
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[ResultDisplay] Failed to hydrate chapter bodies',
+        expect.any(Error),
+      );
+    });
+
+    errorSpy.mockRestore();
+  });
+
   it('stops showing the chapter hydration loading state when all chapter body requests fail', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     hoisted.getNeshChapterBodyMock.mockRejectedValue(new Error('Falha 401'));
@@ -822,6 +1429,75 @@ describe('ResultDisplay advanced behavior', () => {
         ),
       ).toBe(true);
     });
+  });
+
+  it('cancels a pending anchor update when navigation is retriggered before RAF flush', async () => {
+    const pendingRafs: FrameRequestCallback[] = [];
+
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '1108.1',
+          resultados: {
+            '11': {
+              capitulo: '11',
+              titulo: 'Amidos e féculas',
+              posicoes: [
+                { codigo: '1108.1', ncm: '1108.1', descricao: 'Amidos e féculas', aliquota: '0', nivel: 2 },
+                { codigo: '1108.2', ncm: '1108.2', descricao: 'Inulina', aliquota: '0', nivel: 2 },
+              ],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-tipi-raf-cancel"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.getElementById('pos-1108-1')).not.toBeNull();
+      expect(intersectionCallbacks.length).toBeGreaterThan(0);
+    });
+
+    rafSpy.mockImplementation((callback: FrameRequestCallback) => {
+      pendingRafs.push(callback);
+      return pendingRafs.length;
+    });
+    cancelRafSpy.mockImplementation(() => undefined);
+
+    const firstTarget = document.getElementById('pos-1108-1');
+    const secondTarget = document.getElementById('pos-1108-2');
+    if (!firstTarget || !secondTarget) {
+      throw new Error('Expected TIPI targets to exist for RAF cancellation test');
+    }
+
+    act(() => {
+      intersectionCallbacks[0]([
+        {
+          isIntersecting: true,
+          target: firstTarget,
+          boundingClientRect: { top: 0 },
+        },
+      ] as any[]);
+    });
+
+    act(() => {
+      intersectionCallbacks[0]([
+        {
+          isIntersecting: true,
+          target: secondTarget,
+          boundingClientRect: { top: 0 },
+        },
+      ] as any[]);
+    });
+
+    expect(cancelRafSpy).toHaveBeenCalledWith(1);
+    expect(pendingRafs.length).toBeGreaterThanOrEqual(2);
   });
 
   it('assigns fallback id via data-ncm and syncs active anchor from intersection', async () => {
@@ -917,6 +1593,38 @@ describe('ResultDisplay advanced behavior', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('sidebar-active-anchor')).toHaveTextContent('chapter-85-consideracoes');
+    });
+  });
+
+  it('handles numeric structured section payloads when generating section anchors', async () => {
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '8517',
+          markdown: '<span id="cap-85"></span><div class="section-consideracoes"><h3>Considerações 123</h3></div><h3 id="pos-85-17">Item 8517</h3>',
+          resultados: {
+            '85': {
+              capitulo: '85',
+              secoes: {
+                consideracoes: 123,
+              },
+              posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-section-anchor-number"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      const section = document.querySelector('.section-consideracoes') as HTMLElement | null;
+      expect(section?.id).toBe('chapter-85-consideracoes');
     });
   });
 
@@ -1080,6 +1788,58 @@ describe('ResultDisplay advanced behavior', () => {
     });
   });
 
+  it('unwraps search highlights when the query is cleared and the component unmounts', async () => {
+    const data = {
+      type: 'code' as const,
+      query: '8517',
+      markdown: '<h3 id="pos-85-17">Item 8517</h3><p>Motor bomba motor</p>',
+      resultados: {
+        '85': {
+          capitulo: '85',
+          posicao_alvo: '85.17',
+          posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+        },
+      },
+    };
+
+    const { container, rerender, unmount } = render(
+      <ResultDisplay
+        data={data}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-query-highlight-cleanup"
+        latestTextQuery="motor"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('#results-content-tab-query-highlight-cleanup')).toHaveTextContent('Motor bomba motor');
+    });
+
+    rerender(
+      <ResultDisplay
+        data={data}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-query-highlight-cleanup"
+        latestTextQuery=""
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelectorAll('mark[data-sh-term="motor"]')).toHaveLength(0);
+    });
+
+    unmount();
+    expect(container.querySelectorAll('mark[data-sh-term="motor"]')).toHaveLength(0);
+  });
+
   it('uses chunked rendering path for very large payloads', async () => {
     const longChunk = 'x'.repeat(51000);
     const data = {
@@ -1240,6 +2000,33 @@ describe('ResultDisplay advanced behavior', () => {
     }
   });
 
+  it('hides comment controls when restricted UI is not available', () => {
+    hoisted.authStateRef.value = {
+      ...hoisted.authStateRef.value,
+      canUseRestrictedUi: false,
+    };
+
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          markdown: '<h3 id="pos-85-17">Item 8517</h3>',
+          resultados: { '85': { capitulo: '85', posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17' }] } },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-comments-restricted"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Ativar comentários' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('comment-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('comment-drawer')).not.toBeInTheDocument();
+  });
+
   it('loads commented anchors, applies DOM markers, and opens the drawer when a commented anchor is clicked on narrow screens', async () => {
     hoisted.commentsStateRef.value = {
       ...hoisted.commentsStateRef.value,
@@ -1257,7 +2044,7 @@ describe('ResultDisplay advanced behavior', () => {
       dispatchEvent: vi.fn(),
     })) as any;
 
-    render(
+    const { rerender } = render(
       <ResultDisplay
         data={{
           type: 'code',
@@ -1296,6 +2083,289 @@ describe('ResultDisplay advanced behavior', () => {
       expect(screen.getByTestId('comment-drawer')).toHaveAttribute('data-open', 'true');
       expect(screen.getByTestId('comment-panel-count')).toHaveTextContent('1');
     });
+
+    hoisted.commentsStateRef.value = {
+      ...hoisted.commentsStateRef.value,
+      commentedAnchors: [],
+    };
+
+    rerender(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          markdown: '<h3 id="pos-85-17">Item 8517</h3><p>Conteúdo com comentário</p>',
+          resultados: {
+            '85': {
+              capitulo: '85',
+              posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-comments-markers"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.getElementById('pos-85-17')?.classList.contains('has-comment')).toBe(false);
+    });
+  });
+
+  it('uses the timeout fallback when idle callback APIs are unavailable', async () => {
+    const originalRequestIdleCallback = (globalThis as any).requestIdleCallback;
+    const originalCancelIdleCallback = (globalThis as any).cancelIdleCallback;
+
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    // @ts-expect-error - emulate browsers without requestIdleCallback
+    globalThis.requestIdleCallback = undefined;
+    // @ts-expect-error - emulate browsers without cancelIdleCallback
+    globalThis.cancelIdleCallback = undefined;
+
+    try {
+      const longChunk = 'x'.repeat(51000);
+      const { unmount } = render(
+        <ResultDisplay
+          data={{
+            type: 'code',
+            markdown: `<hr><p>${longChunk}</p><hr><p>fim-chunk</p>`,
+            resultados: {
+              '99': { capitulo: '99', posicoes: [] },
+            },
+          }}
+          mobileMenuOpen={false}
+          onCloseMobileMenu={vi.fn()}
+          isActive={true}
+          tabId="tab-chunk-timeout-fallback"
+          isNewSearch={false}
+          onConsumeNewSearch={vi.fn()}
+        />,
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 80));
+
+      expect(screen.getByText('fim-chunk')).toBeInTheDocument();
+
+      unmount();
+      expect(clearTimeoutSpy).toHaveBeenCalled();
+    } finally {
+      globalThis.requestIdleCallback = originalRequestIdleCallback;
+      globalThis.cancelIdleCallback = originalCancelIdleCallback;
+      clearTimeoutSpy.mockRestore();
+    }
+  });
+
+  it('uses the 8-digit data-ncm fallback when assigning anchor ids', async () => {
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '49089000',
+          markdown: '<h3 data-ncm="4908.90.00">Item 4908</h3>',
+          resultados: {
+            '49': {
+              capitulo: '49',
+              posicoes: [{ codigo: '49.08', descricao: 'Item 4908' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-data-ncm-8digits"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      const fallbackAnchor = document.querySelector('[data-ncm="4908.90.00"]') as HTMLElement | null;
+      expect(fallbackAnchor?.id).toBe('pos-4908-90-00');
+    });
+  });
+
+  it('uses the 4-digit data-ncm fallback when assigning anchor ids', async () => {
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '8517',
+          markdown: '<h3 data-ncm="8517">Item sem id compacto</h3>',
+          resultados: {
+            '85': {
+              capitulo: '85',
+              posicoes: [{ codigo: '85.17', descricao: 'Item sem id compacto' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-data-ncm-4digits"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      const fallbackAnchor = document.querySelector('[data-ncm="8517"]') as HTMLElement | null;
+      expect(fallbackAnchor?.id).toBe('pos-85-17');
+    });
+  });
+
+  it('prefers prefix matches when the query only matches a code prefix', async () => {
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '1108',
+          resultados: {
+            '11': {
+              capitulo: '11',
+              titulo: 'Amidos e féculas',
+              posicoes: [
+                { codigo: '1108.1', ncm: '1108.1', descricao: 'Amidos e féculas', aliquota: '0', nivel: 2 },
+                { codigo: '1108.2', ncm: '1108.2', descricao: 'Inulina', aliquota: '0', nivel: 2 },
+              ],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-prefix-match"
+        isNewSearch={true}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        hoisted.robustCallsRef.value.some((call) => Array.isArray(call.targetId)
+          ? call.targetId.includes('pos-1108-1')
+          : call.targetId === 'pos-1108-1'),
+      ).toBe(true);
+    });
+  });
+
+  it('prefers the topmost visible intersection target when multiple anchors are visible', async () => {
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          query: '1108.1',
+          resultados: {
+            '11': {
+              capitulo: '11',
+              titulo: 'Amidos e féculas',
+              posicoes: [
+                { codigo: '1108.1', ncm: '1108.1', descricao: 'Amidos e féculas', aliquota: '0', nivel: 2 },
+                { codigo: '1108.2', ncm: '1108.2', descricao: 'Inulina', aliquota: '0', nivel: 2 },
+              ],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        isActive={true}
+        tabId="tab-intersection-sort"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.getElementById('pos-1108-1')).not.toBeNull();
+      expect(document.getElementById('pos-1108-2')).not.toBeNull();
+      expect(intersectionCallbacks.length).toBeGreaterThan(0);
+    });
+
+    act(() => {
+      intersectionCallbacks[0]([
+        {
+          isIntersecting: true,
+          target: document.getElementById('pos-1108-2'),
+          boundingClientRect: { top: 40 },
+        },
+        {
+          isIntersecting: true,
+          target: document.getElementById('pos-1108-1'),
+          boundingClientRect: { top: 8 },
+        },
+      ] as any[]);
+    });
+
+    expect(screen.getByTestId('sidebar-active-anchor')).toHaveTextContent('pos-1108-1');
+  });
+
+  it('delegates sidebar toggling to the mobile menu callback on narrow screens', () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 800,
+      writable: true,
+    });
+    const onToggleMobileMenu = vi.fn();
+
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          markdown: '<h3 id="pos-85-17">Item 8517</h3>',
+          resultados: {
+            '85': {
+              capitulo: '85',
+              posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+            },
+          },
+        }}
+        mobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        onToggleMobileMenu={onToggleMobileMenu}
+        isActive={true}
+        tabId="tab-sidebar-mobile-toggle"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Recolher navegação' }));
+    expect(onToggleMobileMenu).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the mobile menu directly when no toggle callback is provided', () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 800,
+      writable: true,
+    });
+    const onCloseMobileMenu = vi.fn();
+
+    render(
+      <ResultDisplay
+        data={{
+          type: 'code',
+          markdown: '<h3 id="pos-85-17">Item 8517</h3>',
+          resultados: {
+            '85': {
+              capitulo: '85',
+              posicoes: [{ codigo: '85.17', anchor_id: 'pos-85-17', descricao: 'Item 8517' }],
+            },
+          },
+        }}
+        mobileMenuOpen={true}
+        onCloseMobileMenu={onCloseMobileMenu}
+        isActive={true}
+        tabId="tab-sidebar-mobile-close"
+        isNewSearch={false}
+        onConsumeNewSearch={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Recolher navegação' }));
+    expect(onCloseMobileMenu).toHaveBeenCalledTimes(1);
   });
 
   it('reports invalid text selections and opens a pending comment for valid selections', async () => {

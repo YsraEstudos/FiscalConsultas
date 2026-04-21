@@ -64,7 +64,12 @@ export function Header({
         logout
     } = useAuth();
     const isAdmin = useIsAdmin();
-    const isServiceDoc = doc === 'nbs';
+    const isServiceDoc = doc === 'nbs' || doc === 'nebs';
+    const serviceSelectorLabel = doc === 'nbs'
+        ? 'NEBS'
+        : doc === 'nebs'
+            ? 'NBS'
+            : 'NESH';
     const titleSubtitle = DOC_SUBTITLES[doc] || DOC_SUBTITLES.tipi;
 
     // Close menu when clicking outside
@@ -135,10 +140,20 @@ export function Header({
 
                 <div className={styles.docSelector}>
                     <button
-                        className={`${styles.docButton} ${doc === (isServiceDoc ? 'nbs' : 'nesh') ? styles.docButtonActive : ''}`}
-                        onClick={() => setDoc(isServiceDoc ? 'nbs' : 'nesh')}
+                        className={`${styles.docButton} ${isServiceDoc ? styles.docButtonActive : ''}`}
+                        onClick={() => {
+                            if (doc === 'nbs') {
+                                setDoc('nebs');
+                                return;
+                            }
+                            if (doc === 'nebs') {
+                                setDoc('nbs');
+                                return;
+                            }
+                            setDoc('nesh');
+                        }}
                     >
-                        {isServiceDoc ? 'NEBS' : 'NESH'}
+                        {serviceSelectorLabel}
                     </button>
                     <button
                         className={`${styles.docButton} ${doc === 'tipi' ? styles.docButtonActive : ''}`}

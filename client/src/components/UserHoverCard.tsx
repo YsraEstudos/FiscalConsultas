@@ -6,6 +6,7 @@
  */
 import { useState, useEffect, ReactNode } from 'react';
 import { getUserCard } from '../services/api';
+import type { UserProfileCardApiResponse } from '../types/api.types';
 import styles from './UserHoverCard.module.css';
 import { sanitizeImageUrl } from '../utils/contentSecurity';
 
@@ -16,21 +17,13 @@ interface UserHoverCardProps {
     imageUrl?: string | null;
 }
 
-interface CardData {
-    user_id: string;
-    full_name: string | null;
-    bio: string | null;
-    image_url: string | null;
-    comment_count: number;
-}
-
 function getInitials(name: string | null): string {
     if (!name) return '?';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 }
 
 export function UserHoverCard({ userId, children, imageUrl }: Readonly<UserHoverCardProps>) {
-    const [card, setCard] = useState<CardData | null>(null);
+    const [card, setCard] = useState<UserProfileCardApiResponse | null>(null);
 
     useEffect(() => {
         // Re-fetch whenever userId changes; cancel the previous request on cleanup
@@ -38,7 +31,7 @@ export function UserHoverCard({ userId, children, imageUrl }: Readonly<UserHover
         let cancelled = false;
 
         getUserCard(userId)
-            .then((data: CardData) => {
+            .then((data: UserProfileCardApiResponse) => {
                 if (!cancelled) setCard(data);
             })
             .catch(() => { /* silent — hover card is non-critical */ });

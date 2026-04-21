@@ -39,6 +39,7 @@ const mocks = vi.hoisted(() => {
     ensureServicesSearchAccessMock: vi.fn(),
     refreshServicesStatusMock: vi.fn(),
     executeSearchForTabMock: vi.fn(),
+    reportClientErrorMock: vi.fn(),
     addToHistoryMock: vi.fn(),
     removeFromHistoryMock: vi.fn(),
     clearHistoryMock: vi.fn(),
@@ -78,6 +79,8 @@ vi.mock('../../src/components/Layout', () => ({
     onOpenTutorial,
     onOpenStats,
     onOpenComparator,
+    onOpenModerate,
+    onOpenProfile,
     onClearHistory,
     onRemoveHistory,
     isLoading,
@@ -109,6 +112,12 @@ vi.mock('../../src/components/Layout', () => ({
       </button>
       <button data-testid="layout-open-comparator" onClick={onOpenComparator}>
         open-comparator
+      </button>
+      <button data-testid="layout-open-moderate" onClick={onOpenModerate}>
+        open-moderate
+      </button>
+      <button data-testid="layout-open-profile" onClick={onOpenProfile}>
+        open-profile
       </button>
       <button data-testid="layout-set-doc-nbs" onClick={() => setDoc('nbs')}>
         setdoc-nbs
@@ -148,6 +157,7 @@ vi.mock('../../src/components/ResultDisplay', () => ({
     mobileMenuOpen,
     isActive,
     onCloseMobileMenu,
+    onToggleMobileMenu,
     onConsumeNewSearch,
     onPersistScroll,
     onContentReady,
@@ -186,6 +196,9 @@ vi.mock('../../src/components/ResultDisplay', () => ({
           <button data-testid={`result-close-mobile-${tabId}`} onClick={onCloseMobileMenu}>
             close-mobile
           </button>
+          <button data-testid={`result-toggle-mobile-${tabId}`} onClick={onToggleMobileMenu}>
+            toggle-mobile
+          </button>
         </div>
       );
     })()
@@ -200,10 +213,18 @@ vi.mock('../../src/components/ServicesTabContent', () => ({
   ServicesTabContent: ({
     doc,
     onSwitchDoc,
+    onOpenDocInNewTab,
+    onContentReady,
   }: any) => (
     <div data-testid={`services-tab-content-${doc}`}>
       <button data-testid={`services-switch-${doc}`} onClick={() => onSwitchDoc(doc === 'nbs' ? 'nebs' : 'nbs', '1.0101.11.00')}>
         switch
+      </button>
+      <button data-testid={`services-open-new-${doc}`} onClick={() => onOpenDocInNewTab(doc === 'nbs' ? 'nebs' : 'nbs', '1.0101.11.00')}>
+        open-new-tab
+      </button>
+      <button data-testid={`services-ready-${doc}`} onClick={onContentReady}>
+        ready
       </button>
     </div>
   ),
@@ -221,6 +242,7 @@ vi.mock('../../src/components/ModalManager', () => ({
       data-tutorial={String(modals.tutorial)}
       data-stats={String(modals.stats)}
       data-comparator={String(modals.comparator)}
+      data-moderate={String(modals.moderate)}
       data-current-doc={currentDoc}
     >
       <button data-testid="modal-close-settings" onClick={onClose.settings}>
@@ -234,6 +256,9 @@ vi.mock('../../src/components/ModalManager', () => ({
       </button>
       <button data-testid="modal-close-comparator" onClick={onClose.comparator}>
         close-comparator
+      </button>
+      <button data-testid="modal-close-moderate" onClick={onClose.moderate}>
+        close-moderate
       </button>
       <button data-testid="modal-open-doc-current" onClick={() => onOpenInDoc('tipi', '1234.56.78')}>
         open-current
@@ -270,6 +295,10 @@ vi.mock('../../src/components/NotePanel', () => ({
       </button>
     </div>
   ),
+}));
+
+vi.mock('../../src/utils/errorMonitoring', () => ({
+  reportClientError: mocks.reportClientErrorMock,
 }));
 
 vi.mock('../../src/components/UserProfilePage', () => ({
@@ -434,6 +463,14 @@ function appendServiceLink(serviceCode: string) {
   return serviceLink;
 }
 
+function appendBrokenServiceLink() {
+  const serviceLink = document.createElement('span');
+  serviceLink.className = 'service-smart-link service-code-target';
+  serviceLink.textContent = 'broken-service-link';
+  document.body.appendChild(serviceLink);
+  return serviceLink;
+}
+
 function appendNoteRef(note: string, chapter?: string, tagName: 'button' | 'a' = 'button') {
   const noteRef = document.createElement(tagName);
   noteRef.className = 'note-ref';
@@ -459,11 +496,17 @@ describe('App behavior', () => {
     mocks.ensureServicesSearchAccessMock.mockResolvedValue(true);
     mocks.refreshServicesStatusMock.mockResolvedValue(undefined);
     mocks.executeSearchForTabMock.mockResolvedValue(undefined);
+    mocks.reportClientErrorMock.mockReset();
     mocks.fetchNotesMock.mockResolvedValue({});
     mocks.historyRef.value = [{ term: '8517', timestamp: 1 }];
     mocks.sidebarPositionRef.value = 'right';
     mocks.resultDisplayCrashTabIdRef.value = null;
     mocks.hydratedResultsRef.value = null;
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 1440,
+      writable: true,
+    });
     setTabsState([buildTab({ id: 'tab-1' })], 'tab-1');
   });
 
@@ -488,6 +531,23 @@ describe('App behavior', () => {
       expect(mocks.createTabMock).toHaveBeenCalledWith('nesh');
       expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(2, 'tab-1', 'nesh', '8517', true);
       expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(3, 'new-nesh-1', 'nesh', '9401', true);
+    });
+  });
+
+  it('reports async search failures through reportClientError', async () => {
+    mocks.executeSearchForTabMock.mockRejectedValueOnce(new Error('boom'));
+
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('layout-search-single'));
+
+    await waitFor(() => {
+      expect(mocks.reportClientErrorMock).toHaveBeenCalledWith(expect.objectContaining({
+        source: 'async-task',
+        context: 'handleSearch',
+        handled: true,
+        error: expect.any(Error),
+      }));
     });
   });
 
@@ -526,6 +586,129 @@ describe('App behavior', () => {
 
     fireEvent.click(downloadButton);
     expect(mocks.installLocalDbMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['checking', 'Baixando... 0%'],
+    ['installing', 'Baixando... 0%'],
+    ['updating', 'Atualizando... 42%'],
+  ] as const)('renders the busy offline action for %s', (status, title) => {
+    mocks.localDbStatusRef.value = status;
+    mocks.localDbProgressRef.value = status === 'updating' ? 42 : 0;
+
+    render(<App />);
+
+    expect(screen.getByTitle(title)).toBeInTheDocument();
+    expect(mocks.installLocalDbMock).not.toHaveBeenCalled();
+  });
+
+  it('renders retry and disabled offline actions for error and unsupported states', () => {
+    mocks.localDbStatusRef.value = 'error';
+
+    const { rerender } = render(<App />);
+
+    fireEvent.click(screen.getByTitle('Erro ao baixar. Tentar de novo'));
+    expect(mocks.installLocalDbMock).toHaveBeenCalledTimes(1);
+
+    mocks.localDbStatusRef.value = 'unsupported';
+    rerender(<App />);
+
+    expect(screen.getByTitle('Este navegador não suporta banco offline')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Baixar BD para habilitar as buscas' })).not.toBeInTheDocument();
+  });
+
+  it('blocks service searches when the service access check denies search mode', async () => {
+    mocks.ensureServicesSearchAccessMock.mockResolvedValue(false);
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        document: 'nbs',
+        results: buildServiceResults('nbs'),
+      }),
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('layout-search-single'));
+
+    await waitFor(() => {
+      expect(mocks.ensureServicesSearchAccessMock).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.executeSearchForTabMock).not.toHaveBeenCalled();
+  });
+
+  it('blocks service tab switching when search access is denied', async () => {
+    mocks.ensureServicesSearchAccessMock.mockResolvedValue(false);
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        document: 'nbs',
+        ncm: '1.0101.11.00',
+        results: buildServiceResults('nbs'),
+      }),
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('services-switch-nbs'));
+
+    await waitFor(() => {
+      expect(mocks.ensureServicesSearchAccessMock).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.updateTabMock).toHaveBeenCalledWith(
+      'tab-1',
+      expect.objectContaining({
+        document: 'nebs',
+        results: null,
+        content: null,
+        error: null,
+        ncm: '',
+        isContentReady: false,
+      }),
+    );
+    expect(mocks.executeSearchForTabMock).not.toHaveBeenCalled();
+  });
+
+  it.each(['nbs', 'nebs'] as const)('opens text result tabs in nesh when the active document is %s', async (doc) => {
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        document: doc,
+        results: doc === 'nbs' ? buildServiceResults('nbs') : buildServiceResults('nebs'),
+      }),
+    ]);
+
+    render(<App />);
+
+    const bridge = (globalThis as any).nesh;
+    await act(async () => {
+      await bridge.openTextResultInNewTab('8422', 'motor centrifo');
+    });
+
+    expect(mocks.createTabMock).toHaveBeenCalledWith('nesh', true);
+    expect(mocks.updateTabMock).toHaveBeenCalledWith('new-nesh-1', { latestTextQuery: 'motor centrifo' });
+    expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nesh-1', 'nesh', '8422', false);
+  });
+
+  it('opens service links in NEBS background tabs on middle mouse down', async () => {
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        document: 'nebs',
+        ncm: '1.1706.90.00',
+        results: buildServiceResults('nebs', '1.1706.90.00'),
+      }),
+    ]);
+
+    render(<App />);
+
+    const serviceLink = appendServiceLink('1.17');
+    fireEvent.mouseDown(serviceLink, { bubbles: true, button: 1 });
+
+    await waitFor(() => {
+      expect(mocks.createTabMock).toHaveBeenCalledWith('nebs', false);
+      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nebs-1', 'nebs', '1.17', false);
+    });
   });
 
   it('creates a new tab for every split term when active tab is occupied', async () => {
@@ -604,6 +787,26 @@ describe('App behavior', () => {
     expect(mocks.ensureServicesAccessMock).not.toHaveBeenCalled();
   });
 
+  it('opens and closes the moderate comments modal from the layout menu', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('layout-open-moderate'));
+    expect(screen.getByTestId('modal-manager')).toHaveAttribute('data-moderate', 'true');
+
+    fireEvent.click(screen.getByTestId('modal-close-moderate'));
+    expect(screen.getByTestId('modal-manager')).toHaveAttribute('data-moderate', 'false');
+  });
+
+  it('opens and closes the profile page from the layout menu', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('layout-open-profile'));
+    expect(screen.getByTestId('user-profile-page')).toHaveAttribute('data-open', 'true');
+
+    fireEvent.click(screen.getByTestId('user-profile-close'));
+    expect(screen.getByTestId('user-profile-page')).toHaveAttribute('data-open', 'false');
+  });
+
   it('wires the restored services tab callbacks back into App state transitions', async () => {
     setTabsState([
       buildTab({
@@ -634,6 +837,28 @@ describe('App behavior', () => {
       expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('tab-1', 'nebs', '1.0101.11.00', false);
     });
     expect(mocks.ensureServicesAccessMock).not.toHaveBeenCalled();
+  });
+
+  it('wires the services tab open-new and ready callbacks back into App state transitions', async () => {
+    setTabsState([
+      buildTab({
+        document: 'nbs',
+        results: buildServiceResults('nbs'),
+        ncm: '1.0101.11.00',
+        isContentReady: false,
+      }),
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('services-open-new-nbs'));
+    fireEvent.click(screen.getByTestId('services-ready-nbs'));
+
+    await waitFor(() => {
+      expect(mocks.createTabMock).toHaveBeenCalledWith('nebs');
+      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nebs-1', 'nebs', '1.0101.11.00', false);
+    });
+    expect(mocks.updateTabMock).toHaveBeenCalledWith('tab-1', { isContentReady: true });
   });
 
   it('toggles modal states and handles openInDoc/openInNewTab actions', async () => {
@@ -771,6 +996,29 @@ describe('App behavior', () => {
     }
   });
 
+  it('toasts when notes are requested from a code tab without a results map', async () => {
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        ncm: '8413',
+        results: {
+          type: 'code',
+          query: '8413',
+          resultados: null,
+          results: null,
+        } as any,
+      }),
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(appendNoteRef('1', '84'));
+
+    await waitFor(() => {
+      expect(mocks.toastMock.error).toHaveBeenCalledWith('Notas indisponíveis para esta aba.');
+    });
+  });
+
   it('opens local notes from hydrated chapter data after ResultDisplay updates the tab snapshot', async () => {
     setTabsState([
       buildTab({
@@ -838,6 +1086,127 @@ describe('App behavior', () => {
     expect(mocks.toastMock).not.toHaveBeenCalledWith('Nota 4 não encontrada. Mostrando notas do capítulo.');
   });
 
+  it('ignores hydrated results when the tab id no longer matches the current tab', async () => {
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        ncm: '8413',
+        results: buildCodeResults({
+          '84': {
+            capitulo: '84',
+            conteudo: '',
+            notas_parseadas: {},
+            posicoes: [],
+          },
+        }, '8413'),
+      }),
+    ]);
+
+    mocks.hydratedResultsRef.value = {
+      '84': {
+        capitulo: '84',
+        conteudo: 'Conteúdo hidratado',
+        notas_parseadas: {},
+        posicoes: [],
+      },
+    };
+
+    let observedUpdates: unknown;
+    mocks.updateTabMock.mockImplementation((tabId: string, updatesOrUpdater: any) => {
+      const mismatchedTab = buildTab({
+        id: 'other-tab',
+        results: buildCodeResults({
+          '84': {
+            capitulo: '84',
+            conteudo: '',
+            notas_parseadas: {},
+            posicoes: [],
+          },
+        }, '8413'),
+      });
+
+      observedUpdates = typeof updatesOrUpdater === 'function'
+        ? updatesOrUpdater(mismatchedTab)
+        : updatesOrUpdater;
+      return tabId;
+    });
+
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('result-hydrate-tab-1'));
+
+    await waitFor(() => {
+      expect(mocks.updateTabMock).toHaveBeenCalledWith('tab-1', expect.any(Function));
+    });
+    expect(observedUpdates).toBeUndefined();
+    mocks.updateTabMock.mockReset();
+  });
+
+  it('ignores hydrated results when the current tab results are not code search data', async () => {
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        document: 'nesh',
+        results: buildServiceResults('nbs') as any,
+      }),
+    ]);
+
+    mocks.hydratedResultsRef.value = {
+      '84': {
+        capitulo: '84',
+        conteudo: 'Conteúdo hidratado',
+        notas_parseadas: {},
+        posicoes: [],
+      },
+    };
+
+    let observedUpdates: unknown;
+    mocks.updateTabMock.mockImplementation((tabId: string, updatesOrUpdater: any) => {
+      const currentTab = mocks.tabsStateRef.value.tabsById.get(tabId);
+      observedUpdates = typeof updatesOrUpdater === 'function'
+        ? updatesOrUpdater(currentTab)
+        : updatesOrUpdater;
+      return tabId;
+    });
+
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('result-hydrate-tab-1'));
+
+    await waitFor(() => {
+      expect(mocks.updateTabMock).toHaveBeenCalledWith('tab-1', expect.any(Function));
+    });
+    expect(observedUpdates).toBeUndefined();
+    mocks.updateTabMock.mockReset();
+  });
+
+  it('skips tab hydration entirely when the hydrated payload is missing', async () => {
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        ncm: '8413',
+        results: buildCodeResults({
+          '84': {
+            capitulo: '84',
+            conteudo: '',
+            notas_parseadas: {},
+            posicoes: [],
+          },
+        }, '8413'),
+      }),
+    ]);
+
+    mocks.hydratedResultsRef.value = null;
+
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('result-hydrate-tab-1'));
+
+    await waitFor(() => {
+      expect(mocks.updateTabMock).not.toHaveBeenCalled();
+    });
+  });
+
   it('opens smart links in background tab on middle mouse down', async () => {
     render(<App />);
 
@@ -848,6 +1217,45 @@ describe('App behavior', () => {
       expect(mocks.createTabMock).toHaveBeenCalledWith('nesh', false);
       expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nesh-1', 'nesh', '9401', false);
     });
+  });
+
+  it('routes delegated service link clicks through the document click handler', async () => {
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        document: 'nbs',
+        ncm: '1.1706.90.00',
+        results: buildServiceResults('nbs', '1.1706.90.00'),
+      }),
+    ]);
+
+    render(<App />);
+
+    const serviceLink = appendServiceLink('1.17');
+    fireEvent.click(serviceLink);
+
+    await waitFor(() => {
+      expect(mocks.ensureServicesSearchAccessMock).toHaveBeenCalledTimes(1);
+      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('tab-1', 'nbs', '1.17', true);
+    });
+  });
+
+  it('ignores delegated service links that are missing a service code', () => {
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        document: 'nbs',
+        ncm: '1.1706.90.00',
+        results: buildServiceResults('nbs', '1.1706.90.00'),
+      }),
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(appendBrokenServiceLink());
+
+    expect(mocks.executeSearchForTabMock).not.toHaveBeenCalled();
+    expect(mocks.createTabMock).not.toHaveBeenCalled();
   });
 
   it('opens service links in NBS background tabs on middle mouse down', async () => {
@@ -874,6 +1282,38 @@ describe('App behavior', () => {
       expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(1, 'new-nbs-1', 'nbs', '1.1706.90.00', false);
       expect(mocks.executeSearchForTabMock).toHaveBeenNthCalledWith(2, 'new-nbs-2', 'nbs', '1.17', false);
     });
+  });
+
+  it('renders inactive ResultDisplay instances with a no-op mobile toggle handler', () => {
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        results: buildCodeResults({
+          '84': { notas_parseadas: {} },
+        }, '8413'),
+      }),
+      buildTab({
+        id: 'tab-2',
+        results: buildCodeResults({
+          '85': { notas_parseadas: {} },
+        }, '8517'),
+      }),
+    ], 'tab-1');
+
+    render(<App />);
+
+    expect(screen.getByTestId('result-display-tab-1')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('result-display-tab-2')).toHaveAttribute('data-active', 'false');
+
+    fireEvent.click(screen.getByTestId('result-toggle-mobile-tab-1'));
+
+    expect(screen.getByTestId('result-display-tab-1')).toHaveAttribute('data-mobile-open', 'true');
+    expect(screen.getByTestId('result-display-tab-2')).toHaveAttribute('data-mobile-open', 'false');
+
+    fireEvent.click(screen.getByTestId('result-toggle-mobile-tab-2'));
+
+    expect(screen.getByTestId('result-display-tab-1')).toHaveAttribute('data-mobile-open', 'true');
+    expect(screen.getByTestId('result-display-tab-2')).toHaveAttribute('data-mobile-open', 'false');
   });
 
   it('opens service links on middle mouse down to avoid scroll-mode swallowing', async () => {

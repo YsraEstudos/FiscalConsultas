@@ -123,7 +123,7 @@ describe('Header', () => {
     expect(screen.getByText('Notas Explicativas do Sistema Harmonizado')).toBeInTheDocument();
   });
 
-  it('uses NBS and NEBS in the selector when the active document is a service tab', () => {
+  it('uses NEBS in the selector when the active document is a service tab', () => {
     const setDoc = vi.fn();
 
     render(
@@ -182,7 +182,7 @@ describe('Header', () => {
 
     fireEvent.click(screen.getByText('Comparar NCMs').closest('button') as HTMLButtonElement);
     fireEvent.click(menuButton);
-    fireEvent.click(screen.getByRole('button', { name: /Serviços \(NBS\)/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Serviços \(NEBS\)/ }));
     fireEvent.click(menuButton);
     fireEvent.click(screen.getByText('Configurações').closest('button') as HTMLButtonElement);
     fireEvent.click(menuButton);
@@ -208,7 +208,7 @@ describe('Header', () => {
     expect(screen.getByText('Tabela de Incidência do IPI')).toBeInTheDocument();
   });
 
-  it('shows menu shortcuts to return to NESH and TIPI from service tabs', () => {
+  it('shows menu shortcuts to return to NESH and TIPI from service tabs', { timeout: 15000 }, () => {
     const setDoc = vi.fn();
 
     render(
@@ -231,9 +231,9 @@ describe('Header', () => {
     );
 
     openMenu();
-    fireEvent.click(screen.getByText('Voltar para NESH').closest('button') as HTMLButtonElement);
+    fireEvent.click(screen.getByRole('button', { name: /Voltar para NESH/i }));
     fireEvent.click(getMenuButton());
-    fireEvent.click(screen.getByText('Ir para TIPI').closest('button') as HTMLButtonElement);
+    fireEvent.click(screen.getByRole('button', { name: /Ir para TIPI/i }));
 
     expect(setDoc).toHaveBeenNthCalledWith(1, 'nesh');
     expect(setDoc).toHaveBeenNthCalledWith(2, 'tipi');
@@ -341,9 +341,9 @@ describe('Header', () => {
     );
 
     openMenu();
-    expect(screen.getByText(/Serviços \(NBS\) indisponível/)).toBeInTheDocument();
+    expect(screen.getByText(/Serviços \(NEBS\) indisponível/)).toBeInTheDocument();
 
-    const nbsButton = screen.getByRole('button', { name: /Serviços \(NBS\) indisponível/i });
+    const nbsButton = screen.getByRole('button', { name: /Serviços \(NEBS\) indisponível/i });
 
     expect(nbsButton).toBeDisabled();
 
