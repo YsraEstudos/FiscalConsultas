@@ -30,6 +30,21 @@ _code_payload_cache: OrderedDict[str, tuple[bytes, bytes]] = OrderedDict()
 _code_payload_cache_lock = threading.Lock()
 
 
+class SearchCacheRequestContext:
+    def __init__(
+        self,
+        *,
+        is_code_query: bool,
+        normalized_query: str,
+        payload_cache_key: str | None,
+        cache_headers: dict[str, str],
+    ):
+        self.is_code_query = is_code_query
+        self.normalized_query = normalized_query
+        self.payload_cache_key = payload_cache_key
+        self.cache_headers = cache_headers
+
+
 def _normalize_query_for_cache(ncm: str, *, is_code_query: bool) -> str:
     """Normalize query while preserving multi-code intent for cache keys."""
     raw_query = (ncm or "").strip()
@@ -154,6 +169,40 @@ def _build_cache_headers(cache_key: str, ncm_normalized: str) -> dict[str, str]:
     }
 
 
+def _validate_public_search_query_input(ncm: str) -> None:
+    if not ncm:
+        raise ValidationError("Parâmetro 'ncm' é obrigatório", field="ncm")
+
+    if len(ncm) > SearchConfig.MAX_QUERY_LENGTH:
+        raise ValidationError(
+            f"Query muito longa (máximo {SearchConfig.MAX_QUERY_LENGTH} caracteres)",
+            field="ncm",
+        )
+
+
+def _build_search_cache_request_context(
+    request: Request,
+    *,
+    ncm: str,
+    shape: str,
+) -> SearchCacheRequestContext:
+    is_code_query = ncm_utils.is_code_query(ncm)
+    ncm_normalized = _normalize_query_for_cache(ncm, is_code_query=is_code_query)
+
+    cache_key = cache_scope_key(request)
+    headers = _build_cache_headers(cache_key, ncm_normalized)
+
+    payload_key = (
+        f"{cache_key}:{ncm_normalized}:{shape}" if is_code_query else None
+    )
+    return SearchCacheRequestContext(
+        is_code_query=is_code_query,
+        normalized_query=ncm_normalized,
+        payload_cache_key=payload_key,
+        cache_headers=headers,
+    )
+
+
 def _extract_code_results(response_data: Mapping[str, Any]) -> dict[str, Any]:
     if "results" in response_data:
         raw_results = response_data.get("results")
@@ -214,7 +263,7 @@ async def _apply_search_rate_limit(request: Request) -> None:
         500: {"description": "Formato de resposta inválido do serviço"},
     },
 )
-async def search(
+async def handleGlobalFiscalSearchRequest(
     request: Request,
     service: Annotated[NeshService, Depends(get_nesh_service)],
     ncm: Annotated[
@@ -253,29 +302,14 @@ async def search(
     )
 
     await _apply_search_rate_limit(request)
-
-    if not ncm:
-        raise ValidationError("Parâmetro 'ncm' é obrigatório", field="ncm")
-
-    if len(ncm) > SearchConfig.MAX_QUERY_LENGTH:
-        raise ValidationError(
-            f"Query muito longa (máximo {SearchConfig.MAX_QUERY_LENGTH} caracteres)",
-            field="ncm",
-        )
+    _validate_public_search_query_input(ncm)
 
     safe_ncm = ncm.replace("\r", "\\r").replace("\n", "\\n")
     logger.debug("Busca: '%s'", safe_ncm)
 
-    # Normalize query for cache-key consistency:
-    # - single-code variants converge (e.g. "85.17" == "8517")
-    # - multi-code token boundaries are preserved (e.g. "85,17" != "8517")
-    # - text queries use strip + lowercase
-    is_code_query = ncm_utils.is_code_query(ncm)
-    ncm_normalized = _normalize_query_for_cache(ncm, is_code_query=is_code_query)
-
-    # Common caching headers / scope key
-    cache_key = cache_scope_key(request)
-    headers = _build_cache_headers(cache_key, ncm_normalized)
+    context = _build_search_cache_request_context(request, ncm=ncm, shape=shape)
+    is_code_query = context.is_code_query
+    headers = context.cache_headers
 
     # Hot-path short-circuit:
     # for code queries, return cached payload before running service/renderer.
@@ -283,7 +317,7 @@ async def search(
     cached_payload: tuple[bytes, bytes] | None = None
     cache_checked = False
     if is_code_query:
-        payload_key = f"{cache_key}:{ncm_normalized}:{shape}"
+        payload_key = context.payload_cache_key
         cached_payload = _code_payload_cache_get(payload_key)
         cache_checked = True
         if cached_payload is not None:
@@ -300,7 +334,7 @@ async def search(
             )
 
     # Service Layer (ASYNC) - Exceções propagam para o handler global
-    result = await service.process_request(ncm)
+    result = await service.executeNeshSearchWithVectorWeights(ncm)
     if not isinstance(result, dict):
         logger.error(
             "search_request_failed request_id=%s path=%s reason=invalid_service_response ncm=%s type=%s",
@@ -345,7 +379,7 @@ async def search(
     # `payload_key=f"{cache_key}:{ncm_normalized}"` and guard with `cache_checked`.
     if response_data.get("type") == "code":
         if not cache_checked:
-            payload_key = f"{cache_key}:{ncm_normalized}:{shape}"
+            payload_key = context.payload_cache_key
             cached_payload = _code_payload_cache_get(payload_key)
             cache_checked = True
 
@@ -404,6 +438,9 @@ async def search(
             "X-Response-Shape": shape,
         },
     )
+
+
+search = handleGlobalFiscalSearchRequest
 
 
 @router.get("/chapters")

@@ -370,7 +370,9 @@ async def test_search_by_code_builds_found_and_not_found_chapters(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_process_request_dispatches_between_code_and_text(monkeypatch):
+async def test_execute_nesh_search_with_vector_weights_dispatches_between_code_and_text(
+    monkeypatch,
+):
     service = NeshService(db=_FakeDb())
 
     async def _search_by_code(_query):
@@ -385,12 +387,32 @@ async def test_process_request_dispatches_between_code_and_text(monkeypatch):
     monkeypatch.setattr(
         nesh_service_module.ncm_utils, "is_code_query", lambda _query: True
     )
-    assert await service.process_request("8517") == {"origin": "code"}
+    assert await service.executeNeshSearchWithVectorWeights("8517") == {
+        "origin": "code"
+    }
 
     monkeypatch.setattr(
         nesh_service_module.ncm_utils, "is_code_query", lambda _query: False
     )
-    assert await service.process_request("telefone") == {"origin": "text"}
+    assert await service.executeNeshSearchWithVectorWeights("telefone") == {
+        "origin": "text"
+    }
+
+
+@pytest.mark.asyncio
+async def test_process_request_is_backward_compatible_alias(monkeypatch):
+    service = NeshService(db=_FakeDb())
+
+    async def _canonical(_query):
+        return {"origin": "canonical"}
+
+    monkeypatch.setattr(
+        service,
+        "executeNeshSearchWithVectorWeights",
+        _canonical,
+    )
+
+    assert await service.process_request("8517") == {"origin": "canonical"}
 
 
 @pytest.mark.asyncio

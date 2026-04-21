@@ -73,15 +73,22 @@ class _FakeNbsService:
         self.mode = "sqlite"
         self.created_repo = False
 
-    async def close(self):
+    async def shutdownNbsServiceResources(self):
         self.closed = True
 
+    async def close(self):
+        await self.shutdownNbsServiceResources()
+
     @classmethod
-    async def create_with_repository(cls):
+    async def initializeNbsServiceWithPostgresRepository(cls):
         obj = cls()
         obj.mode = "repo"
         obj.created_repo = True
         return obj
+
+    @classmethod
+    async def create_with_repository(cls):
+        return await cls.initializeNbsServiceWithPostgresRepository()
 
 
 class _FakeAiService:

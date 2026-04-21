@@ -362,7 +362,7 @@ async def _init_tipi_service(app: FastAPI) -> None:
 async def _init_nbs_service(app: FastAPI) -> None:
     if settings.database.is_postgres:
         try:
-            app.state.nbs_service = await NbsService.create_with_repository()
+            app.state.nbs_service = await NbsService.initializeNbsServiceWithPostgresRepository()
             logger.info("NbsService initialized in Repository mode (Postgres)")
             return
         except Exception as e:
@@ -390,7 +390,7 @@ async def _shutdown_resources(app: FastAPI) -> None:
 
     if hasattr(app.state, "nbs_service") and app.state.nbs_service:
         try:
-            await app.state.nbs_service.close()
+            await app.state.nbs_service.shutdownNbsServiceResources()
         except Exception as e:
             logger.warning("Error closing NbsService: %s", e)
 

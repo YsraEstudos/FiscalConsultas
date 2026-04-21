@@ -99,10 +99,10 @@ class NbsService:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
-        await self.close()
+        await self.shutdownNbsServiceResources()
 
     @classmethod
-    async def create_with_repository(cls) -> "NbsService":
+    async def initializeNbsServiceWithPostgresRepository(cls) -> "NbsService":
         """Factory assíncrono para criar o serviço via repository/AsyncSession."""
         if not _REPO_AVAILABLE:
             raise RuntimeError("Repository não disponível. Instale sqlmodel.")
@@ -116,6 +116,10 @@ class NbsService:
                 yield repository_cls(session)
 
         return cls(repository_factory=repo_factory)
+
+    @classmethod
+    async def create_with_repository(cls) -> "NbsService":
+        return await cls.initializeNbsServiceWithPostgresRepository()
 
     @asynccontextmanager
     async def _get_repo(self) -> AsyncIterator["_NbsRepository | None"]:
@@ -270,7 +274,7 @@ class NbsService:
                 return
         await conn.close()
 
-    async def close(self) -> None:
+    async def shutdownNbsServiceResources(self) -> None:
         async with self._pool_lock:
             while self._pool:
                 conn = self._pool.pop()
@@ -281,6 +285,9 @@ class NbsService:
         async with self._get_cache_lock():
             self._search_cache.clear()
             self._detail_cache.clear()
+
+    async def close(self) -> None:
+        await self.shutdownNbsServiceResources()
 
     @staticmethod
     def _build_health_payload(

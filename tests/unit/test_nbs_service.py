@@ -23,6 +23,30 @@ def _reset_pool_state():
     yield
 
 
+@pytest.mark.asyncio
+async def test_initialize_nbs_service_with_postgres_repository_builds_repository_factory(
+    monkeypatch,
+):
+    class _FakeRepository:
+        def __init__(self, session):
+            self.session = session
+
+    @asynccontextmanager
+    async def _fake_get_session():
+        yield object()
+
+    monkeypatch.setattr(nbs_service_module, "_REPO_AVAILABLE", True)
+    monkeypatch.setattr(nbs_service_module, "get_session", _fake_get_session)
+    monkeypatch.setattr(nbs_service_module, "NbsRepository", _FakeRepository)
+
+    service = await NbsService.initializeNbsServiceWithPostgresRepository()
+
+    assert service._use_repository is True
+    assert service._repository is None
+    assert service._repository_factory is not None
+    assert service._pool == []
+
+
 def _seed_services_db(db_path: Path) -> None:
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -555,7 +579,9 @@ async def test_service_instances_do_not_reuse_connections_from_other_databases(
 
 
 @pytest.mark.asyncio
-async def test_close_clears_only_the_instance_pool(tmp_path: Path):
+async def test_shutdown_nbs_service_resources_clears_only_the_instance_pool(
+    tmp_path: Path,
+):
     db_path = tmp_path / "services.db"
     _seed_services_db(db_path)
     service = NbsService(db_path)
@@ -565,7 +591,7 @@ async def test_close_clears_only_the_instance_pool(tmp_path: Path):
 
     assert len(service._pool) > 0
 
-    await service.close()
+    await service.shutdownNbsServiceResources()
 
     assert service._pool == []
 

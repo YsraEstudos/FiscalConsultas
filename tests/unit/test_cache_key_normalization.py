@@ -1,8 +1,16 @@
 """Tests for search-route cache-key normalization."""
 
+import pytest
 from starlette.requests import Request
 
-from backend.presentation.routes.search import _accepts_gzip, _normalize_query_for_cache
+from backend.config.constants import SearchConfig
+from backend.config.exceptions import ValidationError
+from backend.presentation.routes.search import (
+    _accepts_gzip,
+    _build_search_cache_request_context,
+    _normalize_query_for_cache,
+    _validate_public_search_query_input,
+)
 from backend.utils.cache import weak_etag
 from backend.utils.ncm_utils import is_code_query
 
@@ -76,3 +84,47 @@ class TestAcceptsGzip:
     def test_rejects_gzip_and_wildcard_with_zero_quality(self):
         request = _build_request_with_accept_encoding("gzip;q=0,*;q=0")
         assert _accepts_gzip(request) is False
+
+
+class TestPublicSearchQueryValidation:
+    def test_rejects_empty_query(self):
+        with pytest.raises(ValidationError, match="Parâmetro 'ncm' é obrigatório"):
+            _validate_public_search_query_input("")
+
+    def test_rejects_query_above_max_length(self):
+        too_long = "x" * (SearchConfig.MAX_QUERY_LENGTH + 1)
+        with pytest.raises(ValidationError, match="Query muito longa"):
+            _validate_public_search_query_input(too_long)
+
+    def test_accepts_non_empty_query_within_limits(self):
+        _validate_public_search_query_input("8517")
+
+
+class TestSearchCacheRequestContext:
+    def test_builds_code_query_context(self):
+        request = _build_request_with_accept_encoding("gzip")
+
+        context = _build_search_cache_request_context(
+            request,
+            ncm="85.17",
+            shape="full",
+        )
+
+        assert context.is_code_query is True
+        assert context.normalized_query == "8517"
+        assert context.payload_cache_key is not None
+        assert context.payload_cache_key.endswith(":8517:full")
+        assert context.cache_headers["Vary"] == "Authorization, X-Tenant-Id, Accept-Encoding"
+
+    def test_builds_text_query_context_without_payload_key(self):
+        request = _build_request_with_accept_encoding("gzip")
+
+        context = _build_search_cache_request_context(
+            request,
+            ncm="motor de arranque",
+            shape="summary",
+        )
+
+        assert context.is_code_query is False
+        assert context.normalized_query == "motor de arranque"
+        assert context.payload_cache_key is None

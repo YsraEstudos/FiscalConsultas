@@ -833,17 +833,18 @@ class NeshService:
             "total_capitulos": len(results),
         }
 
-    async def process_request(self, query: str) -> ServiceResponse:
-        """
-        Facade principal de processamento de busca (Async).
-        """
+    async def executeNeshSearchWithVectorWeights(self, query: str) -> ServiceResponse:
+        """Facade canônico para execução da busca NESH."""
         # Heurística: só dígitos/pontuação = código NCM
         is_ncm = ncm_utils.is_code_query(query)
 
         if is_ncm:
             return await self.search_by_code(query)
-        else:
-            return await self.search_full_text(query)
+        return await self.search_full_text(query)
+
+    async def process_request(self, query: str) -> ServiceResponse:
+        """Alias de compatibilidade para o método canônico de busca."""
+        return await self.executeNeshSearchWithVectorWeights(query)
 
     async def prewarm_cache(
         self, chapter_nums: Optional[List[str]] = None, concurrency: int = 10

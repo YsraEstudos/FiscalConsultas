@@ -29,6 +29,13 @@ class _FakeNeshServiceCode:
         }
 
 
+def test_search_handler_keeps_legacy_alias_to_canonical_name():
+    assert (
+        search_route.search
+        is search_route.handleGlobalFiscalSearchRequest
+    )
+
+
 class _FakeNeshServiceText:
     async def process_request(self, query: str):
         return {
@@ -113,7 +120,7 @@ def _cleanup_overrides():
 def test_search_code_response_keeps_resultados_alias(client, monkeypatch):
     monkeypatch.setattr(
         NeshService,
-        "process_request",
+        "executeNeshSearchWithVectorWeights",
         AsyncMock(side_effect=_FakeNeshServiceCode().process_request),
     )
 
@@ -133,7 +140,7 @@ def test_search_code_response_keeps_resultados_alias(client, monkeypatch):
 def test_search_text_response_does_not_inject_resultados(client, monkeypatch):
     monkeypatch.setattr(
         NeshService,
-        "process_request",
+        "executeNeshSearchWithVectorWeights",
         AsyncMock(side_effect=_FakeNeshServiceText().process_request),
     )
 
@@ -148,7 +155,7 @@ def test_search_text_response_does_not_inject_resultados(client, monkeypatch):
 def test_search_code_prefers_results_key_even_when_empty(client, monkeypatch):
     monkeypatch.setattr(
         NeshService,
-        "process_request",
+        "executeNeshSearchWithVectorWeights",
         AsyncMock(side_effect=_FakeNeshServiceCodeEmptyResults().process_request),
     )
 
@@ -167,7 +174,7 @@ def test_search_invalid_service_response_returns_500_with_cors_header(
 ):
     monkeypatch.setattr(
         NeshService,
-        "process_request",
+        "executeNeshSearchWithVectorWeights",
         AsyncMock(side_effect=_FakeNeshServiceInvalid().process_request),
     )
 

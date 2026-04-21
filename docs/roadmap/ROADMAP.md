@@ -1,6 +1,190 @@
-# Strategic Roadmap & Technical Debt Paydown - Nesh/Fiscal
+# Roadmap Mestre: Nomes Únicos, Refatoração e Evolução do Produto
 
-Este roadmap organiza a evolução do Nesh de uma ferramenta de busca estática para uma **Plataforma de Inteligência Fiscal e Classificação Colaborativa**. A prioridade mantém-se em Segurança e Estabilidade, seguida pela modernização da infraestrutura e novas funcionalidades de IA.
+> [!IMPORTANT]
+> Documento canônico consolidado. O conteúdo de `ROADMAP_NOMES_UNICOS_IA.md` e `refatoracao.md` foi absorvido aqui para evitar fragmentação e perda de contexto.
+> Use este arquivo como fonte única para diagnóstico, renomeação, refatoração e acompanhamento do progresso.
+
+## Prompt Inicial do Agente
+
+> Você é o agente responsável por analisar este repositório para refatoração guiada por nomes únicos, trabalhando um arquivo por vez.
+> 1. Escolha um único arquivo do mapa de refatoração, leia apenas o necessário para entendê-lo e diga se ele realmente precisa de refatoração.
+> 2. Dentro desse arquivo, identifique todos os nomes genéricos, ambíguos, duplicados ou colidentes, incluindo funções, handlers, utilitários, classes, variáveis públicas e scripts auxiliares.
+> 3. Para cada nome problemático, rastreie onde ele é usado, proponha um nome mais específico e valide colisões até que a nova identificação seja única, pesquisável e semanticamente estável no repositório.
+> 4. Se o arquivo também tiver funções longas ou responsabilidades concentradas, proponha extração, divisão ou redução de complexidade quando isso melhorar segurança, performance, testabilidade ou legibilidade.
+> 5. Produza um plano estruturado para o arquivo analisado, separando bloqueios P0, itens estruturais P1 e limpeza P2, com foco explícito em segurança, performance, qualidade de refatoração e redução de dívida técnica.
+> 6. Mantenha um backlog vivo do que ficou pendente e, ao final de cada lote, atualize esta documentação com o que foi concluído, o que foi adiado e qual é o próximo arquivo ou bloco a ser tratado.
+
+## Estado Atual do Documento
+
+| Checkpoint | Status | Saída esperada |
+| --- | --- | --- |
+| 0. Consolidação | concluído | um único documento canônico |
+| 1. Diagnóstico | pendente | inventário de arquivos, hotspots e colisões |
+| 2. Nomes únicos | pendente | tabela de renomes canônicos por área |
+| 3. Refatoração P0 | em andamento | correções de risco e inconsistências |
+| 4. Refatoração P1/P2 | pendente | redução de dívida técnica e limpeza |
+| 5. Validação final | pendente | checagem de colisões, scripts e tamanhos |
+
+## Progresso do Lote Atual
+
+- Concluído: criado `scripts/report_long_functions.py` para localizar funções de módulo acima do limite configurado.
+- Concluído: adicionados testes cobrindo docstrings multilinha, comentários, diretórios ignorados e exportação JSON com chaves `ITEM_*`.
+- Concluído: shortlist das funções acima de 100 linhas incorporada ao roadmap como hotspot funcional confirmado.
+- Validado: `pytest tests/unit/test_report_long_functions.py` passou.
+- Validado: `python scripts/report_long_functions.py --threshold 20 --no-json` executou com sucesso e gerou inventário do repositório.
+- Concluído: alinhei o ciclo de vida do `NbsService` com os nomes canônicos `initializeNbsServiceWithPostgresRepository` e `shutdownNbsServiceResources`, mantendo aliases de compatibilidade.
+- Concluído: atualizei os testes de lifecycle do NBS e do bootstrap do app para cobrir o contrato novo.
+- Validado: `pytest tests/unit/test_nbs_service.py tests/unit/test_app_lifespan_additional.py` passou com sucesso usando base temp explícita.
+- Concluído: movi o ponto principal de execução do NESH para o método canônico `executeNeshSearchWithVectorWeights`, mantendo `process_request` como alias de compatibilidade.
+- Concluído: alinhei a rota `/api/search` para chamar o método canônico do serviço.
+- Validado: `pytest tests/unit/test_nesh_service_additional.py tests/integration/test_search_route_contracts.py` passou com sucesso.
+- Concluído: renomeei o handler principal da rota de busca para `handleGlobalFiscalSearchRequest`, mantendo alias legado `search` para compatibilidade.
+- Validado: teste de alias do handler e contratos da rota de busca aprovados no mesmo lote.
+- Concluído: extraí validação de query e construção de contexto de cache da rota `/api/search` para helpers dedicados, reduzindo responsabilidade do handler principal.
+- Validado: `pytest tests/unit/test_cache_key_normalization.py tests/integration/test_search_route_contracts.py` passou com sucesso após a extração.
+- Backlog aberto: aplicar o fluxo de análise arquivo por arquivo nos hotspots mais críticos e registrar os nomes genéricos encontrados em cada um.
+- Backlog aberto: transformar os nomes canônicos sugeridos em renomes efetivos somente depois de validar colisões textuais e dependências cruzadas.
+- Próximo passo: continuar o lote P0 na rota principal (`backend/presentation/routes/search.py`) com extração de blocos para reduzir responsabilidades da função longa.
+
+## Protocolo de Execução
+
+1. Analise um arquivo por vez e finalize o diagnóstico completo desse arquivo antes de passar para o próximo.
+2. Para cada arquivo, confirme se há refatoração necessária, quais nomes são genéricos ou colidentes e quais dependências precisam ser atualizadas.
+3. Quando houver nomes para trocar, valide primeiro as ocorrências textuais e só então proponha o novo nome canônico.
+4. Se houver funções longas, responsabilidades misturadas ou trechos difíceis de testar, proponha extração, divisão ou simplificação com foco em segurança, performance e legibilidade.
+5. Atualize backend, frontend, scripts e testes afetados pelo nome antigo apenas depois de fechar o diagnóstico do arquivo atual.
+6. Reescreva comentários obsoletos que existiam apenas para justificar nomes ruins ou fluxo confuso.
+7. Registre o resultado do arquivo no backlog e atualize o progresso deste documento ao encerrar cada lote.
+
+## Regras Para Nomes Únicos
+
+| Regra | Aplicação |
+| --- | --- |
+| Evitar verbos genéricos | Não usar `process`, `update`, `fetch`, `get`, `handle`, `render`, `parse`, `search`, `sync` sozinho. |
+| Explicitar domínio | O nome precisa dizer o objeto e a ação reais, como `generateFiscalAssistanceAiResponse`. |
+| Ser único no repositório | Depois de nomear, valide se existe outra definição com o mesmo núcleo semântico. |
+| Espelhar semântica entre camadas | Se a API mudar no backend, o nome correspondente no frontend e nos scripts deve refletir o mesmo significado. |
+| Preservar rastreabilidade | O nome deve funcionar como ponto de busca direta em `grep`/`ripgrep`. |
+
+### Mapa Inicial de Renomes Canônicos
+
+| Área | Nome genérico atual | Nome canônico sugerido | Observação |
+| --- | --- | --- | --- |
+| `backend/services/nbs_service.py` | `create_with_repository`, `close` | `initializeNbsServiceWithPostgresRepository`, `shutdownNbsServiceResources` | Já surgindo no bootstrap do app. |
+| `backend/services/nesh_service.py` | `search` | `executeNeshSearchWithVectorWeights` | Evitar colisão com outros buscadores. |
+| `backend/services/tipi_service.py` | `parse_row` | `parseTipiRegistryRowToDomainModel` | Nome semântico para o parser. |
+| `backend/services/ai_service.py` e `comment_service.py` | `get_ai_response` | `generateFiscalAssistanceAiResponse` | Unificar nomenclatura de IA. |
+| `backend/services/profile_service.py` | `update_profile` | `updateUserFiscalProfilePreferences` | Foco explícito no perfil fiscal. |
+| `backend/presentation/routes/search.py` e `tipi.py` | `get_results` | `handleGlobalFiscalSearchRequest` | Handler de entrada global. |
+| `backend/presentation/routes/system.py` e `database_download.py` | `status`, `health` | `getSystemOperationalMetrics`, `fetchStaticDatabaseAsset` | Evitar termos genéricos. |
+| `backend/presentation/routes/auth.py`, `profile.py`, `comments.py` | `login` | `handleFiscalUserAuthenticationFlow` | Flow de autenticação explícito. |
+| `backend/presentation/routes/webhooks.py` e `services.py` | `on_event` | `processExternalServiceWebhookNotification` | Handler externo inequívoco. |
+| `backend/presentation/renderer.py` | `render` | `transformMarkdownToFiscalHtmlStructure` | Nome descritivo para o pipeline. |
+| `backend/presentation/tipi_renderer.py` e `schemas/` | `validate` | `validateTipiTaxTableSchemaRegistry` | Validação específica. |
+| `client/src/App.tsx` e `main.tsx` | `handleSearch` | `initiateApplicationWideFiscalSearch` | Handler global de busca. |
+| `client/src/constants.ts` | `API_URL` | `FISCAL_BACKEND_BASE_ENDPOINT_URL` | Constante explícita e única. |
+| `client/src/components/ResultDisplay.tsx` | `handleClick`, `onScroll` | `handleFiscalResultScrollSync`, `toggleSearchTermHighlighterHighlight` | Nomes de interação específicos. |
+| `client/src/components/ServicesWorkspace.tsx`, `ServicesTabContent.tsx`, `TabsBar.tsx` | `onChange` | `switchActiveFiscalServiceWorkspaceTab` | Gestão de abas sem ambiguidade. |
+| `client/src/components/CommentDrawer.tsx`, `CommentPanel.tsx`, `AIChat.tsx`, `ComparatorModal.tsx` | `submit` | `postAdminFiscalCommentUpdate` | Ação e contexto claros. |
+| `client/src/components/Sidebar.tsx`, `Header.tsx`, `Layout.tsx`, `CrossNavContextMenu.tsx` | `toggleSidebar` | `toggleMainNavigationSidebarState` | Estado de navegação explícito. |
+| `client/src/services/` | `getData` | `fetchAuthenticatedUserTaxPreferences` | Nome alinhado ao backend. |
+| `client/src/hooks/` | `useAuth`, `useFetch` | `useFiscalServiceAuthSession`, `useDebouncedNeshSearchInput` | Hook deve revelar a intenção. |
+| `client/src/utils/` | `formatDate` | `formatFiscalSubmissionTimestamp` | Utilitário deve refletir o domínio. |
+
+## Plano de Refatoração Priorizada
+
+### Diagnóstico Rápido
+
+- Hotspots de tamanho: `backend/presentation/renderer.py` (1180 linhas), `backend/server/middleware.py` (1176), `backend/services/nbs_service.py` (1149), `backend/services/nesh_service.py` (920), `backend/presentation/routes/system.py` (875).
+- Hotspots de frontend: `client/src/components/ResultDisplay.tsx` (1865), `client/src/workers/db.worker.js` (1553), `client/src/services/api.ts` (1105), `client/src/context/LocalDatabaseContext.tsx` (946), `client/src/components/ServicesWorkspace.module.css` (908), `client/src/components/SearchHighlighter.tsx` (822), `client/src/App.tsx` (803).
+- Complexidade React: `ResultDisplay.tsx` concentra muitos efeitos e lógica de scroll, seleção e fallback.
+- Dívida de scripts: muitos arquivos em `scripts/` e testes usam `sys.path.append/insert`.
+- Dívida de tipagem: há alto uso de `any` em caminhos centrais do frontend.
+
+### Hotspots Funcionais Confirmados (> 100 linhas)
+
+| Prioridade sugerida | Função | Arquivo | Linhas | Motivo resumido |
+| --- | --- | --- | --- | --- |
+| P0 | `search` | `backend/presentation/routes/search.py` | 145 | rota crítica, ponto de entrada principal |
+| P0 | `run_full_migration` | `scripts/migrate_to_postgres.py` | 115 | migração de dados sensível e longa |
+| P1 | `_consolidate_databases` | `scripts/build_offline_db.py` | 292 | núcleo offline com alto acoplamento |
+| P1 | `upgrade` | `migrations/versions/012_services_catalog_postgres.py` | 149 | migration grande, precisa segmentação |
+| P1 | `upgrade` | `migrations/versions/001_initial.py` | 141 | migration base, revisar legibilidade |
+| P1 | `_seed_services_db` | `tests/unit/test_nbs_service.py` | 144 | seed de teste complexo, bom alvo para helpers |
+| P1 | `_seed_tipi_db` | `test_support.py` | 133 | suporte de teste pesado, consolidar dados |
+| P2 | `create_database` | `scripts/rebuild_index.py` | 113 | script legado com lógica concentrada |
+| P2 | `create_database` | `scripts/setup_database.py` | 100 | script legado com lógica concentrada |
+
+Esses nomes entram no próximo lote de corte e extração, em ordem de impacto real no produto e no fluxo de dados.
+
+### P0 - Resolver Primeiro
+
+- [ ] Corrigir o callback de auto-scroll em `client/src/components/ResultDisplay.tsx` e `client/src/App.tsx`.
+  - Problema: a assinatura e o consumo do callback estão desalinhados, o que pode quebrar a persistência de scroll entre abas.
+- [ ] Fechar o split-brain de renderização entre backend e fallback frontend.
+  - Problema: `backend/presentation/renderer.py` e `client/src/utils/NeshRenderer.ts` competem como fontes de verdade.
+- [ ] Eliminar o risco de XSS ao confiar no HTML do backend.
+  - Problema: a sanitização é pulada em certos caminhos quando `rawMarkdown` vem do backend.
+- [ ] Unificar o modelo de domínio duplicado entre `TypedDict` e `SQLModel`.
+  - Problema: contratos de resposta vivem em dois lugares com semântica diferente.
+- [ ] Centralizar o parsing fragmentado com regex diferentes.
+  - Problema: ingestão, runtime e scripts podem divergir na leitura de NCM, NBS e notas.
+- [ ] Separar os caminhos legado e novo nos serviços híbridos.
+  - Problema: `if self._use_repository` mistura dois fluxos de execução no mesmo arquivo.
+
+### P1 - Refatorar Em Seguida
+
+- [ ] Eliminar a duplicação de cache/gzip nas rotas de busca.
+  - Problema: `backend/presentation/routes/search.py` e `backend/presentation/routes/tipi.py` têm payloads quase copiados.
+- [ ] Quebrar os arquivos tipo god class/god component.
+  - Problema: `renderer.py`, `nesh_service.py`, `tipi_service.py` e `ResultDisplay.tsx` acumulam responsabilidades demais.
+- [ ] Alinhar a geração de `anchor_id` entre backend e frontend.
+  - Problema: a estratégia de idempotência não é igual nas duas camadas.
+- [ ] Remover hacks de path/import e ruído de debug.
+  - Problema: há `sys.path` manual e prints que enfraquecem a execução em IDE, CI e produção.
+- [ ] Consolidar configurações duplicadas e conflitantes.
+  - Problema: limites e flags aparecem em mais de uma fonte.
+- [ ] Controlar o middleware com cache global manual e tarefas fire-and-forget.
+  - Problema: lifecycle e observabilidade ficam frágeis.
+
+### P2 - Limpeza Estrutural
+
+- [ ] Aumentar a tipagem do frontend.
+  - Problema: o uso de `any` em caminhos centrais reduz segurança de refactor.
+- [ ] Cobrir melhor o core NESH com testes.
+  - Problema: o contrato de rota é testado, mas a lógica pesada de serviço e parsing ainda precisa de mais foco.
+- [ ] Substituir o entrypoint placeholder por uma entrada real do produto.
+  - Problema: o arquivo principal não representa o comportamento final da aplicação.
+
+## Auditoria de Tamanho de Arquivos
+
+### Backend acima de 800 linhas
+
+- `backend/presentation/renderer.py` - 1180 linhas
+- `backend/server/middleware.py` - 1176 linhas
+- `backend/services/nbs_service.py` - 1149 linhas
+- `backend/services/nesh_service.py` - 920 linhas
+- `backend/presentation/routes/system.py` - 875 linhas
+
+### Client acima de 800 linhas
+
+- `client/src/components/ResultDisplay.tsx` - 1865 linhas
+- `client/src/workers/db.worker.js` - 1553 linhas
+- `client/src/services/api.ts` - 1105 linhas
+- `client/src/context/LocalDatabaseContext.tsx` - 946 linhas
+- `client/src/components/ServicesWorkspace.module.css` - 908 linhas
+- `client/src/components/SearchHighlighter.tsx` - 822 linhas
+- `client/src/App.tsx` - 803 linhas
+
+## Checklist Obrigatório de Validação
+
+1. [ ] Rodar busca de colisões para cada nome novo e elevar ainda mais a especificidade se houver mais de uma definição relevante.
+2. [ ] Verificar sincronia entre backend e frontend sempre que um nome de API mudar.
+3. [ ] Simplificar comentários obsoletos que só existem porque o nome anterior era ruim.
+4. [ ] Revisar `scripts/` e `test_support.py` para ajustar helpers que chamam funções renomeadas.
+5. [ ] Executar `node client/scripts/verify-file-lengths.cjs` e priorizar os arquivos acima de 800/1000 linhas.
+6. [ ] Fazer um teste de navegação textual pedindo para achar a função só pelo nome novo.
+7. [ ] Encerrar cada lote atualizando a seção de estado deste documento.
 
 ---
 
