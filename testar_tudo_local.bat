@@ -40,10 +40,10 @@ echo    Backend iniciado. Aguarde alguns segundos para ele subir.
 echo.
 
 :: -----------------------------------------------------------
-:: [3] Subir Frontend com npx vite (evita confusao com npm local)
+:: [3] Subir Frontend usando o script padrao do client
 :: -----------------------------------------------------------
 echo [3/3] Iniciando Frontend Vite (porta 5173)...
-start "Nesh Frontend" /D "%~dp0client" cmd /k "npx vite --host 127.0.0.1"
+start "Nesh Frontend" /D "%~dp0client" cmd /k "npm run dev"
 echo    Frontend iniciado.
 echo.
 
@@ -71,5 +71,11 @@ echo   Frontend: http://127.0.0.1:5173/
 echo =======================================================
 echo.
 
-start "" "http://127.0.0.1:5173/"
+if "!VITE_OK!"=="1" (
+    start "" "http://127.0.0.1:5173/"
+) else (
+    echo.
+    echo [ERRO] O frontend nao respondeu na porta 5173.
+    echo        Verifique a janela "Nesh Frontend" e os logs acima.
+)
 pause

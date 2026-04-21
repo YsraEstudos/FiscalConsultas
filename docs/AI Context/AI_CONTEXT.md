@@ -1,382 +1,145 @@
-# Nesh / Fiscal - AI_CONTEXT
-
-Atualizado em: 2026-04-15
-Base desta revisao: README, PR 194, `testar_tudo_local.bat`, `client/package.json`, `docs/TESTING.md`, `LocalDatabaseContext`, `coi-serviceworker` e workflows atuais de CI/MegaLinter/Pages.
-
-## 1) Proposito
-
-Nesh/Fiscal e uma aplicacao de consulta fiscal com dois domínios principais:
-
-- NESH: busca por codigo e por texto em capitulos/notas/posicoes.
-- TIPI: busca por codigo e texto com foco em arvore de NCM e aliquotas.
-- NBS/NEBS: busca por codigo e detalhe de catalogo de servicos, com arvore por prefixo, smart-links e painel de explicacoes por capitulo da NBS.
-
-A UX e orientada por navegacao rapida (abas, smart-links, menu contextual, autoscroll, sidebar virtualizada).
-
-O estado atual tambem inclui um modo offline total no navegador para `NESH`, `TIPI`, `NBS` e `NEBS`, com instalacao em um botao, banco local em OPFS e cache do app shell via service worker.
-
-## 2) Verdade de Execucao (Source of Truth)
-
-- Backend entrypoint real: `Nesh.py`
-  - sobe `backend.server.app:app` com Uvicorn.
-- App FastAPI real: `backend/server/app.py`
-  - routers: `/api`, `/api/tipi`, `/api/webhooks`
-  - middlewares: GZip, TenantMiddleware, CORS, no-cache para HTML
-  - lifespan: inicializa `NeshService`, `TipiService`, `AiService`, `Redis`, glossario.
-- Frontend entrypoint real: `client/src/main.tsx`
-  - exige `VITE_CLERK_PUBLISHABLE_KEY`.
-- Shell SPA real: `client/index.html`
-  - publica CSP, `referrer` policy e `Permissions-Policy` via meta tags.
-- Service worker real: `client/public/coi-serviceworker.js`
-  - garante COOP/COEP para SQLite WASM e tambem cacheia o app shell.
-- Orquestrador offline real: `client/src/context/LocalDatabaseContext.tsx`
-  - coordena instalacao, remocao, atualizacao, multi-abas, OPFS e worker local.
-- Rotas de distribuicao do artefato offline: `backend/presentation/routes/database_download.py`
-  - `GET /api/database/version`
-  - `POST /api/database/token`
-  - `POST /api/database/download`
-- Frontend estatico pode ser publicado fora do backend
-  - Cloudflare Pages ou GitHub Pages (`https://ysraestudos.github.io/FiscalConsultas/` no modo project site).
-
-## 3) Mapa Arquitetural Atual
-
-```text
-backend/
-  config/                settings, constantes, excecoes, logging, schema SQL
-  server/                app FastAPI, middleware tenant/JWT, rate-limit, handlers
-  presentation/routes/   contratos HTTP (search, tipi, auth, system, webhooks)
-  services/              logica de negocio (NESH, TIPI, IA)
-  infrastructure/        DatabaseAdapter SQLite, db_engine SQLAlchemy/SQLModel, Redis, repositories
-  domain/                TypedDict legados + SQLModel ORM/response models
-  data/                  glossary_manager + glossary_db.json
-
-client/src/
-  components/            ResultDisplay, Sidebar, TextSearchResults, modais
-  hooks/                 useSearch, useRobustScroll, useTabs, useHistory
-  context/               Auth, Settings, Glossary, CrossChapterNote
-  services/api.ts        axios + auth interceptor + cache local/in-memory
-  types/api.types.ts     contratos TS manuais
-
-scripts/
-  setup_database.py      monta SQLite NESH (chapters/positions/chapter_notes)
-  setup_fulltext.py      cria/atualiza FTS SQLite
-  setup_tipi_database.py monta SQLite TIPI (xlsx)
-  setup_nbs_database.py  popula `services.db` com a hierarquia NBS
-  setup_nebs_database.py popula `services.db` com o catalogo NEBS
-  build_offline_db.py    gera o pacote criptografado distribuivel do navegador
-  export_nbs_chapter_notes.py extrai notas oficiais da NBS para JSON do frontend
-  rebuild_index.py       rebuild alternativo de nesh.db (usa fonte debug)
-  ingest_markdown.py     ingestao alternativa/legada
-  migrate_to_postgres.py migracao SQLite -> PostgreSQL
-```
-
-## 4) Fluxos Criticos de Negocio
-
-### 4.1 NESH - Busca por codigo (`GET /api/search?ncm=...`)
-
-1. Rota valida tamanho da query e monta headers de cache.
-2. Se query parecer codigo (`ncm_utils.is_code_query`), tenta payload cache de rota.
-3. `NeshService.process_request` encaminha para `search_by_code`.
-4. Service monta `results` por capitulo (com `posicoes`, `notas_parseadas`, `secoes`).
-5. Rota pre-renderiza HTML via `HtmlRenderer.render_full_response(results)` no campo `markdown`.
-6. Rota remove `conteudo` bruto do payload e preserva compatibilidade `results` + `resultados`.
-7. Corpo serializado e comprimido e cacheado em memoria da rota (raw + gzip).
-
-### 4.2 NESH - Busca textual
-
-1. Service normaliza query (com stemming via `NeshTextProcessor`).
-2. Executa estrategia por tiers:
-   - Tier 1: frase exata
-   - Tier 2: AND
-   - Tier 3: OR
-3. Se caminho legado SQLite: aplica bonus NEAR.
-4. Retorna `type="text"` com `match_type`, `warning`, `results` scoreados.
-
-### 4.3 TIPI - Busca por codigo/texto (`GET /api/tipi/search`)
-
-- Codigo: `TipiService.search_by_code` com `view_mode=family|chapter`.
-- Texto: `TipiService.search_text` (FTS).
-- Compatibilidade de contrato: rota garante `results` e alias `resultados`.
-- Payload cache da rota TIPI segue padrao semelhante ao NESH.
-
-### 4.4 Instalacao do modo offline no navegador
-
-1. `LocalDatabaseContext` consulta `GET /api/database/version`.
-2. O frontend pede token efemero em `POST /api/database/token`.
-3. O worker baixa o artefato em `POST /api/database/download`.
-4. O blob criptografado e persistido em OPFS.
-5. `db.worker.js` abre o banco local e passa a responder buscas e detalhes localmente.
-6. `coi-serviceworker.js` aquece o cache do app shell para reabertura sem rede.
-7. `BroadcastChannel` coordena instalacao, atualizacao e remocao entre varias abas.
-
-Escopo offline efetivo:
-
-- `NESH`, `TIPI`, `NBS` e `NEBS`: busca e leitura local apos instalacao.
-- autenticacao, comentarios, perfil e chat IA: degradam quando offline, sem quebrar a UI base.
-
-## 5) Contratos HTTP Relevantes
-
-Rotas principais:
-
-- `GET /api/search`
-- `GET /api/chapters`
-- `GET /api/nesh/chapter/{chapter}/notes`
-- `GET /api/glossary`
-- `GET /api/tipi/search`
-- `GET /api/tipi/chapters`
-- `GET /api/status`
-- `GET /api/database/version`
-- `GET /api/cache-metrics` (admin)
-- `GET /api/debug/anchors` (debug_mode + admin)
-- `GET /api/auth/me` (`authenticated`, `can_use_ai_chat`, `can_use_restricted_ui`)
-- `POST /api/database/token`
-- `POST /api/database/download`
-- `POST /api/ai/chat` (Rate Limited 5req/min, Auth Required, allowlist por email)
-- `POST /api/webhooks/asaas` (Provisiona Tenants localmente)
-
-Regras de compatibilidade importantes:
-
-- respostas de codigo mantem `results` e `resultados`.
-- TIPI usa `view_mode` estrito (`family`, `chapter`).
-- `client/src/types/api.types.ts` e manual (sem codegen OpenAPI ativo).
-
-## 6) Dados, Ingestao e Persistencia
-
-### 6.1 PostgreSQL (Primary State)
-
-- Motor primário atual para os dados (habilitado por `DATABASE__ENGINE=postgresql`).
-- Configurado via `DATABASE__POSTGRES_URL` em prod/dev.
-- Controle de Schema estrito gerenciado por Alembic migrations (`migrations/`).
-- Engine RLS (Row-Level Security) ativo: `db_engine` injeta `app.current_tenant` da request via contextvar nas operações.
-
-### 6.2 SQLite local (Modo Desacoplado Dev/Fallback)
-
-- NESH: `database/nesh.db`
-- TIPI: `database/tipi.db`
-- Servicos: `database/services.db`
-- Serviço `NeshService` possui fallback para SQLite em caso de modo Legacy de Ingestão (offline fallback mode), através do `DatabaseAdapter` original.
-- Cuidado: Não é o target para transações reais de negócios como criação de Assinaturas e Usuários B2B.
-
-### 6.3 Artefato offline do navegador
-
-- `database/fiscal_offline.enc`
-- `database/fiscal_offline.meta`
-- gerados por `scripts/build_offline_db.py`
-- tratados como artefatos de release/deploy, nao como entrada manual do usuario final
-- o pacote fornece integridade e distribuicao controlada, nao sigilo forte contra o proprio usuario
-
-### 6.4 Fontes de arquivos
-
-- NESH: `data/Nesh.txt` ou `data/Nesh.zip` (setup principal), e variante `data/debug_nesh/Nesh.txt` (rebuild alternativo).
-- TIPI: `data/tipi.xlsx`.
-- Glossario: `backend/data/glossary_db.json`.
-
-## 7) Seguranca e Tenancy
-
-- **Hardcoded Secrets Restritos**: Nenhuma credencial inserida no código; todas são injetadas (leia `SECRETS_POLICY.md` para regras ativas).
-- Middleware `TenantMiddleware` protege rotas `/api/*` (exceto `/api/auth/me`, `/api/webhooks`, `/api/status`).
-- JWT Clerk (`RS256` + `JWKS`):
-  - Autenticação migrou do session legada (desabilitada) para validação local assíncrona do JWKS (`AUTH__CLERK_DOMAIN`).
-  - Cache local de tokens JWKS válidos (60s).
-- Rate Limit & Anti-abuso:
-  - Rotas pesadas como `ai/chat` impõem limite via `SlidingWindowRateLimiter` (`ai_chat_rate_limiter`). Cache via Redis na infraestrutura é alvo previsto.
-- Multi-tenant:
-  - `org_id` extraído do JWT para o `tenant_context`.
-  - Provisioning Best-Effort (sincronização fantasma) de entidades DB locais após verificação de autenticidade JWT.
-- Webhook Asaas para Pagamentos:
-  - Gera triggers para criação automática/ativação de tenants (`Subscription`).
-- Hardening ativo no frontend:
-  - HTML backend-rendered/markdown legado passa por sanitização central em `client/src/utils/contentSecurity.ts`.
-  - Links só aceitam protocolos seguros e links externos recebem `rel="noopener noreferrer"`.
-  - Imagens inseguras são descartadas; imagens válidas recebem `loading="lazy"`, `decoding="async"` e `referrerpolicy="no-referrer"`.
-  - `api.ts` usa `withCredentials: false`; o fluxo autenticado depende do header `Authorization`, não de cookies implícitos.
-  - O Clerk permanece em `development` enquanto o projeto não tiver domínio próprio/plano pago; isso é tratado como estado temporário e o hardening do cliente deve continuar garantindo que nada sensível dependa de configuração do front-end.
-- Autorização/gating de UI no frontend:
-  - `AuthContext` deriva `isAdmin` de `membership.role` do Clerk via `hasPrivilegedRole`.
-  - roles reconhecidas: `admin`, `owner`, `superadmin`, inclusive formatos compostos como `org:admin`.
-  - `AuthContext` também consome `/api/auth/me` para expor capacidades como `canUseAiChat` e `canUseRestrictedUi`.
-  - allowlists de chat IA/UI restrita ficam no backend (`SECURITY__AI_CHAT_ALLOWED_EMAILS` e `SECURITY__RESTRICTED_UI_ALLOWED_EMAILS`), não no bundle público.
-
-## 8) Cache e Performance (estado atual)
-
-Camadas de cache:
-
-1. L1 service cache (in-memory) em `NeshService` e `TipiService`.
-2. L2 Redis opcional (`backend/infrastructure/redis_client.py`) para chapter/FTS.
-3. Payload cache de rota (`/api/search`, `/api/tipi/search`) com corpo pre-serializado e gzip precomputado.
-4. Cache frontend em `client/src/services/api.ts` (memoria + localStorage + dedup in-flight).
-
-Notas:
-
-- compressao usa `compresslevel=1` na pratica (middleware + caches de rota).
-- `PerformanceConfig.GZIP_COMPRESSION_LEVEL=6` em constantes nao e a fonte ativa.
-
-## 9) Frontend: Contratos Operacionais
-
-- `ResultDisplay` e o orquestrador de render/autoscroll/persistencia de scroll.
-- NESH preferencialmente chega pre-renderizado no campo `markdown` (HTML do backend).
-- Todo HTML renderizado por `ResultDisplay` e `MarkdownPane` deve passar pelo pipeline de sanitização/hardening antes de entrar no DOM.
-- Fallbacks existem:
-  - NESH fallback em `NeshRenderer.renderFullResponse`.
-  - TIPI fallback em `renderTipiFallback`.
-- Sidebar virtualizada (`react-virtuoso`) usa anchors e codigos normalizados.
-- Notas cross-chapter usam cache dedicado (`CrossChapterNoteContext`).
-- NBS usa `service-smart-link` para códigos destacados, navegação por prefixo na busca e um painel interno de explicações do capítulo, com preferência de abrir em nova aba controlada por `SettingsContext`.
-- As notas oficiais da NBS usadas no painel de explicações sao extraidas do PDF oficial e materializadas em `client/src/data/nbsChapterNotes.json`.
-
-## 10) Testes e CI (estado real)
-
-Local:
-
-- Backend default: `uv run pytest -q` (sem `perf` e `snapshot` por padrao).
-- Frontend default: `cd client && npm run test`.
-- Frontend type-check: `cd client && npm run type-check`.
-- Bootstrap Windows local completo: `.\testar_tudo_local.bat`.
-- Validacao dedicada de auth env (backend): `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate_auth_env.ps1`.
-- Testes de performance existem, mas sao opt-in.
-- Existe cobertura de contratos de rota, renderer, middleware e hooks.
-- Cobertura offline relevante:
-  - `tests/unit/test_database_download_route.py`
-  - `client/src/workers/workerUtils.test.ts`
-  - `client/tests/unit/useSearch.test.tsx`
-  - `client/tests/unit/useSearch.behavior.test.tsx`
-  - `client/tests/e2e/services-tabs.flow.test.tsx`
-- Snapshot observado em 2026-03-09:
-  - frontend: `46` arquivos / `270` testes passando
-  - novas suítes cobrindo `contentSecurity`, `authz`, `MarkdownPane`, `ModalManager`, `AuthContext`, `ResultDisplay`, `AppSearch`
-
-CI observado em `.github/workflows/tests.yml`:
-
-- Job backend:
-  - Python `3.14`
-  - `uv sync --group dev`
-  - `uv run ruff format --check`
-  - `uv run ruff check`
-  - `uv run pyright migrations`
-  - `uv run pylint migrations/env.py migrations/versions/001_initial.py migrations/versions/006_precomputed_columns_and_gin.py --disable=all --enable=E,F --disable=E0401,E1101`
-  - `uv run pytest -q --cov=backend --cov-report=xml --cov-report=term-missing --cov-fail-under=70`
-- Job frontend:
-  - Node `24`
-  - `npm ci`
-  - `npm run lint`
-  - `npm run type-check`
-  - `npm run test:coverage`
-
-CI adicional em `.github/workflows/megalinter.yml`:
-
-- `pull_request` (`PR Smart`): `VALIDATE_ALL_CODEBASE=false` e linters/scanners selecionados para diff de PR.
-- `workflow_dispatch` e `schedule` (`Full Audit`): `VALIDATE_ALL_CODEBASE=true` para varredura completa.
-- `PYTHON_PYLINT` e `PYTHON_PYRIGHT` ficam fora do PR Smart e sao cobertos no workflow de testes do backend.
-- GitHub Pages:
-  - publicacao do frontend estatico por GitHub Actions.
-  - o project site deste repo usa o path-base `/FiscalConsultas/`.
-  - a origem publica esperada no backend e `https://ysraestudos.github.io`.
-
-## 11) Drift Documental (status atual)
-
-Status:
-
-1. README, `TESTING.md` e este contexto foram sincronizados em 2026-04-15 com o fluxo local `testar_tudo_local.bat`, o pacote offline do navegador e o deploy cloud-first.
-2. O ponto de atencao atual e manter capacidades de UI restrita documentadas como derivadas de `/api/auth/me`, com allowlist real no backend.
-3. Outro ponto de atencao e manter este documento sincronizado quando o contrato do modo offline ou o escopo do `PR Smart` mudar.
-
-## 12) Divida Tecnica Estrutural (resumo)
-
-1. Dominio duplicado (`TypedDict` + response models SQLModel) em paralelo.
-2. Parser/regex fragmentado entre runtime e scripts de ingestao.
-3. Servicos hibridos com bifurcacao legado vs repository no mesmo modulo.
-4. Split-brain de renderizacao (backend + fallback frontend).
-5. Uso elevado de `any` em pontos centrais de frontend.
-6. `sys.path.append/insert` em scripts e imports de fallback.
-7. Contrato de callback de autoscroll desalinhado entre `App.tsx` e `ResultDisplay.tsx`.
-8. Endpoint `/api/debug/anchors` tenta ler `markdown` direto do service, mas renderer principal roda na rota `/api/search`.
-9. NBS/NEBS ainda compartilham parte do fluxo de renderizacao, mas a interface ganhou um painel dedicado de explicacoes por capitulo e expande prefixos NBS quando a configuracao esta ligada.
-
-## 13) Setup / Comandos Recomendados
-
-### Backend
-
-Opcao A (pyproject/uv):
-
-```powershell
-uv sync --group dev
-uv run Nesh.py
-```
-
-Opcao B (venv + install local):
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -e .
-python Nesh.py
-```
-
-Observacoes:
-
-- `requirements.txt` e `requirements-dev.txt` nao existem neste snapshot.
-- `pyproject.toml` define `requires-python = ">=3.13"`.
-
-### Frontend
-
-```powershell
-cd client
-npm ci
-npm run dev
-```
-
-### Dados SQLite
-
-```powershell
-uv run scripts/setup_tipi_database.py
-$env:PYTHONUTF8="1"; uv run scripts/setup_database.py
-$env:PYTHONUTF8="1"; uv run scripts/setup_fulltext.py
-uv run scripts/setup_nbs_database.py
-uv run scripts/setup_nebs_database.py
-uv run scripts/build_offline_db.py
-```
-
-### Bootstrap Windows assistido
-
-```powershell
-.\testar_tudo_local.bat
-```
-
-Notas:
-
-- o script atual sobe backend FastAPI na porta `8000` e frontend Vite na porta `5173`.
-- o script cria `client/.env.development.local` apontando para `http://127.0.0.1:8000`.
-- o frontend so e iniciado depois que o backend responde, para evitar `502` no proxy local.
-- o script desliga Redis no ambiente local (`CACHE__ENABLE_REDIS=false`) para nao bloquear o bootstrap.
-
-## 14) Regras para Mudancas por IA
-
-Do:
-
-- Preservar contratos legados (`results` + `resultados`) enquanto frontend depender.
-- Manter compatibilidade de IDs de anchor (`generate_anchor_id`/`generateAnchorId`).
-- Atualizar docs em conjunto com mudancas de fluxo/contrato.
-
-Don't:
-
-- Nao remover fallbacks sem plano de migracao e testes.
-- Nao mudar formato de `view_mode` da TIPI sem alinhar frontend + testes.
-- Nao assumir que um unico renderer e usado em todos os caminhos hoje.
-
-## 15) Prioridades de Refatoracao (explicacao simples)
-
-1. Corrigir callback de autoscroll.
-Motivo simples: e como etiquetar a caixa certa antes de guardar o brinquedo.
-2. Escolher uma fonte principal de render por fluxo (NESH/TIPI).
-Motivo simples: duas receitas diferentes para o mesmo bolo confundem a cozinha.
-3. Unificar parser de NESH.
-Motivo simples: varias regras diferentes para o mesmo jogo geram briga.
-4. Consolidar modelos de dominio.
-Motivo simples: dois mapas diferentes para o mesmo lugar fazem voce se perder.
-5. Reduzir `any` e dividir componentes grandes.
-Motivo simples: caixas com nome ajudam a achar as coisas rapido.
-
-## 16) Unknown / Nao Consolidado
-
-- Backend cloud (Render + Neon) ja esta operacional; ainda falta consolidar rollout automatizado do artefato offline junto do deploy.
-- Estrategia final de desativacao do alias `resultados` no contrato publico: ainda nao definida.
+# Agent guidelines
+
+## Critical Rules
+
+- Put non-negotiable safety, data, and production constraints first.
+- If a rule is labeled `CAVEAT`, `IMPORTANT`, `DO NOT CHANGE`, or equivalent in project docs, rule files, or nearby code comments, it overrides general best practices.
+- Keep always-loaded instructions concise; move long procedures and domain details into linked or scoped documents.
+
+## Agent Behavior & Workflow
+
+- Self-correction: treat the first iteration as a draft. run the relevant tests or checks to verify the solution. If not, manually review the generated code for obvious edge cases before finishing.
+- Surgical changes: output only the necessary changes. Do not rewrite entire files just to change a few lines.
+
+## Context Routing & Precedence
+
+- Progressive disclosure: before making architectural decisions, inspect the neighboring code to understand local conventions. If project documentation exists, read it too. If docs conflict with the code, treat the code as the source of truth and flag the inconsistency.
+- Context routing: use this file as an entry point, not as the only source of truth. If working on a specific domain, first locate and read that domain’s documentation and nearest analogous implementation before proposing changes.
+- Living context: after any meaningful change, update the relevant context files so a future session can understand the current state without rediscovery.
+
+## Code style
+
+**Performance baseline**
+- Default to `O(1)` lookups. Use Sets for uniqueness checks and Maps/Dicts for key-value grouping.
+- Never use nested loops (`O(n^2)`) for data transformation if a flat approach with a hash map is possible.
+
+**Functions**
+- 2–20 lines per function. Split anything longer by responsibility.
+- One function, one job. If you need "and" to describe it, split it.
+- Early returns over nested ifs. Max 2 levels of indentation inside a function body.
+
+**Files**
+- Under 500 lines. Split by responsibility, not by size alone.
+- One module, one responsibility (SRP). No god files.
+- Predictable paths: follow the framework convention (`controller/model/view`,
+  `src/lib/test`, etc.).
+
+**Naming**
+- Names must be specific and unique. Avoid `data`, `handler`, `Manager`, `utils`, `helpers`.
+- A good name returns fewer than 5 `grep` hits across the codebase.
+- Boolean names start with `is`, `has`, or `can` (`isLoading`, `hasPermission`).
+
+**Types**
+- Explicit types everywhere. No `any`, no untyped `Dict`, no untyped function signatures.
+- Prefer domain types over primitives: `UserId` over `string`, `Price` over `number`.
+
+**Duplication & indirection**
+- No copy-pasted logic. Extract shared behaviour into a named function or module.
+- Three identical call sites is a heuristic for extraction, not a mandate — extract on the third occurrence only when the copies share the same domain and intent; otherwise prefer deliberate duplication over artificial coupling.
+
+**Error messages**
+- Always include the offending value and the expected shape.
+  - Bad: `raise ValueError("Invalid input")`
+  - Good: `raise ValueError(f"Expected ISO-8601 date, got {value!r}")`
+
+## Comments
+
+- Keep every comment you write. Do not strip comments during refactors — they carry
+  intent and provenance.
+- Write **why**, not what. Skip `// increment counter` above `i++`.
+- Docstrings on every public function: state the intent and include one usage example.
+- When a line exists because of a specific bug or upstream constraint, reference
+  the issue number or commit SHA inline.
+  ```python
+  # Workaround for upstream bug: github.com/org/lib/issues/42 (fixed in v2.1, pending upgrade)
+  ```
+
+## Tests
+
+- All tests run with a single command. Document that command at the top of the README.
+- Every new function gets a test. Every bug fix gets a regression test.
+- Mock external I/O (API, DB, filesystem) with named fake classes, not inline stubs.
+  ```python
+  class FakePaymentGateway:      # not: mock.patch("stripe.charge")
+      def charge(self, amount): ...
+  ```
+- Tests must be F.I.R.S.T:
+  - **Fast** — no real network or disk I/O.
+  - **Independent** — no shared mutable state between tests.
+  - **Repeatable** — same result on any machine, any run order.
+  - **Self-validating** — pass or fail, no human interpretation required.
+  - **Timely** — written alongside the code, not after the PR is merged.
+- Name tests so the failure message is a complete sentence:
+  `test_order_total_includes_tax_when_region_is_eu`
+
+## Error handling
+
+- Handle errors at the boundary where you have enough context to act.
+- Do not swallow exceptions silently. Log or re-raise with added context.
+- Distinguish recoverable errors (retry/fallback) from programming errors (panic/crash).
+- Never use exceptions for control flow in the happy path.
+
+## Dependencies
+
+- Inject dependencies through the constructor or function parameters. No globals,
+  no module-level singletons.
+- Wrap every third-party library behind a thin interface owned by this project.
+  Internals depend on that interface, not on the library directly. Swapping the
+  vendor requires changing only the adapter.
+- Pin dependency versions in lock files. Review diffs on upgrades.
+
+## Structure
+
+- Follow the framework's established layout (Rails, Django, Next.js, etc.).
+- Small, focused modules over large, catch-all files.
+
+## Formatting
+
+Run the language-default formatter before every commit. Do not discuss style
+beyond what the formatter enforces.
+
+| Language   | Formatter         |
+|------------|-------------------|
+| Rust       | `cargo fmt`       |
+| Go         | `gofmt`           |
+| JavaScript | `prettier`        |
+| Python     | `black`           |
+| Ruby       | `rubocop -A`      |
+
+If there is no formatter, agree on one and add it to CI.
+
+## Logging
+
+- **Structured JSON** for all internal/observability logs. Include a `level`,
+  `timestamp`, and a `context` object with relevant IDs on every line.
+- **Plain text** only for user-facing CLI output.
+- Log at the right level: `DEBUG` for tracing, `INFO` for lifecycle events,
+  `WARN` for recoverable issues, `ERROR` for failures that need attention.
+- Never log secrets, tokens, PII, or raw request bodies.
+
+## Security
+
+- Validate and sanitise all input at the entry point (API boundary, CLI args, env vars).
+- Never interpolate user input into queries, shell commands, or HTML. Use
+  parameterised queries and escaping utilities.
+- Secrets come from environment variables or a secrets manager. Never hard-code
+  them, never commit them.
+- Apply least-privilege: request only the permissions a module actually needs.
+
+## Git hygiene
+
+- One logical change per commit. Commits must build and pass tests in isolation.
+- Commit message format: `<type>(<scope>): <short imperative summary>`
+  Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`.
+- PR descriptions state **why** the change is needed, not just what changed.
+- Do not merge with failing CI.

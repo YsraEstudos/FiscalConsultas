@@ -38,13 +38,59 @@
 - Concluído: movi o ponto principal de execução do NESH para o método canônico `executeNeshSearchWithVectorWeights`, mantendo `process_request` como alias de compatibilidade.
 - Concluído: alinhei a rota `/api/search` para chamar o método canônico do serviço.
 - Validado: `pytest tests/unit/test_nesh_service_additional.py tests/integration/test_search_route_contracts.py` passou com sucesso.
-- Concluído: renomeei o handler principal da rota de busca para `handleGlobalFiscalSearchRequest`, mantendo alias legado `search` para compatibilidade.
-- Validado: teste de alias do handler e contratos da rota de busca aprovados no mesmo lote.
-- Concluído: extraí validação de query e construção de contexto de cache da rota `/api/search` para helpers dedicados, reduzindo responsabilidade do handler principal.
-- Validado: `pytest tests/unit/test_cache_key_normalization.py tests/integration/test_search_route_contracts.py` passou com sucesso após a extração.
-- Backlog aberto: aplicar o fluxo de análise arquivo por arquivo nos hotspots mais críticos e registrar os nomes genéricos encontrados em cada um.
-- Backlog aberto: transformar os nomes canônicos sugeridos em renomes efetivos somente depois de validar colisões textuais e dependências cruzadas.
-- Próximo passo: continuar o lote P0 na rota principal (`backend/presentation/routes/search.py`) com extração de blocos para reduzir responsabilidades da função longa.
+- Concluído: refatorei `backend/presentation/routes/search.py`, removi o alias legado `search` e mantive `handleGlobalFiscalSearchRequest` como nome canônico público.
+- Concluído: renomeei os handlers auxiliares da mesma rota para `listNeshChapters`, `fetchNeshChapterNotes`, `fetchNeshChapterBody` e `lookupGlossaryDefinition`.
+- Concluído: extraí helpers específicos para rate limit, normalização de cache, shaping de resposta, serialização e gzip, reduzindo a responsabilidade concentrada do handler principal.
+- Concluído: corrigi o fallback de cache para respostas `type="code"` vindas de queries textuais, usando chave de cache consistente com `shape`.
+- Validado: `pytest tests/unit/test_cache_key_normalization.py tests/integration/test_search_route_contracts.py tests/unit/test_system_routes_endpoints.py` passou com sucesso após a refatoração.
+- Concluído: renomeei o accessor de métricas da busca para `snapshotSearchCodePayloadCacheMetrics` e atualizei `backend/presentation/routes/system.py` para consumir o novo nome.
+- Concluído: refatorei `backend/presentation/routes/tipi.py`, removendo aliases implícitos, renomeando handlers públicos para nomes específicos e separando normalização, cache, gzip e highlights.
+- Concluído: renomeei o accessor de métricas da TIPI para `snapshotTipiCodePayloadCacheMetrics` e atualizei `backend/presentation/routes/system.py` para consumir o novo nome.
+- Concluído: atualizei os testes de highlights, adicionei cobertura unitária para normalização/cache da TIPI e mantive o contrato da rota de busca intacto.
+- Validado: `pytest tests/unit/test_tipi_route_cache_key_normalization.py tests/unit/test_tipi_route_highlights.py tests/unit/test_system_routes_endpoints.py` passou com sucesso.
+- Concluído: refatorei `backend/services/tipi_service.py`, renomeando a superfície pública para `initializeTipiServiceWithRepositoryFactory`, `searchTipiByNcmCode`, `searchTipiByTextQuery`, `fetchTipiChapterCatalog`, `probeTipiCatalogHealth` e `snapshotTipiInternalCacheMetrics`.
+- Concluído: extraí responsabilidades reais do serviço TIPI para o pacote `backend/services/tipi/`, separando health probe e pipeline de busca/cache em módulos menores e mantendo `TipiService` como fachada compatível.
+- Concluído: reduzi `backend/services/tipi_service.py` para 379 linhas e preservei os aliases de migração e helpers privados ainda exercitados pela suíte, para não quebrar a transição entre chamadores antigos e novos.
+- Validado: `pytest tests/unit/test_tipi_service_additional.py tests/integration/test_tipi_service_contract.py tests/unit/test_system_routes_endpoints.py tests/unit/test_app_lifespan_additional.py tests/integration/test_tipi_api_integration.py --basetemp .pytest_tmp` passou com sucesso.
+- Adiado: remoção final dos aliases legados de `TipiService` e a troca dos últimos helpers privados genéricos dependem de um passe posterior quando os testes deixarem de depender desses nomes.
+- Concluído: extraí o serviço NESH para o pacote `backend/services/nesh/`, separando capítulos/cache e FTS em módulos próprios e reduzindo `backend/services/nesh_service.py` para 270 linhas sem quebrar o contrato público.
+- Concluído: removi o fallback com `sys.path` de `backend/services/nesh_service.py`, alinhando o serviço às regras do `AI_CONTEXT.md` sobre imports estáveis e previsíveis.
+- Concluído: fechei os últimos helpers internos genéricos do NESH em `backend/services/nesh/chapters.py` e `backend/services/nesh/fts.py`, renomeando o pipeline de capítulos, cache e FTS para nomes específicos.
+- Validado: `pytest tests/unit/test_nesh_service_additional.py tests/integration/test_search_route_contracts.py tests/unit/test_system_routes_endpoints.py tests/unit/test_app_lifespan_additional.py --basetemp .pytest_tmp` passou com sucesso.
+- Adiado: a remoção final da ponte de compatibilidade `_fts_scored_cached` na fachada `NeshService` fica para quando a suíte parar de monkeypatchar esse nome.
+- Concluído: refatorei `backend/presentation/routes/system.py`, extraindo normalização/coleta de status para `backend/presentation/routes/system_status.py` e serialização Prometheus para `backend/presentation/routes/system_metrics.py`.
+- Concluído: reduzi `backend/presentation/routes/system.py` para 244 linhas, mantendo aliases privados compatíveis para a suíte e aplicando o mesmo limite de rate no `HEAD /status`.
+- Validado: `pytest tests/unit/test_system_route_helpers.py tests/unit/test_system_routes_endpoints.py tests/integration/test_search_route_contracts.py tests/unit/test_app_lifespan_additional.py --basetemp .pytest_tmp` passou com sucesso.
+- Adiado: renomear definitivamente endpoints e helpers genéricos de `system.py` como `get_status`, `get_metrics`, `get_cache_metrics` e `_to_int` fica para o próximo passe de nomenclatura, porque a suíte ainda os referencia diretamente.
+- Concluído: reconstruí `backend/server/app.py` como uma fachada fina, separando startup/shutdown em `app_lifecycle.py`, segurança em `app_security.py` e montagem de rotas em `app_routes.py`.
+- Concluído: removi os aliases legados públicos de `backend/presentation/routes/system.py` e `backend/services/nesh_service.py`, atualizando os testes para os nomes canônicos.
+- Validado: `python -m pytest tests/unit/test_app_lifespan_additional.py tests/unit/test_system_route_helpers.py tests/unit/test_system_routes_endpoints.py tests/unit/test_nesh_service_additional.py tests/integration/test_search_route_contracts.py tests/unit/test_nesh_entrypoint.py --basetemp .pytest_tmp` passou com sucesso.
+- Adiado: a próxima rodada de nomenclatura pode avançar para os módulos auxiliares de NESH (`backend/services/nesh/chapters.py` e `backend/services/nesh/fts.py`) se quisermos renomear os helpers internos remanescentes.
+- Concluído: extraí os helpers puros de rede e contexto de request para `backend/server/middleware_context.py` e `backend/server/middleware_network.py`, além do bloco de JWT/provisionamento para `backend/server/middleware_jwt_support.py`.
+- Concluído: enxuguei `backend/server/middleware.py` para mantê-lo como fachada compatível e ponto de montagem da `TenantMiddleware`, preservando os caches e os símbolos públicos ainda usados pelos testes.
+- Validado: `python -m py_compile backend/server/middleware.py backend/server/middleware_context.py backend/server/middleware_network.py backend/server/middleware_jwt_support.py` passou com sucesso.
+- Validado: `pytest tests/unit/test_middleware_additional.py tests/unit/test_middleware_jwt_cache.py tests/unit/test_app_lifespan_additional.py tests/unit/test_system_routes_endpoints.py --basetemp .pytest_tmp` passou com sucesso.
+- Adiado: a renomeação final dos helpers stateful do middleware fica para um passe posterior, quando a suíte deixar de depender dos nomes internos antigos.
+- Concluído: refatorei `backend/presentation/renderer.py`, extraindo cache/regex para `backend/presentation/renderer_patterns.py`, transforms para `backend/presentation/renderer_text.py` e estrutura/renderização para `backend/presentation/renderer_structure.py`.
+- Concluído: reduzi `backend/presentation/renderer.py` para 198 linhas e preservei a compatibilidade dos pontos de monkeypatch usados pela suíte, incluindo o fallback dinâmico do `glossary_manager`.
+- Concluído: adicionei o alias `total` ao payload da rota TIPI para manter o contrato de integração enquanto `total_capitulos` continua sendo o campo canônico interno.
+- Validado: `pytest tests/unit/test_renderer_additional.py tests/unit/test_renderer_cleanup.py tests/unit/test_renderer_regex.py tests/performance/test_benchmark_renderer.py tests/unit/test_tipi_route_highlights.py tests/unit/test_cache_key_normalization.py tests/integration/test_search_route_contracts.py tests/integration/test_tipi_api_integration.py --basetemp .pytest_tmp` passou com sucesso.
+- Concluído: refatorei `backend/services/nbs_service.py`, extraindo bootstrap, cache, health e lógica SQLite para `backend/services/nbs/` e reduzindo a fachada para 183 linhas.
+- Concluído: atualizei os chamadores de NBS para os nomes canônicos `searchNbsCatalogEntries`, `fetchNbsCatalogItemDetails`, `fetchNbsCatalogTreePage`, `searchNbsExplanatoryEntries`, `fetchNbsExplanatoryEntryDetails` e `probeNbsCatalogHealth`.
+- Concluído: limpei os últimos helpers de rota em `backend/presentation/routes/services.py` e `backend/presentation/routes/system_status.py`, alinhando-os ao contrato canônico da camada NBS.
+- Validado: `python -m pytest tests/unit/test_nbs_service.py tests/integration/test_services_route_contract.py tests/unit/test_system_routes_endpoints.py tests/unit/test_app_lifespan_additional.py --basetemp .pytest_tmp` passou com sucesso.
+- Adiado: remover os aliases legados de `NbsService` e reescrever os testes que ainda exercitam os nomes antigos fica para um lote posterior, depois que a migração de callers estiver totalmente estável.
+- Concluído: refatorei `backend/infrastructure/repositories/nbs_repository.py`, dividindo a persistência NBS em módulos menores e renomeando a superfície pública para `load_nbs_catalog_entries`, `load_nbs_catalog_item_details`, `load_nbs_catalog_tree_page`, `load_nbs_explanatory_entries`, `load_nbs_explanatory_entry_details`, `snapshot_nbs_catalog_counts` e `snapshot_nbs_catalog_metadata`.
+- Validado: `python -m pytest tests/unit/test_nbs_repository.py tests/unit/test_nbs_service.py tests/integration/test_services_route_contract.py tests/unit/test_system_routes_endpoints.py tests/unit/test_app_lifespan_additional.py --basetemp .pytest_tmp` passou com sucesso.
+- Concluído: adicionei `client/tests/playwright/comments-flow.spec.ts` cobrindo o fluxo crítico de comentários em desktop, mobile e moderação admin com mocks determinísticos de Clerk e das APIs de comentário.
+- Concluído: ampliei `client/tests/unit/App.behavior.test.tsx` e `client/tests/unit/ResultDisplay.advanced.test.tsx` para cobrir estados de acesso a serviços, download offline, callbacks de perfil/moderação e variações de sidebar/comentários; `App.tsx` e `ResultDisplay.tsx` chegaram a 100% de linhas.
+- Validado: `npm run test -- tests/unit/App.behavior.test.tsx tests/unit/ResultDisplay.advanced.test.tsx tests/unit/ResultDisplay.test.tsx` e `npm run test:e2e -- tests/playwright/comments-flow.spec.ts` passaram com sucesso.
+- Concluído: normalizei os testes legados de `Header`, `UserProfilePage` e `services-tabs`, ajustei o timeout do fluxo de deleção do perfil e `npm run test:coverage` voltou a passar.
+- Pendente: se quisermos elevar a cobertura além do estado atual, os próximos alvos saem de `App.tsx`/`ResultDisplay.tsx` e passam para os arquivos que ainda aparecem abaixo de 100% no relatório geral.
+- Concluído: executei a Fase 1 dos contratos frontend, separando `client/src/types/api.types.ts` em módulos menores (`apiCommon.types.ts`, `apiSearch.types.ts`, `apiServices.types.ts`) e movendo os guards de runtime para `client/src/types/apiResponseGuards.ts`.
+- Concluído: refatorei `client/src/utils/nbsChapterNotes.ts` com nomes canônicos (`buildNbsChapterNotesMarkup`, `resolveNbsChapterNumberFromCode`, `lookupNbsChapterNotesEntry`, `buildNbsChapterNotesDocumentHtml`, `openNbsChapterNotesPreviewWindow`) e deixei aliases de transição documentados como deprecated.
+- Validado: `npm exec -- vitest run tests/unit/api.types.guards.test.ts src/utils/nbsChapterNotes.test.ts tests/unit/searchResultMarkup.test.ts tests/unit/useSearch.test.tsx tests/unit/ServicesTabContent.test.tsx`, `npm exec -- tsc --noEmit` e `npm run test:coverage` passaram com sucesso.
+- Estado após Fase 1: `client/src/utils/nbsChapterNotes.ts` chegou a 100% de linhas; `client/src/types/api.types.ts` virou fachada declarativa; os próximos hotspots do lote continuam sendo `client/src/context/LocalDatabaseContext.tsx` e `client/src/services/api.ts`.
 
 ## Protocolo de Execução
 
@@ -95,7 +141,7 @@
 
 ### Diagnóstico Rápido
 
-- Hotspots de tamanho: `backend/presentation/renderer.py` (1180 linhas), `backend/server/middleware.py` (1176), `backend/services/nbs_service.py` (1149), `backend/services/nesh_service.py` (920), `backend/presentation/routes/system.py` (875).
+- Hotspots de tamanho: `backend/server/middleware.py` (631), `backend/services/nesh_service.py` (270), `backend/presentation/routes/system.py` (244).
 - Hotspots de frontend: `client/src/components/ResultDisplay.tsx` (1865), `client/src/workers/db.worker.js` (1553), `client/src/services/api.ts` (1105), `client/src/context/LocalDatabaseContext.tsx` (946), `client/src/components/ServicesWorkspace.module.css` (908), `client/src/components/SearchHighlighter.tsx` (822), `client/src/App.tsx` (803).
 - Complexidade React: `ResultDisplay.tsx` concentra muitos efeitos e lógica de scroll, seleção e fallback.
 - Dívida de scripts: muitos arquivos em `scripts/` e testes usam `sys.path.append/insert`.
@@ -105,7 +151,7 @@
 
 | Prioridade sugerida | Função | Arquivo | Linhas | Motivo resumido |
 | --- | --- | --- | --- | --- |
-| P0 | `search` | `backend/presentation/routes/search.py` | 145 | rota crítica, ponto de entrada principal |
+| P0 | `handleGlobalFiscalSearchRequest` | `backend/presentation/routes/search.py` | 106 | rota crítica, ponto de entrada principal |
 | P0 | `run_full_migration` | `scripts/migrate_to_postgres.py` | 115 | migração de dados sensível e longa |
 | P1 | `_consolidate_databases` | `scripts/build_offline_db.py` | 292 | núcleo offline com alto acoplamento |
 | P1 | `upgrade` | `migrations/versions/012_services_catalog_postgres.py` | 149 | migration grande, precisa segmentação |
@@ -137,7 +183,7 @@ Esses nomes entram no próximo lote de corte e extração, em ordem de impacto r
 - [ ] Eliminar a duplicação de cache/gzip nas rotas de busca.
   - Problema: `backend/presentation/routes/search.py` e `backend/presentation/routes/tipi.py` têm payloads quase copiados.
 - [ ] Quebrar os arquivos tipo god class/god component.
-  - Problema: `renderer.py`, `nesh_service.py`, `tipi_service.py` e `ResultDisplay.tsx` acumulam responsabilidades demais.
+  - Problema: `ResultDisplay.tsx` ainda concentra scroll, seleção e fallback em um componente grande.
 - [ ] Alinhar a geração de `anchor_id` entre backend e frontend.
   - Problema: a estratégia de idempotência não é igual nas duas camadas.
 - [ ] Remover hacks de path/import e ruído de debug.
@@ -160,9 +206,8 @@ Esses nomes entram no próximo lote de corte e extração, em ordem de impacto r
 
 ### Backend acima de 800 linhas
 
-- `backend/presentation/renderer.py` - 1180 linhas
-- `backend/server/middleware.py` - 1176 linhas
-- `backend/services/nbs_service.py` - 1149 linhas
+- `backend/server/middleware.py` - 631 linhas
+- `backend/services/nbs_service.py` - 183 linhas (fachada após split)
 - `backend/services/nesh_service.py` - 920 linhas
 - `backend/presentation/routes/system.py` - 875 linhas
 
