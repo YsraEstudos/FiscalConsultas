@@ -168,6 +168,17 @@ class DatabaseAdapter:
             logger.error(f"Erro ao verificar DB: {exc}")
             return None
 
+    async def get_all_chapters_list(self) -> List[str]:
+        """Returns the ordered list of chapter numbers."""
+        async with self.get_connection() as conn:
+            cursor = await conn.execute(
+                "SELECT chapter_num FROM chapters ORDER BY chapter_num"
+            )
+            rows = await cursor.fetchall()
+            chapters = [row["chapter_num"] for row in rows]
+            logger.debug(f"Listados {len(chapters)} capítulos")
+            return chapters
+
     async def get_chapter_raw(self, chapter_num: str) -> Optional[Dict[str, Any]]:
         return await self._search.get_chapter_raw(chapter_num)
 

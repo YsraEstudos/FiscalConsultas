@@ -257,7 +257,7 @@ class RedisCache:
         try:
             shared = await future
         except Exception:
-            self._logger.debug("Inflight cache await failed", exc_info=True)
+            logger.debug("Inflight cache await failed", exc_info=True)
             return None, None
         return shared, self._finish_cache_stats(
             stats,

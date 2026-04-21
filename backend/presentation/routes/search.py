@@ -161,6 +161,10 @@ def get_payload_cache_metrics() -> dict[str, str | float | int]:
     }
 
 
+def snapshotSearchCodePayloadCacheMetrics() -> dict[str, str | float | int]:
+    return get_payload_cache_metrics()
+
+
 def _build_cache_headers(cache_key: str, ncm_normalized: str) -> dict[str, str]:
     return {
         "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",

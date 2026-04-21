@@ -128,6 +128,11 @@ class TipiService:
 
         return cls(repository_factory=repo_factory)
 
+    @classmethod
+    async def initializeTipiServiceWithRepositoryFactory(cls) -> "TipiService":
+        """Backward-compatible alias for the refactored repository factory."""
+        return await cls.create_with_repository()
+
     def _get_cache_lock(self) -> asyncio.Lock:
         """Lazy initialization do lock para evitar criação fora do event loop."""
         if self._cache_lock is None:
@@ -298,6 +303,10 @@ class TipiService:
         except Exception as e:
             logger.error(f"TIPI Check Connection failed: {e}")
             return {"ok": False, "error": str(e)}
+
+    async def probeTipiCatalogHealth(self) -> dict[str, Any]:
+        """Backward-compatible alias for catalog health checks."""
+        return await self.check_connection()
 
     def _empty_code_response(self, query: str) -> Dict[str, Any]:
         return {
@@ -780,3 +789,7 @@ class TipiService:
                 "hit_rate": chapter_snapshot.hit_rate,
             },
         }
+
+    async def snapshotTipiInternalCacheMetrics(self) -> Dict[str, Any]:
+        """Backward-compatible alias for internal cache metrics snapshot."""
+        return await self.get_internal_cache_metrics()

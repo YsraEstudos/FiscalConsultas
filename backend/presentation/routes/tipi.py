@@ -119,6 +119,10 @@ def get_payload_cache_metrics() -> dict[str, str | float | int]:
     }
 
 
+def snapshotTipiCodePayloadCacheMetrics() -> dict[str, str | float | int]:
+    return get_payload_cache_metrics()
+
+
 router = APIRouter()
 TIPI_SEARCH_RESPONSES = {
     429: {"description": "Limite de requisições para busca pública excedido."},

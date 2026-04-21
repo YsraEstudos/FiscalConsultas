@@ -129,6 +129,11 @@ class NeshService:
 
         return cls(repository_factory=repo_factory)
 
+    @classmethod
+    async def initializeNeshServiceWithRepositoryFactory(cls) -> "NeshService":
+        """Backward-compatible alias for the refactored repository factory."""
+        return await cls.create_with_repository()
+
     def _get_cache_lock(self) -> asyncio.Lock:
         """Lazy initialization do lock para evitar criação fora do event loop."""
         if self._cache_lock is None:
@@ -878,6 +883,12 @@ class NeshService:
         await asyncio.gather(*(_warm(num) for num in chapter_nums))
         return len(chapter_nums)
 
+    async def prewarmNeshChapterCache(
+        self, chapter_nums: Optional[List[str]] = None, concurrency: int = 10
+    ) -> int:
+        """Backward-compatible alias for chapter cache warmup."""
+        return await self.prewarm_cache(chapter_nums, concurrency)
+
     async def get_internal_cache_metrics(self) -> Dict[str, Any]:
         """
         Snapshot dos caches internos (L1) do serviço.
@@ -918,3 +929,7 @@ class NeshService:
                 "hit_rate": fts_snapshot.hit_rate,
             },
         }
+
+    async def snapshotNeshInternalCacheMetrics(self) -> Dict[str, Any]:
+        """Backward-compatible alias for internal cache metrics snapshot."""
+        return await self.get_internal_cache_metrics()

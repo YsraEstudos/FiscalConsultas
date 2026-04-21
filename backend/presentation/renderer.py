@@ -7,6 +7,7 @@ from html.parser import HTMLParser
 from collections.abc import Mapping
 import re
 
+from ..config.constants import RegexPatterns
 from ..config.logging_config import renderer_logger as logger
 from ..data.glossary_manager import glossary_manager as _default_glossary_manager
 from ..domain import SearchResult
@@ -65,10 +66,7 @@ class HtmlRenderer:
         r"\b(?:exceto|não\s+compreende|nao\s+compreende|exclu[ií]do|exclusive)\b",
         re.IGNORECASE,
     )
-    RE_UNIT = re.compile(
-        r"\b(?:dB|kΩ|Ω|psi|Pa|bar|kg|g|mg|t|m²|m3|cm|mm|km|litros?|ml|l|w|kw|v|kv|hz|°c|m)\b",
-        re.IGNORECASE,
-    )
+    RE_UNIT = re.compile(RegexPatterns.MEASUREMENT_UNITS)
     RE_NESH_INTERNAL_REF = re.compile(r"^\s*XV-\d{4}-\d+\s*$", re.MULTILINE)
     RE_STANDALONE_NCM = re.compile(r"^\s*\d{2}\.\d{2}(?:\.\d{2})?\s*$", re.MULTILINE)
     RE_STRAY_LIST_MARKER = re.compile(r"^\s*-\s*\*?\s*$", re.MULTILINE)

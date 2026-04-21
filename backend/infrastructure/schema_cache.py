@@ -51,14 +51,11 @@ class SchemaCache(Generic[T]):
             )
         """
         now = time.time()
+        signature = resolve_db_signature()
         async with self._lock:
-            if self._entry is not None and (
-                now - self._entry.checked_at < self._ttl_seconds
-            ):
-                return self._entry.value
-
-            signature = resolve_db_signature()
             if self._entry is not None and self._entry.db_signature == signature:
+                if now - self._entry.checked_at < self._ttl_seconds:
+                    return self._entry.value
                 self._entry.checked_at = now
                 return self._entry.value
 

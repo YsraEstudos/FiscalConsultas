@@ -278,14 +278,19 @@ async def _shutdown_resources(app: FastAPI) -> None:
     except Exception as exc:
         logger.warning("Error closing Redis cache: %s", exc)
 
+    if hasattr(app.state, "tipi_service") and app.state.tipi_service:
+        close_tipi_service = getattr(app.state.tipi_service, "close", None)
+        if callable(close_tipi_service):
+            try:
+                await close_tipi_service()
+            except Exception as exc:
+                logger.warning("Error closing TipiService: %s", exc)
+
     if hasattr(app.state, "nbs_service") and app.state.nbs_service:
         try:
             await app.state.nbs_service.shutdownNbsServiceResources()
         except Exception as exc:
             logger.warning("Error closing NbsService: %s", exc)
-
-    if not getattr(app.state, "sqlmodel_enabled", False):
-        return
 
     try:
         from backend.infrastructure.db_engine import close_db

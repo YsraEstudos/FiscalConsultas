@@ -376,6 +376,10 @@ class NbsService:
         finally:
             await self._release_connection(conn)
 
+    async def probeNbsCatalogHealth(self) -> dict[str, Any]:
+        """Backward-compatible alias for catalog health checks."""
+        return await self.check_connection()
+
     async def _get_table_columns(
         self, conn: aiosqlite.Connection, table: str
     ) -> set[str]:
