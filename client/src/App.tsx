@@ -39,6 +39,17 @@ function splitSearchTerms(raw: string): string[] {
 
 const noop = () => { };
 
+function escapeCssIdentifier(value: string): string {
+    if (
+        typeof globalThis.CSS !== 'undefined' &&
+        typeof globalThis.CSS.escape === 'function'
+    ) {
+        return globalThis.CSS.escape(value);
+    }
+
+    return value.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+}
+
 function handleDelegatedSearchNavigation(
     target: Element,
     selector: string,
@@ -55,7 +66,7 @@ function handleDelegatedSearchNavigation(
 
     const value = link.dataset[dataKey];
     if (!value) {
-        return true;
+        return false;
     }
 
     event.preventDefault();
@@ -76,7 +87,7 @@ function handleDelegatedNoteNavigation(
     const noteRef = target.closest('.note-ref');
     if (!(noteRef instanceof HTMLElement)) return false;
     const note = noteRef.dataset.note;
-    if (!note) return true;
+    if (!note) return false;
     event.preventDefault();
     onOpenNote(note, noteRef.dataset.chapter || undefined);
     return true;
@@ -243,8 +254,9 @@ function App() {
         const container = document.getElementById(`results-content-${activeTabId}`);
         if (!container) return false;
 
+        const escapedChapter = chapter ? escapeCssIdentifier(chapter) : '';
         const selectors = [
-            ...(chapter ? [`#chapter-${chapter}-notas`, `#chapter-${chapter}`, `#cap-${chapter}`] : []),
+            ...(chapter ? [`#chapter-${escapedChapter}-notas`, `#chapter-${escapedChapter}`, `#cap-${escapedChapter}`] : []),
             '.section-notas',
             '.regras-gerais'
         ];
@@ -442,7 +454,9 @@ function App() {
                 return;
             }
 
-            handleDelegatedNoteNavigation(target, event, handleOpenNoteRef.current);
+            if (handleDelegatedNoteNavigation(target, event, handleOpenNoteRef.current)) {
+                return;
+            }
         };
 
         document.addEventListener('mousedown', handleDelegatedMiddleMouseDown);

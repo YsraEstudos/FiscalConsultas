@@ -1219,6 +1219,35 @@ describe('App behavior', () => {
     });
   });
 
+  it('keeps note navigation working when a smart-link anchor has no NCM data', async () => {
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        ncm: '8401',
+        results: buildCodeResults({
+          '84': { notas_parseadas: { '1': 'Nota combinada' } },
+        }),
+      }),
+    ]);
+
+    render(<App />);
+
+    const hybridLink = appendSmartLink('');
+    hybridLink.classList.add('note-ref');
+    hybridLink.dataset.note = '1';
+    hybridLink.dataset.chapter = '84';
+
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+    hybridLink.dispatchEvent(clickEvent);
+
+    expect(clickEvent.defaultPrevented).toBe(true);
+    await waitFor(() => {
+      expect(screen.getByTestId('note-panel')).toHaveAttribute('data-open', 'true');
+      expect(screen.getByTestId('note-panel')).toHaveAttribute('data-content', 'Nota combinada');
+    });
+    expect(mocks.executeSearchForTabMock).not.toHaveBeenCalled();
+  });
+
   it('routes delegated service link clicks through the document click handler', async () => {
     setTabsState([
       buildTab({
@@ -1392,6 +1421,37 @@ describe('App behavior', () => {
     container.remove();
     fireEvent.click(appendNoteRef('99', '84'));
     expect(mocks.toastMock.error).toHaveBeenCalledWith('Nota 99 não encontrada no capítulo 84.');
+  });
+
+  it('escapes chapter selectors when falling back to notes section scroll', () => {
+    vi.useFakeTimers();
+    setTabsState([
+      buildTab({
+        id: 'tab-1',
+        ncm: '8401',
+        results: buildCodeResults({
+          '84.1': { notas_parseadas: {} },
+        }),
+      }),
+    ]);
+
+    render(<App />);
+
+    const container = document.createElement('div');
+    container.id = 'results-content-tab-1';
+    const notesTarget = document.createElement('div');
+    notesTarget.id = 'chapter-84.1-notas';
+    container.appendChild(notesTarget);
+    document.body.appendChild(container);
+
+    fireEvent.click(appendNoteRef('99', '84.1'));
+    expect(notesTarget.classList.contains('flash-highlight')).toBe(true);
+    expect(mocks.toastMock).toHaveBeenCalledWith('Nota 99 não encontrada. Mostrando notas do capítulo.');
+
+    vi.advanceTimersByTime(2000);
+    expect(notesTarget.classList.contains('flash-highlight')).toBe(false);
+
+    container.remove();
   });
 
   it('shows unavailable and unidentified chapter errors for notes', () => {
