@@ -1,0 +1,355 @@
+import { MAX_ANCESTOR_DEPTH } from "./constants.js";
+import { fetchAll, fetchOne } from "./query.js";
+import { getWorkerDb } from "./state.js";
+
+/**
+ * Execute an FTS5 search query with a LIKE fallback.
+ * @param {string} table
+ * @param {string} query
+ * @param {string[]} columns
+ * @param {string} contentTable
+ * @param {number} limit
+ * @returns {Array<Record<string, any>>}
+ */
+export function ftsSearch(
+  table,
+  query,
+  columns,
+  contentTable,
+  limit = 50
+) {
+  const db = getWorkerDb();
+  if (!db) return [];
+
+  const sanitized = query
+    .replace(/["\\']/g, "")
+    .replace(/[{}()[\]^~*?:!]/g, " ")
+    .trim();
+  if (!sanitized) return [];
+
+  const terms = sanitized.split(/\s+/).filter((term) => term.length > 0);
+  if (terms.length === 0) return [];
+
+  const matchExpr = terms.map((term) => `"${term}"*`).join(" ");
+  const colList = columns.map((column) => `ct.${column}`).join(", ");
+
+  try {
+    const sql = `
+      SELECT ${colList}
+      FROM ${table}(?) AS ft
+      JOIN ${contentTable} AS ct ON ct.rowid = ft.rowid
+      ORDER BY rank
+      LIMIT ?
+    `;
+    const rows = db.exec(sql, {
+      bind: [matchExpr, limit],
+      returnValue: "resultRows",
+      rowMode: "object",
+    });
+    return rows || [];
+  } catch {
+    try {
+      const likeClause = terms
+        .map(() => `${columns.slice(-1)[0]} LIKE ?`)
+        .join(" AND ");
+      const likeParams = terms.map((term) => `%${term}%`);
+      const fallbackColList = columns.join(", ");
+      const sql = `SELECT ${fallbackColList} FROM ${contentTable} WHERE ${likeClause} LIMIT ?`;
+      const rows = db.exec(sql, {
+        bind: [...likeParams, limit],
+        returnValue: "resultRows",
+        rowMode: "object",
+      });
+      return rows || [];
+    } catch {
+      return [];
+    }
+  }
+}
+
+export function searchNbsByText(query) {
+  return ftsSearch(
+    "nbs_fts",
+    query,
+    ["code", "code_clean", "description", "parent_code", "level", "has_nebs"],
+    "nbs_items"
+  );
+}
+
+export function searchNebsByText(query) {
+  return ftsSearch(
+    "nebs_fts",
+    query,
+    ["code", "code_clean", "title", "body_text", "section_title"],
+    "nebs_entries"
+  );
+}
+
+function cleanServiceCode(code) {
+  return String(code || "").replace(/[^0-9]/g, "");
+}
+
+function rowToNbsItem(row) {
+  return {
+    code: String(row.code || ""),
+    code_clean: String(row.code_clean || ""),
+    description: String(row.description || ""),
+    parent_code: row.parent_code ? String(row.parent_code) : null,
+    level: Number(row.level || 0),
+    has_nebs: Boolean(row.has_nebs),
+  };
+}
+
+function rowToNebsEntry(row) {
+  if (!row) return null;
+  return {
+    code: String(row.code || ""),
+    code_clean: String(row.code_clean || ""),
+    title: String(row.title || ""),
+    body_text: String(row.body_text || ""),
+    body_markdown: row.body_markdown ? String(row.body_markdown) : null,
+    title_normalized: row.title_normalized ? String(row.title_normalized) : "",
+    body_normalized: row.body_normalized ? String(row.body_normalized) : "",
+    section_title: row.section_title ? String(row.section_title) : null,
+    page_start: Number(row.page_start || 0),
+    page_end: Number(row.page_end || 0),
+  };
+}
+
+export function searchNbsByCode(query, limit = 50) {
+  const rawQuery = String(query || "").trim();
+  const cleanQuery = cleanServiceCode(rawQuery);
+  if (!rawQuery && !cleanQuery) return [];
+
+  return fetchAll(
+    `SELECT
+        code,
+        code_clean,
+        description,
+        parent_code,
+        level,
+        has_nebs
+     FROM nbs_items
+     WHERE (? <> '' AND (code = ? OR code LIKE ?))
+        OR (? <> '' AND (code_clean = ? OR code_clean LIKE ?))
+     ORDER BY
+        CASE
+          WHEN code = ? OR code_clean = ? THEN 0
+          WHEN code LIKE ? OR code_clean LIKE ? THEN 1
+          ELSE 2
+        END,
+        level ASC,
+        source_order ASC,
+        LENGTH(code_clean) ASC
+     LIMIT ?`,
+    [
+      rawQuery,
+      rawQuery,
+      `${rawQuery}%`,
+      cleanQuery,
+      cleanQuery,
+      `${cleanQuery}%`,
+      rawQuery,
+      cleanQuery,
+      `${rawQuery}%`,
+      `${cleanQuery}%`,
+      limit,
+    ]
+  ).map(rowToNbsItem);
+}
+
+export function searchNebsByCode(query, limit = 50) {
+  const rawQuery = String(query || "").trim();
+  const cleanQuery = cleanServiceCode(rawQuery);
+  if (!rawQuery && !cleanQuery) return [];
+
+  return fetchAll(
+    `SELECT
+        code,
+        code_clean,
+        title,
+        body_text,
+        section_title,
+        page_start,
+        page_end
+     FROM nebs_entries
+     WHERE (? <> '' AND (code = ? OR code LIKE ?))
+        OR (? <> '' AND (code_clean = ? OR code_clean LIKE ?))
+     ORDER BY
+        CASE
+          WHEN code = ? OR code_clean = ? THEN 0
+          WHEN code LIKE ? OR code_clean LIKE ? THEN 1
+          ELSE 2
+        END,
+        page_start ASC,
+        LENGTH(code_clean) ASC
+     LIMIT ?`,
+    [
+      rawQuery,
+      rawQuery,
+      `${rawQuery}%`,
+      cleanQuery,
+      cleanQuery,
+      `${cleanQuery}%`,
+      rawQuery,
+      cleanQuery,
+      `${rawQuery}%`,
+      `${cleanQuery}%`,
+      limit,
+    ]
+  ).map(rowToNebsEntry);
+}
+
+function fetchNbsItemByCode(code) {
+  const rawCode = String(code || "").trim();
+  const cleanCode = cleanServiceCode(rawCode);
+  if (!rawCode && !cleanCode) return null;
+
+  const rows = fetchAll(
+    `SELECT code, code_clean, description, parent_code, level, has_nebs
+     FROM nbs_items
+     WHERE (? <> '' AND code = ?)
+        OR (? <> '' AND code_clean = ?)
+     ORDER BY LENGTH(code_clean) DESC
+     LIMIT 1`,
+    [rawCode, rawCode, cleanCode, cleanCode]
+  );
+  return rows.length > 0 ? rowToNbsItem(rows[0]) : null;
+}
+
+function fetchAncestors(item) {
+  const ancestors = [];
+  let currentParent = item?.parent_code || null;
+  let depth = 0;
+
+  while (currentParent && depth < MAX_ANCESTOR_DEPTH) {
+    const parent = fetchOne(
+      `SELECT code, code_clean, description, parent_code, level, has_nebs
+       FROM nbs_items
+       WHERE code = ?
+       LIMIT 1`,
+      [currentParent]
+    );
+    if (!parent) break;
+    ancestors.unshift(rowToNbsItem(parent));
+    currentParent = parent.parent_code || null;
+    depth += 1;
+  }
+
+  return ancestors;
+}
+
+function resolveHierarchyRoot(item, ancestors) {
+  if (!item) return null;
+  if (Number(item.level || 0) <= 1) return item;
+  const chapterRoot = ancestors.find((ancestor) => ancestor.level === 1);
+  return chapterRoot || ancestors[0] || item;
+}
+
+function fetchTreePage(rootCode, page = 1, pageSize = 50) {
+  const normalizedPage = Math.max(Number(page || 1), 1);
+  const normalizedPageSize = Math.min(Math.max(Number(pageSize || 50), 1), 200);
+  const offset = (normalizedPage - 1) * normalizedPageSize;
+  const countRow = fetchOne(
+    `SELECT COUNT(*) AS total
+     FROM nbs_items
+     WHERE code = ? OR code LIKE ?`,
+    [rootCode, `${rootCode}%`]
+  );
+  const total = Number(countRow?.total || 0);
+  const items = fetchAll(
+    `SELECT code, code_clean, description, parent_code, level, has_nebs
+     FROM nbs_items
+     WHERE code = ? OR code LIKE ?
+     ORDER BY source_order ASC
+     LIMIT ? OFFSET ?`,
+    [rootCode, `${rootCode}%`, normalizedPageSize, offset]
+  ).map(rowToNbsItem);
+
+  return {
+    items,
+    page: normalizedPage,
+    page_size: normalizedPageSize,
+    total,
+    has_more: offset + items.length < total,
+  };
+}
+
+export function getLocalNbsDetail(code, page = 1, pageSize = 50) {
+  if (!getWorkerDb()) return null;
+
+  const item = fetchNbsItemByCode(code);
+  if (!item) return null;
+
+  const ancestors = fetchAncestors(item);
+  const children = fetchAll(
+    `SELECT code, code_clean, description, parent_code, level, has_nebs
+     FROM nbs_items
+     WHERE parent_code = ?
+     ORDER BY source_order ASC`,
+    [item.code]
+  ).map(rowToNbsItem);
+  const chapterRoot = resolveHierarchyRoot(item, ancestors);
+  const chapterPage = chapterRoot
+    ? fetchTreePage(chapterRoot.code, page, pageSize)
+    : null;
+  const nebsEntry = fetchOne(
+    `SELECT
+        code,
+        code_clean,
+        title,
+        body_text,
+        section_title,
+        page_start,
+        page_end
+     FROM nebs_entries
+     WHERE code = ? OR code_clean = ?
+     ORDER BY LENGTH(code_clean) DESC
+     LIMIT 1`,
+    [item.code, item.code_clean]
+  );
+
+  return {
+    success: true,
+    item,
+    ancestors,
+    children,
+    chapter_root: chapterRoot,
+    chapter_items: chapterPage?.items || [],
+    chapter_page: chapterPage,
+    nebs: rowToNebsEntry(nebsEntry),
+  };
+}
+
+export function getLocalNebsDetail(code) {
+  if (!getWorkerDb()) return null;
+
+  const item = fetchNbsItemByCode(code);
+  if (!item) return null;
+
+  const cleanCode = cleanServiceCode(code);
+  const entry = fetchOne(
+    `SELECT
+        code,
+        code_clean,
+        title,
+        body_text,
+        section_title,
+        page_start,
+        page_end
+     FROM nebs_entries
+     WHERE (? <> '' AND code = ?)
+        OR (? <> '' AND code_clean = ?)
+     ORDER BY LENGTH(code_clean) DESC
+     LIMIT 1`,
+    [code, code, cleanCode, cleanCode]
+  );
+  if (!entry) return null;
+
+  return {
+    success: true,
+    item,
+    ancestors: fetchAncestors(item),
+    entry: rowToNebsEntry(entry),
+  };
+}

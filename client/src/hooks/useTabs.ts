@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from "react";
-import type { SearchResponse } from "../types/api.types";
+import type { FiscalSearchApiResponse } from "../types/api.types";
 
 /** Tipo de documento suportado */
 export type DocType = "nesh" | "tipi" | "nbs" | "nebs";
@@ -14,7 +14,7 @@ export interface Tab {
   error: string | null;
   ncm?: string;
   latestTextQuery?: string;
-  results?: SearchResponse | null;
+  results?: FiscalSearchApiResponse | null;
   /**
    * Flag para indicar que há resultados novos de busca.
    * Quando true, o ResultDisplay prioriza auto-scroll e NÃO restaura scroll salvo.

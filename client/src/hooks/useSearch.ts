@@ -7,8 +7,14 @@ import { useHistory } from './useHistory';
 import { useSettings } from '../context/SettingsContext';
 import { useLocalDatabase } from '../context/LocalDatabaseContext';
 import { extractChapter, isSameChapter } from '../utils/chapterDetection';
-import type { SearchResponse, NbsSearchResponse, NebsSearchResponse, TipiTextSearchResponse, TextSearchResponse } from '../types/api.types';
-import { isCodeSearchResponse } from '../types/api.types';
+import type {
+    FiscalSearchApiResponse,
+    NbsCatalogSearchApiResponse,
+    NebsExplanatorySearchApiResponse,
+    NeshTextSearchApiResponse,
+    TipiTextSearchApiResponse,
+} from '../types/api.types';
+import { isCodeSearchApiResponse } from '../services/apiResponseGuards';
 import { buildLocalCodeSearchResponse } from '../utils/searchResultMarkup';
 import {
     getServiceCatalogErrorInfo,
@@ -30,12 +36,12 @@ function normalizeLocalResults(
     doc: DocType,
     query: string,
     results: Record<string, unknown>[]
-): SearchResponse | null {
+): FiscalSearchApiResponse | null {
     const safeResults = Array.isArray(results) ? results : [];
 
     switch (doc) {
         case 'nbs': {
-            const response: NbsSearchResponse = {
+            const response: NbsCatalogSearchApiResponse = {
                 success: true, query, normalized: query,
                 results: safeResults.map((r) => ({
                     code: String(r.code || ''), code_clean: String(r.code_clean || ''),
@@ -48,7 +54,7 @@ function normalizeLocalResults(
             return response;
         }
         case 'nebs': {
-            const response: NebsSearchResponse = {
+            const response: NebsExplanatorySearchApiResponse = {
                 success: true, query, normalized: query,
                 results: safeResults.map((r) => ({
                     code: String(r.code || ''),
@@ -63,7 +69,7 @@ function normalizeLocalResults(
             return response;
         }
         case 'tipi': {
-            const response: TipiTextSearchResponse = {
+            const response: TipiTextSearchApiResponse = {
                 success: true, type: 'text', query: query,
                 normalized: query, match_type: 'fts',
                 warning: null, total: safeResults.length,
@@ -77,8 +83,8 @@ function normalizeLocalResults(
             return response;
         }
         case 'nesh': {
-            // NESH local FTS returns flat items → build TextSearchResponse
-            const response: TextSearchResponse = {
+            // NESH local FTS returns flat items → build the canonical text-search DTO
+            const response: NeshTextSearchApiResponse = {
                 success: true, type: 'text', query,
                 normalized: query, match_type: 'all_words',
                 warning: null, total_capitulos: safeResults.length,
@@ -117,13 +123,13 @@ export function useSearch(
         tipiViewModeRef.current = tipiViewMode;
     }, [tipiViewMode]);
 
-    const updateResultsQuery = useCallback((results: SearchResponse, query: string): SearchResponse => {
+    const updateResultsQuery = useCallback((results: FiscalSearchApiResponse, query: string): FiscalSearchApiResponse => {
         if (results.query === query) return results;
 
-        const nextResults = { ...results, query } as SearchResponse;
+        const nextResults = { ...results, query } as FiscalSearchApiResponse;
 
         // Preserve legacy alias when source came from non-enumerable getter.
-        if (isCodeSearchResponse(nextResults) && !(nextResults as any).resultados) {
+        if (isCodeSearchApiResponse(nextResults) && !(nextResults as any).resultados) {
             (nextResults as any).resultados = (results as any).resultados ?? (results as any).results;
         }
 
@@ -171,7 +177,7 @@ export function useSearch(
         });
 
         try {
-            let data: SearchResponse | null = null;
+            let data: FiscalSearchApiResponse | null = null;
             const isOfflineScopedDoc = doc === 'nesh' || doc === 'tipi' || doc === 'nbs' || doc === 'nebs';
 
             // === HYBRID SEARCH: Local DB first, API fallback ===
@@ -209,7 +215,7 @@ export function useSearch(
 
             // Fallback to API if local returned nothing
             if (!data) {
-                const searchHandlers: Record<DocType, () => Promise<SearchResponse>> = {
+                const searchHandlers: Record<DocType, () => Promise<FiscalSearchApiResponse>> = {
                     nesh: () => searchNCM(query),
                     tipi: () => searchTipi(query, tipiViewModeRef.current),
                     nbs: () => searchNbsServices(query),
@@ -223,7 +229,7 @@ export function useSearch(
             }
 
             // Extrai capitulos apenas para respostas do tipo code
-            const codeResults = isCodeSearchResponse(data)
+            const codeResults = isCodeSearchApiResponse(data)
                 ? (data.resultados || data.results)
                 : null;
             const chaptersInResponse = codeResults
@@ -235,7 +241,7 @@ export function useSearch(
 
             updateTab(tabId, {
                 results: updateResultsQuery(data, query),
-                content: isCodeSearchResponse(data) ? data.markdown || '' : '',
+                content: isCodeSearchApiResponse(data) ? data.markdown || '' : '',
                 loading: false,
                 isNewSearch: true,
                 isContentReady: false,

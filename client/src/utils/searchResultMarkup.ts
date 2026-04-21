@@ -1,11 +1,11 @@
 import type {
-    CodeSearchResponse,
-    SearchResponse,
-    TextSearchResponse,
-    TipiCodeSearchResponse,
-    TipiTextSearchResponse,
+    FiscalSearchApiResponse,
+    NeshCodeSearchApiResponse,
+    NeshTextSearchApiResponse,
+    TipiCodeSearchApiResponse,
+    TipiTextSearchApiResponse,
 } from '../types/api.types';
-import { isCodeSearchResponse } from '../types/api.types';
+import { isCodeSearchApiResponse } from '../services/apiResponseGuards';
 import { generateAnchorId } from './id_utils';
 import { NeshRenderer } from './NeshRenderer';
 
@@ -141,7 +141,7 @@ function renderTextSearchItem(item: any): string {
     return `<li><strong>${safeCode}</strong> - ${safeDescription}${extra}</li>`;
 }
 
-function renderTextSearchFallback(response: TextSearchResponse | TipiTextSearchResponse): string | null {
+function renderTextSearchFallback(response: NeshTextSearchApiResponse | TipiTextSearchApiResponse): string | null {
     if (!Array.isArray(response.results) || response.results.length === 0) {
         return null;
     }
@@ -155,7 +155,7 @@ export function buildLocalCodeSearchResponse(
     query: string,
     results: CodeResults,
     markdown?: string | null,
-): CodeSearchResponse | TipiCodeSearchResponse {
+): NeshCodeSearchApiResponse | TipiCodeSearchApiResponse {
     const safeResults = results && typeof results === 'object' ? results : {};
 
     if (doc === 'tipi') {
@@ -188,7 +188,7 @@ export function buildLocalCodeSearchResponse(
 
 export function resolveSearchResponseMarkup(
     doc: SupportedDocType,
-    response: SearchResponse | CodeSearchResponse | TipiCodeSearchResponse | null | undefined,
+    response: FiscalSearchApiResponse | NeshCodeSearchApiResponse | TipiCodeSearchApiResponse | null | undefined,
 ): string | null {
     if (!response) return null;
 
@@ -196,7 +196,7 @@ export function resolveSearchResponseMarkup(
         return response.markdown;
     }
 
-    if (isCodeSearchResponse(response)) {
+    if (isCodeSearchApiResponse(response)) {
         const codeResults = (response.resultados || response.results) as CodeResults | undefined;
         if (!codeResults || typeof codeResults !== 'object') {
             return null;
@@ -214,7 +214,7 @@ export function resolveSearchResponseMarkup(
     }
 
     if ('results' in response && Array.isArray(response.results)) {
-        return renderTextSearchFallback(response as TextSearchResponse | TipiTextSearchResponse);
+        return renderTextSearchFallback(response as NeshTextSearchApiResponse | TipiTextSearchApiResponse);
     }
 
     return null;
