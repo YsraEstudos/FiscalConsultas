@@ -345,3 +345,7 @@ class TipiService:
     async def snapshotTipiInternalCacheMetrics(self):
         async with self._get_cache_lock():
             return snapshot_tipi_internal_cache_metrics(self)
+
+    async def get_internal_cache_metrics(self):
+        """Alias compatível com a API anterior do serviço."""
+        return await self.snapshotTipiInternalCacheMetrics()

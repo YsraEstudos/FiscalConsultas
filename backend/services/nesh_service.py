@@ -224,6 +224,14 @@ class NeshService:
             self, chapter_nums=chapter_nums, concurrency=concurrency
         )
 
+    async def prewarm_cache(
+        self, chapter_nums: Optional[list[str]] = None, concurrency: int = 10
+    ) -> int:
+        """Alias compatível com a API anterior do serviço."""
+        return await self.prewarmNeshChapterCache(
+            chapter_nums=chapter_nums, concurrency=concurrency
+        )
+
     async def snapshotNeshInternalCacheMetrics(self) -> dict:
         """
         Captura as métricas atuais dos caches internos do serviço.
@@ -268,3 +276,7 @@ class NeshService:
                 "hit_rate": fts_snapshot.hit_rate,
             },
         }
+
+    async def get_internal_cache_metrics(self) -> dict:
+        """Alias compatível com a API anterior do serviço."""
+        return await self.snapshotNeshInternalCacheMetrics()

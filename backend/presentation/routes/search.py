@@ -147,6 +147,11 @@ def snapshotSearchCodePayloadCacheMetrics() -> dict[str, str | float | int]:
     }
 
 
+def get_payload_cache_metrics() -> dict[str, str | float | int]:
+    """Alias compatível com a API anterior do módulo."""
+    return snapshotSearchCodePayloadCacheMetrics()
+
+
 def _build_search_payload_cache_headers(
     payload_scope_key: str, normalized_query: str
 ) -> dict[str, str]:
