@@ -17,7 +17,7 @@ try:
     import redis.asyncio as aioredis  # type: ignore[import-untyped]
 
     _REDIS_AVAILABLE = True
-except Exception:  # pragma: no cover - optional dependency
+except ImportError:  # pragma: no cover - optional dependency
     aioredis = SimpleNamespace(from_url=None)
     _REDIS_AVAILABLE = False
 
@@ -257,6 +257,7 @@ class RedisCache:
         try:
             shared = await future
         except Exception:
+            self._logger.debug("Inflight cache await failed", exc_info=True)
             return None, None
         return shared, self._finish_cache_stats(
             stats,

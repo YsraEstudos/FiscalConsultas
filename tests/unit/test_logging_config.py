@@ -98,3 +98,48 @@ def test_setup_logging_redacts_sensitive_values(monkeypatch, capsys):
 def test_get_logger_uses_nesh_prefix():
     logger = logging_config.get_logger("database")
     assert logger.name == "nesh.database"
+
+
+def test_sanitizers_redact_nested_sensitive_values():
+    assert logging_config._is_sensitive_key("api-key") is True
+    assert logging_config._is_sensitive_key("visible") is False
+    assert logging_config._sanitize_string("token=abc password=xyz") == "token=[REDACTED] password=[REDACTED]"
+
+    sanitized = logging_config._sanitize_value(
+        {
+            "api_key": "secret-value",
+            "nested": ("authorization: Bearer abc.def", ["password=xyz", "safe"]),
+        }
+    )
+
+    assert sanitized["api_key"] == "[REDACTED]"
+    assert sanitized["nested"][0] == "authorization: [REDACTED]"
+    assert sanitized["nested"][1][0] == "password=[REDACTED]"
+    assert sanitized["nested"][1][1] == "safe"
+
+
+def test_resolve_logging_level_accepts_ints_strings_and_unknown_values():
+    assert logging_config._resolve_logging_level(logging.DEBUG) == logging.DEBUG
+    assert logging_config._resolve_logging_level("warning") == logging.WARNING
+    assert logging_config._resolve_logging_level("not-a-level") == logging.INFO
+    assert logging_config._resolve_logging_level(None) == logging.INFO
+
+
+def test_remove_managed_handlers_keeps_user_handlers(monkeypatch):
+    logger = logging.getLogger("nesh.test.logging_config")
+    logger.handlers = []
+
+    managed_handler = logging.StreamHandler()
+    user_handler = logging.StreamHandler()
+    setattr(managed_handler, logging_config.NESH_MANAGED_HANDLER_ATTR, True)
+
+    logger.addHandler(managed_handler)
+    logger.addHandler(user_handler)
+
+    logging_config._remove_managed_handlers(logger)
+
+    assert managed_handler not in logger.handlers
+    assert user_handler in logger.handlers
+
+    logger.removeHandler(user_handler)
+    user_handler.close()

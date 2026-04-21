@@ -88,8 +88,8 @@ def _remove_managed_handlers(logger: logging.Logger) -> None:
             logger.removeHandler(handler)
             try:
                 handler.close()
-            except Exception:
-                pass
+            except Exception:  # noqa: S110 - handler cleanup during teardown
+                pass  # Safe to ignore: handler is being removed regardless
 
 
 def setup_logging(
@@ -124,8 +124,8 @@ def setup_logging(
         if hasattr(sys.stdout, "reconfigure"):
             try:
                 sys.stdout.reconfigure(encoding="utf-8")
-            except Exception:
-                pass
+            except Exception:  # noqa: S110 - stdout reconfigure is best-effort
+                pass  # Safe to ignore: stdout encoding is non-critical
 
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)

@@ -51,13 +51,13 @@ class _FakeTipiService:
         self.error = error
         self.calls = 0
 
-    async def check_connection(self):  # NOSONAR
+    async def probeTipiCatalogHealth(self):  # NOSONAR
         self.calls += 1
         if self.error:
             raise self.error
         return self.payload
 
-    async def get_internal_cache_metrics(self):  # NOSONAR
+    async def snapshotTipiInternalCacheMetrics(self):  # NOSONAR
         return {"cache": "tipi"}
 
 
@@ -67,7 +67,7 @@ class _FakeNbsService:
         self.error = error
         self.calls = 0
 
-    async def check_connection(self):  # NOSONAR
+    async def probeNbsCatalogHealth(self):  # NOSONAR
         self.calls += 1
         if self.error:
             raise self.error
@@ -78,23 +78,25 @@ class _FakeNeshService:
     def __init__(self, response):
         self.response = response
 
-    async def get_internal_cache_metrics(self):  # NOSONAR
+    async def snapshotNeshInternalCacheMetrics(self):  # NOSONAR
         return {"cache": "nesh"}
 
-    async def process_request(self, _ncm: str, **kwargs):  # NOSONAR
+    async def executeNeshSearchWithVectorWeights(  # NOSONAR
+        self, _ncm: str, **kwargs
+    ):
         return self.response
 
 
 def test_to_int_returns_default_on_invalid_values():
-    assert system._to_int("abc", default=7) == 7
-    assert system._to_int(None, default=9) == 9
+    assert system.coerce_int("abc", default=7) == 7
+    assert system.coerce_int(None, default=9) == 9
 
 
 @pytest.fixture(autouse=True)
 def _reset_status_cache():
-    system._reset_status_cache_for_tests()
+    system.reset_status_cache_for_tests()
     yield
-    system._reset_status_cache_for_tests()
+    system.reset_status_cache_for_tests()
 
 
 @pytest.mark.asyncio
@@ -117,7 +119,7 @@ async def test_get_status_uses_app_state_services_when_available():
         version="9.9.9",
     )
 
-    payload = await system.get_status(request)
+    payload = await system.fetch_system_status(request)
 
     assert payload["status"] == "online"
     assert payload["database"]["status"] == "online"
@@ -164,7 +166,7 @@ async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypat
         },
     )
 
-    payload = await system.get_status(request)
+    payload = await system.fetch_system_status(request)
 
     assert payload["status"] == "online"
     assert payload["database"]["status"] == "online"
@@ -193,7 +195,7 @@ async def test_get_status_handles_db_and_tipi_exceptions(monkeypatch):
         },
     )
 
-    payload = await system.get_status(request)
+    payload = await system.fetch_system_status(request)
 
     assert payload["status"] == "error"
     assert payload["database"]["status"] == "error"
@@ -220,8 +222,8 @@ async def test_get_status_reuses_cached_snapshot_within_ttl(monkeypatch):
         state={"db": db, "tipi_service": tipi, "nbs_service": nbs},
     )
 
-    first = await system.get_status(request)
-    second = await system.get_status(request)
+    first = await system.fetch_system_status(request)
+    second = await system.fetch_system_status(request)
 
     assert first == second
     assert db.calls == 1
@@ -244,7 +246,7 @@ async def test_get_status_deduplicates_concurrent_refresh(monkeypatch):
             return self.payload
 
     class _SlowFakeNbsService(_FakeNbsService):
-        async def check_connection(self):  # NOSONAR
+        async def probeNbsCatalogHealth(self):  # NOSONAR
             self.calls += 1
             await asyncio.sleep(0.05)
             return self.payload
@@ -266,8 +268,8 @@ async def test_get_status_deduplicates_concurrent_refresh(monkeypatch):
     )
 
     first, second = await asyncio.gather(
-        system.get_status(request),
-        system.get_status(request),
+        system.fetch_system_status(request),
+        system.fetch_system_status(request),
     )
 
     assert first == second
@@ -309,7 +311,7 @@ async def test_get_status_details_returns_sensitive_fields_for_admin(monkeypatch
         version="9.9.9",
     )
 
-    payload = await system.get_status_details(request)
+    payload = await system.fetch_system_status_details(request)
 
     assert payload["status"] == "online"
     assert payload["version"] == "9.9.9"
@@ -335,7 +337,7 @@ async def test_get_status_details_rejects_non_admin(monkeypatch):
     request = _build_request("/api/status/details")
 
     with pytest.raises(HTTPException) as exc:
-        await system.get_status_details(request)
+        await system.fetch_system_status_details(request)
 
     assert exc.value.status_code == 403
 
@@ -349,7 +351,7 @@ async def test_get_cache_metrics_rejects_non_admin(monkeypatch):
     request = _build_request("/api/cache-metrics")
 
     with pytest.raises(HTTPException) as exc:
-        await system.get_cache_metrics(request)
+        await system.fetch_system_cache_metrics(request)
 
     assert exc.value.status_code == 403
 
@@ -364,10 +366,14 @@ async def test_get_cache_metrics_returns_payload_for_admin(monkeypatch):
 
     monkeypatch.setattr(system, "_is_admin_request", _mock_admin)
     monkeypatch.setattr(
-        search_route, "get_payload_cache_metrics", lambda: {"hits": 1, "misses": 2}
+        search_route,
+        "snapshotSearchCodePayloadCacheMetrics",
+        lambda: {"hits": 1, "misses": 2},
     )
     monkeypatch.setattr(
-        tipi_route, "get_payload_cache_metrics", lambda: {"hits": 3, "misses": 4}
+        tipi_route,
+        "snapshotTipiCodePayloadCacheMetrics",
+        lambda: {"hits": 3, "misses": 4},
     )
 
     request = _build_request(
@@ -378,7 +384,7 @@ async def test_get_cache_metrics_returns_payload_for_admin(monkeypatch):
         },
     )
 
-    payload = await system.get_cache_metrics(request)
+    payload = await system.fetch_system_cache_metrics(request)
 
     assert payload["status"] == "ok"
     assert payload["search_code_payload_cache"] == {"hits": 1, "misses": 2}
@@ -395,7 +401,7 @@ async def test_get_metrics_returns_404_when_disabled(monkeypatch):
     request = _build_request("/api/metrics")
 
     with pytest.raises(HTTPException) as exc:
-        await system.get_metrics(request)
+        await system.fetch_system_metrics(request)
 
     assert exc.value.status_code == 404
 
@@ -408,7 +414,7 @@ async def test_get_metrics_rejects_invalid_token(monkeypatch):
     request = _build_request("/api/metrics", headers={"X-Metrics-Token": "wrong"})
 
     with pytest.raises(HTTPException) as exc:
-        await system.get_metrics(request)
+        await system.fetch_system_metrics(request)
 
     assert exc.value.status_code == 403
 
@@ -443,10 +449,10 @@ async def test_get_metrics_returns_prometheus_payload(monkeypatch):
         }
 
     monkeypatch.setattr(
-        system, "_collect_cache_metrics_payload", _fake_collect_cache_metrics
+        system, "_collect_system_cache_metrics_payload", _fake_collect_cache_metrics
     )
 
-    response = await system.get_metrics(request)
+    response = await system.fetch_system_metrics(request)
 
     assert response.status_code == 200
     body = response.body.decode("utf-8")
@@ -472,7 +478,7 @@ async def test_debug_anchors_returns_404_when_debug_mode_is_disabled(monkeypatch
     request = _build_request("/api/debug/anchors")
 
     with pytest.raises(HTTPException) as exc:
-        await system.debug_anchors(
+        await system.debug_nesh_anchors(
             request=request, ncm="8517", service=_FakeNeshService({})
         )
 
@@ -490,7 +496,7 @@ async def test_debug_anchors_returns_403_for_non_admin(monkeypatch):
     request = _build_request("/api/debug/anchors")
 
     with pytest.raises(HTTPException) as exc:
-        await system.debug_anchors(
+        await system.debug_nesh_anchors(
             request=request, ncm="8517", service=_FakeNeshService({})
         )
 
@@ -520,7 +526,9 @@ async def test_debug_anchors_filters_position_related_ids(monkeypatch):
     )
     request = _build_request("/api/debug/anchors")
 
-    payload = await system.debug_anchors(request=request, ncm="8517", service=service)
+    payload = await system.debug_nesh_anchors(
+        request=request, ncm="8517", service=service
+    )
 
     assert payload["query"] == "8517"
     assert payload["normalized"] == "8517"
@@ -539,7 +547,7 @@ async def test_reload_secrets_rejects_non_admin(monkeypatch):
     request = _build_request("/api/admin/reload-secrets", method="POST")
 
     with pytest.raises(HTTPException) as exc:
-        await system.reload_secrets(request)
+        await system.reload_system_secrets(request)
 
     assert exc.value.status_code == 403
 
@@ -558,7 +566,7 @@ async def test_reload_secrets_calls_reload_for_admin(monkeypatch):
     monkeypatch.setattr(system, "reload_settings", _fake_reload)
     request = _build_request("/api/admin/reload-secrets", method="POST")
 
-    payload = await system.reload_secrets(request)
+    payload = await system.reload_system_secrets(request)
 
     assert payload == {"success": True}
     assert called["value"] is True

@@ -46,11 +46,11 @@ class _FakeNeshService:
     def __init__(self, db=None):
         self.db = db
 
-    async def prewarm_cache(self):
+    async def prewarmNeshChapterCache(self):
         return 0
 
     @classmethod
-    async def create_with_repository(cls):
+    async def initializeNeshServiceWithRepositoryFactory(cls):
         return cls()
 
 
@@ -60,7 +60,7 @@ class _FakeTipiService:
         self.created_repo = False
 
     @classmethod
-    async def create_with_repository(cls):
+    async def initializeTipiServiceWithRepositoryFactory(cls):
         obj = cls()
         obj.created_repo = True
         obj.mode = "repo"
@@ -85,10 +85,6 @@ class _FakeNbsService:
         obj.mode = "repo"
         obj.created_repo = True
         return obj
-
-    @classmethod
-    async def create_with_repository(cls):
-        return await cls.initializeNbsServiceWithPostgresRepository()
 
 
 class _FakeAiService:
@@ -303,7 +299,7 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
     monkeypatch, core_mocks
 ):
     class _FailingPrewarmNeshService(_FakeNeshService):
-        async def prewarm_cache(self):
+        async def prewarmNeshChapterCache(self):
             raise RuntimeError("prewarm failed")
 
     class _ScalarResult:
