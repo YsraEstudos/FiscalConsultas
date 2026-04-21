@@ -59,11 +59,11 @@ function shouldAttemptAuthRefresh(detail?: string): boolean {
 async function getForcedRefreshToken(path: string, reason: string): Promise<{
     token: string | null;
     options: ClerkTokenGetterOptions;
-    mode: 'fresh' | 'in_flight' | 'cooldown';
+    mode: 'fresh' | 'in_flight' | 'cooldown' | 'not_applicable';
 }> {
     const options = buildTokenGetterOptions(true);
     if (!clerkGetToken) {
-        return { token: null, options, mode: 'cooldown' };
+        return { token: null, options, mode: 'not_applicable' };
     }
 
     if (inFlightForcedRefreshPromise) {
@@ -83,10 +83,10 @@ async function getForcedRefreshToken(path: string, reason: string): Promise<{
         return { token: null, options, mode: 'cooldown' };
     }
 
-    lastForcedRefreshAtMs = now;
     inFlightForcedRefreshPromise = clerkGetToken(options);
     try {
         const token = await inFlightForcedRefreshPromise;
+        lastForcedRefreshAtMs = Date.now();
         return { token, options, mode: 'fresh' };
     } finally {
         inFlightForcedRefreshPromise = null;

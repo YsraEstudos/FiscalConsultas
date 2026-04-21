@@ -424,8 +424,9 @@ export function useSearchHighlighterState({
 
             match.node.classList.add('active');
             match.node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            reportHighlightScrollCompletion();
         }
-    }, [activeTerm, activeIndices, matches, contentContainerRef]);
+    }, [activeTerm, activeIndices, matches, contentContainerRef, reportHighlightScrollCompletion]);
 
     const handleNext = useCallback(() => {
         if (!activeTerm) {
@@ -472,8 +473,9 @@ export function useSearchHighlighterState({
         const element = contentContainerRef.current.querySelector(`[id="${CSS.escape(id)}"]`);
         if (element) {
             element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            reportHighlightScrollCompletion();
         }
-    }, [contentContainerRef]);
+    }, [contentContainerRef, reportHighlightScrollCompletion]);
 
     const handleClose = useCallback(() => {
         setIsVisible(false);

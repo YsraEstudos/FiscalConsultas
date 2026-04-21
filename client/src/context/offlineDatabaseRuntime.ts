@@ -84,8 +84,9 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
         () =>
             compareOfflineVersions(remoteVersion, localVersion) > 0
             && status !== 'installing'
-            && status !== 'updating',
-        [localVersion, remoteVersion, status],
+            && status !== 'updating'
+            && !isRemoving,
+        [isRemoving, localVersion, remoteVersion, status],
     );
 
     const {

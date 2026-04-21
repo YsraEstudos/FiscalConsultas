@@ -494,7 +494,7 @@ export function useAppInteractions({
 
     useEffect(() => {
         const globalBridge = globalThis as typeof globalThis & { nesh?: NeshBridge };
-        globalBridge.nesh = {
+        const bridge: NeshBridge = {
             smartLinkSearch: (ncm: string) => {
                 handleSearchRef.current(ncm);
             },
@@ -509,9 +509,12 @@ export function useAppInteractions({
                 );
             },
         };
+        globalBridge.nesh = bridge;
 
         return () => {
-            globalBridge.nesh = undefined;
+            if (globalBridge.nesh === bridge) {
+                globalBridge.nesh = undefined;
+            }
         };
     }, [onOpenSettings, runNonBlockingTask]);
 

@@ -89,6 +89,10 @@ function cleanServiceCode(code) {
   return String(code || "").replace(/[^0-9]/g, "");
 }
 
+function escapeLikePattern(value) {
+  return String(value || "").replace(/[\\%_]/g, "\\$&");
+}
+
 function rowToNbsItem(row) {
   return {
     code: String(row.code || ""),
@@ -121,6 +125,9 @@ export function searchNbsByCode(query, limit = 50) {
   const cleanQuery = cleanServiceCode(rawQuery);
   if (!rawQuery && !cleanQuery) return [];
 
+  const rawPrefix = `${escapeLikePattern(rawQuery)}%`;
+  const cleanPrefix = `${escapeLikePattern(cleanQuery)}%`;
+
   return fetchAll(
     `SELECT
         code,
@@ -130,12 +137,12 @@ export function searchNbsByCode(query, limit = 50) {
         level,
         has_nebs
      FROM nbs_items
-     WHERE (? <> '' AND (code = ? OR code LIKE ?))
-        OR (? <> '' AND (code_clean = ? OR code_clean LIKE ?))
+     WHERE (? <> '' AND (code = ? OR code LIKE ? ESCAPE '\\'))
+        OR (? <> '' AND (code_clean = ? OR code_clean LIKE ? ESCAPE '\\'))
      ORDER BY
         CASE
           WHEN code = ? OR code_clean = ? THEN 0
-          WHEN code LIKE ? OR code_clean LIKE ? THEN 1
+          WHEN code LIKE ? ESCAPE '\\' OR code_clean LIKE ? ESCAPE '\\' THEN 1
           ELSE 2
         END,
         level ASC,
@@ -145,14 +152,14 @@ export function searchNbsByCode(query, limit = 50) {
     [
       rawQuery,
       rawQuery,
-      `${rawQuery}%`,
+      rawPrefix,
       cleanQuery,
       cleanQuery,
-      `${cleanQuery}%`,
+      cleanPrefix,
       rawQuery,
       cleanQuery,
-      `${rawQuery}%`,
-      `${cleanQuery}%`,
+      rawPrefix,
+      cleanPrefix,
       limit,
     ]
   ).map(rowToNbsItem);
@@ -162,6 +169,9 @@ export function searchNebsByCode(query, limit = 50) {
   const rawQuery = String(query || "").trim();
   const cleanQuery = cleanServiceCode(rawQuery);
   if (!rawQuery && !cleanQuery) return [];
+
+  const rawPrefix = `${escapeLikePattern(rawQuery)}%`;
+  const cleanPrefix = `${escapeLikePattern(cleanQuery)}%`;
 
   return fetchAll(
     `SELECT
@@ -173,12 +183,12 @@ export function searchNebsByCode(query, limit = 50) {
         page_start,
         page_end
      FROM nebs_entries
-     WHERE (? <> '' AND (code = ? OR code LIKE ?))
-        OR (? <> '' AND (code_clean = ? OR code_clean LIKE ?))
+     WHERE (? <> '' AND (code = ? OR code LIKE ? ESCAPE '\\'))
+        OR (? <> '' AND (code_clean = ? OR code_clean LIKE ? ESCAPE '\\'))
      ORDER BY
         CASE
           WHEN code = ? OR code_clean = ? THEN 0
-          WHEN code LIKE ? OR code_clean LIKE ? THEN 1
+          WHEN code LIKE ? ESCAPE '\\' OR code_clean LIKE ? ESCAPE '\\' THEN 1
           ELSE 2
         END,
         page_start ASC,
@@ -187,14 +197,14 @@ export function searchNebsByCode(query, limit = 50) {
     [
       rawQuery,
       rawQuery,
-      `${rawQuery}%`,
+      rawPrefix,
       cleanQuery,
       cleanQuery,
-      `${cleanQuery}%`,
+      cleanPrefix,
       rawQuery,
       cleanQuery,
-      `${rawQuery}%`,
-      `${cleanQuery}%`,
+      rawPrefix,
+      cleanPrefix,
       limit,
     ]
   ).map(rowToNebsEntry);
