@@ -1134,9 +1134,9 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     Injeta `<mark class="has-comment">` em volta dos elementos que possuem
     comentários aprovados, identificados pelo anchor_key (= valor do atributo id).
 
-    Estratégia: para cada anchor_key, encontramos o elemento que possui
-    `id="<anchor_key>"` e adicionamos a classe `has-comment` a ele.
-    Não envolve o texto em outro elemento para preservar a estrutura do DOM.
+    Estratégia: O(N) regex single-pass - percorremos todas as tags do HTML e
+    se o `id` da tag constar no conjunto `target_keys`, adicionamos a classe.
+    Isso substitui o método O(N*K) que iterava sobre os K elementos chave.
 
     Args:
         html: HTML já renderizado pelo HtmlRenderer.
@@ -1148,32 +1148,28 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     if not commented_anchor_keys or not html:
         return html
 
-    for key in commented_anchor_keys:
-        # Escapa o key para uso em regex seguro
-        safe_key = re.escape(key)
+    target_keys = set(commented_anchor_keys)
 
-        # Encontra a tag com id="{key}" e adiciona has-comment à sua classe
-        # Suporta: id="key", id='key', class="..." já existente
-        def _add_class(match: re.Match) -> str:
-            tag = match.group(0)
+    def _process_tag(match: re.Match) -> str:
+        tag = match.group(0)
+
+        # Fast exit se a tag não possui atributo ID
+        if "id=" not in tag:
+            return tag
+
+        id_match = re.search(r'\bid=["\']?([^"\'>\s]+)["\']?', tag)
+        if id_match and id_match.group(1) in target_keys:
             if "class=" in tag:
-                # Adiciona has-comment à class existente
+                # Usa match não preguiçoso pra satisfazer o Sonar
                 tag = re.sub(
-                    r'(class=["\'])([^"\']*?)(["\'])',
+                    r'(class=["\'])([^"\']*)(["\'])',
                     lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
                     tag,
                     count=1,
                 )
             else:
-                # Insere class antes do fechamento da tag de abertura
                 tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
-            return tag
+        return tag
 
-        html = re.sub(
-            rf'<[a-zA-Z][^>]*\bid=["\']?{safe_key}["\']?[^>]*>',
-            _add_class,
-            html,
-            count=1,
-        )
-
-    return html
+    # Processa apenas tags de abertura HTML usando restrições mais fortes p/ SonarQube
+    return re.sub(r'<[a-zA-Z][^\s>]*\s+[^>]*>|<[a-zA-Z][^\s>]*>', _process_tag, html)

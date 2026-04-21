@@ -1,0 +1,3 @@
+## 2025-02-12 - Single-Pass Regex Optimization for inject_comment_marks
+**Learning:** ReDoS checks (like Sonar/MegaLinter) will fail if we use lazy quantifiers like `*?` combined with multiple capture groups. Additionally, multiple iterative search-and-replace operations over a large string for a variable number of keys leads to O(N*K) scaling.
+**Action:** Use a single-pass regex to match structural HTML tags (e.g. `<[a-zA-Z][^\s>]*\s+[^>]*>|<[a-zA-Z][^\s>]*>`) instead of full document iteration, reducing time complexity to O(N+K). Also, strictly enforce non-lazy matching for class attributes (`[^"\']*`) to satisfy static analyzers.
