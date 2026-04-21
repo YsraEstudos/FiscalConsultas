@@ -3,6 +3,7 @@ import os
 import time
 
 import pytest
+from backend.utils import ncm_utils
 
 pytestmark = pytest.mark.perf
 
@@ -35,23 +36,33 @@ WARM_P95_MS_TIPI = _env_float("NESH_PERF_WARM_TIPI_P95_MS", 30.0)
 COLD_START_P95_MS = _env_float("NESH_PERF_COLD_START_P95_MS", 6000.0)
 
 
+async def _run_nesh_query(service, query: str):
+    if ncm_utils.is_code_query(query):
+        return await service.searchNeshByNcmCode(query)
+    return await service.searchNeshByTextQuery(query)
+
+
 @pytest.mark.asyncio
 async def test_perf_warm_pipeline_code_p95(nesh_service):
     from backend.presentation.renderer import HtmlRenderer
 
     # Warmup
     for _ in range(5):
-        warm = await nesh_service.process_request("85")
+        warm = await _run_nesh_query(nesh_service, "85")
         assert warm.get("type") == "code"
-        HtmlRenderer.render_full_response(warm["results"])
+        HtmlRenderer.render_full_response(
+            warm.get("results") or warm.get("resultados") or {}
+        )
 
     samples_ms = []
     for _ in range(30):
         start = time.perf_counter()
-        data = await nesh_service.process_request("85")
+        data = await _run_nesh_query(nesh_service, "85")
         assert data.get("success") is True
         assert data.get("type") == "code"
-        HtmlRenderer.render_full_response(data["results"])
+        HtmlRenderer.render_full_response(
+            data.get("results") or data.get("resultados") or {}
+        )
         end = time.perf_counter()
         samples_ms.append((end - start) * 1000.0)
 
@@ -65,13 +76,13 @@ async def test_perf_warm_pipeline_code_p95(nesh_service):
 async def test_perf_warm_service_fts_p95(nesh_service):
     # Warmup
     for _ in range(5):
-        warm = await nesh_service.process_request("bomba submersivel")
+        warm = await _run_nesh_query(nesh_service, "bomba submersivel")
         assert warm.get("success") is True
 
     samples_ms = []
     for _ in range(25):
         start = time.perf_counter()
-        data = await nesh_service.process_request("bomba submersivel")
+        data = await _run_nesh_query(nesh_service, "bomba submersivel")
         assert data.get("success") is True
         end = time.perf_counter()
         samples_ms.append((end - start) * 1000.0)
@@ -87,7 +98,7 @@ async def test_perf_warm_tipi_code_render_p95(tipi_service):
 
     # Warmup
     for _ in range(3):
-        warm = await tipi_service.search_by_code("8517")
+        warm = await tipi_service.searchTipiByNcmCode("8517")
         assert warm.get("success") is True
         TipiRenderer.render_full_response(
             warm.get("resultados") or warm.get("results") or {}
@@ -96,7 +107,7 @@ async def test_perf_warm_tipi_code_render_p95(tipi_service):
     samples_ms = []
     for _ in range(20):
         start = time.perf_counter()
-        data = await tipi_service.search_by_code("8517")
+        data = await tipi_service.searchTipiByNcmCode("8517")
         assert data.get("success") is True
         TipiRenderer.render_full_response(
             data.get("resultados") or data.get("results") or {}

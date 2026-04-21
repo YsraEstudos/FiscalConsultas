@@ -834,7 +834,9 @@ def _seed_tipi_db(db_path: Path) -> None:
 def _build_sqlite_test_environment() -> SQLiteTestEnvironment:
     from backend.config.settings import settings
 
-    temporary_directory = TemporaryDirectory(prefix="pytest-sqlite-")
+    temporary_directory = TemporaryDirectory(
+        prefix="pytest-sqlite-", ignore_cleanup_errors=True
+    )
     temporary_root = Path(temporary_directory.name)
     nesh_db_path = temporary_root / "nesh.db"
     tipi_db_path = temporary_root / "tipi.db"
