@@ -1,22 +1,22 @@
-"""Tests for search-route cache-key normalization."""
+"""Tests for TIPI-route cache-key normalization and request validation."""
 
 import pytest
 from starlette.requests import Request
 
-from backend.config.constants import SearchConfig
+from backend.config.constants import SearchConfig, ViewMode
 from backend.config.exceptions import ValidationError
-from backend.presentation.routes.search import (
-    _build_search_payload_cache_context,
-    _normalize_search_query_for_cache_key,
-    _request_accepts_gzip_encoding,
-    _validate_public_search_query_input,
+from backend.presentation.routes.tipi import (
+    _build_tipi_payload_cache_context,
+    _normalize_tipi_query_for_cache_key,
+    _request_accepts_tipi_gzip_encoding,
+    _validate_tipi_search_query_input,
 )
 from backend.utils.cache import weak_etag
 from backend.utils.ncm_utils import is_code_query
 
 
 def _normalize_query(ncm: str) -> str:
-    return _normalize_search_query_for_cache_key(
+    return _normalize_tipi_query_for_cache_key(
         ncm, is_code_query=is_code_query(ncm)
     )
 
@@ -25,13 +25,13 @@ def _build_request_with_accept_encoding(value: str) -> Request:
     scope = {
         "type": "http",
         "method": "GET",
-        "path": "/api/search",
+        "path": "/api/tipi/search",
         "headers": [(b"accept-encoding", value.encode("latin-1"))],
     }
     return Request(scope)
 
 
-class TestCodeQueryNormalization:
+class TestTipiCodeQueryNormalization:
     def test_dotted_and_plain_same_key(self):
         assert _normalize_query("85.17") == _normalize_query("8517") == "8517"
 
@@ -51,12 +51,12 @@ class TestCodeQueryNormalization:
 
     def test_etag_differs_for_multi_code_and_single_code(self):
         scope = "public"
-        etag_multi = weak_etag("nesh", scope, _normalize_query("85,17"))
-        etag_single = weak_etag("nesh", scope, _normalize_query("8517"))
+        etag_multi = weak_etag("tipi", scope, _normalize_query("85,17"))
+        etag_single = weak_etag("tipi", scope, _normalize_query("8517"))
         assert etag_multi != etag_single
 
 
-class TestTextQueryNormalization:
+class TestTipiTextQueryNormalization:
     def test_case_insensitive(self):
         assert _normalize_query("Capacitor") == _normalize_query("capacitor")
 
@@ -70,64 +70,67 @@ class TestTextQueryNormalization:
         assert _normalize_query("capacitor") != _normalize_query("resistor")
 
 
-class TestAcceptsGzip:
+class TestTipiAcceptsGzip:
     def test_accepts_plain_gzip(self):
         request = _build_request_with_accept_encoding("gzip")
-        assert _request_accepts_gzip_encoding(request) is True
+        assert _request_accepts_tipi_gzip_encoding(request) is True
 
     def test_rejects_gzip_with_zero_quality(self):
         request = _build_request_with_accept_encoding("gzip;q=0")
-        assert _request_accepts_gzip_encoding(request) is False
+        assert _request_accepts_tipi_gzip_encoding(request) is False
 
     def test_accepts_wildcard_with_positive_quality(self):
         request = _build_request_with_accept_encoding("*;q=1")
-        assert _request_accepts_gzip_encoding(request) is True
+        assert _request_accepts_tipi_gzip_encoding(request) is True
 
     def test_rejects_gzip_and_wildcard_with_zero_quality(self):
         request = _build_request_with_accept_encoding("gzip;q=0,*;q=0")
-        assert _request_accepts_gzip_encoding(request) is False
+        assert _request_accepts_tipi_gzip_encoding(request) is False
 
 
-class TestPublicSearchQueryValidation:
+class TestPublicTipiSearchQueryValidation:
     def test_rejects_empty_query(self):
         with pytest.raises(ValidationError, match="Parâmetro 'ncm' é obrigatório"):
-            _validate_public_search_query_input("")
+            _validate_tipi_search_query_input("")
 
     def test_rejects_query_above_max_length(self):
         too_long = "x" * (SearchConfig.MAX_QUERY_LENGTH + 1)
         with pytest.raises(ValidationError, match="Query muito longa"):
-            _validate_public_search_query_input(too_long)
+            _validate_tipi_search_query_input(too_long)
 
     def test_accepts_non_empty_query_within_limits(self):
-        _validate_public_search_query_input("8517")
+        _validate_tipi_search_query_input("8517")
 
 
-class TestSearchPayloadCacheContext:
+class TestTipiPayloadCacheContext:
     def test_builds_code_query_context(self):
         request = _build_request_with_accept_encoding("gzip")
 
-        context = _build_search_payload_cache_context(
+        context = _build_tipi_payload_cache_context(
             request,
             ncm="85.17",
+            view_mode=ViewMode.FAMILY,
         )
 
         assert context.is_code_query is True
         assert context.normalized_query == "8517"
-        assert context.build_code_payload_cache_key(shape="full").endswith(
-            ":8517:full"
+        assert context.build_code_payload_cache_key().endswith(":family:8517")
+        assert (
+            context.cache_headers["Vary"]
+            == "Authorization, X-Tenant-Id, Accept-Encoding"
         )
-        assert context.cache_headers["Vary"] == "Authorization, X-Tenant-Id, Accept-Encoding"
 
-    def test_builds_text_query_context_without_payload_key(self):
+    def test_builds_text_query_context(self):
         request = _build_request_with_accept_encoding("gzip")
 
-        context = _build_search_payload_cache_context(
+        context = _build_tipi_payload_cache_context(
             request,
             ncm="motor de arranque",
+            view_mode=ViewMode.CHAPTER,
         )
 
         assert context.is_code_query is False
         assert context.normalized_query == "motor de arranque"
-        assert context.build_code_payload_cache_key(shape="summary").endswith(
-            ":motor de arranque:summary"
+        assert context.build_code_payload_cache_key().endswith(
+            ":chapter:motor de arranque"
         )

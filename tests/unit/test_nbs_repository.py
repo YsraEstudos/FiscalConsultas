@@ -47,13 +47,24 @@ async def test_search_public_scope_filters_to_null_tenant():
     session = _FakeSession([_FakeRowsResult([])])
     repo = NbsRepository(session)
 
-    results = await repo.search("construcao")
+    results = await repo.load_nbs_catalog_entries("construcao")
 
     assert results == []
     stmt, params = session.calls[0]
     assert "n.tenant_id IS NULL" in str(stmt)
     assert params is not None
     assert "tenant_id" not in params
+
+
+@pytest.mark.asyncio
+async def test_search_alias_keeps_migration_compatibility():
+    legacy_repo = NbsRepository(_FakeSession([_FakeRowsResult([])]))
+    canonical_repo = NbsRepository(_FakeSession([_FakeRowsResult([])]))
+
+    legacy_results = await legacy_repo.search("construcao")
+    canonical_results = await canonical_repo.load_nbs_catalog_entries("construcao")
+
+    assert legacy_results == canonical_results == []
 
 
 @pytest.mark.asyncio
@@ -67,8 +78,8 @@ async def test_catalog_counts_and_metadata_public_scope_filter_to_null_tenant():
     )
     repo = NbsRepository(session)
 
-    counts = await repo.get_catalog_counts()
-    metadata = await repo.get_catalog_metadata()
+    counts = await repo.snapshot_nbs_catalog_counts()
+    metadata = await repo.snapshot_nbs_catalog_metadata()
 
     assert counts == {"nbs_items": 12, "nebs_entries": 8}
     assert metadata == {"nbs_version": "2026-04"}
@@ -109,7 +120,7 @@ async def test_get_item_details_public_scope_filters_to_null_tenant():
     )
     repo = NbsRepository(session)
 
-    details = await repo.get_item_details("1.01")
+    details = await repo.load_nbs_catalog_item_details("1.01")
 
     assert details["success"] is True
     assert details["item"]["code"] == "1.01"
@@ -162,7 +173,7 @@ async def test_get_nebs_details_public_scope_filters_to_null_tenant():
     )
     repo = NbsRepository(session)
 
-    details = await repo.get_nebs_details("1.0102.61")
+    details = await repo.load_nbs_explanatory_entry_details("1.0102.61")
 
     assert details["success"] is True
     assert details["item"]["code"] == "1.0102.61"

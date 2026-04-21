@@ -43,7 +43,7 @@ def _disable_redis(monkeypatch):
 async def test_create_with_repository_raises_when_repo_is_unavailable(monkeypatch):
     monkeypatch.setattr(nesh_service_module, "_REPO_AVAILABLE", False)
     with pytest.raises(RuntimeError, match="Repository não disponível"):
-        await NeshService.create_with_repository()
+        await NeshService.initializeNeshServiceWithRepositoryFactory()
 
 
 def test_fts_cache_key_is_deterministic():
@@ -76,20 +76,20 @@ async def test_get_repo_supports_repository_factory_and_none():
 
 def test_strip_chapter_preamble_and_parse_notes():
     content = "Capítulo 85\nNotas iniciais\n85.17 - Conteúdo principal"
-    stripped = NeshService._strip_chapter_preamble(content)
+    stripped = NeshService.stripNeshChapterPreamble(content)
     assert stripped.startswith("85.17 -")
 
-    assert NeshService._strip_chapter_preamble("") == ""
+    assert NeshService.stripNeshChapterPreamble("") == ""
     assert (
-        NeshService._strip_chapter_preamble("Sem posição NCM aqui")
+        NeshService.stripNeshChapterPreamble("Sem posição NCM aqui")
         == "Sem posição NCM aqui"
     )
 
     service = NeshService(db=_FakeDb())
-    parsed = service.parse_chapter_notes("1 - Nota um\ncontinua\n2. Nota dois")
+    parsed = service.parseNeshChapterNotes("1 - Nota um\ncontinua\n2. Nota dois")
     assert parsed["1"].startswith("1 - Nota um")
     assert parsed["2"].startswith("2. Nota dois")
-    assert service.parse_chapter_notes("") == {}
+    assert service.parseNeshChapterNotes("") == {}
 
 
 @pytest.mark.asyncio
@@ -109,8 +109,8 @@ async def test_fetch_chapter_data_populates_cache_and_reuses_cached_value(monkey
     )
     service = NeshService(db=db)
 
-    first = await service.fetch_chapter_data("85")
-    second = await service.fetch_chapter_data("85")
+    first = await service.fetchNeshChapterData("85")
+    second = await service.fetchNeshChapterData("85")
 
     assert db.chapter_calls == 1
     assert first == second
@@ -143,8 +143,8 @@ async def test_fetch_chapter_data_uses_precomputed_json_and_fallback_parse(monke
     )
     service = NeshService(db=db)
 
-    chapter_85 = await service.fetch_chapter_data("85")
-    chapter_86 = await service.fetch_chapter_data("86")
+    chapter_85 = await service.fetchNeshChapterData("85")
+    chapter_86 = await service.fetchNeshChapterData("86")
 
     assert chapter_85["parsed_notes"] == {"1": "precomputada"}
     assert chapter_86["parsed_notes"]["1"].startswith("1 - Nota de fallback")
@@ -155,7 +155,7 @@ async def test_fetch_chapter_data_raises_when_db_adapter_is_missing(monkeypatch)
     _disable_redis(monkeypatch)
     service = NeshService(db=None)
     with pytest.raises(RuntimeError, match="DatabaseAdapter não configurado"):
-        await service.fetch_chapter_data("85")
+        await service.fetchNeshChapterData("85")
 
 
 def test_normalize_query_and_normalize_query_raw_apply_filters(monkeypatch):
@@ -165,7 +165,7 @@ def test_normalize_query_and_normalize_query_raw_apply_filters(monkeypatch):
     monkeypatch.setattr(
         service.processor, "process_query_for_fts", lambda _text: f"{tokens} w1*"
     )
-    normalized = service.normalize_query("qualquer")
+    normalized = service.normalizeNeshQuery("qualquer")
     assert len(normalized.split()) == 20
     assert normalized.split()[1] == "w1*"
 
@@ -173,7 +173,7 @@ def test_normalize_query_and_normalize_query_raw_apply_filters(monkeypatch):
         service.processor, "normalize", lambda _text: "de a x motor motor bomba"
     )
     monkeypatch.setattr(service.processor, "stopwords", {"de", "a"})
-    normalized_raw = service.normalize_query_raw("qualquer")
+    normalized_raw = service.normalizeNeshRawQuery("qualquer")
     assert normalized_raw == "motor* bomba*"
 
 
@@ -216,10 +216,10 @@ async def test_search_full_text_returns_none_match_when_query_becomes_empty(
     monkeypatch,
 ):
     service = NeshService(db=_FakeDb())
-    monkeypatch.setattr(service, "normalize_query", lambda _query: "")
-    monkeypatch.setattr(service, "normalize_query_raw", lambda _query: "")
+    monkeypatch.setattr(service, "normalizeNeshQuery", lambda _query: "")
+    monkeypatch.setattr(service, "normalizeNeshRawQuery", lambda _query: "")
 
-    payload = await service.search_full_text("x")
+    payload = await service.searchNeshByTextQuery("x")
 
     assert payload["match_type"] == "none"
     assert payload["results"] == []
@@ -234,8 +234,10 @@ async def test_search_full_text_combines_tiers_and_applies_near_bonus(monkeypatc
     )
     service = NeshService(db=db)
 
-    monkeypatch.setattr(service, "normalize_query", lambda _query: "motor* bomba*")
-    monkeypatch.setattr(service, "normalize_query_raw", lambda _query: "motor* bomba*")
+    monkeypatch.setattr(service, "normalizeNeshQuery", lambda _query: "motor* bomba*")
+    monkeypatch.setattr(
+        service, "normalizeNeshRawQuery", lambda _query: "motor* bomba*"
+    )
     monkeypatch.setattr(
         service.processor, "process_query_exact", lambda _query: "motor bomba"
     )
@@ -294,7 +296,7 @@ async def test_search_full_text_combines_tiers_and_applies_near_bonus(monkeypatc
 
     monkeypatch.setattr(service, "_fts_scored_cached", _fake_fts)
 
-    payload = await service.search_full_text("motor bomba")
+    payload = await service.searchNeshByTextQuery("motor bomba")
 
     assert payload["match_type"] == "exact"
     assert payload["warning"] is None
@@ -305,8 +307,8 @@ async def test_search_full_text_combines_tiers_and_applies_near_bonus(monkeypatc
 @pytest.mark.asyncio
 async def test_search_full_text_returns_warning_when_no_results(monkeypatch):
     service = NeshService(db=_FakeDb())
-    monkeypatch.setattr(service, "normalize_query", lambda _query: "foo*")
-    monkeypatch.setattr(service, "normalize_query_raw", lambda _query: "foo*")
+    monkeypatch.setattr(service, "normalizeNeshQuery", lambda _query: "foo*")
+    monkeypatch.setattr(service, "normalizeNeshRawQuery", lambda _query: "foo*")
     monkeypatch.setattr(service.processor, "process_query_exact", lambda _query: "foo")
     monkeypatch.setattr(service.processor, "process_query_for_fts", lambda _word: None)
 
@@ -315,7 +317,7 @@ async def test_search_full_text_returns_warning_when_no_results(monkeypatch):
 
     monkeypatch.setattr(service, "_fts_scored_cached", _empty_fts)
 
-    payload = await service.search_full_text("foo")
+    payload = await service.searchNeshByTextQuery("foo")
 
     assert payload["match_type"] == "none"
     assert "Nenhum resultado encontrado" in payload["warning"]
@@ -357,9 +359,9 @@ async def test_search_by_code_builds_found_and_not_found_chapters(monkeypatch):
             }
         return None
 
-    monkeypatch.setattr(service, "fetch_chapter_data", _fake_fetch)
+    monkeypatch.setattr(service, "fetchNeshChapterData", _fake_fetch)
 
-    payload = await service.search_by_code("8517,invalido,7301")
+    payload = await service.searchNeshByNcmCode("8517,invalido,7301")
 
     assert payload["type"] == "code"
     assert payload["total_capitulos"] == 2
@@ -381,8 +383,8 @@ async def test_execute_nesh_search_with_vector_weights_dispatches_between_code_a
     async def _search_full_text(_query):
         return {"origin": "text"}
 
-    monkeypatch.setattr(service, "search_by_code", _search_by_code)
-    monkeypatch.setattr(service, "search_full_text", _search_full_text)
+    monkeypatch.setattr(service, "searchNeshByNcmCode", _search_by_code)
+    monkeypatch.setattr(service, "searchNeshByTextQuery", _search_full_text)
 
     monkeypatch.setattr(
         nesh_service_module.ncm_utils, "is_code_query", lambda _query: True
@@ -412,13 +414,15 @@ async def test_process_request_is_backward_compatible_alias(monkeypatch):
         _canonical,
     )
 
-    assert await service.process_request("8517") == {"origin": "canonical"}
+    assert await service.executeNeshSearchWithVectorWeights("8517") == {
+        "origin": "canonical"
+    }
 
 
 @pytest.mark.asyncio
 async def test_prewarm_cache_covers_empty_sources_and_exception_path(monkeypatch):
     service_without_sources = NeshService(db=None)
-    assert await service_without_sources.prewarm_cache() == 0
+    assert await service_without_sources.prewarmNeshChapterCache() == 0
 
     service = NeshService(db=_FakeDb())
     calls = []
@@ -428,8 +432,8 @@ async def test_prewarm_cache_covers_empty_sources_and_exception_path(monkeypatch
         if chapter_num == "02":
             raise RuntimeError("boom")
 
-    monkeypatch.setattr(service, "fetch_chapter_data", _fake_fetch)
-    warmed = await service.prewarm_cache(["01", "02", "03"], concurrency=2)
+    monkeypatch.setattr(service, "fetchNeshChapterData", _fake_fetch)
+    warmed = await service.prewarmNeshChapterCache(["01", "02", "03"], concurrency=2)
 
     assert warmed == 3
     assert calls == ["01", "02", "03"]
@@ -443,7 +447,7 @@ async def test_get_internal_cache_metrics_returns_current_snapshots():
     service._chapter_cache_metrics.record_hit()
     service._fts_cache_metrics.record_miss()
 
-    payload = await service.get_internal_cache_metrics()
+    payload = await service.snapshotNeshInternalCacheMetrics()
 
     assert payload["chapter_cache"]["current_size"] == 1
     assert payload["chapter_cache"]["hits"] >= 1

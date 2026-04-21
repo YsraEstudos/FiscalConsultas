@@ -3,18 +3,63 @@ import logging
 import re
 import secrets
 from datetime import date, datetime, timezone
-from typing import Any, Dict, Optional, cast
+from typing import Protocol, TypedDict, Unpack, cast
 
 from backend.config.settings import settings
 from backend.domain.sqlmodels import Subscription, Tenant
 from backend.infrastructure.db_engine import get_session
 from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 logger = logging.getLogger("routes.webhooks")
 _TENANT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{3,128}$")
 _asaas_token_warning_logged = False
+
+
+class AsaasPaymentPayload(TypedDict, total=False):
+    externalReference: str
+    plan: str
+    description: str
+    value: str | int | float
+    billingType: str
+    status: str
+    dueDate: str
+    paymentDate: str
+    customer: str
+    subscription: str
+    id: str
+
+
+class AsaasWebhookPayload(TypedDict, total=False):
+    event: str
+    externalReference: str
+    plan: str
+    payment: AsaasPaymentPayload
+
+
+class _SubscriptionUpsertPayload(TypedDict):
+    tenant_id: str
+    provider_customer_id: str | None
+    provider_subscription_id: str | None
+    provider_payment_id: str | None
+    plan_name: str
+    payment_status: str
+    amount: float | None
+    billing_cycle: str | None
+    next_due_date: date | None
+    last_payment_date: datetime | None
+    raw_payload: str
+    now: datetime
+
+
+class _SubscriptionTableColumns(Protocol):
+    provider: object
+    provider_payment_id: object
+    provider_subscription_id: object
+    tenant_id: object
+    updated_at: object
 
 
 def _extract_asaas_token(request: Request) -> str | None:
@@ -41,16 +86,28 @@ def _is_valid_asaas_webhook(request: Request) -> bool:
     return secrets.compare_digest(token, configured)
 
 
-def _parse_date(value: Any) -> Optional[date]:
+def _normalize_optional_text(
+    value: object | None, *, max_length: int | None = None
+) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return text[:max_length] if max_length is not None else text
+
+
+def _parse_date(value: object | None) -> date | None:
     if not value:
         return None
     try:
         return date.fromisoformat(str(value)[:10])
-    except Exception:
+    except (ValueError, TypeError) as exc:
+        logger.debug("Failed to parse date value %r: %s", value, exc)
         return None
 
 
-def _parse_datetime(value: Any) -> Optional[datetime]:
+def _parse_datetime(value: object | None) -> datetime | None:
     if not value:
         return None
     raw = str(value).strip()
@@ -64,12 +121,14 @@ def _parse_datetime(value: Any) -> Optional[datetime]:
             # Persistimos como UTC naive para compatibilidade com DateTime sem timezone.
             parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
         return parsed
-    except Exception:
-        logger.warning("Invalid datetime format in Asaas payload: %s", raw)
+    except ValueError as exc:
+        logger.warning("Invalid datetime format in Asaas payload %r: %s", raw, exc)
         return None
 
 
-async def _get_or_update_tenant(session: Any, tenant_id: str, plan_name: str) -> None:
+async def _get_or_update_tenant(
+    session: AsyncSession, tenant_id: str, plan_name: str
+) -> None:
     tenant = await session.get(Tenant, tenant_id)
     if not tenant:
         tenant = Tenant(
@@ -85,12 +144,12 @@ async def _get_or_update_tenant(session: Any, tenant_id: str, plan_name: str) ->
 
 
 async def _find_asaas_subscription(
-    session: Any,
+    session: AsyncSession,
     tenant_id: str,
-    provider_payment_id: Optional[str],
-    provider_subscription_id: Optional[str],
-):
-    table = cast(Any, Subscription).__table__.c
+    provider_payment_id: str | None,
+    provider_subscription_id: str | None,
+) -> Subscription | None:
+    table = cast(_SubscriptionTableColumns, Subscription.__table__.c)
     if provider_payment_id:
         result = await session.execute(
             select(Subscription).where(
@@ -126,9 +185,9 @@ async def _find_asaas_subscription(
 
 
 def _upsert_subscription(
-    session: Any,
-    subscription: Optional[Subscription],
-    **data: Any,
+    session: AsyncSession,
+    subscription: Subscription | None,
+    **data: Unpack[_SubscriptionUpsertPayload],
 ) -> None:
     if not subscription:
         subscription = Subscription(
@@ -166,17 +225,21 @@ def _upsert_subscription(
         subscription.updated_at = data["now"]
 
 
-async def process_asaas_payment_confirmed(payload: Dict[str, Any]) -> Dict[str, Any]:
+async def process_asaas_payment_confirmed(
+    payload: AsaasWebhookPayload,
+) -> dict[str, object]:
     """
     Provisiona ou atualiza assinatura/tenant após PAYMENT_CONFIRMED.
     """
     raw_payment = payload.get("payment")
-    payment: Dict[str, Any] = raw_payment if isinstance(raw_payment, dict) else {}
-
-    external_reference = payment.get("externalReference") or payload.get(
-        "externalReference"
+    payment: AsaasPaymentPayload = (
+        cast(AsaasPaymentPayload, raw_payment) if isinstance(raw_payment, dict) else {}
     )
-    tenant_id = str(external_reference or "").strip()
+
+    external_reference = _normalize_optional_text(
+        payment.get("externalReference") or payload.get("externalReference")
+    )
+    tenant_id = external_reference or ""
     if not tenant_id:
         return {"processed": False, "reason": "missing_external_reference"}
     if not _TENANT_ID_RE.fullmatch(tenant_id):
@@ -197,14 +260,16 @@ async def process_asaas_payment_confirmed(payload: Dict[str, Any]) -> Dict[str, 
     if amount is not None and amount <= 0:
         return {"processed": False, "reason": "invalid_amount"}
 
-    billing_cycle = payment.get("billingType")
-    payment_status = str(payment.get("status") or "CONFIRMED")[:64]
+    billing_cycle = _normalize_optional_text(payment.get("billingType"), max_length=64)
+    payment_status = (
+        _normalize_optional_text(payment.get("status"), max_length=64) or "CONFIRMED"
+    )
     next_due_date = _parse_date(payment.get("dueDate"))
     last_payment_date = _parse_datetime(payment.get("paymentDate"))
 
-    provider_customer_id = payment.get("customer")
-    provider_subscription_id = payment.get("subscription")
-    provider_payment_id = payment.get("id")
+    provider_customer_id = _normalize_optional_text(payment.get("customer"))
+    provider_subscription_id = _normalize_optional_text(payment.get("subscription"))
+    provider_payment_id = _normalize_optional_text(payment.get("id"))
 
     async with get_session() as session:
         await _get_or_update_tenant(session, tenant_id, plan_name)
@@ -269,17 +334,18 @@ async def asaas_webhook(request: Request):
 
     try:
         payload = json.loads(raw_body)
-    except Exception:
+    except (json.JSONDecodeError, ValueError):
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="Invalid webhook payload")
+    typed_payload = cast(AsaasWebhookPayload, payload)
 
-    event = str(payload.get("event") or "").strip()
+    event = _normalize_optional_text(typed_payload.get("event")) or ""
     if not event:
         raise HTTPException(status_code=400, detail="Missing event in payload")
 
     if event != "PAYMENT_CONFIRMED":
         return {"success": True, "processed": False, "ignored_event": event}
 
-    result = await process_asaas_payment_confirmed(payload)
+    result = await process_asaas_payment_confirmed(typed_payload)
     return {"success": True, **result}
