@@ -1172,4 +1172,4 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
         return tag
 
     # Processa apenas tags de abertura HTML usando restrições mais fortes p/ SonarQube
-    return re.sub(r'<[a-zA-Z][^\s>]*\s+[^>]*>|<[a-zA-Z][^\s>]*>', _process_tag, html)
+    return re.sub(r"<[a-zA-Z][^\s>]*\s+[^>]*>|<[a-zA-Z][^\s>]*>", _process_tag, html)

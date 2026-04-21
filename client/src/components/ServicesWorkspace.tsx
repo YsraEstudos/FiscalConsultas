@@ -257,7 +257,6 @@ function NbsDetailSection({
     nbsNoteBodyHtml,
     nbsNotesContentRef,
     nbsState,
-    openCatalogDoc,
 }: Readonly<NbsDetailSectionProps>) {
     return (
         <section className={styles.rightPanel}>

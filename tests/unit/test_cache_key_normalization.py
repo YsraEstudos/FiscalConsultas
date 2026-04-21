@@ -114,7 +114,10 @@ class TestSearchCacheRequestContext:
         assert context.normalized_query == "8517"
         assert context.payload_cache_key is not None
         assert context.payload_cache_key.endswith(":8517:full")
-        assert context.cache_headers["Vary"] == "Authorization, X-Tenant-Id, Accept-Encoding"
+        assert (
+            context.cache_headers["Vary"]
+            == "Authorization, X-Tenant-Id, Accept-Encoding"
+        )
 
     def test_builds_text_query_context_without_payload_key(self):
         request = _build_request_with_accept_encoding("gzip")

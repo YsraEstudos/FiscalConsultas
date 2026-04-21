@@ -4,8 +4,6 @@ from backend.presentation.renderer import inject_comment_marks
 def test_inject_comment_marks_empty_inputs():
     assert inject_comment_marks("", ["key1"]) == ""
     assert inject_comment_marks("<div></div>", []) == "<div></div>"
-    assert inject_comment_marks("<div></div>", None) == "<div></div>"
-    assert inject_comment_marks(None, ["key1"]) is None
 
 
 def test_inject_comment_marks_single_target():

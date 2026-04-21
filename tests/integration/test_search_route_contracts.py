@@ -30,10 +30,7 @@ class _FakeNeshServiceCode:
 
 
 def test_search_handler_keeps_legacy_alias_to_canonical_name():
-    assert (
-        search_route.search
-        is search_route.handleGlobalFiscalSearchRequest
-    )
+    assert search_route.search is search_route.handleGlobalFiscalSearchRequest
 
 
 class _FakeNeshServiceText:

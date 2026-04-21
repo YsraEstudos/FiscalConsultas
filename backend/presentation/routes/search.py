@@ -192,9 +192,7 @@ def _build_search_cache_request_context(
     cache_key = cache_scope_key(request)
     headers = _build_cache_headers(cache_key, ncm_normalized)
 
-    payload_key = (
-        f"{cache_key}:{ncm_normalized}:{shape}" if is_code_query else None
-    )
+    payload_key = f"{cache_key}:{ncm_normalized}:{shape}" if is_code_query else None
     return SearchCacheRequestContext(
         is_code_query=is_code_query,
         normalized_query=ncm_normalized,

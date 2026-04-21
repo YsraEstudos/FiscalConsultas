@@ -127,7 +127,6 @@ function comparePositionCodes(aCode: string, bCode: string): number {
 export const Sidebar = React.memo(function Sidebar({
   results,
   onNavigate,
-  isOpen,
   onClose,
   searchQuery,
   activeAnchorId,

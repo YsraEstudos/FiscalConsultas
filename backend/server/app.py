@@ -362,7 +362,9 @@ async def _init_tipi_service(app: FastAPI) -> None:
 async def _init_nbs_service(app: FastAPI) -> None:
     if settings.database.is_postgres:
         try:
-            app.state.nbs_service = await NbsService.initializeNbsServiceWithPostgresRepository()
+            app.state.nbs_service = (
+                await NbsService.initializeNbsServiceWithPostgresRepository()
+            )
             logger.info("NbsService initialized in Repository mode (Postgres)")
             return
         except Exception as e:
