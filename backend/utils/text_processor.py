@@ -1,57 +1,9 @@
-import functools
 import re
 import unicodedata
 from typing import List
 
 # Pre-compiled regex for word extraction (performance optimization)
 _RE_WORD = re.compile(r"\b\w+\b")
-
-
-@functools.lru_cache(maxsize=10240)
-def _stem_word(word: str) -> str: # NOSONAR
-    """
-    Stemming logic memoized for performance.
-    Moved out of the class so caching doesn't capture the `self` instance.
-    """
-    word = word.lower()
-
-    # Remove accents
-    word = unicodedata.normalize("NFKD", word).encode("ASCII", "ignore").decode("utf-8")
-
-    # Plural step
-    if word.endswith("s"):
-        if word.endswith("ns"):  # ex: trens -> trem
-            word = word[:-2] + "m"
-        elif word.endswith("ais"):  # animais -> animal
-            word = word[:-3] + "al"
-        elif word.endswith("eis"):  # papeis -> papel, submersiveis -> submersivel
-            word = word[:-3] + "el"
-        elif word.endswith("ois"):  # lencois -> lencol
-            word = word[:-3] + "ol"
-        elif word.endswith("is"):  # funis -> funil
-            word = word[:-2] + "il"
-        elif word.endswith("les"):  # males -> mal
-            word = word[:-3] + "l"
-        elif word.endswith("res"):  # motores -> motor
-            word = word[:-2]
-        elif word.endswith("es"):  # ex: motores -> motor
-            if len(word) >= 4 and word[-3] in "szr":
-                word = word[:-2]
-            else:
-                word = word[:-2] + "e"
-        else:
-            word = word[:-1]  # carros -> carro
-
-    # Feminine step
-    if word.endswith("a"):
-        if word.endswith("na"):  # pequena -> pequeno
-            word = word[:-1] + "o"
-        elif word.endswith("ra"):  # produtora -> produtor
-            word = word[:-1]
-        elif len(word) > 3:
-            word = word[:-1]  # gata -> gat
-
-    return word
 
 
 class PortugueseStemmer:
@@ -67,8 +19,65 @@ class PortugueseStemmer:
             .decode("utf-8")
         )
 
+    def _replace_suffix(self, word: str, suffix: str, replacement: str) -> str:
+        if word.endswith(suffix):
+            return word[: -len(suffix)] + replacement
+        return word
+
+    def step_plural(self, word: str) -> str:
+        """Remove sufixos de plural."""
+        if word.endswith("s"):
+            if word.endswith("ns"):  # ex: trens -> trem
+                return self._replace_suffix(word, "ns", "m")
+            # IMPORTANTE: Verificar sufixos mais específicos ANTES do genérico 'es'
+            elif word.endswith("ais"):  # animais -> animal
+                return self._replace_suffix(word, "ais", "al")
+            elif word.endswith("eis"):  # papeis -> papel, submersiveis -> submersivel
+                return self._replace_suffix(word, "eis", "el")
+            elif word.endswith("ois"):  # lencois -> lencol
+                return self._replace_suffix(word, "ois", "ol")
+            elif word.endswith("is"):  # funis -> funil
+                return self._replace_suffix(word, "is", "il")
+            elif word.endswith("les"):  # males -> mal
+                return self._replace_suffix(word, "les", "l")
+            elif word.endswith("res"):  # motores -> motor
+                return word[:-2]
+            elif word.endswith(
+                "es"
+            ):  # ex: motores -> motor (AGORA DEPOIS dos específicos!)
+                if (
+                    len(word) >= 4 and word[-3] in "szr"
+                ):  # luzes->luz, vezes->vez, cores->cor
+                    return word[:-2]
+                return self._replace_suffix(word, "es", "e")
+            else:
+                return word[:-1]  # carros -> carro
+        return word
+
+    def step_feminine(self, word: str) -> str:
+        """Redução de feminino para masculino (aproximado)."""
+        if word.endswith("a"):
+            if word.endswith("na"):  # pequena -> pequeno
+                return self._replace_suffix(word, "a", "o")
+            if word.endswith("ra"):  # produtora -> produtor
+                return word[:-1]
+            if len(word) > 3:
+                return word[:-1]  # gata -> gat
+        return word
+
+    def step_augmentative(self, word: str) -> str:
+        # NCMs usam pouco aumentativo, mas...
+        return word
+
     def stem(self, word: str) -> str:
-        return _stem_word(word)
+        word = word.lower()
+        word = self._remove_accent(word)
+
+        # Ordem de aplicação
+        word = self.step_plural(word)
+        word = self.step_feminine(word)
+
+        return word
 
 
 class NeshTextProcessor:
@@ -88,20 +97,44 @@ class NeshTextProcessor:
         normalized = self.normalize(text)
         words = _RE_WORD.findall(normalized)
 
-        return " ".join(
-            _stem_word(w) for w in words if w not in self.stopwords and len(w) >= 2
-        )
+        processed = []
+        for w in words:
+            if w in self.stopwords:
+                continue
+            if len(w) < 2:  # Ignora letras soltas
+                continue
+
+            stemmed = self.stemmer.stem(w)
+            processed.append(stemmed)
+
+        return " ".join(processed)
 
     def process_query_for_fts(self, text: str) -> str:
         """Prepara string para FTS (prefix search com wildcards)."""
         normalized = self.normalize(text)
         words = _RE_WORD.findall(normalized)
 
-        return " ".join(f"{_stem_word(w)}*" for w in words if w not in self.stopwords)
+        processed = []
+        for w in words:
+            if w in self.stopwords:
+                continue
+
+            stemmed = self.stemmer.stem(w)
+            processed.append(f"{stemmed}*")
+
+        return " ".join(processed)
 
     def process_query_exact(self, text: str) -> str:
         """Prepara string para FTS SEM wildcards (busca exata)."""
         normalized = self.normalize(text)
         words = _RE_WORD.findall(normalized)
 
-        return " ".join(_stem_word(w) for w in words if w not in self.stopwords)
+        processed = []
+        for w in words:
+            if w in self.stopwords:
+                continue
+
+            stemmed = self.stemmer.stem(w)
+            processed.append(stemmed)
+
+        return " ".join(processed)
