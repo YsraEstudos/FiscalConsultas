@@ -250,14 +250,12 @@ interface NbsDetailSectionProps {
     readonly nbsNoteBodyHtml: string;
     readonly nbsNotesContentRef: React.RefObject<HTMLDivElement | null>;
     readonly nbsState: ServicesWorkspaceNbsState;
-    readonly openCatalogDoc: OpenCatalogDoc;
 }
 
 function NbsDetailSection({
     nbsNoteBodyHtml,
     nbsNotesContentRef,
     nbsState,
-    openCatalogDoc,
 }: Readonly<NbsDetailSectionProps>) {
     return (
         <section className={styles.rightPanel}>
@@ -409,7 +407,6 @@ function NbsWorkspaceView({
     nbsPrefixAutoExpand,
     nbsState,
     onSelectNbs,
-    openCatalogDoc,
     setIsChapterNotesOpen,
 }: Readonly<NbsWorkspaceViewProps>) {
     const chapterButtonLabel = activeChapterNumber
@@ -480,7 +477,6 @@ function NbsWorkspaceView({
                 nbsNoteBodyHtml={nbsNoteBodyHtml}
                 nbsNotesContentRef={nbsNotesContentRef}
                 nbsState={nbsState}
-                openCatalogDoc={openCatalogDoc}
             />
             <NbsChapterNotesDialog
                 chapterNotesDialogRef={chapterNotesDialogRef}

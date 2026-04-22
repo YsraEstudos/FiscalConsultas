@@ -1852,7 +1852,6 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                     <Sidebar
                         results={renderableCodeResults}
                         onNavigate={handleNavigate}
-                        isOpen={mobileMenuOpen}
                         onClose={onCloseMobileMenu}
                         searchQuery={latestTextQuery || data.query || data.ncm}
                         activeAnchorId={activeAnchorId}
