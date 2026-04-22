@@ -1,6 +1,6 @@
+import functools
 import re
 import unicodedata
-import functools
 from typing import List
 
 # Pre-compiled regex for word extraction (performance optimization)
@@ -16,11 +16,7 @@ def _stem_word(word: str) -> str:
     word = word.lower()
 
     # Remove accents
-    word = (
-        unicodedata.normalize("NFKD", word)
-        .encode("ASCII", "ignore")
-        .decode("utf-8")
-    )
+    word = unicodedata.normalize("NFKD", word).encode("ASCII", "ignore").decode("utf-8")
 
     # Plural step
     if word.endswith("s"):
@@ -93,9 +89,7 @@ class NeshTextProcessor:
         words = _RE_WORD.findall(normalized)
 
         return " ".join(
-            _stem_word(w)
-            for w in words
-            if w not in self.stopwords and len(w) >= 2
+            _stem_word(w) for w in words if w not in self.stopwords and len(w) >= 2
         )
 
     def process_query_for_fts(self, text: str) -> str:
@@ -103,19 +97,11 @@ class NeshTextProcessor:
         normalized = self.normalize(text)
         words = _RE_WORD.findall(normalized)
 
-        return " ".join(
-            f"{_stem_word(w)}*"
-            for w in words
-            if w not in self.stopwords
-        )
+        return " ".join(f"{_stem_word(w)}*" for w in words if w not in self.stopwords)
 
     def process_query_exact(self, text: str) -> str:
         """Prepara string para FTS SEM wildcards (busca exata)."""
         normalized = self.normalize(text)
         words = _RE_WORD.findall(normalized)
 
-        return " ".join(
-            _stem_word(w)
-            for w in words
-            if w not in self.stopwords
-        )
+        return " ".join(_stem_word(w) for w in words if w not in self.stopwords)

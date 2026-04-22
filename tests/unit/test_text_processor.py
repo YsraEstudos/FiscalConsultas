@@ -1,11 +1,15 @@
 import pytest
-from backend.utils.text_processor import NeshTextProcessor, PortugueseStemmer
+
+from backend.utils.text_processor import (
+    NeshTextProcessor,
+    PortugueseStemmer,
+    _stem_word,
+)
 
 pytestmark = pytest.mark.unit
 
 
 def test_stemmer_plural_rules_cover_specific_suffixes():
-    from backend.utils.text_processor import _stem_word
     # Test plural variations via stemmer since the methods were inlined for performance
     assert _stem_word("trens") == "trem"
     assert _stem_word("animais") == "animal"
@@ -20,7 +24,6 @@ def test_stemmer_plural_rules_cover_specific_suffixes():
 
 
 def test_stemmer_feminine_rules():
-    from backend.utils.text_processor import _stem_word
     assert _stem_word("pequena") == "pequeno"
     assert _stem_word("produtora") == "produtor"
     assert _stem_word("gata") == "gat"
