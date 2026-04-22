@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Any, ParamSpec, TypeVar, cast
+from typing import Any, cast
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -92,9 +92,6 @@ from backend.utils.frontend_check import verify_frontend_build
 setup_logging()
 logger = logging.getLogger("server")
 
-P = ParamSpec("P")
-R = TypeVar("R")
-
 
 def _sync_lifecycle_dependencies() -> None:
     """Keeps the lifecycle module aligned with monkeypatched app-level symbols."""
@@ -115,7 +112,7 @@ def _sync_lifecycle_dependencies() -> None:
     app_lifecycle.logger = logger
 
 
-def _sync_lifecycle_call(callback: Callable[P, R]) -> Callable[P, R]:
+def _sync_lifecycle_call[**P, R](callback: Callable[P, R]) -> Callable[P, R]:
     def wrapped(*args: P.args, **kwargs: P.kwargs) -> R:
         _sync_lifecycle_dependencies()
         return callback(*args, **kwargs)

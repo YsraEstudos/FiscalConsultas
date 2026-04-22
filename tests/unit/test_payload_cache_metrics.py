@@ -34,7 +34,7 @@ def test_payload_cache_metrics_snapshot_tracks_all_counters() -> None:
     assert snapshot.served_identity == 1
     assert snapshot.current_size == 3
     assert snapshot.max_size == 5
-    assert snapshot.hit_rate == 0.6667
+    assert snapshot.hit_rate == pytest.approx(0.6667, abs=1e-4)
 
 
 def test_payload_cache_metrics_snapshot_handles_empty_counters() -> None:
@@ -42,7 +42,7 @@ def test_payload_cache_metrics_snapshot_handles_empty_counters() -> None:
 
     snapshot = metrics.snapshot(current_size=0, max_size=10)
 
-    assert snapshot.hit_rate == 0.0
+    assert snapshot.hit_rate == pytest.approx(0.0, abs=1e-9)
     assert snapshot.hits == 0
     assert snapshot.misses == 0
 

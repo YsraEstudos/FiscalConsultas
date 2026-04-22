@@ -23,9 +23,11 @@ class _FakeDbAdapter:
         self.closed = False
 
     async def _ensure_pool(self):
+        await asyncio.sleep(0)
         self.pool_ready = True
 
     async def close(self):
+        await asyncio.sleep(0)
         self.closed = True
 
 
@@ -47,10 +49,12 @@ class _FakeNeshService:
         self.db = db
 
     async def prewarmNeshChapterCache(self):
+        await asyncio.sleep(0)
         return 0
 
     @classmethod
     async def initializeNeshServiceWithRepositoryFactory(cls):
+        await asyncio.sleep(0)
         return cls()
 
 
@@ -61,6 +65,7 @@ class _FakeTipiService:
 
     @classmethod
     async def initializeTipiServiceWithRepositoryFactory(cls):
+        await asyncio.sleep(0)
         obj = cls()
         obj.created_repo = True
         obj.mode = "repo"
@@ -74,6 +79,7 @@ class _FakeNbsService:
         self.created_repo = False
 
     async def shutdownNbsServiceResources(self):
+        await asyncio.sleep(0)
         self.closed = True
 
     async def close(self):
@@ -81,6 +87,7 @@ class _FakeNbsService:
 
     @classmethod
     async def initializeNbsServiceWithPostgresRepository(cls):
+        await asyncio.sleep(0)
         obj = cls()
         obj.mode = "repo"
         obj.created_repo = True
@@ -101,10 +108,12 @@ def core_mocks(monkeypatch):
     }
 
     async def _redis_close():
+        await asyncio.sleep(0)
         fake_calls["redis_closed"] = True
         app_module.redis_cache._client = None
 
     async def _redis_connect():
+        await asyncio.sleep(0)
         fake_calls["redis_connected"] = True
         app_module.redis_cache._client = object()
 
@@ -136,6 +145,7 @@ def core_mocks(monkeypatch):
 @pytest.mark.asyncio
 async def test_no_cache_html_sets_headers_for_html_paths_only():
     async def _next(_request):
+        await asyncio.sleep(0)
         return Response("ok")
 
     html_response = await app_module.no_cache_html(
@@ -187,6 +197,7 @@ async def test_lifespan_sqlite_init_db_failure_keeps_startup_and_shutdown(
     fake_db = _FakeDbAdapter("db.sqlite")
 
     async def _init_db_fail():
+        await asyncio.sleep(0)
         raise RuntimeError("unsupported sqlite extension")
 
     monkeypatch.setattr(app_module.settings.database, "engine", "sqlite")
@@ -273,9 +284,11 @@ async def test_lifespan_sqlite_init_db_success_closes_sqlmodel_engine(
     close_db_called = {"value": False}
 
     async def _init_db_ok():
+        await asyncio.sleep(0)
         return None
 
     async def _close_db_ok():
+        await asyncio.sleep(0)
         close_db_called["value"] = True
 
     monkeypatch.setattr(app_module.settings.database, "engine", "sqlite")
@@ -300,6 +313,7 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
 ):
     class _FailingPrewarmNeshService(_FakeNeshService):
         async def prewarmNeshChapterCache(self):
+            await asyncio.sleep(0)
             raise RuntimeError("prewarm failed")
 
     class _ScalarResult:
@@ -311,6 +325,7 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
 
     class _Session:
         async def execute(self, _query):
+            await asyncio.sleep(0)
             return _ScalarResult(123)
 
     @asynccontextmanager
@@ -318,6 +333,7 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
         yield _Session()
 
     async def _close_db_fail():
+        await asyncio.sleep(0)
         raise RuntimeError("close failed")
 
     monkeypatch.setattr(app_module.settings.database, "engine", "postgresql")
@@ -347,6 +363,7 @@ async def test_lifespan_postgres_tipi_count_failure_falls_back_to_sqlite_mode(
 ):
     class _BrokenSession:
         async def execute(self, _query):
+            await asyncio.sleep(0)
             raise RuntimeError("tipi count failed")
 
     @asynccontextmanager
@@ -354,6 +371,7 @@ async def test_lifespan_postgres_tipi_count_failure_falls_back_to_sqlite_mode(
         yield _BrokenSession()
 
     async def _close_db_ok():
+        await asyncio.sleep(0)
         return None
 
     monkeypatch.setattr(app_module.settings.database, "engine", "postgresql")
@@ -375,6 +393,7 @@ async def test_init_cache_warmup_handles_redis_connect_exception(monkeypatch):
     warnings = []
 
     async def _connect_fail():
+        await asyncio.sleep(0)
         raise RuntimeError("redis unavailable")
 
     def _capture_warning(msg, *args):
@@ -433,6 +452,7 @@ async def test_lifespan_postgres_import_error_still_enables_sqlmodel(
 
     class _Session:
         async def execute(self, _query):
+            await asyncio.sleep(0)
             return _ScalarResult(True)
 
     @asynccontextmanager
@@ -440,6 +460,7 @@ async def test_lifespan_postgres_import_error_still_enables_sqlmodel(
         yield _Session()
 
     async def _close_db_ok():
+        await asyncio.sleep(0)
         return None
 
     monkeypatch.setattr(app_module.settings.database, "engine", "postgresql")
@@ -563,12 +584,15 @@ async def test_shutdown_resources_continues_after_db_close_failure(monkeypatch):
 
     class _BrokenDb:
         async def close(self):
+            await asyncio.sleep(0)
             raise RuntimeError("db close failed")
 
     async def _redis_close():
+        await asyncio.sleep(0)
         return None
 
     async def _close_db():
+        await asyncio.sleep(0)
         close_db_called["value"] = True
 
     def _capture_warning(msg, *args):
@@ -594,9 +618,11 @@ async def test_shutdown_resources_continues_after_redis_close_failure(monkeypatc
     close_db_called = {"value": False}
 
     async def _redis_close():
+        await asyncio.sleep(0)
         raise RuntimeError("redis close failed")
 
     async def _close_db():
+        await asyncio.sleep(0)
         close_db_called["value"] = True
 
     def _capture_warning(msg, *args):

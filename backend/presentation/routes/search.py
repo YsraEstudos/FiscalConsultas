@@ -161,8 +161,11 @@ def get_payload_cache_metrics() -> dict[str, str | float | int]:
     }
 
 
-def snapshotSearchCodePayloadCacheMetrics() -> dict[str, str | float | int]:
+def get_search_code_payload_cache_metrics() -> dict[str, str | float | int]:
     return get_payload_cache_metrics()
+
+
+snapshotSearchCodePayloadCacheMetrics = get_search_code_payload_cache_metrics
 
 
 def _build_cache_headers(cache_key: str, ncm_normalized: str) -> dict[str, str]:
@@ -217,6 +220,102 @@ def _extract_code_results(response_data: Mapping[str, Any]) -> dict[str, Any]:
     return raw_results if isinstance(raw_results, dict) else {}
 
 
+def _prepare_code_search_response(
+    response_data: dict[str, Any], *, shape: str
+) -> None:
+    results = _extract_code_results(response_data)
+    if shape == "full":
+        response_data["markdown"] = HtmlRenderer.render_full_response(results)
+    for chapter_data in results.values():
+        if isinstance(chapter_data, dict):
+            chapter_data.pop("conteudo", None)
+    response_data["results"] = results
+    response_data["resultados"] = (
+        results  # @deprecated: legacy alias, planned removal v2.0
+    )
+    response_data["total_capitulos"] = response_data.get("total_capitulos") or len(
+        results
+    )
+
+
+def _build_code_search_metric_headers(
+    *,
+    headers: Mapping[str, str],
+    response_bytes: int,
+    compressed_bytes: int,
+    serialization_ms: float,
+    gzip_ms: float,
+    shape: str,
+) -> dict[str, str]:
+    return {
+        **headers,
+        "X-Response-Bytes": str(response_bytes),
+        "X-Compressed-Bytes": str(compressed_bytes),
+        "X-Serialize-Ms": str(serialization_ms),
+        "X-Gzip-Ms": str(gzip_ms),
+        "X-Response-Shape": shape,
+    }
+
+
+def _build_code_search_response(
+    request: Request,
+    response_data: dict[str, Any],
+    *,
+    headers: Mapping[str, str],
+    context: SearchCacheRequestContext,
+    request_id: str,
+    shape: str,
+    cache_checked: bool,
+    cached_payload: tuple[bytes, bytes] | None,
+) -> Response:
+    _prepare_code_search_response(response_data, shape=shape)
+
+    payload_key = context.payload_cache_key
+    if not cache_checked and payload_key is not None:
+        cached_payload = _code_payload_cache_get(payload_key)
+
+    cache_status = "HIT" if cached_payload is not None else "MISS"
+    serialization_ms = 0.0
+    gzip_ms = 0.0
+    if cached_payload is None:
+        serialization_started = perf_counter()
+        raw_body = _orjson.dumps(response_data)
+        serialization_ms = round((perf_counter() - serialization_started) * 1000, 2)
+        gzip_started = perf_counter()
+        gzip_body = gzip.compress(raw_body, compresslevel=1, mtime=0)
+        gzip_ms = round((perf_counter() - gzip_started) * 1000, 2)
+        response_bytes = len(raw_body)
+        compressed_bytes = len(gzip_body)
+        cached_payload = (raw_body, gzip_body)
+        if payload_key is not None:
+            _code_payload_cache_set(payload_key, cached_payload)
+    else:
+        response_bytes = len(cached_payload[0])
+        compressed_bytes = len(cached_payload[1])
+
+    metric_headers = _build_code_search_metric_headers(
+        headers=headers,
+        response_bytes=response_bytes,
+        compressed_bytes=compressed_bytes,
+        serialization_ms=serialization_ms,
+        gzip_ms=gzip_ms,
+        shape=shape,
+    )
+
+    logger.info(
+        "search_request_finished request_id=%s path=%s outcome=success type=code cache_status=%s",
+        request_id,
+        request.url.path,
+        cache_status,
+    )
+    return _build_payload_response(
+        request,
+        cached_payload,
+        headers=metric_headers,
+        cache_status=cache_status,
+    )
+
+
 def _build_payload_response(
     request: Request,
     payload: tuple[bytes, bytes],
@@ -267,7 +366,7 @@ async def _apply_search_rate_limit(request: Request) -> None:
         500: {"description": "Formato de resposta inválido do serviço"},
     },
 )
-async def handleGlobalFiscalSearchRequest(
+async def handle_global_fiscal_search_request(
     request: Request,
     service: Annotated[NeshService, Depends(get_nesh_service)],
     ncm: Annotated[
@@ -351,77 +450,16 @@ async def handleGlobalFiscalSearchRequest(
             status_code=500, detail="Formato de resposta inválido do serviço"
         )
     response_data = cast(dict[str, Any], result)
-    serialization_ms = 0.0
-    gzip_ms = 0.0
-    response_bytes = 0
-    compressed_bytes = 0
-
-    # Compatibilidade de contrato / performance:
-    # - manter 'results' como chave canônica e alias legado 'resultados'
-    # - pre-renderizar HTML no backend (campo `markdown` mantido por compatibilidade)
-    # - remover campos brutos pesados da serialização
     if response_data.get("type") == "code":
-        results = _extract_code_results(response_data)
-        if shape == "full":
-            response_data["markdown"] = HtmlRenderer.render_full_response(results)
-        for chapter_data in results.values():
-            if isinstance(chapter_data, dict):
-                chapter_data.pop("conteudo", None)
-        response_data["results"] = results
-        response_data["resultados"] = (
-            results  # @deprecated: legacy alias, planned removal v2.0
-        )
-        response_data["total_capitulos"] = response_data.get("total_capitulos") or len(
-            results
-        )
-
-    # Hot path optimization:
-    # code lookups are frequently repeated with very large payloads (~860KB+).
-    # Cache both raw and gzip bodies to avoid serializing/compressing each request.
-    # Secondary cache lookup: if `is_code_query` was False but service returned
-    # `type="code"`, we still try `_code_payload_cache_get` once using
-    # `payload_key=f"{cache_key}:{ncm_normalized}"` and guard with `cache_checked`.
-    if response_data.get("type") == "code":
-        if not cache_checked:
-            payload_key = context.payload_cache_key
-            cached_payload = _code_payload_cache_get(payload_key)
-            cache_checked = True
-
-        cache_status = "HIT" if cached_payload is not None else "MISS"
-        if cached_payload is None:
-            serialization_started = perf_counter()
-            raw_body = _orjson.dumps(response_data)
-            serialization_ms = round((perf_counter() - serialization_started) * 1000, 2)
-            gzip_started = perf_counter()
-            gzip_body = gzip.compress(raw_body, compresslevel=1, mtime=0)
-            gzip_ms = round((perf_counter() - gzip_started) * 1000, 2)
-            response_bytes = len(raw_body)
-            compressed_bytes = len(gzip_body)
-            cached_payload = (raw_body, gzip_body)
-            if payload_key is not None:
-                _code_payload_cache_set(payload_key, cached_payload)
-        else:
-            response_bytes = len(cached_payload[0])
-            compressed_bytes = len(cached_payload[1])
-        metric_headers = {
-            "X-Response-Bytes": str(response_bytes),
-            "X-Compressed-Bytes": str(compressed_bytes),
-            "X-Serialize-Ms": str(serialization_ms),
-            "X-Gzip-Ms": str(gzip_ms),
-            "X-Response-Shape": shape,
-        }
-
-        logger.info(
-            "search_request_finished request_id=%s path=%s outcome=success type=code cache_status=%s",
-            request_id,
-            request.url.path,
-            cache_status,
-        )
-        return _build_payload_response(
+        return _build_code_search_response(
             request,
-            cached_payload,
-            headers={**headers, **metric_headers},
-            cache_status=cache_status,
+            response_data,
+            headers=headers,
+            context=context,
+            request_id=request_id,
+            shape=shape,
+            cache_checked=cache_checked,
+            cached_payload=cached_payload,
         )
 
     logger.info(
@@ -444,7 +482,8 @@ async def handleGlobalFiscalSearchRequest(
     )
 
 
-search = handleGlobalFiscalSearchRequest
+handleGlobalFiscalSearchRequest = handle_global_fiscal_search_request
+search = handle_global_fiscal_search_request
 
 
 @router.get("/chapters")

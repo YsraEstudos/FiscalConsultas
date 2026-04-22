@@ -119,8 +119,11 @@ def get_payload_cache_metrics() -> dict[str, str | float | int]:
     }
 
 
-def snapshotTipiCodePayloadCacheMetrics() -> dict[str, str | float | int]:
+def get_tipi_code_payload_cache_metrics() -> dict[str, str | float | int]:
     return get_payload_cache_metrics()
+
+
+snapshotTipiCodePayloadCacheMetrics = get_tipi_code_payload_cache_metrics
 
 
 router = APIRouter()

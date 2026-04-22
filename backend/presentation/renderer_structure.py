@@ -216,19 +216,46 @@ def _structure_headings(
     return content
 
 
+def _normalize_bullet_content(
+    renderer: _RendererRegexProtocol, line: str
+) -> str | None:
+    stripped = line.strip()
+    if not stripped:
+        return None
+
+    marker = stripped[0]
+    if marker not in renderer._BULLET_MARKERS:
+        return None
+
+    tail = stripped[1:]
+    if not tail:
+        return ""
+    if not tail[0].isspace():
+        return None
+    return tail.strip()
+
+
+def _normalize_special_line(
+    renderer: _RendererRegexProtocol, line: str
+) -> str | None:
+    bold_only = renderer.RE_BOLD_ONLY_LINE.match(line)
+    if bold_only:
+        title = bold_only.group(1).strip()
+        return f'<h4 class="nesh-subheading">{title}</h4>'
+
+    bold_inline = renderer.RE_BOLD_INLINE.match(line)
+    if bold_inline:
+        title = bold_inline.group(1).strip()
+        rest = bold_inline.group(2).strip()
+        return f'<span class="nesh-inline-title">{title}</span> {rest}'
+
+    return None
+
+
 def _normalize_lines(renderer: _RendererRegexProtocol, content: str) -> str:
     normalized_lines: list[str] = []
     for line in content.split("\n"):
-        bullet_content = None
-        stripped = line.strip()
-        if stripped:
-            marker = stripped[0]
-            if marker in renderer._BULLET_MARKERS:
-                tail = stripped[1:]
-                if not tail:
-                    bullet_content = ""
-                elif tail[0].isspace():
-                    bullet_content = tail.strip()
+        bullet_content = _normalize_bullet_content(renderer, line)
 
         if bullet_content == "":
             continue
@@ -238,19 +265,9 @@ def _normalize_lines(renderer: _RendererRegexProtocol, content: str) -> str:
             normalized_lines.append(f"- {bullet_content}")
             continue
 
-        bold_only = renderer.RE_BOLD_ONLY_LINE.match(line)
-        if bold_only:
-            title = bold_only.group(1).strip()
-            normalized_lines.append(f'<h4 class="nesh-subheading">{title}</h4>')
-            continue
-
-        bold_inline = renderer.RE_BOLD_INLINE.match(line)
-        if bold_inline:
-            title = bold_inline.group(1).strip()
-            rest = bold_inline.group(2).strip()
-            normalized_lines.append(
-                f'<span class="nesh-inline-title">{title}</span> {rest}'
-            )
+        special_line = _normalize_special_line(renderer, line)
+        if special_line is not None:
+            normalized_lines.append(special_line)
             continue
 
         normalized_lines.append(line)

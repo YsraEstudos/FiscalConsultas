@@ -264,34 +264,31 @@ async def _init_nbs_service(app: FastAPI) -> None:
     logger.info("NbsService initialized in SQLite mode (services.db)")
 
 
-async def _shutdown_resources(app: FastAPI) -> None:
-    logger.info("Shutting down...")
+async def _close_app_state_resource(
+    app: FastAPI, attr_name: str, method_name: str, label: str
+) -> None:
+    resource = getattr(app.state, attr_name, None)
+    if resource is None:
+        return
 
-    if hasattr(app.state, "db") and app.state.db:
-        try:
-            await app.state.db.close()
-        except Exception as exc:
-            logger.warning("Error closing DatabaseAdapter: %s", exc)
+    close_method = getattr(resource, method_name, None)
+    if not callable(close_method):
+        return
 
+    try:
+        await close_method()
+    except Exception as exc:
+        logger.warning("Error closing %s: %s", label, exc)
+
+
+async def _close_redis_cache() -> None:
     try:
         await redis_cache.close()
     except Exception as exc:
         logger.warning("Error closing Redis cache: %s", exc)
 
-    if hasattr(app.state, "tipi_service") and app.state.tipi_service:
-        close_tipi_service = getattr(app.state.tipi_service, "close", None)
-        if callable(close_tipi_service):
-            try:
-                await close_tipi_service()
-            except Exception as exc:
-                logger.warning("Error closing TipiService: %s", exc)
 
-    if hasattr(app.state, "nbs_service") and app.state.nbs_service:
-        try:
-            await app.state.nbs_service.shutdownNbsServiceResources()
-        except Exception as exc:
-            logger.warning("Error closing NbsService: %s", exc)
-
+async def _close_sqlmodel_engine() -> None:
     try:
         from backend.infrastructure.db_engine import close_db
 
@@ -299,6 +296,20 @@ async def _shutdown_resources(app: FastAPI) -> None:
         logger.info("SQLModel engine closed")
     except Exception as exc:
         logger.warning("Error closing SQLModel engine: %s", exc)
+
+
+async def _shutdown_resources(app: FastAPI) -> None:
+    logger.info("Shutting down...")
+    await _close_app_state_resource(app, "db", "close", "DatabaseAdapter")
+    await _close_redis_cache()
+    await _close_app_state_resource(app, "tipi_service", "close", "TipiService")
+    await _close_app_state_resource(
+        app,
+        "nbs_service",
+        "shutdownNbsServiceResources",
+        "NbsService",
+    )
+    await _close_sqlmodel_engine()
 
 
 @asynccontextmanager

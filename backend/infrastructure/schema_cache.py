@@ -6,21 +6,18 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Generic, TypeVar
 
 type DatabaseSignature = tuple[float, int] | None
 
-T = TypeVar("T")
-
 
 @dataclass
-class _SchemaCacheEntry(Generic[T]):
+class _SchemaCacheEntry[T]:
     db_signature: DatabaseSignature
     value: T
     checked_at: float
 
 
-class SchemaCache(Generic[T]):
+class SchemaCache[T]:
     """Caches schema-derived values with TTL and DB signature invalidation.
 
     Example:

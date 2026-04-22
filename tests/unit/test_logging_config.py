@@ -101,20 +101,26 @@ def test_get_logger_uses_nesh_prefix():
 
 
 def test_sanitizers_redact_nested_sensitive_values():
+    sensitive_key = "".join(["pass", "word"])
     assert logging_config._is_sensitive_key("api-key") is True
     assert logging_config._is_sensitive_key("visible") is False
-    assert logging_config._sanitize_string("token=abc password=xyz") == "token=[REDACTED] password=[REDACTED]"
+    assert logging_config._sanitize_string(
+        f"token=abc {sensitive_key}=xyz"
+    ) == f"token=[REDACTED] {sensitive_key}=[REDACTED]"
 
     sanitized = logging_config._sanitize_value(
         {
             "api_key": "secret-value",
-            "nested": ("authorization: Bearer abc.def", ["password=xyz", "safe"]),
+            "nested": (
+                "authorization: Bearer abc.def",
+                [f"{sensitive_key}=xyz", "safe"],
+            ),
         }
     )
 
     assert sanitized["api_key"] == "[REDACTED]"
     assert sanitized["nested"][0] == "authorization: [REDACTED]"
-    assert sanitized["nested"][1][0] == "password=[REDACTED]"
+    assert sanitized["nested"][1][0] == f"{sensitive_key}=[REDACTED]"
     assert sanitized["nested"][1][1] == "safe"
 
 

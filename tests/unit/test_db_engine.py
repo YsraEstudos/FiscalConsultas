@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -98,12 +99,15 @@ async def test_get_session_and_get_db_use_tenant_context(monkeypatch) -> None:
             self.rollbacks = 0
 
         async def execute(self, statement, params):
+            await asyncio.sleep(0)
             self.executed.append((statement, params))
 
         async def commit(self):
+            await asyncio.sleep(0)
             self.commits += 1
 
         async def rollback(self):
+            await asyncio.sleep(0)
             self.rollbacks += 1
 
     class _FakeSessionMaker:
@@ -113,9 +117,11 @@ async def test_get_session_and_get_db_use_tenant_context(monkeypatch) -> None:
         def __call__(self):
             class _AsyncSessionContext:
                 async def __aenter__(inner_self):
+                    await asyncio.sleep(0)
                     return self.session
 
                 async def __aexit__(inner_self, exc_type, exc, tb):
+                    await asyncio.sleep(0)
                     return False
 
             return _AsyncSessionContext()
