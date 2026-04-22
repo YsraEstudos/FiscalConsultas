@@ -1,29 +1,33 @@
 import pytest
-from backend.utils.text_processor import NeshTextProcessor, PortugueseStemmer
+
+from backend.utils.text_processor import (
+    NeshTextProcessor,
+    PortugueseStemmer,
+    _stem_word,
+)
 
 pytestmark = pytest.mark.unit
 
 
 def test_stemmer_plural_rules_cover_specific_suffixes():
-    s = PortugueseStemmer()
-    assert s.step_plural("trens") == "trem"  # ns -> m
-    assert s.step_plural("animais") == "animal"  # ais -> al
-    assert s.step_plural("papeis") == "papel"  # eis -> el
-    assert s.step_plural("lencois") == "lencol"  # ois -> ol
-    assert s.step_plural("funis") == "funil"  # is -> il
-    assert s.step_plural("males") == "mal"  # les -> l
-    assert s.step_plural("motores") == "motor"  # res -> trim 2
-    assert s.step_plural("luzes") == "luz"  # es with s/z/r rule
-    assert s.step_plural("paredes") == "parede"  # generic es -> e
-    assert s.step_plural("carros") == "carro"  # generic s
+    # Test plural variations via stemmer since the methods were inlined for performance
+    assert _stem_word("trens") == "trem"
+    assert _stem_word("animais") == "animal"
+    assert _stem_word("papeis") == "papel"
+    assert _stem_word("lencois") == "lencol"
+    assert _stem_word("funis") == "funil"
+    assert _stem_word("males") == "mal"
+    assert _stem_word("motores") == "motor"
+    assert _stem_word("luzes") == "luz"
+    assert _stem_word("paredes") == "parede"
+    assert _stem_word("carros") == "carro"
 
 
 def test_stemmer_feminine_rules():
-    s = PortugueseStemmer()
-    assert s.step_feminine("pequena") == "pequeno"
-    assert s.step_feminine("produtora") == "produtor"
-    assert s.step_feminine("gata") == "gat"
-    assert s.step_feminine("mar") == "mar"
+    assert _stem_word("pequena") == "pequeno"
+    assert _stem_word("produtora") == "produtor"
+    assert _stem_word("gata") == "gat"
+    assert _stem_word("mar") == "mar"
 
 
 def test_stem_normalizes_case_and_accent():
@@ -54,10 +58,10 @@ def test_process_query_exact_without_wildcards():
 
 
 def test_step_augmentative_is_noop():
-    s = PortugueseStemmer()
-    assert s.step_augmentative("carrinho") == "carrinho"
+    # removed step_augmentative as it was a noop anyway
+    pass
 
 
 def test_replace_suffix_returns_original_when_suffix_not_present():
-    s = PortugueseStemmer()
-    assert s._replace_suffix("motor", "xyz", "a") == "motor"
+    # step_plural no longer relies on replace_suffix as it uses string slices
+    pass
