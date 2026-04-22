@@ -24,9 +24,9 @@ class DatabaseSearchQueries:
 
     def __init__(self, adapter: "DatabaseAdapter") -> None:
         self._adapter = adapter
-        self._fts_schema_cache = SchemaCache[Dict[str, Any]]()
-        self._chapter_notes_schema_cache = SchemaCache[set[str]]()
-        self._positions_schema_cache = SchemaCache[set[str]]()
+        self._fts_schema_cache: SchemaCache[Dict[str, Any]] = SchemaCache()
+        self._chapter_notes_schema_cache: SchemaCache[set[str]] = SchemaCache()
+        self._positions_schema_cache: SchemaCache[set[str]] = SchemaCache()
         self._chapter_sql_cache: Optional[str] = None
         self._chapter_sql_has_sections: Optional[bool] = None
         self._chapter_sql_has_parsed_notes_json: Optional[bool] = None
