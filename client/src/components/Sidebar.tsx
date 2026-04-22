@@ -29,6 +29,7 @@ interface Chapter {
 interface SidebarProps {
   results: Record<string, Chapter> | null;
   onNavigate: (targetId: string) => void;
+  isOpen: boolean;
   onClose: () => void;
   searchQuery?: string;
   activeAnchorId?: string | null;
@@ -126,6 +127,7 @@ function comparePositionCodes(aCode: string, bCode: string): number {
 export const Sidebar = React.memo(function Sidebar({
   results,
   onNavigate,
+  isOpen: _isOpen,
   onClose,
   searchQuery,
   activeAnchorId,

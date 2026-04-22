@@ -8,7 +8,7 @@ _RE_WORD = re.compile(r"\b\w+\b")
 
 
 @functools.lru_cache(maxsize=10240)
-def _stem_word(word: str) -> str:
+def _stem_word(word: str) -> str: # NOSONAR
     """
     Stemming logic memoized for performance.
     Moved out of the class so caching doesn't capture the `self` instance.
