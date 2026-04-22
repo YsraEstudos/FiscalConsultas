@@ -7,7 +7,11 @@ from typing import cast
 import aiosqlite
 import orjson
 
-from backend.config.exceptions import DatabaseError, DatabaseNotFoundError, NotFoundError
+from backend.config.exceptions import (
+    DatabaseError,
+    DatabaseNotFoundError,
+    NotFoundError,
+)
 from backend.config.logging_config import service_logger as logger
 from backend.utils.nbs_parser import (
     build_nbs_code_variants,
@@ -32,7 +36,9 @@ def normalize_nbs_page_size(page_size: int) -> int:
     return min(max(normalized, 1), MAX_TREE_PAGE_SIZE)
 
 
-async def acquire_nbs_sqlite_connection(service: NbsServiceState) -> aiosqlite.Connection:
+async def acquire_nbs_sqlite_connection(
+    service: NbsServiceState,
+) -> aiosqlite.Connection:
     if not service.db_path.exists():
         raise DatabaseNotFoundError(str(service.db_path))
 
@@ -164,7 +170,9 @@ def build_nbs_excerpt(body_text: str, limit: int = 220) -> str:
 
 def resolve_nbs_code_aliases(code: str) -> tuple[list[str], list[str]]:
     aliases = list(build_nbs_code_variants((code or "").strip()))
-    clean_aliases = [clean_nbs_code(alias) for alias in aliases if clean_nbs_code(alias)]
+    clean_aliases = [
+        clean_nbs_code(alias) for alias in aliases if clean_nbs_code(alias)
+    ]
     return aliases, list(dict.fromkeys(clean_aliases))
 
 
@@ -253,9 +261,7 @@ async def fetch_nbs_item_by_code(
         where_clauses.append(f"code IN ({', '.join(['?'] * len(aliases))})")
         params.extend(aliases)
     if clean_aliases:
-        where_clauses.append(
-            f"code_clean IN ({', '.join(['?'] * len(clean_aliases))})"
-        )
+        where_clauses.append(f"code_clean IN ({', '.join(['?'] * len(clean_aliases))})")
         params.extend(clean_aliases)
 
     cursor = await conn.execute(

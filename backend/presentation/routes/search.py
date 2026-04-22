@@ -447,9 +447,7 @@ async def handle_global_fiscal_search_request(
     # - pre-renderizar HTML no backend (campo `markdown` mantido por compatibilidade)
     # - remover campos brutos pesados da serialização
     if response_data.get("type") == "code":
-        response_data = _apply_code_search_response_contract(
-            response_data, shape=shape
-        )
+        response_data = _apply_code_search_response_contract(response_data, shape=shape)
         return _build_code_search_response(
             request,
             response_data,

@@ -57,7 +57,6 @@ describe('Sidebar Reliability Reproduction', () => {
             <Sidebar
                 results={mockResults}
                 onNavigate={mockNavigate}
-                isOpen={true}
                 onClose={mockClose}
                 searchQuery=""
             />
@@ -73,7 +72,6 @@ describe('Sidebar Reliability Reproduction', () => {
             <Sidebar
                 results={mockResults}
                 onNavigate={mockNavigate}
-                isOpen={true}
                 onClose={mockClose}
                 searchQuery="4908.90.00"
             />
@@ -106,7 +104,6 @@ describe('Sidebar Reliability Reproduction', () => {
             <Sidebar
                 results={mockResults}
                 onNavigate={mockNavigate}
-                isOpen={true}
                 onClose={mockClose}
                 searchQuery=""
             />
@@ -116,7 +113,6 @@ describe('Sidebar Reliability Reproduction', () => {
             <Sidebar
                 results={mockResults}
                 onNavigate={mockNavigate}
-                isOpen={true}
                 onClose={mockClose}
                 searchQuery="9999.00.00" // Non-existent
             />

@@ -61,7 +61,9 @@ async def test_renderer_outputs_compatible_ids():
         ("abc", "aliquot-zero"),
     ],
 )
-def test_get_aliquot_class_covers_all_ranges(aliquota: str, expected_class: str) -> None:
+def test_get_aliquot_class_covers_all_ranges(
+    aliquota: str, expected_class: str
+) -> None:
     assert TipiRenderer.get_aliquot_class(aliquota) == expected_class
 
 
@@ -76,7 +78,7 @@ def test_render_position_and_chapter_variants() -> None:
         }
     )
     assert 'id="pos-85-17"' in position_html
-    assert 'tipi-nivel-5' in position_html
+    assert "tipi-nivel-5" in position_html
     assert 'data-tooltip="Alíquota Média (6-10%)"' in position_html
     assert ">7%<" in position_html
 
@@ -89,7 +91,7 @@ def test_render_position_and_chapter_variants() -> None:
         }
     )
     assert 'aria-label="NCM 85.18"' in empty_aliquota_html
-    assert 'tipi-nivel-0' in empty_aliquota_html
+    assert "tipi-nivel-0" in empty_aliquota_html
 
     chapter_html = TipiRenderer.render_chapter(
         {"capitulo": "85", "titulo": "Capítulo 85", "posicoes": []}
@@ -99,7 +101,9 @@ def test_render_position_and_chapter_variants() -> None:
 
 
 @pytest.mark.unit
-def test_render_full_response_and_text_results_handle_empty_and_populated_inputs() -> None:
+def test_render_full_response_and_text_results_handle_empty_and_populated_inputs() -> (
+    None
+):
     assert (
         TipiRenderer.render_full_response({})
         == '<p class="empty">Nenhum resultado encontrado na TIPI.</p>'
@@ -126,7 +130,7 @@ def test_render_full_response_and_text_results_handle_empty_and_populated_inputs
         }
     )
     assert 'id="cap-85"' in full_html
-    assert 'aliquot-nt' in full_html
+    assert "aliquot-nt" in full_html
 
     text_html = TipiRenderer.render_text_results(
         [

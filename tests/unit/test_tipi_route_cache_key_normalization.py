@@ -16,9 +16,7 @@ from backend.utils.ncm_utils import is_code_query
 
 
 def _normalize_query(ncm: str) -> str:
-    return _normalize_tipi_query_for_cache_key(
-        ncm, is_code_query=is_code_query(ncm)
-    )
+    return _normalize_tipi_query_for_cache_key(ncm, is_code_query=is_code_query(ncm))
 
 
 def _build_request_with_accept_encoding(value: str) -> Request:

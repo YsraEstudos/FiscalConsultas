@@ -417,7 +417,7 @@ export function ServicesTabContent({
             : EMPTY_NEBS_STATE
     ), [data.results, detailStatus, doc, nebsDetail, selectedCode]);
 
-    const title = doc === 'nbs' ? 'Resultados NEBS' : 'Resultados NEBS';
+    const title = doc === 'nbs' ? 'Resultados NBS' : 'Resultados NEBS';
     const countLabel = `${data.total} ${doc === 'nbs' ? 'itens' : 'notas'}`;
     const queryLabel = data.query.trim() || 'catalogo raiz';
     const shellClassName = `${styles.shell} ${isWorkspaceReady ? styles.shellVisible : styles.shellHidden}`;

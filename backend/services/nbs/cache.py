@@ -148,4 +148,3 @@ async def write_nbs_detail_cache_payload(
     )
     if redis_cache.available:
         await redis_cache.set_services_detail(namespace, scope, key, payload)
-

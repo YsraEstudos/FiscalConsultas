@@ -164,7 +164,7 @@ function NbsHierarchySection({
                         <span className={styles.chapterNotesEyebrow}>Explicações</span>
                         <span>{chapterButtonLabel}</span>
                     </button>
-                    Hierarquia NEBS
+                    Hierarquia NBS
                 </div>
                 <span className={styles.sectionBadge}>
                     {activeChapterNumber ? `Capítulo ${activeChapterNumber} ativo` : 'Capítulo ativo'}
@@ -259,6 +259,15 @@ function NbsDetailSection({
     nbsState,
     openCatalogDoc,
 }: Readonly<NbsDetailSectionProps>) {
+    const linkedNebs = nbsState.detail?.nebs ?? null;
+    const linkedNebsCode = linkedNebs?.code ?? null;
+
+    const handleOpenLinkedNebs = () => {
+        if (linkedNebsCode) {
+            openCatalogDoc('nebs', linkedNebsCode);
+        }
+    };
+
     return (
         <section className={styles.rightPanel}>
             {nbsState.isLoadingDetail ? (
@@ -290,7 +299,7 @@ function NbsDetailSection({
                         </div>
                     </section>
 
-                    {nbsState.detail.nebs && (
+                    {linkedNebs && (
                         <section className={styles.notesCard} style={{ marginTop: '1rem' }}>
                             <div className={styles.notesHeader}>
                                 <span className={styles.notesIcon}>i</span>
@@ -302,6 +311,18 @@ function NbsDetailSection({
                                 dangerouslySetInnerHTML={{ __html: nbsNoteBodyHtml }}
                             />
                         </section>
+                    )}
+
+                    {linkedNebsCode && (
+                        <div className={styles.detailActions} style={{ marginTop: '1rem' }}>
+                            <button
+                                type="button"
+                                className={styles.secondaryAction}
+                                onClick={handleOpenLinkedNebs}
+                            >
+                                Ver NEBS
+                            </button>
+                        </div>
                     )}
 
                     
@@ -571,7 +592,7 @@ function NebsDetailSection({
                         </p>
                     </div>
 
-                    <div className={styles.breadcrumbs} aria-label="Hierarquia NEBS">
+                    <div className={styles.breadcrumbs} aria-label="Hierarquia NBS">
                         {nebsState.detail.ancestors.map((ancestor) => (
                             <button
                                 key={ancestor.code}
@@ -614,14 +635,14 @@ function NebsDetailSection({
                     </section>
 
                     <div className={styles.detailActions}>
-                        <button
-                            type="button"
-                            className={styles.secondaryAction}
-                            onClick={() => openCatalogDoc('nbs', nebsState.detail?.item.code)}
-                        >
-                            Abrir item NEBS relacionado
-                        </button>
-                    </div>
+                            <button
+                                type="button"
+                                className={styles.secondaryAction}
+                                onClick={() => openCatalogDoc('nbs', nebsState.detail?.item.code)}
+                            >
+                                Abrir item NBS relacionado
+                            </button>
+                        </div>
                 </>
             ) : (
                 <div className={styles.emptyDetail}>

@@ -191,7 +191,9 @@ def _build_tipi_payload_cache_context(
     )
 
 
-def _extract_tipi_code_search_results(response_data: Mapping[str, Any]) -> dict[str, Any]:
+def _extract_tipi_code_search_results(
+    response_data: Mapping[str, Any],
+) -> dict[str, Any]:
     if "results" in response_data:
         raw_results = response_data.get("results")
     elif "resultados" in response_data:
@@ -289,9 +291,7 @@ def _apply_tipi_description_highlights(result: dict[str, Any]) -> None:
         _apply_tipi_text_description_highlights(results)
 
 
-def _apply_tipi_code_search_contract(
-    response_data: dict[str, Any]
-) -> dict[str, Any]:
+def _apply_tipi_code_search_contract(response_data: dict[str, Any]) -> dict[str, Any]:
     results = _extract_tipi_code_search_results(response_data)
     response_data["results"] = results
     response_data["resultados"] = results
@@ -436,9 +436,7 @@ async def handle_tipi_search_request(
                 cache_status="HIT",
             )
 
-        result = await tipi_service.searchTipiByNcmCode(
-            ncm, view_mode=view_mode.value
-        )
+        result = await tipi_service.searchTipiByNcmCode(ncm, view_mode=view_mode.value)
         if not isinstance(result, dict):
             logger.error(
                 "tipi_request_failed request_id=%s path=%s reason=invalid_service_response ncm=%s type=%s",
@@ -447,9 +445,7 @@ async def handle_tipi_search_request(
                 safe_ncm,
                 type(result).__name__,
             )
-            raise HTTPException(
-                status_code=500, detail=INVALID_TIPI_RESPONSE_DETAIL
-            )
+            raise HTTPException(status_code=500, detail=INVALID_TIPI_RESPONSE_DETAIL)
 
         result = _apply_tipi_code_search_contract(result)
         _apply_tipi_description_highlights(result)

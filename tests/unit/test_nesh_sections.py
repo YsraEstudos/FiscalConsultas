@@ -1,6 +1,10 @@
 import pytest
 
-from backend.utils.nesh_sections import _ChapterSectionParser, clean_markdown, extract_chapter_sections
+from backend.utils.nesh_sections import (
+    _ChapterSectionParser,
+    clean_markdown,
+    extract_chapter_sections,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -10,10 +14,19 @@ def test_clean_markdown_removes_common_markup() -> None:
 
 
 def test_definition_continuation_detects_supported_patterns() -> None:
-    assert _ChapterSectionParser._is_definition_continuation("continua", False, "") is True
-    assert _ChapterSectionParser._is_definition_continuation("- item", False, "") is True
-    assert _ChapterSectionParser._is_definition_continuation("Linha", False, "prefixo:") is True
-    assert _ChapterSectionParser._is_definition_continuation("Linha", False, "") is False
+    assert (
+        _ChapterSectionParser._is_definition_continuation("continua", False, "") is True
+    )
+    assert (
+        _ChapterSectionParser._is_definition_continuation("- item", False, "") is True
+    )
+    assert (
+        _ChapterSectionParser._is_definition_continuation("Linha", False, "prefixo:")
+        is True
+    )
+    assert (
+        _ChapterSectionParser._is_definition_continuation("Linha", False, "") is False
+    )
 
 
 def test_parser_header_and_definition_state_transitions() -> None:

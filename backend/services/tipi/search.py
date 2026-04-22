@@ -1,21 +1,17 @@
 from __future__ import annotations
 
-from collections import OrderedDict
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
 from ...config.constants import CacheConfig
 from ...utils import ncm_utils
 from ...utils.id_utils import generate_anchor_id
-from ...utils.payload_cache_metrics import PayloadCacheMetrics
 from .types import (
     TipiChapterCatalogItem,
     TipiChapterResultsMap,
     TipiCodeCacheKey,
     TipiCodeChapterPayload,
     TipiCodeSearchPayload,
-    TipiPositionRow,
-    TipiRepositoryHealthPayload,
     TipiRowBatch,
     TipiTextSearchItem,
     TipiTextSearchPayload,
@@ -318,13 +314,28 @@ def build_tipi_code_result_map(
 async def search_tipi_by_ncm_code(
     service: "TipiService", ncm_query: str, view_mode: str = "family"
 ) -> TipiCodeSearchPayload:
-    cache_key = (ncm_query, view_mode)
+    parts = service._normalize_tipi_multi_code_parts(ncm_query)
+    query_part = parts[0] if parts else ""
+    normalized_query = ncm_utils.format_ncm_tipi(query_part)
+    clean_query = ncm_utils.clean_ncm(normalized_query)
+    if not clean_query:
+        return service._build_empty_tipi_code_search_response(ncm_query)
+
+    cache_view_mode = view_mode
+    should_share_short_query_cache = len(parts) == 1 and len(clean_query) <= 2
+    if should_share_short_query_cache:
+        cache_view_mode = "family"
+
+    cap_num = clean_query[:2].zfill(2)
+
+    cache_key = (ncm_query, cache_view_mode)
     cached = await service._read_tipi_code_search_cache(cache_key)
     if cached:
+        if should_share_short_query_cache:
+            await service._get_chapter_positions(cap_num)
         return cached
     service._code_search_cache_metrics.record_miss()
 
-    parts = service._normalize_tipi_multi_code_parts(ncm_query)
     if len(parts) > 1:
         result = await service._search_tipi_multi_code_parts(
             ncm_query, view_mode, parts
@@ -332,13 +343,6 @@ async def search_tipi_by_ncm_code(
         await service._write_tipi_code_search_cache(cache_key, result)
         return result
 
-    query_part = parts[0] if parts else ""
-    normalized_query = ncm_utils.format_ncm_tipi(query_part)
-    clean_query = ncm_utils.clean_ncm(normalized_query)
-    if not clean_query:
-        return service._build_empty_tipi_code_search_response(ncm_query)
-
-    cap_num = clean_query[:2].zfill(2)
     posicao_alvo = service._resolve_tipi_target_position(
         clean_query, normalized_query, query_part
     )

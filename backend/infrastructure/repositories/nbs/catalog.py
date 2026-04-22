@@ -174,7 +174,9 @@ async def load_nbs_catalog_item_details(
         children_params["tenant_id"] = repo.tenant_id
     child_rows = await repo.session.execute(text(children_sql), children_params)
     tree_page = (
-        await load_nbs_catalog_tree_page(repo, chapter_root["code"], page=page, page_size=page_size)
+        await load_nbs_catalog_tree_page(
+            repo, chapter_root["code"], page=page, page_size=page_size
+        )
         if include_tree
         else None
     )
@@ -224,7 +226,9 @@ async def load_nbs_catalog_tree_page(
     }
     if repo.tenant_id is not None:
         params["tenant_id"] = repo.tenant_id
-    total_rows = int((await repo.session.execute(text(count_sql), params)).scalar() or 0)
+    total_rows = int(
+        (await repo.session.execute(text(count_sql), params)).scalar() or 0
+    )
     items = await load_nbs_catalog_items_by_prefix(
         repo,
         code,

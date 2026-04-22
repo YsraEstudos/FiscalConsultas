@@ -16,9 +16,7 @@ from backend.utils.ncm_utils import is_code_query
 
 
 def _normalize_query(ncm: str) -> str:
-    return _normalize_search_query_for_cache_key(
-        ncm, is_code_query=is_code_query(ncm)
-    )
+    return _normalize_search_query_for_cache_key(ncm, is_code_query=is_code_query(ncm))
 
 
 def _build_request_with_accept_encoding(value: str) -> Request:
@@ -113,10 +111,11 @@ class TestSearchPayloadCacheContext:
 
         assert context.is_code_query is True
         assert context.normalized_query == "8517"
-        assert context.build_code_payload_cache_key(shape="full").endswith(
-            ":8517:full"
+        assert context.build_code_payload_cache_key(shape="full").endswith(":8517:full")
+        assert (
+            context.cache_headers["Vary"]
+            == "Authorization, X-Tenant-Id, Accept-Encoding"
         )
-        assert context.cache_headers["Vary"] == "Authorization, X-Tenant-Id, Accept-Encoding"
 
     def test_builds_text_query_context_without_payload_key(self):
         request = _build_request_with_accept_encoding("gzip")

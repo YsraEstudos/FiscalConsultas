@@ -29,7 +29,9 @@ from .types import (
 )
 
 
-def public_nbs_explanatory_entry(entry: dict[str, object] | None) -> dict[str, object] | None:
+def public_nbs_explanatory_entry(
+    entry: dict[str, object] | None,
+) -> dict[str, object] | None:
     if not entry:
         return None
     public_entry = {field: entry.get(field) for field in NEBS_PUBLIC_FIELDS}
@@ -137,9 +139,7 @@ async def fetch_nbs_catalog_item_details(
         nebs_payload = (
             None
             if nebs_row is None
-            else public_nbs_explanatory_entry(
-                row_to_nbs_explanatory_entry(nebs_row)
-            )
+            else public_nbs_explanatory_entry(row_to_nbs_explanatory_entry(nebs_row))
         )
 
         payload = {
@@ -230,9 +230,7 @@ async def fetch_nbs_explanatory_entry_details(
         entry_where_clauses: list[str] = []
         entry_params: list[str] = []
         if aliases:
-            entry_where_clauses.append(
-                f"code IN ({', '.join(['?'] * len(aliases))})"
-            )
+            entry_where_clauses.append(f"code IN ({', '.join(['?'] * len(aliases))})")
             entry_params.extend(aliases)
         if clean_aliases:
             entry_where_clauses.append(

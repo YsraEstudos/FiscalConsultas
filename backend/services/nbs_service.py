@@ -190,9 +190,7 @@ class NbsService:
         """Busca entradas NEBS por código ou texto."""
         return await search_nbs_explanatory_entries(self, query, limit=limit)
 
-    async def search_nebs(
-        self, query: str, *, limit: int = 50
-    ) -> dict[str, object]:
+    async def search_nebs(self, query: str, *, limit: int = 50) -> dict[str, object]:
         return await self.searchNbsExplanatoryEntries(query, limit=limit)
 
     async def fetchNbsExplanatoryEntryDetails(self, code: str) -> dict[str, object]:
@@ -215,4 +213,5 @@ __all__ = [
     "DEFAULT_TREE_PAGE_SIZE",
     "MAX_TREE_PAGE_SIZE",
     "NbsService",
+    "redis_cache",
 ]

@@ -875,7 +875,13 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
     // Sidebar collapsed state for lateral layout
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-    const toggleSidebar = useCallback(() => { if (window.innerWidth <= 1024) { if (onToggleMobileMenu) onToggleMobileMenu(); else if (onCloseMobileMenu && mobileMenuOpen) onCloseMobileMenu(); } else { setSidebarCollapsed(prev => !prev); } }, [onToggleMobileMenu, onCloseMobileMenu, mobileMenuOpen]);
+    const toggleSidebar = useCallback(() => {
+        if (window.innerWidth <= 1024) {
+            if (onToggleMobileMenu) onToggleMobileMenu();
+            else if (onCloseMobileMenu && mobileMenuOpen) onCloseMobileMenu();
+        }
+        setSidebarCollapsed((prev) => !prev);
+    }, [onToggleMobileMenu, onCloseMobileMenu, mobileMenuOpen]);
 
     // ── Sistema de Comentários (Google Docs Style) ─────────────────────────
     const [commentsEnabled, setCommentsEnabled] = useState(false);
@@ -1852,7 +1858,6 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                     <Sidebar
                         results={renderableCodeResults}
                         onNavigate={handleNavigate}
-                        isOpen={mobileMenuOpen}
                         onClose={onCloseMobileMenu}
                         searchQuery={latestTextQuery || data.query || data.ncm}
                         activeAnchorId={activeAnchorId}
