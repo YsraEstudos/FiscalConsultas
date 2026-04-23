@@ -182,7 +182,8 @@ describe('services tabs flow', () => {
     render(<ServicesTabsHarness initialDoc="nbs" initialQuery="1.0101.11.00" />);
 
     await screen.findByText('Resultados NBS');
-    fireEvent.click(screen.getByRole('button', { name: 'Ver NBS' }));
+    const verNbsButton = await screen.findByRole('button', { name: 'Ver NBS' });
+    fireEvent.click(verNbsButton);
 
     await waitFor(() => {
       expect(screen.getByTestId('tab-list')).toHaveAttribute('data-count', '1');
@@ -196,7 +197,10 @@ describe('services tabs flow', () => {
     render(<ServicesTabsHarness initialDoc="nebs" initialQuery="1.0101.11.00" />);
 
     await screen.findByText('Resultados NEBS');
-    fireEvent.click(screen.getByRole('button', { name: 'Abrir item NBS relacionado' }));
+    const openNbsRelatedButton = await screen.findByRole('button', {
+      name: 'Abrir item NBS relacionado',
+    });
+    fireEvent.click(openNbsRelatedButton);
 
     await waitFor(() => {
       expect(screen.getByTestId('tab-list')).toHaveAttribute('data-count', '1');
@@ -210,7 +214,8 @@ describe('services tabs flow', () => {
     render(<ServicesTabsHarness initialDoc="nbs" initialQuery="1.0101.11.00" />);
 
     await screen.findByText('Resultados NBS');
-    fireEvent.click(screen.getByRole('button', { name: 'Ver NBS' }));
+    const verNbsButton = await screen.findByRole('button', { name: 'Ver NBS' });
+    fireEvent.click(verNbsButton);
 
     await waitFor(() => {
       expect(screen.getByTestId('active-tab-meta')).toHaveTextContent('nebs:1.0101.11.00');
@@ -235,8 +240,10 @@ describe('services tabs flow', () => {
       />,
     );
 
-    await screen.findByRole('button', { name: 'Abrir item NBS relacionado' });
-    fireEvent.click(screen.getByRole('button', { name: 'Abrir item NBS relacionado' }));
+    const openNbsRelatedButton = await screen.findByRole('button', {
+      name: 'Abrir item NBS relacionado',
+    });
+    fireEvent.click(openNbsRelatedButton);
 
     expect(onOpenDocInNewTab).toHaveBeenCalledWith('nbs', '1.0101.11.00');
   });
@@ -254,7 +261,8 @@ describe('services tabs flow', () => {
     );
 
     await screen.findByText('Resultados NBS');
-    fireEvent.click(screen.getByRole('button', { name: 'Ver NBS' }));
+    const verNbsButton = await screen.findByRole('button', { name: 'Ver NBS' });
+    fireEvent.click(verNbsButton);
 
     expect(onOpenDocInNewTab).toHaveBeenCalledWith('nebs', '1.0101.11.00');
   });
@@ -263,7 +271,8 @@ describe('services tabs flow', () => {
     render(<ServicesTabsHarness initialDoc="nebs" initialQuery="1.0101.11.00" />);
 
     await screen.findByText('Resultados NEBS');
-    fireEvent.click(screen.getByRole('button', { name: '1.01' }));
+    const breadcrumbButton = await screen.findByRole('button', { name: '1.01' });
+    fireEvent.click(breadcrumbButton);
 
     await waitFor(() => {
       expect(screen.getByTestId('tab-list')).toHaveAttribute('data-count', '1');
@@ -284,7 +293,8 @@ describe('services tabs flow', () => {
     );
 
     await screen.findByText('Resultados NEBS');
-    fireEvent.click(screen.getByRole('button', { name: '1.01' }));
+    const breadcrumbButton = await screen.findByRole('button', { name: '1.01' });
+    fireEvent.click(breadcrumbButton);
 
     expect(onOpenDocInNewTab).toHaveBeenCalledWith('nbs', '1.01');
     expect(screen.getByTestId('active-tab-meta')).toHaveTextContent('nebs:1.0101.11.00');
