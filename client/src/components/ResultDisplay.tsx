@@ -26,9 +26,11 @@ import {
 import { getNeshChapterBody } from '../services/api';
 import type { ChapterBodyResponse } from '../types/api.types';
 
-const LEGACY_MARKDOWN_PATTERN = /(^|\n)\s{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+\.\s|---+\s*$)|\*\*[^*\n]+?\*\*/m;
+const LEGACY_MARKDOWN_BLOCK_PATTERN = /(^|\n)\s{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+\.\s|---+\s*$)/m;
+const LEGACY_MARKDOWN_EMPHASIS_PATTERN = /\*\*[^*\n]+?\*\*/m;
 
-const isLikelyLegacyMarkdown = (value: string) => LEGACY_MARKDOWN_PATTERN.test(value);
+const isLikelyLegacyMarkdown = (value: string) =>
+    LEGACY_MARKDOWN_BLOCK_PATTERN.test(value) || LEGACY_MARKDOWN_EMPHASIS_PATTERN.test(value);
 
 const SHARED_MARKUP_CACHE_MAX = 12;
 const sharedRawMarkupCache = new Map<string, string>();
@@ -88,7 +90,7 @@ const isTipiResults = (resultados: Record<string, any> | null | undefined) => {
 
 const renderTipiFallback = (resultados: Record<string, any>) => {
     const chapters = Object.values(resultados)
-        .sort((a: any, b: any) => parseInt(a?.capitulo || '0', 10) - parseInt(b?.capitulo || '0', 10));
+        .sort((a: any, b: any) => Number.parseInt(a?.capitulo || '0', 10) - Number.parseInt(b?.capitulo || '0', 10));
 
     return chapters.map((chapter: any) => {
         const capitulo = chapter?.capitulo || '';
@@ -155,13 +157,15 @@ function getChapterAnchors(container: HTMLElement): HTMLElement[] {
 }
 
 function getChapterBounds(container: HTMLElement, capitulo: string): { start: HTMLElement | null; next: HTMLElement | null } {
-    const startByCap = container.querySelector(`#${CSS.escape(`cap-${capitulo}`)}`) as HTMLElement | null;
-    const startByChapter = container.querySelector(`#${CSS.escape(`chapter-${capitulo}`)}`) as HTMLElement | null;
+    const startByCapId = CSS.escape(`cap-${capitulo}`);
+    const startByCap = container.querySelector(`#${startByCapId}`) as HTMLElement | null;
+    const startByChapterId = CSS.escape(`chapter-${capitulo}`);
+    const startByChapter = container.querySelector(`#${startByChapterId}`) as HTMLElement | null;
     const start = startByCap || startByChapter;
     if (!start) return { start: null, next: null };
 
     const anchors = getChapterAnchors(container);
-    const idx = anchors.findIndex((el) => el === start);
+    const idx = anchors.indexOf(start);
     if (idx < 0) return { start, next: null };
 
     return { start, next: anchors[idx + 1] || null };
@@ -1840,9 +1844,11 @@ export const ResultDisplay = React.memo(function ResultDisplay({
 
             {/* Mobile Sidebar Overlay */}
             {shouldRenderSidebar && (
-                <div 
+                <button
+                    type="button"
                     className={`${styles.mobileOverlay || ''} ${mobileMenuOpen ? (styles.mobileOverlayOpen || '') : ''}`}
                     onClick={onCloseMobileMenu}
+                    aria-label="Fechar menu lateral"
                 />
             )}
 
@@ -1852,7 +1858,6 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                     <Sidebar
                         results={renderableCodeResults}
                         onNavigate={handleNavigate}
-                        isOpen={mobileMenuOpen}
                         onClose={onCloseMobileMenu}
                         searchQuery={latestTextQuery || data.query || data.ncm}
                         activeAnchorId={activeAnchorId}
