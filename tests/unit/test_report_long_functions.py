@@ -40,7 +40,7 @@ def test_scan_tree_reports_only_module_level_functions_and_skips_generated_dirs(
         project_root.mkdir()
 
         source = textwrap.dedent(
-            '''
+            """
             def short_function():
                 return 1
 
@@ -63,7 +63,7 @@ def test_scan_tree_reports_only_module_level_functions_and_skips_generated_dirs(
                     value = 1
                     value += 2
                     return value
-            '''
+            """
         )
         (project_root / "module.py").write_text(source, encoding="utf-8")
 
@@ -93,7 +93,7 @@ def test_write_json_report_exports_root_object_keyed_by_item_ids():
         project_root.mkdir()
 
         source = textwrap.dedent(
-            '''
+            """
             def first():
                 a = 1
                 b = 2
@@ -104,7 +104,7 @@ def test_write_json_report_exports_root_object_keyed_by_item_ids():
                 value += 2
                 value += 3
                 return value
-            '''
+            """
         )
         (project_root / "module.py").write_text(source, encoding="utf-8")
 

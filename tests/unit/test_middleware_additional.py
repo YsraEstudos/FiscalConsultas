@@ -921,10 +921,7 @@ def test_is_recently_provisioned_treats_zero_timestamp_as_valid():
     cache_key = ("org1", "u1")
     cache = {cache_key: 0.0}
 
-    assert (
-        middleware._is_recently_provisioned(cache_key, 10.0, cache, 30.0)
-        is True
-    )
+    assert middleware._is_recently_provisioned(cache_key, 10.0, cache, 30.0) is True
     assert middleware._is_recently_provisioned(cache_key, 10.0, {}, 30.0) is False
 
 

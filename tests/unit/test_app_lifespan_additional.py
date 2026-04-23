@@ -197,7 +197,9 @@ def test_configure_routes_keeps_fallback_when_frontend_index_missing(tmp_path):
 
     app_module._configure_routes(app, str(tmp_path), app_module.logger)
 
-    assert not any(getattr(route, "name", None) == "static" for route in app.router.routes)
+    assert not any(
+        getattr(route, "name", None) == "static" for route in app.router.routes
+    )
     assert any(
         getattr(route, "path", None) == "/"
         and getattr(route, "name", None) == "_read_root"
@@ -525,7 +527,9 @@ def test_build_content_security_policy_keeps_local_origins_in_development(monkey
     assert "https://cdn.jsdelivr.net" in csp
 
 
-def test_build_cors_configuration_defaults_to_localhost_only_in_development(monkeypatch):
+def test_build_cors_configuration_defaults_to_localhost_only_in_development(
+    monkeypatch,
+):
     monkeypatch.setattr(app_module.settings.server, "env", "development", raising=False)
     monkeypatch.setattr(
         app_module.settings.server, "cors_allowed_origins", None, raising=False

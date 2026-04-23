@@ -120,7 +120,7 @@ def _sync_lifecycle_call[**P, R](callback: Callable[P, R]) -> Callable[P, R]:
     return wrapped
 
 
-def _sync_lifecycle_async_call(
+def _sync_lifecycle_async_call[**P, R](
     callback: Callable[P, Awaitable[R]],
 ) -> Callable[P, Awaitable[R]]:
     async def wrapped(*args: P.args, **kwargs: P.kwargs) -> R:

@@ -3,7 +3,7 @@ Renderizador HTML para o Nesh.
 Facade compativel para o pipeline de Markdown/HTML e os helpers usados pelos testes.
 """
 
-from html.parser import HTMLParser
+from html.parser import HTMLParser  # noqa: F401 - re-exported for callers
 from collections.abc import Mapping
 import re
 
@@ -11,7 +11,11 @@ from ..config.constants import RegexPatterns
 from ..config.logging_config import renderer_logger as logger
 from ..data.glossary_manager import glossary_manager as _default_glossary_manager
 from ..domain import SearchResult
-from .renderer_patterns import _MultiTransformParser, _get_fallback_anchor_pattern, _get_position_pattern
+from .renderer_patterns import _MultiTransformParser  # noqa: F401 - re-exported for callers
+from .renderer_patterns import (
+    _get_fallback_anchor_pattern,  # noqa: F401 - re-exported for callers
+    _get_position_pattern,  # noqa: F401 - re-exported for callers
+)
 from .renderer_structure import (
     _get_pending_anchors,
     _inject_fallback_anchors,
@@ -22,7 +26,7 @@ from .renderer_structure import (
     _render_structured_sections,
     _structure_headings,
     _trim_chapter_content,
-    inject_comment_marks,
+    inject_comment_marks,  # noqa: F401 - re-exported for callers
 )
 from .renderer_text import (
     _apply_post_transforms,

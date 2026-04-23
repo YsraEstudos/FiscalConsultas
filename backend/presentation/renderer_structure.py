@@ -232,9 +232,7 @@ def _normalize_bullet_content(
     return tail.strip()
 
 
-def _normalize_special_line(
-    renderer: _RendererRegexProtocol, line: str
-) -> str | None:
+def _normalize_special_line(renderer: _RendererRegexProtocol, line: str) -> str | None:
     bold_only = renderer.RE_BOLD_ONLY_LINE.match(line)
     if bold_only:
         title = bold_only.group(1).strip()

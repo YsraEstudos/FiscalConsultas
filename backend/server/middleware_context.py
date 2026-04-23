@@ -7,9 +7,9 @@ import logging
 from contextvars import ContextVar, Token
 from typing import Any, Coroutine, Optional
 
-logger = logging.getLogger("nesh.middleware.context")
-
 from backend.infrastructure.db_engine import tenant_context
+
+logger = logging.getLogger("nesh.middleware.context")
 
 _request_id_ctx: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
 _jwt_failure_reason_ctx: ContextVar[Optional[str]] = ContextVar(
@@ -66,4 +66,3 @@ def _reset_request_id(token: Token[Optional[str]]) -> None:
 
 def _record_jwt_failure_reason(reason: Optional[str]) -> None:
     _jwt_failure_reason_ctx.set(reason)
-

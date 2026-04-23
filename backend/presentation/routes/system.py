@@ -12,38 +12,38 @@ from backend.server.rate_limit import status_rate_limiter
 from backend.services import NeshService
 from backend.utils.auth import extract_bearer_token, extract_client_ip, is_admin_payload
 
-from .system_metrics import append_catalog_status_metrics
-from .system_metrics import append_database_latency_metric
-from .system_metrics import append_internal_cache_hit_rate_metrics
-from .system_metrics import append_metric_line
-from .system_metrics import append_payload_cache_metrics
+from .system_metrics import append_catalog_status_metrics  # noqa: F401 - re-exported for callers
+from .system_metrics import append_database_latency_metric  # noqa: F401 - re-exported for callers
+from .system_metrics import append_internal_cache_hit_rate_metrics  # noqa: F401 - re-exported for callers
+from .system_metrics import append_metric_line  # noqa: F401 - re-exported for callers
+from .system_metrics import append_payload_cache_metrics  # noqa: F401 - re-exported for callers
 from .system_metrics import build_prometheus_metrics_payload
-from .system_metrics import metric_value_from_status
-from .system_status import await_status_refresh_snapshot
+from .system_metrics import metric_value_from_status  # noqa: F401 - re-exported for callers
+from .system_status import await_status_refresh_snapshot  # noqa: F401 - re-exported for callers
 from .system_status import build_detailed_status_payload
 from .system_status import build_public_status_payload
-from .system_status import build_status_snapshot
-from .system_status import coerce_int
-from .system_status import collect_db_status
+from .system_status import build_status_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import coerce_int  # noqa: F401 - re-exported for callers
+from .system_status import collect_db_status  # noqa: F401 - re-exported for callers
 from .system_status import collect_nbs_catalog_health
 from .system_status import collect_status_payloads
-from .system_status import collect_status_payloads_uncached
-from .system_status import collect_tipi_status
-from .system_status import extract_prefixed_metadata
-from .system_status import get_status_cache_lock
-from .system_status import get_status_snapshot
-from .system_status import normalize_count_catalog_status
-from .system_status import normalize_db_status
-from .system_status import normalize_tipi_status
-from .system_status import read_l1_status_snapshot
-from .system_status import read_redis_status_snapshot
-from .system_status import read_stale_l1_status_snapshot
-from .system_status import recover_status_snapshot
-from .system_status import refresh_status_snapshot
-from .system_status import reset_status_cache_for_tests
-from .system_status import status_cache_ttl_seconds
-from .system_status import store_status_snapshot
-from .system_status import unpack_status_snapshot
+from .system_status import collect_status_payloads_uncached  # noqa: F401 - re-exported for callers
+from .system_status import collect_tipi_status  # noqa: F401 - re-exported for callers
+from .system_status import extract_prefixed_metadata  # noqa: F401 - re-exported for callers
+from .system_status import get_status_cache_lock  # noqa: F401 - re-exported for callers
+from .system_status import get_status_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import normalize_count_catalog_status  # noqa: F401 - re-exported for callers
+from .system_status import normalize_db_status  # noqa: F401 - re-exported for callers
+from .system_status import normalize_tipi_status  # noqa: F401 - re-exported for callers
+from .system_status import read_l1_status_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import read_redis_status_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import read_stale_l1_status_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import recover_status_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import refresh_status_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import reset_status_cache_for_tests  # noqa: F401 - re-exported for callers
+from .system_status import status_cache_ttl_seconds  # noqa: F401 - re-exported for callers
+from .system_status import store_status_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import unpack_status_snapshot  # noqa: F401 - re-exported for callers
 
 router = APIRouter()
 collect_nbs_status = collect_nbs_catalog_health
@@ -134,9 +134,7 @@ async def _collect_system_cache_metrics_payload(request: Request) -> dict:
         "search_code_payload_cache": (
             search_route.snapshotSearchCodePayloadCacheMetrics()
         ),
-        "tipi_code_payload_cache": (
-            tipi_route.snapshotTipiCodePayloadCacheMetrics()
-        ),
+        "tipi_code_payload_cache": (tipi_route.snapshotTipiCodePayloadCacheMetrics()),
         "nesh_internal_caches": nesh_internal,
         "tipi_internal_caches": tipi_internal,
     }
@@ -257,7 +255,9 @@ async def debug_nesh_anchors(
     html_content = response_data.get("markdown", "") or ""
     id_pattern = re.compile(r'id="([^"]+)"')
     all_ids = id_pattern.findall(html_content)
-    pos_ids = [item for item in all_ids if item.startswith("pos-") or item.startswith("cap-")]
+    pos_ids = [
+        item for item in all_ids if item.startswith("pos-") or item.startswith("cap-")
+    ]
 
     return {
         "query": ncm,

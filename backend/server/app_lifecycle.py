@@ -124,7 +124,9 @@ def _log_runtime_security_warnings() -> None:
         )
 
     if not settings.database.is_postgres:
-        warnings.append("DATABASE__ENGINE não está em postgresql no ambiente de produção.")
+        warnings.append(
+            "DATABASE__ENGINE não está em postgresql no ambiente de produção."
+        )
 
     for warning in warnings:
         logger.warning("Runtime security warning: %s", warning)
@@ -180,7 +182,9 @@ async def _init_nesh_service(app: FastAPI) -> None:
     from backend.services.nesh_service import NeshService
 
     if settings.database.is_postgres:
-        app.state.service = await NeshService.initializeNeshServiceWithRepositoryFactory()
+        app.state.service = (
+            await NeshService.initializeNeshServiceWithRepositoryFactory()
+        )
         logger.info("NeshService initialized in Repository mode (Postgres/RLS)")
         return
 

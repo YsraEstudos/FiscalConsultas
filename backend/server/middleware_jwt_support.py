@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import logging
 import re
@@ -248,7 +247,17 @@ def _log_jwt_validation_success(
                 "header": token_snapshot.get("header", {}),
                 "claims": {
                     k: payload.get(k)
-                    for k in ("iss", "sub", "sid", "azp", "aud", "org_id", "exp", "iat", "nbf")
+                    for k in (
+                        "iss",
+                        "sub",
+                        "sid",
+                        "azp",
+                        "aud",
+                        "org_id",
+                        "exp",
+                        "iat",
+                        "nbf",
+                    )
                 },
             },
             ensure_ascii=False,
@@ -457,7 +466,10 @@ def _resolve_user_id(payload: dict[str, Any]) -> Optional[str]:
 
 
 def _is_recently_provisioned(
-    cache_key: tuple[str, str], now: float, cache: dict[tuple[str, str], float], ttl: float
+    cache_key: tuple[str, str],
+    now: float,
+    cache: dict[tuple[str, str], float],
+    ttl: float,
 ) -> bool:
     cached_at = cache.get(cache_key)
     return cached_at is not None and (now - cached_at) < ttl
@@ -516,7 +528,10 @@ async def _upsert_clerk_entities(
 
 
 def _mark_entities_as_provisioned(
-    cache_key: tuple[str, str], now: float, cache: dict[tuple[str, str], float], max_size: int
+    cache_key: tuple[str, str],
+    now: float,
+    cache: dict[tuple[str, str], float],
+    max_size: int,
 ) -> None:
     if len(cache) >= max_size:
         oldest = sorted(cache.items(), key=lambda item: item[1])[:100]

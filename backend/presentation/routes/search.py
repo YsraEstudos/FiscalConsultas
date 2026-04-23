@@ -199,9 +199,7 @@ def _build_search_cache_request_context(
     cache_key = cache_scope_key(request)
     headers = _build_cache_headers(cache_key, ncm_normalized)
 
-    payload_key = (
-        f"{cache_key}:{ncm_normalized}:{shape}" if is_code_query else None
-    )
+    payload_key = f"{cache_key}:{ncm_normalized}:{shape}" if is_code_query else None
     return SearchCacheRequestContext(
         is_code_query=is_code_query,
         normalized_query=ncm_normalized,
@@ -220,9 +218,7 @@ def _extract_code_results(response_data: Mapping[str, Any]) -> dict[str, Any]:
     return raw_results if isinstance(raw_results, dict) else {}
 
 
-def _prepare_code_search_response(
-    response_data: dict[str, Any], *, shape: str
-) -> None:
+def _prepare_code_search_response(response_data: dict[str, Any], *, shape: str) -> None:
     results = _extract_code_results(response_data)
     if shape == "full":
         response_data["markdown"] = HtmlRenderer.render_full_response(results)
