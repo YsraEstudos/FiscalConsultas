@@ -101,6 +101,26 @@ def test_safe_get_unverified_claims_parses_payload_and_handles_malformed():
     assert middleware._safe_get_unverified_claims("a.b") == {}
 
 
+def test_safe_get_unverified_header_parses_payload_and_rejects_malformed():
+    header = (
+        base64.urlsafe_b64encode(
+            json.dumps({"alg": "none", "typ": "JWT"}, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        )
+        .decode("ascii")
+        .rstrip("=")
+    )
+    token = f"{header}.payload.sig"
+
+    assert middleware._safe_get_unverified_header(token) == {
+        "alg": "none",
+        "typ": "JWT",
+    }
+    assert middleware._safe_get_unverified_header("not-a-jwt") == {}
+    assert middleware._safe_get_unverified_header(".payload.sig") == {}
+
+
 def test_jwt_observability_logs_do_not_include_token_fingerprint(monkeypatch):
     warning_messages: list[str] = []
     debug_calls: list[tuple[str, str]] = []

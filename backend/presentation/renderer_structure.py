@@ -123,7 +123,6 @@ def _render_structured_sections(
             f'<h3 class="section-header titulo-header">📖 {titulo_processed}</h3>\n'
             "</div>\n\n"
         )
-        rendered_notes_block = True
 
     notas_sec = str(sections.get("notas") or "").strip()
     if notas_sec:
@@ -145,7 +144,6 @@ def _render_structured_sections(
             f'<div class="consideracoes-content">\n{consideracoes_html}\n</div>\n'
             "</div>\n\n"
         )
-        rendered_notes_block = True
 
     definicoes = str(sections.get("definicoes") or "").strip()
     if definicoes:
@@ -156,7 +154,6 @@ def _render_structured_sections(
             f'<div class="definicoes-content">\n{definicoes_html}\n</div>\n'
             "</div>\n\n"
         )
-        rendered_notes_block = True
 
     return html, rendered_notes_block
 
@@ -430,7 +427,7 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
             return tag
 
         html = re.sub(
-            rf'<[a-zA-Z][^>]*\bid=["\']?{safe_key}["\']?[^>]*>',
+            rf'<[a-zA-Z][^>]*\bid=(?:"{safe_key}"|\'{safe_key}\'|{safe_key})(?=[\s/>]|$)[^>]*>',
             _add_class,
             html,
             count=1,

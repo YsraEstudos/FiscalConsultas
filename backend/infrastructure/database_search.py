@@ -209,6 +209,10 @@ class DatabaseSearchQueries:
         *,
         raise_on_unavailable: bool,
     ) -> list[Dict[str, Any]]:
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 0:
+            raise ValueError("FTS limit must be a non-negative integer")
+
+        safe_limit = min(limit, SearchConfig.MAX_FTS_RESULTS)
         schema = await self._get_fts_schema_cached(conn)
         if not schema.get("available"):
             msg = (
@@ -230,7 +234,7 @@ class DatabaseSearchQueries:
             ORDER BY {rank_sql["order"]}
             LIMIT ?
         """,  # nosec B608 - content_col/rank_sql come from validated schema
-            (query, limit),
+            (query, safe_limit),
         )
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
@@ -323,7 +327,7 @@ class DatabaseSearchQueries:
 
     async def fts_search(
         self, query: str, limit: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> list[Dict[str, Any]]:
         logger.debug(f"FTS search: '{query}'")
         result_limit = limit if limit is not None else SearchConfig.MAX_FTS_RESULTS
 
@@ -342,7 +346,7 @@ class DatabaseSearchQueries:
         limit: int,
         words_matched: int = 0,
         total_words: int = 1,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[Dict[str, Any]]:
         tier_bases = {
             1: SearchConfig.TIER1_BASE_SCORE,
             2: SearchConfig.TIER2_BASE_SCORE,
@@ -374,7 +378,7 @@ class DatabaseSearchQueries:
 
     async def fts_search_near(
         self, words: list[str], distance: int, limit: int
-    ) -> List[Dict[str, Any]]:
+    ) -> list[Dict[str, Any]]:
         if len(words) < 2:
             return []
 

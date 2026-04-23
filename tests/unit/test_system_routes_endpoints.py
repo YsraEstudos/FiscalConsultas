@@ -8,6 +8,7 @@ from starlette.requests import Request
 
 import backend.infrastructure.db_engine as db_engine
 from backend.presentation.routes import system
+from backend.presentation.routes import system_status
 
 pytestmark = pytest.mark.unit
 
@@ -288,6 +289,35 @@ async def test_get_status_deduplicates_concurrent_refresh(monkeypatch):
     assert db.calls == 1
     assert tipi.calls == 1
     assert nbs.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_refresh_status_snapshot_ignores_redis_write_failures(monkeypatch):
+    async def _fake_collect(_request):
+        return (
+            {"status": "online", "chapters": 5, "positions": 9},
+            {"status": "online", "chapters": 3, "positions": 4},
+            {"status": "online", "items": 6},
+            {"status": "online", "entries": 2},
+            "online",
+        )
+
+    async def _boom(*_args, **_kwargs):
+        raise RuntimeError("redis down")
+
+    monkeypatch.setattr(
+        system_status, "collect_status_payloads_uncached", _fake_collect
+    )
+    monkeypatch.setattr(system_status.redis_cache, "_client", object(), raising=False)
+    monkeypatch.setattr(system_status.redis_cache, "set_status_snapshot", _boom)
+
+    snapshot = await system_status.refresh_status_snapshot(
+        _build_request("/api/status"),
+        ttl_seconds=30,
+    )
+
+    assert snapshot["overall_status"] == "online"
+    assert system_status.read_l1_status_snapshot() == snapshot
 
 
 @pytest.mark.asyncio

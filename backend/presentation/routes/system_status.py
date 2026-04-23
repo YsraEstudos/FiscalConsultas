@@ -295,7 +295,13 @@ async def refresh_status_snapshot(request: Request, ttl_seconds: int) -> dict:
     snapshot = build_status_snapshot(*await collect_status_payloads_uncached(request))
     store_status_snapshot(snapshot, expires_at=time.monotonic() + ttl_seconds)
     if redis_cache.available:
-        await redis_cache.set_status_snapshot("public", snapshot)
+        try:
+            await redis_cache.set_status_snapshot("public", snapshot)
+        except Exception:
+            logger.warning(
+                "Failed to persist status snapshot to Redis; keeping in-process cache",
+                exc_info=True,
+            )
     return snapshot
 
 

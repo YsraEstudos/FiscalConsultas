@@ -62,7 +62,7 @@ def _decode_jwt_json_segment(segment: str) -> dict[str, Any]:
 
 def _safe_get_unverified_header(token: str) -> dict[str, Any]:
     parts = token.split(".")
-    if len(parts) < 1:
+    if len(parts) != 3 or not parts[0]:
         return {}
     return _decode_jwt_json_segment(parts[0])
 

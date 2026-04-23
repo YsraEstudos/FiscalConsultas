@@ -190,6 +190,21 @@ async def test_no_cache_html_hides_api_docs_without_debug_mode(monkeypatch):
     assert response.headers["X-Frame-Options"] == "DENY"
 
 
+def test_configure_routes_keeps_fallback_when_frontend_index_missing(tmp_path):
+    app = FastAPI()
+    static_root = tmp_path / "client" / "dist"
+    static_root.mkdir(parents=True)
+
+    app_module._configure_routes(app, str(tmp_path), app_module.logger)
+
+    assert not any(getattr(route, "name", None) == "static" for route in app.router.routes)
+    assert any(
+        getattr(route, "path", None) == "/"
+        and getattr(route, "name", None) == "_read_root"
+        for route in app.router.routes
+    )
+
+
 @pytest.mark.asyncio
 async def test_lifespan_sqlite_init_db_failure_keeps_startup_and_shutdown(
     monkeypatch, core_mocks
