@@ -182,7 +182,7 @@ describe('services tabs flow', () => {
     render(<ServicesTabsHarness initialDoc="nbs" initialQuery="1.0101.11.00" />);
 
     await screen.findByText('Resultados NBS');
-    fireEvent.click(screen.getByRole('button', { name: 'Ver NEBS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ver NBS' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('tab-list')).toHaveAttribute('data-count', '1');
@@ -192,7 +192,7 @@ describe('services tabs flow', () => {
     expect(screen.getByText('Esta subposição inclui serviços de novas construções e reparo.')).toBeInTheDocument();
   });
 
-  it('switches back to NBS results when the user clicks the NEBS header action', async () => {
+  it('switches back to NBS results when the user clicks the NBS header action', async () => {
     render(<ServicesTabsHarness initialDoc="nebs" initialQuery="1.0101.11.00" />);
 
     await screen.findByText('Resultados NEBS');
@@ -203,14 +203,14 @@ describe('services tabs flow', () => {
       expect(screen.getByTestId('active-tab-meta')).toHaveTextContent('nbs:1.0101.11.00');
     });
     expect(await screen.findByText('Resultados NBS')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Ver NEBS' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ver NBS' })).toBeInTheDocument();
   });
 
   it('preserves the current query when toggling between NBS and NEBS results', async () => {
     render(<ServicesTabsHarness initialDoc="nbs" initialQuery="1.0101.11.00" />);
 
     await screen.findByText('Resultados NBS');
-    fireEvent.click(screen.getByRole('button', { name: 'Ver NEBS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ver NBS' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('active-tab-meta')).toHaveTextContent('nebs:1.0101.11.00');
@@ -241,7 +241,7 @@ describe('services tabs flow', () => {
     expect(onOpenDocInNewTab).toHaveBeenCalledWith('nbs', '1.0101.11.00');
   });
 
-  it('opens NEBS in a new tab when clicking Ver NEBS and preference is enabled', async () => {
+  it('opens NEBS in a new tab when clicking Ver NBS and preference is enabled', async () => {
     const onOpenDocInNewTab = vi.fn();
     refs.openNewTab = true;
 
@@ -254,7 +254,7 @@ describe('services tabs flow', () => {
     );
 
     await screen.findByText('Resultados NBS');
-    fireEvent.click(screen.getByRole('button', { name: 'Ver NEBS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ver NBS' }));
 
     expect(onOpenDocInNewTab).toHaveBeenCalledWith('nebs', '1.0101.11.00');
   });

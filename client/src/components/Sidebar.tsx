@@ -33,7 +33,6 @@ interface Chapter {
 interface SidebarProps {
   results: Record<string, Chapter> | null
   onNavigate: (targetId: string) => void
-  isOpen: boolean
   onClose: () => void
   searchQuery?: string
   activeAnchorId?: string | null
@@ -131,7 +130,6 @@ function comparePositionCodes(aCode: string, bCode: string): number {
 export const Sidebar = React.memo(function Sidebar({
   results,
   onNavigate,
-  isOpen,
   onClose,
   searchQuery,
   activeAnchorId,
@@ -336,7 +334,6 @@ export const Sidebar = React.memo(function Sidebar({
   return (
     <>
       <div
-        data-open={isOpen}
         className={`${styles.navSidebar} ${styles.active} ${isTipi ? styles.navSidebarTipi : ''}`}
       >
         <div className={styles.navHeader}>

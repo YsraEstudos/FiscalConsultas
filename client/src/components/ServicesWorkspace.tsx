@@ -327,7 +327,7 @@ function NbsHierarchySection({
                         <span>{chapterButtonLabel}</span>
                     </button>
                     {' '}
-                    Hierarquia NEBS
+                    Hierarquia NBS
                 </div>
                 <span className={styles.sectionBadge}>
                     {activeChapterNumber ? `Capítulo ${activeChapterNumber} ativo` : 'Capítulo ativo'}
@@ -410,7 +410,7 @@ function NbsDetailSection({
                             className={styles.secondaryAction}
                             onClick={() => openCatalogDoc('nebs', detail.item.code)}
                         >
-                            Ver NEBS
+                            Ver NBS
                         </button>
                     </div>
                 )}
@@ -457,7 +457,7 @@ function NbsChapterNotesDialog({
                 <section className={styles.chapterNotesSheet}>
                     <div className={styles.chapterNotesSheetHeader}>
                         <div className={styles.chapterNotesSheetCopy}>
-                            <span className={styles.chapterNotesSheetEyebrow}>NEBS • Explicações do capítulo</span>
+                            <span className={styles.chapterNotesSheetEyebrow}>NBS • Explicações do capítulo</span>
                             <h3 id="nbs-chapter-notes-title">
                                 Capítulo {currentChapterNotesEntry.chapter} - {currentChapterNotesEntry.title}
                             </h3>
@@ -699,7 +699,7 @@ function NebsDetailSection({
 
                 <div className={styles.detailGrid}>
                     <section className={styles.card}>
-                        <div className={styles.cardLabel}>Servico NEBS vinculado</div>
+                        <div className={styles.cardLabel}>Servico NBS vinculado</div>
                         <p>{nebsState.detail.item.description}</p>
                     </section>
 
@@ -732,7 +732,7 @@ function NebsDetailSection({
         detailBody = (
             <div className={styles.emptyDetail}>
                 <strong>Selecione uma nota</strong>
-                <p>O painel mostra a nota explicativa publicada, a seção de origem e o vínculo com o serviço NEBS.</p>
+                <p>O painel mostra a nota explicativa publicada, a seção de origem e o vínculo com o serviço NBS.</p>
             </div>
         );
     }
