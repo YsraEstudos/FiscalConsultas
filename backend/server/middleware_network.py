@@ -31,4 +31,3 @@ def is_loopback_host(host: Optional[str]) -> bool:
 
 def origin_looks_like_loopback(origin: str) -> bool:
     return is_loopback_host(urlparse(origin).hostname)
-

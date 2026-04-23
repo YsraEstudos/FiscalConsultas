@@ -82,7 +82,9 @@ def append_payload_cache_metrics(
         )
 
 
-def append_internal_cache_hit_rate_metrics(lines: list[str], cache_metrics: dict) -> None:
+def append_internal_cache_hit_rate_metrics(
+    lines: list[str], cache_metrics: dict
+) -> None:
     lines.extend(
         [
             "# HELP nesh_internal_cache_hit_rate Internal service cache hit rate.",

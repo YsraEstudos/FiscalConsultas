@@ -104,9 +104,10 @@ def test_sanitizers_redact_nested_sensitive_values():
     sensitive_key = "".join(["pass", "word"])
     assert logging_config._is_sensitive_key("api-key") is True
     assert logging_config._is_sensitive_key("visible") is False
-    assert logging_config._sanitize_string(
-        f"token=abc {sensitive_key}=xyz"
-    ) == f"token=[REDACTED] {sensitive_key}=[REDACTED]"
+    assert (
+        logging_config._sanitize_string(f"token=abc {sensitive_key}=xyz")
+        == f"token=[REDACTED] {sensitive_key}=[REDACTED]"
+    )
 
     sanitized = logging_config._sanitize_value(
         {

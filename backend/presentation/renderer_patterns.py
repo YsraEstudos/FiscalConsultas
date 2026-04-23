@@ -96,9 +96,7 @@ class _MultiTransformParser(HTMLParser):
         if self._skip_depth > 0:
             self._skip_depth -= 1
 
-    def handle_startendtag(
-        self, tag: str, attrs: list[tuple[str, str | None]]
-    ) -> None:
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self.out.append(self.get_starttag_text() or "")
 
     def handle_data(self, data: str) -> None:
@@ -152,9 +150,7 @@ class _SmartLinkParser(HTMLParser):
         if self._skip_depth > 0:
             self._skip_depth -= 1
 
-    def handle_startendtag(
-        self, tag: str, attrs: list[tuple[str, str | None]]
-    ) -> None:
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self.out.append(self.get_starttag_text() or "")
 
     def handle_data(self, data: str) -> None:
@@ -202,9 +198,7 @@ class _UnitHighlighter(HTMLParser):
         if self._skip_depth > 0:
             self._skip_depth -= 1
 
-    def handle_startendtag(
-        self, tag: str, attrs: list[tuple[str, str | None]]
-    ) -> None:
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self.out.append(self.get_starttag_text() or "")
 
     def handle_data(self, data: str) -> None:

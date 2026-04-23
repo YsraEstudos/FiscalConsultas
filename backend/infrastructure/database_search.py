@@ -90,7 +90,9 @@ class DatabaseSearchQueries:
                 "reason": f"Falha ao inspecionar schema FTS: {exc}",
             }
 
-    async def _get_fts_schema_cached(self, conn: aiosqlite.Connection) -> Dict[str, Any]:
+    async def _get_fts_schema_cached(
+        self, conn: aiosqlite.Connection
+    ) -> Dict[str, Any]:
         return await self._fts_schema_cache.get_or_load(
             load=lambda: self._detect_fts_schema(conn),
             resolve_db_signature=self._get_db_signature,
@@ -105,7 +107,9 @@ class DatabaseSearchQueries:
             logger.warning(f"Falha ao inspecionar chapter_notes: {exc}")
             return set()
 
-    async def _get_chapter_notes_columns_cached(self, conn: aiosqlite.Connection) -> set[str]:
+    async def _get_chapter_notes_columns_cached(
+        self, conn: aiosqlite.Connection
+    ) -> set[str]:
         return await self._chapter_notes_schema_cache.get_or_load(
             load=lambda: self._get_chapter_notes_columns(conn),
             resolve_db_signature=self._get_db_signature,
@@ -120,7 +124,9 @@ class DatabaseSearchQueries:
             logger.warning(f"Falha ao inspecionar positions: {exc}")
             return set()
 
-    async def _get_positions_columns_cached(self, conn: aiosqlite.Connection) -> set[str]:
+    async def _get_positions_columns_cached(
+        self, conn: aiosqlite.Connection
+    ) -> set[str]:
         return await self._positions_schema_cache.get_or_load(
             load=lambda: self._get_positions_columns(conn),
             resolve_db_signature=self._get_db_signature,
@@ -142,7 +148,9 @@ class DatabaseSearchQueries:
             return {"select": "rank", "order": "rank"}
         return {"select": "bm25(search_index) AS rank", "order": "bm25(search_index)"}
 
-    def _build_chapter_sql(self, has_sections: bool, has_parsed_notes_json: bool) -> str:
+    def _build_chapter_sql(
+        self, has_sections: bool, has_parsed_notes_json: bool
+    ) -> str:
         if (
             self._chapter_sql_cache is not None
             and self._chapter_sql_has_sections == has_sections
@@ -308,7 +316,9 @@ class DatabaseSearchQueries:
                 if row["codigo"] is not None
             ]
 
-            logger.debug(f"Capítulo {chapter_num}: {len(positions)} posições (2 queries)")
+            logger.debug(
+                f"Capítulo {chapter_num}: {len(positions)} posições (2 queries)"
+            )
             sections_map: Dict[str, Any] = {
                 col: first_row[col] for col in CHAPTER_NOTES_SECTION_COLUMNS
             }

@@ -133,7 +133,9 @@ async def test_get_session_and_get_db_use_tenant_context(monkeypatch) -> None:
 
     try:
         settings.database.engine = "postgresql"
-        monkeypatch.setattr(db_engine, "get_session_maker", lambda: _FakeSessionMaker(fake_session))
+        monkeypatch.setattr(
+            db_engine, "get_session_maker", lambda: _FakeSessionMaker(fake_session)
+        )
 
         async with db_engine.get_session() as session:
             assert session is fake_session
