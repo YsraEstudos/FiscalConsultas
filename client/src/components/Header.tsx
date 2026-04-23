@@ -138,7 +138,7 @@ export function Header({
                         className={`${styles.docButton} ${doc === (isServiceDoc ? 'nbs' : 'nesh') ? styles.docButtonActive : ''}`}
                         onClick={() => setDoc(isServiceDoc ? 'nbs' : 'nesh')}
                     >
-                        {isServiceDoc ? 'NEBS' : 'NESH'}
+                        {isServiceDoc ? 'NBS' : 'NESH'}
                     </button>
                     <button
                         className={`${styles.docButton} ${doc === 'tipi' ? styles.docButtonActive : ''}`}
@@ -185,7 +185,7 @@ export function Header({
                                 className={servicesUnavailableReason ? styles.menuButtonDisabled : ''}
                                 title={servicesUnavailableReason ?? undefined}
                             >
-                                <span>🧭</span> {servicesUnavailableReason ? 'Serviços (NEBS) indisponível' : 'Serviços (NEBS)'}
+                                <span>🧭</span> {servicesUnavailableReason ? 'Serviços (NBS) indisponível' : 'Serviços (NBS)'}
                             </button>
                         )}
                         <div className={styles.menuDivider}></div>
@@ -273,3 +273,4 @@ export function Header({
         </header>
     );
 }
+

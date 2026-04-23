@@ -145,9 +145,9 @@ describe('Header', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'NEBS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'NBS' }));
 
-    expect(setDoc).toHaveBeenCalledWith('nebs');
+    expect(setDoc).toHaveBeenCalledWith('nbs');
     expect(screen.getByText('Classificação Brasileira de Serviços')).toBeInTheDocument();
   });
 
@@ -214,7 +214,7 @@ describe('Header', () => {
     render(
       <Header
         onSearch={vi.fn()}
-        doc="nebs"
+        doc="nbs"
         setDoc={setDoc}
         searchKey="search-1"
         onOpenSettings={vi.fn()}
@@ -351,3 +351,4 @@ describe('Header', () => {
     expect(setDoc).not.toHaveBeenCalled();
   });
 });
+

@@ -342,19 +342,22 @@ interface NbsDetailSectionProps {
     readonly nbsNoteBodyHtml: string;
     readonly nbsNotesContentRef: React.RefObject<HTMLDivElement | null>;
     readonly nbsState: ServicesWorkspaceNbsState;
+    readonly openCatalogDoc: OpenCatalogDoc;
 }
 
 function NbsDetailSection({
     nbsNoteBodyHtml,
     nbsNotesContentRef,
     nbsState,
+    openCatalogDoc,
 }: Readonly<NbsDetailSectionProps>) {
     let detailBody: React.ReactNode;
 
     if (nbsState.isLoadingDetail) {
         detailBody = <Loading label="Montando painel..." />;
     } else if (nbsState.detail) {
-        const codeParts = nbsState.detail.item.code.split('.');
+        const detail = nbsState.detail;
+        const codeParts = detail.item.code.split('.');
 
         detailBody = (
             <>
@@ -363,11 +366,11 @@ function NbsDetailSection({
                 <section className={styles.card}>
                     <div className={styles.cardLabel}>Descrição</div>
                     <p>
-                        <strong className={`${styles.interactiveCode} service-code-target`} data-service-code={nbsState.detail.item.code}>
-                            {nbsState.detail.item.code}
+                        <strong className={`${styles.interactiveCode} service-code-target`} data-service-code={detail.item.code}>
+                            {detail.item.code}
                         </strong>
                         {' - '}
-                        {nbsState.detail.item.description}
+                        {detail.item.description}
                     </p>
                 </section>
 
@@ -386,7 +389,7 @@ function NbsDetailSection({
                     </div>
                 </section>
 
-                {nbsState.detail.nebs && (
+                {detail.nebs && (
                     <section className={styles.notesCard} style={{ marginTop: '1rem' }}>
                         <div className={styles.notesHeader}>
                             <span className={styles.notesIcon}>i</span>
@@ -398,6 +401,18 @@ function NbsDetailSection({
                             dangerouslySetInnerHTML={{ __html: nbsNoteBodyHtml }}
                         />
                     </section>
+                )}
+
+                {detail.nebs && (
+                    <div className={styles.detailActions}>
+                        <button
+                            type="button"
+                            className={styles.secondaryAction}
+                            onClick={() => openCatalogDoc('nebs', detail.item.code)}
+                        >
+                            Ver NEBS
+                        </button>
+                    </div>
                 )}
             </>
         );
@@ -489,6 +504,7 @@ interface NbsWorkspaceViewProps {
     readonly nbsPrefixAutoExpand: boolean;
     readonly nbsState: ServicesWorkspaceNbsState;
     readonly onSelectNbs: (code: string) => void;
+    readonly openCatalogDoc: OpenCatalogDoc;
     readonly setIsChapterNotesOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
@@ -503,6 +519,7 @@ function NbsWorkspaceView({
     nbsPrefixAutoExpand,
     nbsState,
     onSelectNbs,
+    openCatalogDoc,
     setIsChapterNotesOpen,
 }: Readonly<NbsWorkspaceViewProps>) {
     const chapterButtonLabel = activeChapterNumber
@@ -544,6 +561,7 @@ function NbsWorkspaceView({
                 nbsNoteBodyHtml={nbsNoteBodyHtml}
                 nbsNotesContentRef={nbsNotesContentRef}
                 nbsState={nbsState}
+                openCatalogDoc={openCatalogDoc}
             />
             <NbsChapterNotesDialog
                 chapterNotesDialogRef={chapterNotesDialogRef}
@@ -705,7 +723,7 @@ function NebsDetailSection({
                         className={styles.secondaryAction}
                         onClick={() => openCatalogDoc('nbs', nebsState.detail?.item.code)}
                     >
-                        Abrir item NEBS relacionado
+                        Abrir item NBS relacionado
                     </button>
                 </div>
             </>
@@ -858,6 +876,7 @@ export function ServicesWorkspace({
                 nbsPrefixAutoExpand={nbsPrefixAutoExpand}
                 nbsState={nbsState}
                 onSelectNbs={onSelectNbs}
+                openCatalogDoc={openCatalogDoc}
                 setIsChapterNotesOpen={setIsChapterNotesOpen}
             />
         );
@@ -872,3 +891,10 @@ export function ServicesWorkspace({
         />
     );
 }
+
+
+
+
+
+
+
