@@ -13,6 +13,7 @@ from ..config.constants import CacheConfig
 from ..config.logging_config import service_logger as logger
 from ..domain import ServiceResponse
 from ..infrastructure import DatabaseAdapter
+from ..infrastructure.redis_client import redis_cache  # noqa: F401
 from ..utils import ncm_utils
 from ..utils.payload_cache_metrics import PayloadCacheMetrics
 from ..utils.text_processor import NeshTextProcessor
@@ -68,9 +69,9 @@ class NeshService:
         self._use_repository = repository is not None or repository_factory is not None
 
         self.processor = NeshTextProcessor(list(CONFIG.stopwords))
-        self._fts_cache: OrderedDict[
-            NeshFtsCacheKey, list[NeshFtsScoredRow]
-        ] = OrderedDict()
+        self._fts_cache: OrderedDict[NeshFtsCacheKey, list[NeshFtsScoredRow]] = (
+            OrderedDict()
+        )
         self._chapter_cache: OrderedDict[str, dict] = OrderedDict()
         self._fts_cache_metrics = PayloadCacheMetrics("nesh_fts_cache")
         self._chapter_cache_metrics = PayloadCacheMetrics("nesh_chapter_cache")
@@ -111,9 +112,7 @@ class NeshService:
     def _fts_cache_key(
         query: str, tier: int, limit: int, words_matched: int, total_words: int
     ) -> str:
-        return build_nesh_fts_cache_key(
-            query, tier, limit, words_matched, total_words
-        )
+        return build_nesh_fts_cache_key(query, tier, limit, words_matched, total_words)
 
     @asynccontextmanager
     async def _get_repo(self):

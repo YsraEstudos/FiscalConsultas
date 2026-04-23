@@ -82,8 +82,8 @@ async def load_nbs_catalog_entries(
                 n.level,
                 n.has_nebs,
                 CASE
-                    WHEN n.code = :raw_query THEN 480
-                    WHEN n.code_clean LIKE :clean_prefix THEN 420
+                    WHEN :raw_query <> '' AND n.code = :raw_query THEN 480
+                    WHEN :clean_query <> '' AND n.code_clean LIKE :clean_prefix THEN 420
                     WHEN n.description_normalized = :normalized_query THEN 360
                     WHEN n.description_normalized LIKE :normalized_prefix THEN 320
                     ELSE 280

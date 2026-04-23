@@ -274,6 +274,8 @@ def _apply_tipi_code_description_highlights(results: dict[str, Any]) -> None:
 
 def _apply_tipi_text_description_highlights(results: list) -> None:
     for item in results:
+        if not isinstance(item, dict):
+            continue
         desc = item.get("descricao", "")
         if desc:
             desc = HtmlRenderer.inject_exclusion_highlights(desc)
@@ -302,10 +304,14 @@ def _apply_tipi_code_search_contract(response_data: dict[str, Any]) -> dict[str,
     results = _extract_tipi_code_search_results(response_data)
     response_data["results"] = results
     response_data["resultados"] = results
-    response_data["total"] = response_data.get("total") or len(results)
-    response_data["total_capitulos"] = response_data.get("total_capitulos") or len(
-        results
-    )
+    if response_data.get("total") is None:
+        response_data["total"] = sum(
+            len(cap_data.get("posicoes") or [])
+            for cap_data in results.values()
+            if isinstance(cap_data, dict)
+        )
+    if response_data.get("total_capitulos") is None:
+        response_data["total_capitulos"] = len(results)
     return response_data
 
 

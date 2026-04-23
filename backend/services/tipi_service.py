@@ -4,13 +4,16 @@ import asyncio
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from pathlib import Path
+import threading
 from typing import TYPE_CHECKING, AsyncIterator, Optional, cast
 
 import aiosqlite
 
 from ..config.exceptions import DatabaseError
+from ..config.constants import CacheConfig  # noqa: F401
 from ..config.logging_config import service_logger as logger
 from ..config.settings import settings
+from ..utils import ncm_utils  # noqa: F401
 from ..utils.payload_cache_metrics import PayloadCacheMetrics
 from .tipi.health import (
     probe_tipi_repository_catalog_health,
@@ -78,7 +81,8 @@ class TipiService:
     """
 
     _tipi_connection_pools: dict[Path, list[aiosqlite.Connection]] = {}
-    _tipi_connection_pool_lock: Optional[asyncio.Lock] = None
+    _tipi_connection_pool_locks: dict[int, asyncio.Lock] = {}
+    _tipi_connection_pool_locks_guard = threading.Lock()
     _tipi_connection_pool_max_size: int = 3
 
     def __init__(
@@ -154,9 +158,13 @@ class TipiService:
 
     @classmethod
     def _get_tipi_connection_pool_lock(cls) -> asyncio.Lock:
-        if cls._tipi_connection_pool_lock is None:
-            cls._tipi_connection_pool_lock = asyncio.Lock()
-        return cls._tipi_connection_pool_lock
+        loop_id = id(asyncio.get_running_loop())
+        with cls._tipi_connection_pool_locks_guard:
+            lock = cls._tipi_connection_pool_locks.get(loop_id)
+            if lock is None:
+                lock = asyncio.Lock()
+                cls._tipi_connection_pool_locks[loop_id] = lock
+            return lock
 
     async def _acquire_tipi_connection(self) -> aiosqlite.Connection:
         async with self._get_tipi_connection_pool_lock():
@@ -170,7 +178,7 @@ class TipiService:
             return conn
         except Exception as exc:
             logger.error("Failed to connect to TIPI DB: %s", exc)
-            raise DatabaseError(f"TIPI DB connection failed: {exc}")
+            raise DatabaseError(f"TIPI DB connection failed: {exc}") from exc
 
     async def _release_tipi_connection(self, conn: aiosqlite.Connection) -> None:
         async with self._get_tipi_connection_pool_lock():
@@ -231,6 +239,8 @@ class TipiService:
         async with cls._get_tipi_connection_pool_lock():
             pools = list(cls._tipi_connection_pools.values())
             cls._tipi_connection_pools = {}
+        with cls._tipi_connection_pool_locks_guard:
+            cls._tipi_connection_pool_locks.clear()
         for pool in pools:
             await cls._close_tipi_pool_connections(pool)
 

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from ...config.logging_config import service_logger as logger
 from .types import TipiRepositoryHealthPayload, TipiSqliteHealthPayload
@@ -35,17 +37,20 @@ async def probe_tipi_repository_catalog_health(
                     """
                 )
             )
+            chapters = int(chapters_result.scalar() or 0)
+            positions = int(positions_result.scalar() or 0)
+            metadata_rows = list(metadata_result)
 
-        chapters = int(chapters_result.scalar() or 0)
-        positions = int(positions_result.scalar() or 0)
-        metadata = {row.key: row.value for row in metadata_result}
+        metadata = {row.key: row.value for row in metadata_rows}
         return {
             "status": "online" if chapters > 0 and positions > 0 else "error",
             "chapters": chapters,
             "positions": positions,
             "metadata": metadata,
         }
-    except Exception as exc:
+    except asyncio.CancelledError:
+        raise
+    except (SQLAlchemyError, RuntimeError, OSError) as exc:
         logger.error("TIPI repository healthcheck failed: %s", exc)
         return {"status": "error", "error": str(exc)}
 
@@ -53,7 +58,7 @@ async def probe_tipi_repository_catalog_health(
 async def probe_tipi_sqlite_catalog_health(
     service: "TipiService",
 ) -> TipiSqliteHealthPayload:
-    if not service.db_path.exists():
+    if not await asyncio.to_thread(service.db_path.exists):
         return {
             "ok": False,
             "error": f"Banco TIPI não encontrado: {service.db_path}",
@@ -73,6 +78,8 @@ async def probe_tipi_sqlite_catalog_health(
             return {"ok": True, "chapters": chapters, "positions": positions}
         finally:
             await service._release_tipi_connection(conn)
-    except Exception as exc:
+    except asyncio.CancelledError:
+        raise
+    except (SQLAlchemyError, RuntimeError, OSError) as exc:
         logger.error("TIPI Check Connection failed: %s", exc)
         return {"ok": False, "error": str(exc)}

@@ -11,7 +11,10 @@ if TYPE_CHECKING:
     from backend.infrastructure.repositories.nbs_repository import NbsRepository
 
 
-async def snapshot_nbs_catalog_counts(repo: "NbsRepository") -> NbsCatalogCountsSnapshot:
+async def snapshot_nbs_catalog_counts(
+    repo: "NbsRepository",
+) -> NbsCatalogCountsSnapshot:
+    tenant_params = build_nbs_tenant_params(repo.tenant_id)
     nbs_sql = (
         "SELECT COUNT(*) AS total FROM nbs_items WHERE 1=1"
         f"{build_nbs_tenant_predicate_sql(repo.tenant_id, 'nbs_items')}"
@@ -20,12 +23,8 @@ async def snapshot_nbs_catalog_counts(repo: "NbsRepository") -> NbsCatalogCounts
         "SELECT COUNT(*) AS total FROM nebs_entries WHERE parser_status = 'trusted'"
         f"{build_nbs_tenant_predicate_sql(repo.tenant_id, 'nebs_entries')}"
     )
-    nbs_result = await repo.session.execute(
-        text(nbs_sql), build_nbs_tenant_params(repo.tenant_id)
-    )
-    nebs_result = await repo.session.execute(
-        text(nebs_sql), build_nbs_tenant_params(repo.tenant_id)
-    )
+    nbs_result = await repo.session.execute(text(nbs_sql), tenant_params)
+    nebs_result = await repo.session.execute(text(nebs_sql), tenant_params)
     return {
         "nbs_items": int(nbs_result.scalar() or 0),
         "nebs_entries": int(nebs_result.scalar() or 0),
@@ -39,5 +38,7 @@ async def snapshot_nbs_catalog_metadata(
         "SELECT key, value FROM catalog_metadata WHERE 1=1"
         f"{build_nbs_tenant_predicate_sql(repo.tenant_id, 'catalog_metadata')}"
     )
-    result = await repo.session.execute(text(sql), build_nbs_tenant_params(repo.tenant_id))
+    result = await repo.session.execute(
+        text(sql), build_nbs_tenant_params(repo.tenant_id)
+    )
     return {row.key: row.value for row in result}
