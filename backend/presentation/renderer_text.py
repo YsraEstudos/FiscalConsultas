@@ -187,24 +187,54 @@ def _apply_smart_links_outside_tags(renderer: _RendererRegexProtocol, text: str)
         clean_ncm = ncm.replace(".", "")
         return f'<a href="#" class="smart-link" data-ncm="{clean_ncm}">{ncm}</a>'
 
-    segments = re.split(r"(<[^>]+>)", text)
-    anchor_tag_pattern = re.compile(r"^<\s*(/?)\s*([a-zA-Z0-9:_-]+)")
-    in_anchor = False
-    for idx, segment in enumerate(segments):
-        if not segment:
-            continue
-        if segment.startswith("<"):
-            tag_match = anchor_tag_pattern.match(segment)
-            if tag_match and tag_match.group(2).lower() == "a":
-                if tag_match.group(1):
-                    in_anchor = False
-                elif not segment.rstrip().endswith("/>"):
-                    in_anchor = True
-            continue
-        if in_anchor:
-            continue
-        segments[idx] = renderer.RE_NCM_LINK.sub(smart_replacer, segment)
-    return "".join(segments)
+    output: list[str] = []
+    index = 0
+    in_anchor_depth = 0
+    size = len(text)
+
+    while index < size:
+        tag_start = text.find("<", index)
+        if tag_start == -1:
+            if in_anchor_depth > 0:
+                output.append(text[index:])
+            else:
+                output.append(renderer.RE_NCM_LINK.sub(smart_replacer, text[index:]))
+            break
+
+        if tag_start > index:
+            segment = text[index:tag_start]
+            if in_anchor_depth > 0:
+                output.append(segment)
+            else:
+                output.append(renderer.RE_NCM_LINK.sub(smart_replacer, segment))
+
+        tag_end = text.find(">", tag_start + 1)
+        if tag_end == -1:
+            tail = text[tag_start:]
+            if in_anchor_depth > 0:
+                output.append(tail)
+            else:
+                output.append(renderer.RE_NCM_LINK.sub(smart_replacer, tail))
+            break
+
+        tag = text[tag_start : tag_end + 1]
+        output.append(tag)
+
+        tag_body = tag[1:-1].strip()
+        if tag_body:
+            is_closing_tag = tag_body.startswith("/")
+            if is_closing_tag:
+                tag_body = tag_body[1:].lstrip()
+            tag_name = tag_body.split(None, 1)[0].rstrip("/").lower()
+            if tag_name == "a":
+                if is_closing_tag:
+                    in_anchor_depth = max(0, in_anchor_depth - 1)
+                elif not tag.rstrip().endswith("/>"):
+                    in_anchor_depth += 1
+
+        index = tag_end + 1
+
+    return "".join(output)
 
 
 def _clean_content(renderer: _RendererRegexProtocol, content: str) -> str:
