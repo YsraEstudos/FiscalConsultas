@@ -147,6 +147,13 @@ def get_payload_cache_metrics() -> dict[str, str | float | int]:
     return snapshot_tipi_code_payload_cache_metrics()
 
 
+def get_tipi_code_payload_cache_metrics() -> dict[str, str | float | int]:
+    return get_payload_cache_metrics()
+
+
+snapshotTipiCodePayloadCacheMetrics = get_tipi_code_payload_cache_metrics
+
+
 def _build_tipi_payload_cache_headers(
     payload_scope_key: str, normalized_query: str, view_mode: str
 ) -> dict[str, str]:
@@ -494,6 +501,5 @@ async def list_tipi_chapters(
     return {"success": True, "capitulos": chapters}
 
 
-snapshotTipiCodePayloadCacheMetrics = snapshot_tipi_code_payload_cache_metrics
 handleTipiSearchRequest = handle_tipi_search_request
 listTipiChapters = list_tipi_chapters

@@ -152,6 +152,13 @@ def get_payload_cache_metrics() -> dict[str, str | float | int]:
     return snapshot_search_code_payload_cache_metrics()
 
 
+def get_search_code_payload_cache_metrics() -> dict[str, str | float | int]:
+    return get_payload_cache_metrics()
+
+
+snapshotSearchCodePayloadCacheMetrics = get_search_code_payload_cache_metrics
+
+
 def _build_search_payload_cache_headers(
     payload_scope_key: str, normalized_query: str
 ) -> dict[str, str]:
@@ -464,6 +471,10 @@ async def handle_global_fiscal_search_request(
         shape=shape,
         request_id=request_id,
     )
+
+
+handleGlobalFiscalSearchRequest = handle_global_fiscal_search_request
+search = handle_global_fiscal_search_request
 
 
 @router.get("/chapters")

@@ -315,50 +315,62 @@ describe('ResultDisplay advanced behavior', () => {
   });
 
   it('renders TIPI fallback, applies aliquot classes and toggles sidebar', async () => {
-    render(
-      <ResultDisplay
-        data={{
-          type: 'code',
-          query: '1001',
-          resultados: {
-            '10': {
-              capitulo: '10',
-              titulo: 'Cereais',
-              posicoes: [
-                { codigo: '10.01', ncm: '10.01', descricao: 'Zero', aliquota: '0', nivel: 1 },
-                { codigo: '10.02', ncm: '10.02', descricao: 'NT', aliquota: 'NT', nivel: 2 },
-                { codigo: '10.03', ncm: '10.03', descricao: 'Baixa', aliquota: '3', nivel: 3 },
-                { codigo: '10.04', ncm: '10.04', descricao: 'Media', aliquota: '8', nivel: 4 },
-                { codigo: '10.05', ncm: '10.05', descricao: 'Alta', aliquota: '15', nivel: 7 },
-                { codigo: '10.06', ncm: '10.06', descricao: 'Texto', aliquota: 'abc', nivel: 1 },
-              ],
-            },
-          },
-        }}
-        mobileMenuOpen={true}
-        onCloseMobileMenu={vi.fn()}
-        isActive={true}
-        tabId="tab-tipi"
-        isNewSearch={false}
-        onConsumeNewSearch={vi.fn()}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('Cereais')).toBeInTheDocument();
-      expect(screen.getByTestId('sidebar-mock')).toBeInTheDocument();
+    const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 1440,
     });
 
-    expect(document.querySelector('.aliquot-zero')).toBeTruthy();
-    expect(document.querySelector('.aliquot-nt')).toBeTruthy();
-    expect(document.querySelector('.aliquot-low')).toBeTruthy();
-    expect(document.querySelector('.aliquot-med')).toBeTruthy();
-    expect(document.querySelector('.aliquot-high')).toBeTruthy();
-    expect(document.querySelector('.tipi-nivel-5')).toBeTruthy();
+    try {
+      render(
+        <ResultDisplay
+          data={{
+            type: 'code',
+            query: '1001',
+            resultados: {
+              '10': {
+                capitulo: '10',
+                titulo: 'Cereais',
+                posicoes: [
+                  { codigo: '10.01', ncm: '10.01', descricao: 'Zero', aliquota: '0', nivel: 1 },
+                  { codigo: '10.02', ncm: '10.02', descricao: 'NT', aliquota: 'NT', nivel: 2 },
+                  { codigo: '10.03', ncm: '10.03', descricao: 'Baixa', aliquota: '3', nivel: 3 },
+                  { codigo: '10.04', ncm: '10.04', descricao: 'Media', aliquota: '8', nivel: 4 },
+                  { codigo: '10.05', ncm: '10.05', descricao: 'Alta', aliquota: '15', nivel: 7 },
+                  { codigo: '10.06', ncm: '10.06', descricao: 'Texto', aliquota: 'abc', nivel: 1 },
+                ],
+              },
+            },
+          }}
+          mobileMenuOpen={true}
+          onCloseMobileMenu={vi.fn()}
+          isActive={true}
+          tabId="tab-tipi"
+          isNewSearch={false}
+          onConsumeNewSearch={vi.fn()}
+        />,
+      );
 
-    const toggle = screen.getByRole('button', { name: 'Recolher navegação' });
-    fireEvent.click(toggle);
-    expect(screen.getByRole('button', { name: 'Expandir navegação' })).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('Cereais')).toBeInTheDocument();
+        expect(screen.getByTestId('sidebar-mock')).toBeInTheDocument();
+      });
+
+      expect(document.querySelector('.aliquot-zero')).toBeTruthy();
+      expect(document.querySelector('.aliquot-nt')).toBeTruthy();
+      expect(document.querySelector('.aliquot-low')).toBeTruthy();
+      expect(document.querySelector('.aliquot-med')).toBeTruthy();
+      expect(document.querySelector('.aliquot-high')).toBeTruthy();
+      expect(document.querySelector('.tipi-nivel-5')).toBeTruthy();
+
+      const toggle = screen.getByRole('button', { name: 'Recolher navegação' });
+      fireEvent.click(toggle);
+      expect(screen.getByRole('button', { name: 'Expandir navegação' })).toBeInTheDocument();
+    } finally {
+      if (originalInnerWidth) {
+        Object.defineProperty(window, 'innerWidth', originalInnerWidth);
+      }
+    }
   });
 
   it('keeps TIPI sidebar highlight on the clicked item while smooth scroll settles', async () => {

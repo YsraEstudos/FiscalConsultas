@@ -8,11 +8,9 @@ from typing import TYPE_CHECKING, AsyncIterator, Optional, cast
 
 import aiosqlite
 
-from ..config.constants import CacheConfig
 from ..config.exceptions import DatabaseError
 from ..config.logging_config import service_logger as logger
 from ..config.settings import settings
-from ..utils import ncm_utils
 from ..utils.payload_cache_metrics import PayloadCacheMetrics
 from .tipi.health import (
     probe_tipi_repository_catalog_health,

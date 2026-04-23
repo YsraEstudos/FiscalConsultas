@@ -29,12 +29,8 @@ class _FakeNeshServiceCode:
         }
 
 
-def test_search_handler_exposes_only_canonical_name():
-    assert (
-        search_route.handleGlobalFiscalSearchRequest.__name__
-        == "handleGlobalFiscalSearchRequest"
-    )
-    assert not hasattr(search_route, "search")
+def test_search_handler_keeps_legacy_alias_to_canonical_name():
+    assert search_route.search is search_route.handleGlobalFiscalSearchRequest
 
 
 class _FakeNeshServiceText:

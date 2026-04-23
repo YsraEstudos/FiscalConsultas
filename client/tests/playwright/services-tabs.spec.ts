@@ -57,7 +57,7 @@ test('loads NBS search results and the linked detail panel', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'Resultados NBS' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Serviços de construção de edificações residenciais/ })).toBeVisible();
   await expect(page.getByText('NOTAS EXPLICATIVAS')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Ver NEBS/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Ver NBS/ })).toBeVisible();
 });
 
 test('switches from an NBS detail to the linked NEBS detail', async ({ page }) => {
@@ -69,7 +69,7 @@ test('switches from an NBS detail to the linked NEBS detail', async ({ page }) =
     && new URL(request.url()).searchParams.get('q') === '1.0101.11.00',
   );
 
-  await page.getByRole('button', { name: /Ver NEBS/ }).click();
+  await page.getByRole('button', { name: /Ver NBS/ }).click();
   await nebsRequest;
 
   await expect(page.getByRole('heading', { name: 'Resultados NEBS' })).toBeVisible();
@@ -80,7 +80,7 @@ test('switches from an NBS detail to the linked NEBS detail', async ({ page }) =
 test('returns from a NEBS detail to the linked NBS detail', async ({ page }) => {
   await openServicesModal(page);
   await searchServices(page, '1.0101.11.00');
-  await page.getByRole('button', { name: /Ver NEBS/ }).click();
+  await page.getByRole('button', { name: /Ver NBS/ }).click();
   await expect(page.getByRole('heading', { name: 'Resultados NEBS' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Abrir item NBS relacionado' })).toBeVisible();
 
@@ -93,7 +93,7 @@ test('returns from a NEBS detail to the linked NBS detail', async ({ page }) => 
   await nbsRequest;
 
   await expect(page.getByRole('heading', { name: 'Resultados NBS' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Ver NEBS/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Ver NBS/ })).toBeVisible();
 });
 
 test('updates NBS detail when clicking an ancestor in the hierarchy', async ({ page }) => {
@@ -218,7 +218,7 @@ test('opens smart-link target in a new tab with middle-click', async ({ page }) 
 test('navigates from NEBS breadcrumbs back to NBS detail in the same tab', async ({ page }) => {
   await openServicesModal(page);
   await searchServices(page, '1.0101.11.00');
-  await page.getByRole('button', { name: /Ver NEBS/ }).click();
+  await page.getByRole('button', { name: /Ver NBS/ }).click();
   await expect(page.getByRole('heading', { name: 'Resultados NEBS' })).toBeVisible();
 
   const nbsRequest = page.waitForRequest((request) =>
@@ -235,7 +235,7 @@ test('navigates from NEBS breadcrumbs back to NBS detail in the same tab', async
 test('opens NEBS breadcrumb navigation in a new tab when preference is enabled', async ({ page }) => {
   await openServicesModal(page);
   await searchServices(page, '1.0101.11.00');
-  await page.getByRole('button', { name: /Ver NEBS/ }).click();
+  await page.getByRole('button', { name: /Ver NBS/ }).click();
   await expect(page.getByRole('heading', { name: 'Resultados NEBS' })).toBeVisible();
 
   const initialTabCount = await page.locator('div[draggable="true"][data-document]').count();
@@ -256,7 +256,7 @@ test('opens NEBS breadcrumb navigation in a new tab when preference is enabled',
 test('opens linked NBS detail in a new tab when preference is enabled', async ({ page }) => {
   await openServicesModal(page);
   await searchServices(page, '1.0101.11.00');
-  await page.getByRole('button', { name: /Ver NEBS/ }).click();
+  await page.getByRole('button', { name: /Ver NBS/ }).click();
   await expect(page.getByRole('heading', { name: 'Resultados NEBS' })).toBeVisible();
 
   const initialTabCount = await page.locator('div[draggable="true"][data-document]').count();

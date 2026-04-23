@@ -13,7 +13,6 @@ from ..config.constants import CacheConfig
 from ..config.logging_config import service_logger as logger
 from ..domain import ServiceResponse
 from ..infrastructure import DatabaseAdapter
-from ..infrastructure.redis_client import redis_cache
 from ..utils import ncm_utils
 from ..utils.payload_cache_metrics import PayloadCacheMetrics
 from ..utils.text_processor import NeshTextProcessor

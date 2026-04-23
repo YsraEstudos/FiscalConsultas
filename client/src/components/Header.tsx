@@ -66,10 +66,17 @@ export function Header({
     } = useAuth();
     const isAdmin = useIsAdmin();
     const isServiceDoc = doc === 'nbs' || doc === 'nebs';
-    const primaryDocLabel = doc === 'nbs' ? 'NEBS' : doc === 'nebs' ? 'NBS' : 'NESH';
-    const primaryDocTarget = doc === 'nbs' ? 'nebs' : doc === 'nebs' ? 'nbs' : 'nesh';
-    const primaryDocActive = doc !== 'tipi';
     const titleSubtitle = DOC_SUBTITLES[doc] || DOC_SUBTITLES.tipi;
+    const primaryDocButtonLabel = doc === 'nbs'
+        ? 'NEBS'
+        : doc === 'nebs'
+            ? 'NBS'
+            : 'NESH';
+    const primaryDocButtonTarget = doc === 'nbs'
+        ? 'nebs'
+        : doc === 'nebs'
+            ? 'nbs'
+            : 'nesh';
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -139,10 +146,10 @@ export function Header({
 
                 <div className={styles.docSelector}>
                     <button
-                        className={`${styles.docButton} ${primaryDocActive ? styles.docButtonActive : ''}`}
-                        onClick={() => setDoc(primaryDocTarget)}
+                        className={`${styles.docButton} ${doc === 'nesh' || doc === 'nbs' || doc === 'nebs' ? styles.docButtonActive : ''}`}
+                        onClick={() => setDoc(primaryDocButtonTarget)}
                     >
-                        {primaryDocLabel}
+                        {primaryDocButtonLabel}
                     </button>
                     <button
                         className={`${styles.docButton} ${doc === 'tipi' ? styles.docButtonActive : ''}`}

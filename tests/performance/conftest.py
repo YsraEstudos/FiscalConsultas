@@ -1,3 +1,4 @@
+import asyncio
 import os
 import subprocess
 import sys
@@ -40,14 +41,17 @@ def nesh_service(_performance_environment):
 
     db = DatabaseAdapter(CONFIG.db_path)
     svc = NeshService(db)
-    return svc
+    yield svc
+    asyncio.run(db.close())
 
 
 @pytest.fixture(scope="session")
 def tipi_service(_performance_environment):
     from backend.services.tipi_service import TipiService
 
-    return TipiService()
+    service = TipiService()
+    yield service
+    asyncio.run(service.close())
 
 
 @pytest.fixture(scope="session")
