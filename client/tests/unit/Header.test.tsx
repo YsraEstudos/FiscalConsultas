@@ -145,9 +145,9 @@ describe('Header', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'NBS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'NEBS' }));
 
-    expect(setDoc).toHaveBeenCalledWith('nbs');
+    expect(setDoc).toHaveBeenCalledWith('nebs');
     expect(screen.getByText('Classificação Brasileira de Serviços')).toBeInTheDocument();
   });
 
@@ -351,4 +351,3 @@ describe('Header', () => {
     expect(setDoc).not.toHaveBeenCalled();
   });
 });
-

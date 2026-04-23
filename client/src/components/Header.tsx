@@ -9,6 +9,7 @@ import styles from './Header.module.css';
 
 const DOC_SUBTITLES: Record<string, string> = {
     nbs: 'Classificação Brasileira de Serviços',
+    nebs: 'Classificação Brasileira de Serviços',
     nesh: 'Notas Explicativas do Sistema Harmonizado',
     tipi: 'Tabela de Incidência do IPI',
 };
@@ -64,8 +65,18 @@ export function Header({
         logout
     } = useAuth();
     const isAdmin = useIsAdmin();
-    const isServiceDoc = doc === 'nbs';
+    const isServiceDoc = doc === 'nbs' || doc === 'nebs';
     const titleSubtitle = DOC_SUBTITLES[doc] || DOC_SUBTITLES.tipi;
+    const primaryDocButtonLabel = doc === 'nbs'
+        ? 'NEBS'
+        : doc === 'nebs'
+            ? 'NBS'
+            : 'NESH';
+    const primaryDocButtonTarget = doc === 'nbs'
+        ? 'nebs'
+        : doc === 'nebs'
+            ? 'nbs'
+            : 'nesh';
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -135,10 +146,10 @@ export function Header({
 
                 <div className={styles.docSelector}>
                     <button
-                        className={`${styles.docButton} ${doc === (isServiceDoc ? 'nbs' : 'nesh') ? styles.docButtonActive : ''}`}
-                        onClick={() => setDoc(isServiceDoc ? 'nbs' : 'nesh')}
+                        className={`${styles.docButton} ${doc === 'nesh' || doc === 'nbs' || doc === 'nebs' ? styles.docButtonActive : ''}`}
+                        onClick={() => setDoc(primaryDocButtonTarget)}
                     >
-                        {isServiceDoc ? 'NBS' : 'NESH'}
+                        {primaryDocButtonLabel}
                     </button>
                     <button
                         className={`${styles.docButton} ${doc === 'tipi' ? styles.docButtonActive : ''}`}
@@ -273,4 +284,3 @@ export function Header({
         </header>
     );
 }
-

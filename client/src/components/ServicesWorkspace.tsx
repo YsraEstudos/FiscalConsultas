@@ -675,7 +675,7 @@ function NebsDetailSection({
                     </p>
                 </div>
 
-                <div className={styles.breadcrumbs} aria-label="Hierarquia NEBS">
+                <div className={styles.breadcrumbs} aria-label="Hierarquia NBS">
                     {nebsState.detail.ancestors.map((ancestor) => (
                         <button
                             key={ancestor.code}
@@ -891,10 +891,3 @@ export function ServicesWorkspace({
         />
     );
 }
-
-
-
-
-
-
-
