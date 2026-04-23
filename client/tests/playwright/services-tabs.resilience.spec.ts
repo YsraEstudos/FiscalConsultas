@@ -69,7 +69,7 @@ test('shows the NEBS empty/error state after a linked NEBS search fails', async 
 
   await openServicesModal(page);
   await searchServices(page, '1.0101.11.00');
-  const openNebsButton = page.getByRole('button', { name: /Ver NEBS/ });
+  const openNebsButton = page.getByRole('button', { name: /Ver NBS/ });
   await expect(openNebsButton).toBeVisible();
 
   const nebsRequest = page.waitForRequest((request) =>
