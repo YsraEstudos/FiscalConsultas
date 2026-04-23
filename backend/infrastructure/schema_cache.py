@@ -7,7 +7,7 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-type DatabaseSignature = tuple[float, int] | None
+type DatabaseSignature = tuple[int, int, int, int] | None
 
 
 @dataclass
@@ -47,7 +47,7 @@ class SchemaCache[T]:
                 resolve_db_signature=get_db_signature,
             )
         """
-        now = time.time()
+        now = time.monotonic()
         signature = resolve_db_signature()
         async with self._lock:
             if self._entry is not None and self._entry.db_signature == signature:

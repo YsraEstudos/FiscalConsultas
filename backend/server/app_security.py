@@ -4,6 +4,7 @@ from fastapi import Request, Response
 
 
 _DOCS_PATHS = frozenset({"/docs", "/redoc", "/openapi.json"})
+_DEV_CORS_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
 
 def _build_content_security_policy(server_env: str) -> str:
@@ -18,6 +19,15 @@ def _build_content_security_policy(server_env: str) -> str:
             ]
         )
 
+    script_sources = [
+        "'self'",
+        "https://*.clerk.accounts.dev",
+        "https://*.clerk.com",
+        "https://challenges.cloudflare.com",
+    ]
+    if server_env == "development":
+        script_sources.append("https://cdn.jsdelivr.net")
+
     return "; ".join(
         (
             "default-src 'self'",
@@ -25,10 +35,7 @@ def _build_content_security_policy(server_env: str) -> str:
             "object-src 'none'",
             "frame-ancestors 'none'",
             "form-action 'self'",
-            (
-                "script-src 'self' https://*.clerk.accounts.dev "
-                "https://*.clerk.com https://challenges.cloudflare.com"
-            ),
+            f"script-src {' '.join(script_sources)}",
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
             "img-src 'self' data: blob: https:",
             "font-src 'self' https://fonts.gstatic.com data:",
@@ -76,11 +83,12 @@ def _build_cors_configuration(
     cors_allowed_origins: list[str] | None,
     cors_allowed_origin_regex: str | None,
 ) -> tuple[list[str], str | None]:
-    cors_origins = cors_allowed_origins or [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "https://ysraestudos.github.io",
-    ]
+    if cors_allowed_origins is not None:
+        cors_origins = list(cors_allowed_origins)
+    elif server_env == "development":
+        cors_origins = list(_DEV_CORS_ORIGINS)
+    else:
+        cors_origins = []
 
     cors_regex_parts: list[str] = []
     configured_cors_regex = (cors_allowed_origin_regex or "").strip()

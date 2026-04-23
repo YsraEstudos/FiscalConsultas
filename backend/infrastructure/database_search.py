@@ -31,9 +31,15 @@ class DatabaseSearchQueries:
         self._chapter_sql_has_sections: Optional[bool] = None
         self._chapter_sql_has_parsed_notes_json: Optional[bool] = None
 
-    def _get_db_signature(self) -> tuple[float, int] | None:
+    def _get_db_signature(self) -> tuple[int, int, int, int] | None:
         try:
-            return (os.path.getmtime(self._adapter.db_path), os.path.getsize(self._adapter.db_path))
+            stat_result = os.stat(self._adapter.db_path)
+            return (
+                stat_result.st_dev,
+                stat_result.st_ino,
+                stat_result.st_ctime_ns,
+                stat_result.st_size,
+            )
         except OSError:
             return None
 
@@ -186,11 +192,13 @@ class DatabaseSearchQueries:
         if not normalized:
             return ""
 
-        primary = normalized.split(" ", 1)[0]
-        if primary.upper() in DatabaseSearchQueries._FTS_RESERVED_OPERATORS:
+        if " " in normalized:
             return ""
 
-        escaped = primary.replace('"', '""')
+        if normalized.upper() in DatabaseSearchQueries._FTS_RESERVED_OPERATORS:
+            return ""
+
+        escaped = normalized.replace('"', '""')
         return f'"{escaped}"'
 
     async def _execute_fts_query(

@@ -328,12 +328,6 @@ def _render_chapter(
     content = _structure_headings(renderer, content, state)
     content = _normalize_lines(renderer, content)
 
-    logger.debug(
-        "Capítulo %s: %s seções estruturadas",
-        data["capitulo"],
-        state["injected_count"],
-    )
-
     content = _inject_fallback_anchors(
         content,
         data.get("posicoes") or [],
@@ -421,12 +415,12 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
 
     for key in commented_anchor_keys:
         safe_key = re.escape(key)
+        class_attr_pattern = re.compile(r'(?<![\w-])(class=["\'])([^"\']*?)(["\'])')
 
         def _add_class(match: re.Match[str]) -> str:
             tag = match.group(0)
-            if "class=" in tag:
-                tag = re.sub(
-                    r'(class=["\'])([^"\']*?)(["\'])',
+            if class_attr_pattern.search(tag):
+                tag = class_attr_pattern.sub(
                     lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
                     tag,
                     count=1,

@@ -100,6 +100,18 @@ def _reset_status_cache():
 
 
 @pytest.mark.asyncio
+async def test_reset_status_cache_for_tests_clears_lock():
+    from backend.presentation.routes import system_status
+
+    system.get_status_cache_lock()
+    assert system_status._STATUS_CACHE_LOCK is not None
+
+    system.reset_status_cache_for_tests()
+
+    assert system_status._STATUS_CACHE_LOCK is None
+
+
+@pytest.mark.asyncio
 async def test_get_status_uses_app_state_services_when_available():
     request = _build_request(
         "/api/status",
@@ -240,7 +252,7 @@ async def test_get_status_deduplicates_concurrent_refresh(monkeypatch):
             return self.payload
 
     class _SlowFakeTipiService(_FakeTipiService):
-        async def check_connection(self):  # NOSONAR
+        async def probeTipiCatalogHealth(self):  # NOSONAR
             self.calls += 1
             await asyncio.sleep(0.05)
             return self.payload

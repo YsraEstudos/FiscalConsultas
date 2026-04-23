@@ -19,5 +19,5 @@ def test_sanitize_fts_token_removes_special_chars() -> None:
 
 
 @pytest.mark.unit
-def test_sanitize_fts_token_keeps_first_word_only() -> None:
-    assert DatabaseAdapter._sanitize_fts_token("bomba hidraulica") == '"bomba"'
+def test_sanitize_fts_token_rejects_multi_word_tokens() -> None:
+    assert DatabaseAdapter._sanitize_fts_token("bomba hidraulica") == ""

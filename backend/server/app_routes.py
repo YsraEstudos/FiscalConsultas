@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 
 from fastapi import FastAPI, Response
@@ -18,7 +19,7 @@ from backend.presentation.routes import (
 )
 
 
-def _configure_routes(app: FastAPI, project_root: str, logger) -> None:
+def _configure_routes(app: FastAPI, project_root: str, logger: logging.Logger) -> None:
     app.include_router(auth.router, prefix="/api", tags=["Auth"])
     app.include_router(search.router, prefix="/api", tags=["Search"])
     app.include_router(tipi.router, prefix="/api/tipi", tags=["TIPI"])

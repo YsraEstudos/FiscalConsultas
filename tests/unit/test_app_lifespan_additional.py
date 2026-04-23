@@ -507,6 +507,38 @@ def test_build_content_security_policy_keeps_local_origins_in_development(monkey
     assert "http://127.0.0.1:8000" in csp
     assert "ws://localhost:*" in csp
     assert "ws://127.0.0.1:*" in csp
+    assert "https://cdn.jsdelivr.net" in csp
+
+
+def test_build_cors_configuration_defaults_to_localhost_only_in_development(monkeypatch):
+    monkeypatch.setattr(app_module.settings.server, "env", "development", raising=False)
+    monkeypatch.setattr(
+        app_module.settings.server, "cors_allowed_origins", None, raising=False
+    )
+    monkeypatch.setattr(
+        app_module.settings.server, "cors_allowed_origin_regex", None, raising=False
+    )
+
+    origins, cors_regex = app_module._build_cors_configuration()
+
+    assert origins == ["http://localhost:5173", "http://127.0.0.1:5173"]
+    assert cors_regex is not None
+    assert "localhost" in cors_regex
+
+
+def test_build_cors_configuration_fails_closed_in_production(monkeypatch):
+    monkeypatch.setattr(app_module.settings.server, "env", "production", raising=False)
+    monkeypatch.setattr(
+        app_module.settings.server, "cors_allowed_origins", [], raising=False
+    )
+    monkeypatch.setattr(
+        app_module.settings.server, "cors_allowed_origin_regex", None, raising=False
+    )
+
+    origins, cors_regex = app_module._build_cors_configuration()
+
+    assert origins == []
+    assert cors_regex is None
 
 
 def test_log_runtime_security_warnings_for_production_misconfiguration(monkeypatch):

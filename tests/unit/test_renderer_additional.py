@@ -85,6 +85,17 @@ def test_inject_smart_links_falls_back_when_parser_raises(monkeypatch):
     assert 'class="smart-link"' in out
 
 
+def test_inject_smart_links_fallback_skips_existing_anchor_tags(monkeypatch):
+    def _boom(self, _data):  # pragma: no cover - explicit fallback trigger
+        raise RuntimeError("parser failure")
+
+    monkeypatch.setattr(renderer.HTMLParser, "feed", _boom)
+    out = HtmlRenderer.inject_smart_links('<a href="#">85.17</a> fora 85.17', "85")
+
+    assert out.count('class="smart-link"') == 1
+    assert '<a href="#">85.17</a>' in out
+
+
 def test_inject_unit_highlights_handles_leading_whitespace_in_match(monkeypatch):
     monkeypatch.setattr(HtmlRenderer, "RE_UNIT", re.compile(r"\s+kg"))
     out = HtmlRenderer.inject_unit_highlights("10  kg")
@@ -174,6 +185,15 @@ def test_apply_post_transforms_falls_back_when_parser_raises(monkeypatch):
     out = HtmlRenderer.apply_post_transforms("<p>**x** 85.17</p>", "85")
     assert "<strong>x</strong>" in out
     assert 'class="smart-link"' in out
+
+
+def test_inject_comment_marks_does_not_corrupt_data_class_attributes():
+    html = '<div data-class="example" id="anchor"></div>'
+    out = renderer.inject_comment_marks(html, ["anchor"])
+
+    assert 'data-class="example"' in out
+    assert 'class="has-comment"' in out
+    assert 'data-class="example" has-comment' not in out
 
 
 def test_render_chapter_returns_error_block_when_content_missing():

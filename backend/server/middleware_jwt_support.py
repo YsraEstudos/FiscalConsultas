@@ -460,7 +460,7 @@ def _is_recently_provisioned(
     cache_key: tuple[str, str], now: float, cache: dict[tuple[str, str], float], ttl: float
 ) -> bool:
     cached_at = cache.get(cache_key)
-    return bool(cached_at and (now - cached_at) < ttl)
+    return cached_at is not None and (now - cached_at) < ttl
 
 
 def _resolve_full_name(payload: dict[str, Any]) -> Optional[str]:
@@ -477,8 +477,11 @@ def _resolve_identity_fields(
     org_name = str(
         payload.get("org_name") or payload.get("organization_name") or org_id
     )
+    # TODO: overwrite this placeholder with the real email on the next JWT refresh.
     email = str(
-        payload.get("email") or payload.get("email_address") or f"{user_id}@clerk.local"
+        payload.get("email")
+        or payload.get("email_address")
+        or f"{user_id}@clerk.invalid"
     )
     full_name = _resolve_full_name(payload)
     return org_name, email, full_name

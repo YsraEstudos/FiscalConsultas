@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from typing import Any, Coroutine, Optional
 
 logger = logging.getLogger("nesh.middleware.context")
@@ -56,11 +56,11 @@ def _schedule_background_task(task_coro: Coroutine[Any, Any, Any]) -> None:
     task.add_done_callback(_on_done)
 
 
-def _set_request_id(request_id: str) -> ContextVar.Token:
+def _set_request_id(request_id: str) -> Token[Optional[str]]:
     return _request_id_ctx.set(request_id)
 
 
-def _reset_request_id(token: ContextVar.Token) -> None:
+def _reset_request_id(token: Token[Optional[str]]) -> None:
     _request_id_ctx.reset(token)
 
 

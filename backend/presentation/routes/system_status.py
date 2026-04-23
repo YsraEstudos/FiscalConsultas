@@ -46,10 +46,11 @@ def read_stale_l1_status_snapshot() -> dict | None:
 
 
 def reset_status_cache_for_tests() -> None:
-    global _STATUS_CACHE_REFRESH_TASK
+    global _STATUS_CACHE_LOCK, _STATUS_CACHE_REFRESH_TASK
     _STATUS_CACHE["value"] = None
     _STATUS_CACHE["expires_at"] = 0.0
     _STATUS_CACHE_REFRESH_TASK = None
+    _STATUS_CACHE_LOCK = None
 
 
 def coerce_int(value, default: int = 0) -> int:

@@ -1,12 +1,10 @@
 """Text cleaning and inline transforms used by the presentation renderer."""
 
 import logging
+import re
 from collections.abc import Callable
 from html.parser import HTMLParser
 from typing import Protocol
-import re
-
-logger = logging.getLogger("nesh.renderer.text")
 
 from .renderer_patterns import (
     _MultiTransformParser,
@@ -14,6 +12,8 @@ from .renderer_patterns import (
     _UnitHighlighter,
     _RendererRegexProtocol,
 )
+
+logger = logging.getLogger("nesh.renderer.text")
 
 
 class _GlossaryManagerProtocol(Protocol):
@@ -188,8 +188,20 @@ def _apply_smart_links_outside_tags(renderer: _RendererRegexProtocol, text: str)
         return f'<a href="#" class="smart-link" data-ncm="{clean_ncm}">{ncm}</a>'
 
     segments = re.split(r"(<[^>]+>)", text)
+    anchor_tag_pattern = re.compile(r"^<\s*(/?)\s*([a-zA-Z0-9:_-]+)")
+    in_anchor = False
     for idx, segment in enumerate(segments):
-        if not segment or segment.startswith("<"):
+        if not segment:
+            continue
+        if segment.startswith("<"):
+            tag_match = anchor_tag_pattern.match(segment)
+            if tag_match and tag_match.group(2).lower() == "a":
+                if tag_match.group(1):
+                    in_anchor = False
+                elif not segment.rstrip().endswith("/>"):
+                    in_anchor = True
+            continue
+        if in_anchor:
             continue
         segments[idx] = renderer.RE_NCM_LINK.sub(smart_replacer, segment)
     return "".join(segments)
@@ -278,7 +290,7 @@ def _inject_smart_links(renderer: _RendererRegexProtocol, text: str) -> str:
         return parser.get_html()
     except Exception:
         _log_parser_fallback("SmartLinkParser", text)
-        return renderer.RE_NCM_LINK.sub(replacer, text)
+        return _apply_smart_links_outside_tags(renderer, text)
 
 
 def _inject_exclusion_highlights(renderer: _RendererRegexProtocol, text: str) -> str:

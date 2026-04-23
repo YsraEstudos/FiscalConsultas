@@ -128,7 +128,7 @@ async def test_get_session_and_get_db_use_tenant_context(monkeypatch) -> None:
 
     original_engine_mode = settings.database.engine
     original_session_maker = db_engine.get_session_maker
-    db_engine.tenant_context.set("tenant-123")
+    token = db_engine.tenant_context.set("tenant-123")
     fake_session = _FakeSession()
 
     try:
@@ -150,7 +150,7 @@ async def test_get_session_and_get_db_use_tenant_context(monkeypatch) -> None:
     finally:
         settings.database.engine = original_engine_mode
         db_engine.get_session_maker = original_session_maker
-        db_engine.tenant_context.set("")
+        db_engine.tenant_context.reset(token)
 
 
 @pytest.mark.asyncio
