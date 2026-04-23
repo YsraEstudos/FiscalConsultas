@@ -181,6 +181,40 @@ def _process_list_block(
     _flush_normal_lines()
 
 
+def _extract_next_fragment(text: str, index: int) -> tuple[str, int]:
+    tag_start = text.find("<", index)
+    if tag_start == -1:
+        return text[index:], len(text)
+    if tag_start > index:
+        return text[index:tag_start], tag_start
+
+    tag_end = text.find(">", tag_start + 1)
+    if tag_end == -1:
+        return text[tag_start:], len(text)
+    return text[tag_start : tag_end + 1], tag_end + 1
+
+
+def _update_anchor_state_or_skip(
+    segment: str,
+    anchor_tag_pattern: re.Pattern[str],
+    in_anchor_depth: int,
+) -> tuple[int, bool]:
+    if not segment.startswith("<"):
+        return in_anchor_depth, False
+
+    tag_match = anchor_tag_pattern.match(segment)
+    if not tag_match or tag_match.group(2).lower() != "a":
+        return in_anchor_depth, True
+
+    if tag_match.group(1):
+        return max(0, in_anchor_depth - 1), True
+
+    if not segment.rstrip().endswith("/>"):
+        return in_anchor_depth + 1, True
+
+    return in_anchor_depth, True
+
+
 def _apply_smart_links_outside_tags(renderer: _RendererRegexProtocol, text: str) -> str:
     def smart_replacer(match: re.Match[str]) -> str:
         ncm = match.group(1)
@@ -191,48 +225,26 @@ def _apply_smart_links_outside_tags(renderer: _RendererRegexProtocol, text: str)
     index = 0
     in_anchor_depth = 0
     size = len(text)
+    anchor_tag_pattern = re.compile(r"^<\s*(/?)\s*([a-zA-Z0-9:_-]+)")
 
     while index < size:
-        tag_start = text.find("<", index)
-        if tag_start == -1:
-            if in_anchor_depth > 0:
-                output.append(text[index:])
-            else:
-                output.append(renderer.RE_NCM_LINK.sub(smart_replacer, text[index:]))
+        segment, next_index = _extract_next_fragment(text, index)
+        if not segment:
             break
 
-        if tag_start > index:
-            segment = text[index:tag_start]
-            if in_anchor_depth > 0:
-                output.append(segment)
-            else:
-                output.append(renderer.RE_NCM_LINK.sub(smart_replacer, segment))
+        in_anchor_depth, skip_linkify = _update_anchor_state_or_skip(
+            segment,
+            anchor_tag_pattern,
+            in_anchor_depth,
+        )
+        if skip_linkify:
+            output.append(segment)
+        elif in_anchor_depth > 0:
+            output.append(segment)
+        else:
+            output.append(renderer.RE_NCM_LINK.sub(smart_replacer, segment))
 
-        tag_end = text.find(">", tag_start + 1)
-        if tag_end == -1:
-            tail = text[tag_start:]
-            if in_anchor_depth > 0:
-                output.append(tail)
-            else:
-                output.append(renderer.RE_NCM_LINK.sub(smart_replacer, tail))
-            break
-
-        tag = text[tag_start : tag_end + 1]
-        output.append(tag)
-
-        tag_body = tag[1:-1].strip()
-        if tag_body:
-            is_closing_tag = tag_body.startswith("/")
-            if is_closing_tag:
-                tag_body = tag_body[1:].lstrip()
-            tag_name = tag_body.split(None, 1)[0].rstrip("/").lower()
-            if tag_name == "a":
-                if is_closing_tag:
-                    in_anchor_depth = max(0, in_anchor_depth - 1)
-                elif not tag.rstrip().endswith("/>"):
-                    in_anchor_depth += 1
-
-        index = tag_end + 1
+        index = next_index
 
     return "".join(output)
 
