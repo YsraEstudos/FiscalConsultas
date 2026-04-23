@@ -8,9 +8,9 @@ from typing import Protocol
 
 from .renderer_patterns import (
     _MultiTransformParser,
+    _RendererRegexProtocol,
     _SmartLinkParser,
     _UnitHighlighter,
-    _RendererRegexProtocol,
 )
 
 logger = logging.getLogger("nesh.renderer.text")
