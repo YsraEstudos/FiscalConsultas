@@ -1,9 +1,80 @@
+import functools
 import re
 import unicodedata
 from typing import List
 
 # Pre-compiled regex for word extraction (performance optimization)
 _RE_WORD = re.compile(r"\b\w+\b")
+
+
+def _remove_accent(word: str) -> str:
+    return unicodedata.normalize("NFKD", word).encode("ASCII", "ignore").decode("utf-8")
+
+
+def _replace_suffix(word: str, suffix: str, replacement: str) -> str:
+    if word.endswith(suffix):
+        return word[: -len(suffix)] + replacement
+    return word
+
+
+def _step_plural(word: str) -> str:
+    """Remove sufixos de plural."""
+    if word.endswith("s"):
+        if word.endswith("ns"):  # ex: trens -> trem
+            return _replace_suffix(word, "ns", "m")
+        # IMPORTANTE: Verificar sufixos mais específicos ANTES do genérico 'es'
+        elif word.endswith("ais"):  # animais -> animal
+            return _replace_suffix(word, "ais", "al")
+        elif word.endswith("eis"):  # papeis -> papel, submersiveis -> submersivel
+            return _replace_suffix(word, "eis", "el")
+        elif word.endswith("ois"):  # lencois -> lencol
+            return _replace_suffix(word, "ois", "ol")
+        elif word.endswith("is"):  # funis -> funil
+            return _replace_suffix(word, "is", "il")
+        elif word.endswith("les"):  # males -> mal
+            return _replace_suffix(word, "les", "l")
+        elif word.endswith("res"):  # motores -> motor
+            return word[:-2]
+        elif word.endswith(
+            "es"
+        ):  # ex: motores -> motor (AGORA DEPOIS dos específicos!)
+            if (
+                len(word) >= 4 and word[-3] in "szr"
+            ):  # luzes->luz, vezes->vez, cores->cor
+                return word[:-2]
+            return _replace_suffix(word, "es", "e")
+        else:
+            return word[:-1]  # carros -> carro
+    return word
+
+
+def _step_feminine(word: str) -> str:
+    """Redução de feminino para masculino (aproximado)."""
+    if word.endswith("a"):
+        if word.endswith("na"):  # pequena -> pequeno
+            return _replace_suffix(word, "a", "o")
+        if word.endswith("ra"):  # produtora -> produtor
+            return word[:-1]
+        if len(word) > 3:
+            return word[:-1]  # gata -> gat
+    return word
+
+
+# ⚡ Bolt Optimization: Memoize the stemmed output for frequent words.
+# In large NCM documents or queries, the same words (e.g. "motores", "animais", "veiculos")
+# appear repeatedly. By caching at the module level with lru_cache, we skip the string
+# processing overhead (lower, remove_accent, step_plural, step_feminine) for cache hits,
+# reducing the NLP processing time significantly.
+@functools.lru_cache(maxsize=4096)
+def _cached_stem(word: str) -> str:
+    word = word.lower()
+    word = _remove_accent(word)
+
+    # Ordem de aplicação
+    word = _step_plural(word)
+    word = _step_feminine(word)
+
+    return word
 
 
 class PortugueseStemmer:
@@ -13,71 +84,25 @@ class PortugueseStemmer:
     """
 
     def _remove_accent(self, word: str) -> str:
-        return (
-            unicodedata.normalize("NFKD", word)
-            .encode("ASCII", "ignore")
-            .decode("utf-8")
-        )
+        return _remove_accent(word)
 
     def _replace_suffix(self, word: str, suffix: str, replacement: str) -> str:
-        if word.endswith(suffix):
-            return word[: -len(suffix)] + replacement
-        return word
+        return _replace_suffix(word, suffix, replacement)
 
     def step_plural(self, word: str) -> str:
         """Remove sufixos de plural."""
-        if word.endswith("s"):
-            if word.endswith("ns"):  # ex: trens -> trem
-                return self._replace_suffix(word, "ns", "m")
-            # IMPORTANTE: Verificar sufixos mais específicos ANTES do genérico 'es'
-            elif word.endswith("ais"):  # animais -> animal
-                return self._replace_suffix(word, "ais", "al")
-            elif word.endswith("eis"):  # papeis -> papel, submersiveis -> submersivel
-                return self._replace_suffix(word, "eis", "el")
-            elif word.endswith("ois"):  # lencois -> lencol
-                return self._replace_suffix(word, "ois", "ol")
-            elif word.endswith("is"):  # funis -> funil
-                return self._replace_suffix(word, "is", "il")
-            elif word.endswith("les"):  # males -> mal
-                return self._replace_suffix(word, "les", "l")
-            elif word.endswith("res"):  # motores -> motor
-                return word[:-2]
-            elif word.endswith(
-                "es"
-            ):  # ex: motores -> motor (AGORA DEPOIS dos específicos!)
-                if (
-                    len(word) >= 4 and word[-3] in "szr"
-                ):  # luzes->luz, vezes->vez, cores->cor
-                    return word[:-2]
-                return self._replace_suffix(word, "es", "e")
-            else:
-                return word[:-1]  # carros -> carro
-        return word
+        return _step_plural(word)
 
     def step_feminine(self, word: str) -> str:
         """Redução de feminino para masculino (aproximado)."""
-        if word.endswith("a"):
-            if word.endswith("na"):  # pequena -> pequeno
-                return self._replace_suffix(word, "a", "o")
-            if word.endswith("ra"):  # produtora -> produtor
-                return word[:-1]
-            if len(word) > 3:
-                return word[:-1]  # gata -> gat
-        return word
+        return _step_feminine(word)
 
     def step_augmentative(self, word: str) -> str:
         # NCMs usam pouco aumentativo, mas...
         return word
 
     def stem(self, word: str) -> str:
-        word = word.lower()
-        word = self._remove_accent(word)
-
-        # Ordem de aplicação
-        word = self.step_plural(word)
-        word = self.step_feminine(word)
-
-        return word
+        return _cached_stem(word)
 
 
 class NeshTextProcessor:
