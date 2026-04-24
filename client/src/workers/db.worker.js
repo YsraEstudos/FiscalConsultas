@@ -6,7 +6,7 @@
  *
  * Security layers:
  * 1. AES-256-GCM decryption (Web Crypto API)
- * 2. PBKDF2 key derivation with domain binding
+ * 2. PBKDF2 key derivation with an authenticated install seed
  * 3. HMAC-SHA256 integrity verification
  * 4. Decrypt-to-memory-only (WASM heap)
  * 5. Encrypted-at-rest local storage (OPFS)
@@ -21,6 +21,7 @@ const GCM_IV_SIZE = 12;
 const GCM_TAG_SIZE = 16;
 const DB_OPFS_FILENAME = "fiscal_offline.enc";
 const DB_VERSION_KEY = "fiscal_offline_version";
+const DB_SEED_KEY = "fiscal_offline_seed";
 const MULTI_CODE_MAX_PARTS = 25;
 const MAX_ANCESTOR_DEPTH = 64;
 const SEARCH_CACHE_MAX = 32;
@@ -38,16 +39,12 @@ import {
   preferMoreSpecific,
 } from "./workerUtils.js";
 
-// This seed MUST match the backend build_offline_db.py APP_SEED
-const _s = [
-  102, 105, 115, 99, 97, 108, 45, 99, 111, 110, 115, 117, 108, 116, 97, 115,
-  45, 111, 102, 102, 108, 105, 110, 101, 45, 50, 48, 50, 54,
-]; // encoded app seed
-
 /** @type {any} */
 let _db = null;
 /** @type {string | null} */
 let _currentVersion = null;
+/** @type {string | null} */
+let _appSeed = null;
 /** @type {'not_installed' | 'ready' | 'installing' | 'error' | 'checking'} */
 let _status = "checking";
 
@@ -120,7 +117,10 @@ if (
 // ---------------------------------------------------------------------------
 
 function _getSeed() {
-  return new TextEncoder().encode(String.fromCharCode(..._s));
+  if (!_appSeed) {
+    throw new Error("Offline database key is missing");
+  }
+  return new TextEncoder().encode(_appSeed);
 }
 
 /**
@@ -135,7 +135,7 @@ async function sha256Hex(value) {
 }
 
 /**
- * Derive AES-256 key using PBKDF2 with domain binding.
+ * Derive AES-256 key using PBKDF2.
  * @param {Uint8Array} salt
  * @param {number} iterations
  * @returns {Promise<CryptoKey>}
@@ -313,6 +313,32 @@ async function readFromOpfs() {
   }
 }
 
+/**
+ * @param {string} seed
+ */
+async function saveSeed(seed) {
+  const root = await getOpfsRoot();
+  const fileHandle = await root.getFileHandle(DB_SEED_KEY, { create: true });
+  const writable = await fileHandle.createWritable();
+  await writable.write(seed);
+  await writable.close();
+}
+
+/**
+ * @returns {Promise<string | null>}
+ */
+async function readSeed() {
+  try {
+    const root = await getOpfsRoot();
+    const fileHandle = await root.getFileHandle(DB_SEED_KEY);
+    const file = await fileHandle.getFile();
+    const seed = (await file.text()).trim();
+    return seed || null;
+  } catch {
+    return null;
+  }
+}
+
 async function removeFromOpfs() {
   try {
     const root = await getOpfsRoot();
@@ -328,6 +354,13 @@ async function removeFromOpfs() {
   } catch {
     // OK
   }
+  try {
+    const root = await getOpfsRoot();
+    await root.removeEntry(DB_SEED_KEY);
+  } catch {
+    // OK
+  }
+  _appSeed = null;
 }
 
 /**
@@ -1199,8 +1232,9 @@ function searchNeshByCode(query) {
 async function handleInitMessage(id, payload) {
   const encData = await readFromOpfs();
   const version = await readVersion();
+  _appSeed = await readSeed();
 
-  if (!encData || !version) {
+  if (!encData || !version || !_appSeed) {
     _status = "not_installed";
     postWorkerStatus(id, { status: "not_installed" });
     return;
@@ -1283,10 +1317,20 @@ async function readEncryptedDatabaseBlob(dlResp, id) {
   return encryptedBlob;
 }
 
-async function requestInstallToken(apiBase) {
+function buildAuthHeaders(clerkToken) {
+  if (!clerkToken || typeof clerkToken !== "string") {
+    throw new Error("Faça login para instalar o banco offline.");
+  }
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${clerkToken}`,
+  };
+}
+
+async function requestInstallToken(apiBase, clerkToken) {
   const tokenResp = await fetch(`${apiBase}/database/token`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: buildAuthHeaders(clerkToken),
   });
 
   if (!tokenResp.ok) {
@@ -1297,10 +1341,10 @@ async function requestInstallToken(apiBase) {
   return tokenResp.json();
 }
 
-async function fetchEncryptedDatabase(apiBase, token) {
+async function fetchEncryptedDatabase(apiBase, token, clerkToken) {
   const dlResp = await fetch(`${apiBase}/database/download`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: buildAuthHeaders(clerkToken),
     body: JSON.stringify({ token }),
   });
 
@@ -1331,17 +1375,23 @@ async function handleInstallMessage(id, payload) {
   postWorkerProgress(id, 0, "requesting_token");
 
   const apiBase = payload?.apiBase || "/api";
-  const tokenData = await requestInstallToken(apiBase);
+  const clerkToken = payload?.clerkToken;
+  const tokenData = await requestInstallToken(apiBase, clerkToken);
   const {
     token,
+    app_seed: appSeed,
     encrypted_sha256: expectedEncryptedSha256,
     chunk_size: chunkSize = 65536,
     pbkdf2_iterations: iterations = 600000,
   } = tokenData;
+  if (!appSeed || typeof appSeed !== "string") {
+    throw new Error("Offline database key was not provided by the server");
+  }
+  _appSeed = appSeed;
 
   postWorkerProgress(id, 10, "fetching_database");
 
-  const dlResp = await fetchEncryptedDatabase(apiBase, token);
+  const dlResp = await fetchEncryptedDatabase(apiBase, token, clerkToken);
   const encryptedBlob = await readEncryptedDatabaseBlob(dlResp, id);
 
   if (expectedEncryptedSha256) {
@@ -1361,6 +1411,7 @@ async function handleInstallMessage(id, payload) {
 
   postWorkerProgress(id, 90, "saving");
   await saveToOpfs(encryptedBlob);
+  await saveSeed(appSeed);
   await updateInstalledVersion(apiBase);
 
   _status = "ready";

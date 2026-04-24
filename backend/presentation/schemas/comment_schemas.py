@@ -6,36 +6,43 @@ e validação nas entradas/saídas da API.
 """
 
 from datetime import datetime
+import re
 from typing import Optional, Literal
 from pydantic import BaseModel, Field, field_validator
+
+ANCHOR_KEY_PATTERN = r"^[A-Za-z0-9._:-]{1,255}$"
+_HTML_TAG_PATTERN = re.compile(r"<\s*/?\s*[a-zA-Z][^>]*>")
+
+
+def _clean_plain_text(value: str, *, field_name: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError(f"{field_name} não pode ficar vazio")
+    if _HTML_TAG_PATTERN.search(cleaned):
+        raise ValueError(f"{field_name} não aceita HTML")
+    return cleaned
 
 
 class CommentCreate(BaseModel):
     """Payload para criação de comentário (POST /api/comments/)."""
 
     anchor_key: str = Field(
-        min_length=1, max_length=255, description="ID do elemento âncora no HTML"
+        min_length=1,
+        max_length=255,
+        pattern=ANCHOR_KEY_PATTERN,
+        description="ID do elemento âncora no HTML",
     )
     selected_text: str = Field(min_length=1, max_length=5000)
     body: str = Field(min_length=1, max_length=4000)
     is_private: bool = Field(
         default=False, description="True → status=private, False → status=pending"
     )
-    user_name: Optional[str] = Field(
-        default=None,
-        max_length=255,
-        description="Campo legado ignorado; o backend usa a identidade do JWT.",
-    )
-    user_image_url: Optional[str] = Field(
-        default=None,
-        max_length=1024,
-        description="Campo legado ignorado; o backend usa a identidade do JWT.",
-    )
+    model_config = {"extra": "forbid"}
 
     @field_validator("anchor_key", "body", "selected_text")
     @classmethod
-    def strip_whitespace(cls, v: str) -> str:
-        return v.strip()
+    def strip_whitespace(cls, v: str, info) -> str:
+        return _clean_plain_text(v, field_name=info.field_name)
 
 
 class CommentOut(BaseModel):
@@ -66,7 +73,9 @@ class CommentUpdate(BaseModel):
     @field_validator("body")
     @classmethod
     def strip_whitespace(cls, v: str) -> str:
-        return v.strip()
+        return _clean_plain_text(v, field_name="body")
+
+    model_config = {"extra": "forbid"}
 
 
 class CommentApproveIn(BaseModel):
@@ -74,3 +83,12 @@ class CommentApproveIn(BaseModel):
 
     action: Literal["approve", "reject"]
     note: Optional[str] = Field(default=None, max_length=1000)
+
+    @field_validator("note")
+    @classmethod
+    def strip_note(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        return _clean_plain_text(v, field_name="note")
+
+    model_config = {"extra": "forbid"}

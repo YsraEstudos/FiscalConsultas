@@ -1,5 +1,6 @@
 import pytest
 from backend.presentation.routes import auth
+from backend.utils.auth import is_admin_payload
 from starlette.requests import Request
 
 pytestmark = pytest.mark.unit
@@ -52,6 +53,11 @@ def test_extract_client_ip_falls_back_to_request_client():
 def test_extract_client_ip_returns_unknown_when_not_available():
     request = _build_request()
     assert auth._extract_client_ip(request) == "unknown"
+
+
+def test_is_admin_payload_accepts_org_prefixed_role():
+    assert is_admin_payload({"org_role": "org:admin"}) is True
+    assert is_admin_payload({"roles": ["member", "org:owner"]}) is True
 
 
 @pytest.mark.asyncio

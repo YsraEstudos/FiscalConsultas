@@ -27,6 +27,7 @@ import {
   type OfflineDatabaseMetadata,
 } from "../utils/offlineDatabase";
 import { API_BASE_URL } from "../services/api";
+import { useAuth } from "./AuthContext";
 
 export type DbStatus =
   | "checking"
@@ -303,6 +304,7 @@ function createInstanceId() {
 export function LocalDatabaseProvider({
   children,
 }: Readonly<{ children: ReactNode }>) {
+  const { getToken } = useAuth();
   const isSupported = useMemo(() => isOfflineDbSupported(), []);
   const instanceIdRef = useRef(createInstanceId());
   const pendingRef = useRef<Map<string, PendingRequest>>(new Map());
@@ -706,10 +708,15 @@ export function LocalDatabaseProvider({
       }
 
       runInBackground(primeOfflineShellCache());
+      const clerkToken = await getToken();
+      if (!clerkToken) {
+        throw new Error("Faça login para instalar o banco offline.");
+      }
       await sendToWorker(
         "INSTALL",
         {
           apiBase: getOfflineApiBaseUrl(),
+          clerkToken,
         },
         180_000
       );
@@ -743,6 +750,7 @@ export function LocalDatabaseProvider({
   }, [
     applyInstalledMetadata,
     broadcast,
+    getToken,
     isSupported,
     localVersion,
     refreshAvailability,

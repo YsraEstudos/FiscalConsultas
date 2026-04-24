@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from fastapi import Request, Response
 
+from backend.utils.auth import is_trusted_proxy
+
 
 _DOCS_PATHS = frozenset({"/docs", "/redoc", "/openapi.json"})
 _DEV_CORS_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
@@ -54,11 +56,11 @@ def _should_expose_api_docs(server_env: str, debug_mode: bool) -> bool:
 
 
 def _request_uses_https(request: Request) -> bool:
-    forwarded_proto = request.headers.get("x-forwarded-proto", "")
-    if forwarded_proto:
+    direct_ip = request.client.host if request.client else None
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").strip()
+    if forwarded_proto and is_trusted_proxy(direct_ip):
         proto = forwarded_proto.split(",", 1)[0].strip().lower()
-        if proto == "https":
-            return True
+        return proto == "https"
     return request.url.scheme.lower() == "https"
 
 

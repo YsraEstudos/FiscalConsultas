@@ -64,13 +64,20 @@ class CommentService:
         tenant_id: str,
         anchor_key: str,
         user_id: str,
+        *,
+        limit: int = 200,
+        offset: int = 0,
     ) -> list[Comment]:
         """Comentários aprovados + privados do próprio usuário para o anchor."""
-        return await self.repo.list_by_anchor(tenant_id, anchor_key, user_id)
+        return await self.repo.list_by_anchor(
+            tenant_id, anchor_key, user_id, limit=limit, offset=offset
+        )
 
-    async def list_pending(self, tenant_id: str) -> list[Comment]:
+    async def list_pending(
+        self, tenant_id: str, *, limit: int = 200, offset: int = 0
+    ) -> list[Comment]:
         """Todos os comentários pendentes para o admin moderar."""
-        return await self.repo.list_pending(tenant_id)
+        return await self.repo.list_pending(tenant_id, limit=limit, offset=offset)
 
     async def moderate(
         self,
@@ -83,11 +90,9 @@ class CommentService:
         Aprova ou rejeita um comentário.
         Somente comentários do mesmo tenant podem ser moderados.
         """
-        comment = await self.repo.get_by_id(comment_id)
+        comment = await self.repo.get_by_id_and_tenant(comment_id, tenant_id)
         if not comment:
-            raise ValueError(f"Comentário {comment_id} não encontrado")
-        if comment.tenant_id != tenant_id:
-            raise PermissionError("Sem permissão para moderar este comentário")
+            raise ValueError("Comentário não encontrado")
 
         new_status = "approved" if data.action == "approve" else "rejected"
         updated = await self.repo.update_status(
@@ -110,11 +115,9 @@ class CommentService:
         Edita o corpo de um comentário.
         Somente o autor pode editar. Se era aprovado, volta para 'pending'.
         """
-        comment = await self.repo.get_by_id(comment_id)
+        comment = await self.repo.get_by_id_and_tenant(comment_id, tenant_id)
         if not comment:
-            raise ValueError(f"Comentário {comment_id} não encontrado")
-        if comment.tenant_id != tenant_id:
-            raise PermissionError("Sem permissão")
+            raise ValueError("Comentário não encontrado")
         if comment.user_id != user_id:
             raise PermissionError("Somente o autor pode editar")
         if comment.status == "rejected":
@@ -134,11 +137,9 @@ class CommentService:
         Remove definitivamente um comentário.
         Somente o autor pode deletar.
         """
-        comment = await self.repo.get_by_id(comment_id)
+        comment = await self.repo.get_by_id_and_tenant(comment_id, tenant_id)
         if not comment:
-            raise ValueError(f"Comentário {comment_id} não encontrado")
-        if comment.tenant_id != tenant_id:
-            raise PermissionError("Sem permissão")
+            raise ValueError("Comentário não encontrado")
         if comment.user_id != user_id:
             raise PermissionError("Somente o autor pode deletar")
 

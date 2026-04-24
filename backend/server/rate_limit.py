@@ -172,3 +172,15 @@ services_detail_rate_limiter = RedisBackedRateLimiter(
     window_seconds=60,
     redis_prefix="rate:services-detail",
 )
+comment_create_rate_limiter = RedisBackedRateLimiter(
+    window_seconds=60,
+    redis_prefix="rate:comments-create",
+)
+comment_read_rate_limiter = RedisBackedRateLimiter(
+    window_seconds=60,
+    redis_prefix="rate:comments-read",
+)
+comment_admin_rate_limiter = RedisBackedRateLimiter(
+    window_seconds=60,
+    redis_prefix="rate:comments-admin",
+)

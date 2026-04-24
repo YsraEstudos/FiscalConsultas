@@ -74,7 +74,7 @@ _jwks_client: Optional[PyJWKClient] = None
 
 # JWT decode cache
 _jwt_decode_cache: dict[str, tuple[dict, float, Optional[float]]] = {}
-_JWT_CACHE_TTL = 60.0
+_JWT_CACHE_TTL = 30.0
 _JWT_CACHE_MAX_SIZE = 1000
 
 # Provisioning cache
@@ -351,8 +351,6 @@ class TenantMiddleware:
         "/api/tipi/chapters",
         "/api/webhooks",
         "/api/database/version",
-        "/api/database/token",
-        "/api/database/download",
     }
     PUBLIC_PREFIX_PATHS = (
         "/api/webhooks/",
@@ -421,6 +419,9 @@ class TenantMiddleware:
         if org_id:
             return org_id
         if allow_dev_fallback:
+            logger.warning(
+                "Using development fallback tenant org_default for a loopback request"
+            )
             return "org_default"
         return None
 

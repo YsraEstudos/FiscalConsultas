@@ -112,7 +112,7 @@ class AuthSettings(BaseModel):
     clerk_audience: Optional[str] = None  # opcional; exige match em "aud"
     clerk_authorized_parties: List[str] = Field(default_factory=list)  # valida "azp"
     clerk_authorized_parties_regex: Optional[str] = None  # regex opcional para previews
-    clerk_clock_skew_seconds: int = 120  # tolerancia para exp/nbf/iat
+    clerk_clock_skew_seconds: int = 30  # tolerancia para exp/nbf/iat; use 5-30s em prod
 
 
 class BillingSettings(BaseModel):

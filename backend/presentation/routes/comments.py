@@ -7,10 +7,12 @@ autenticação via decode_clerk_jwt e verificação de admin via is_admin_payloa
 
 import logging
 from typing import Annotated
+from urllib.parse import urlparse
 
 from backend.config.settings import settings
 from backend.infrastructure.db_engine import get_db
 from backend.presentation.schemas.comment_schemas import (
+    ANCHOR_KEY_PATTERN,
     CommentApproveIn,
     CommentCreate,
     CommentOut,
@@ -22,9 +24,14 @@ from backend.server.middleware import (
     get_last_jwt_failure_reason,
     _resolve_full_name,
 )
+from backend.server.rate_limit import (
+    comment_admin_rate_limiter,
+    comment_create_rate_limiter,
+    comment_read_rate_limiter,
+)
 from backend.services.comment_service import CommentService
 from backend.utils.auth import extract_bearer_token, is_admin_payload
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("routes.comments")
@@ -32,6 +39,14 @@ logger = logging.getLogger("routes.comments")
 router = APIRouter(prefix="/comments", tags=["Comments"])
 
 ERROR_TENANT_MISSING = "Tenant não identificado"
+COMMENT_CREATE_LIMIT_PER_MINUTE = 10
+COMMENT_READ_LIMIT_PER_MINUTE = 60
+COMMENT_ADMIN_LIMIT_PER_MINUTE = 30
+ALLOWED_CLERK_IMAGE_HOSTS = {
+    "img.clerk.com",
+    "img.clerkstage.com",
+    "images.clerk.dev",
+}
 
 
 # ─── Dependências de Autenticação ──────────────────────────────────────────
@@ -68,9 +83,38 @@ def _resolve_comment_author_identity(
         if isinstance(raw_picture, str) and raw_picture.strip()
         else None
     )
-    image_url = trimmed_image_url or trimmed_picture
+    image_url = _sanitize_clerk_image_url(trimmed_image_url or trimmed_picture)
 
     return full_name, image_url
+
+
+def _sanitize_clerk_image_url(value: str | None) -> str | None:
+    if not value or len(value) > 1024:
+        return None
+    parsed = urlparse(value)
+    hostname = (parsed.hostname or "").lower()
+    if parsed.scheme.lower() != "https":
+        return None
+    if hostname not in ALLOWED_CLERK_IMAGE_HOSTS:
+        return None
+    return value
+
+
+async def _consume_rate_limit(
+    *,
+    limiter,
+    key: str,
+    limit: int,
+    detail: str,
+) -> None:
+    allowed, retry_after = await limiter.consume(key=key, limit=limit)
+    if allowed:
+        return
+    raise HTTPException(
+        status_code=429,
+        detail=detail,
+        headers={"Retry-After": str(retry_after)},
+    )
 
 
 async def _require_payload(request: Request) -> dict:
@@ -128,6 +172,12 @@ async def create_comment(
     auth_payload = await _require_payload(request)
     tenant_id = _tenant_from_auth_payload(auth_payload)
     user_id: str = auth_payload.get("sub", "")
+    await _consume_rate_limit(
+        limiter=comment_create_rate_limiter,
+        key=f"{tenant_id}:{user_id}",
+        limit=COMMENT_CREATE_LIMIT_PER_MINUTE,
+        detail="Limite de criação de comentários excedido",
+    )
     user_name, user_image_url = _resolve_comment_author_identity(auth_payload)
     try:
         comment = await service.create_comment(
@@ -154,15 +204,25 @@ async def create_comment(
     },
 )
 async def list_by_anchor(
-    anchor_key: str,
+    anchor_key: Annotated[str, Path(pattern=ANCHOR_KEY_PATTERN)],
     request: Request,
     service: Annotated[CommentService, Depends(_get_service)],
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ):
     """Lista comentários aprovados + privados do usuário para um anchor."""
     auth_payload = await _require_payload(request)
     tenant_id = _tenant_from_auth_payload(auth_payload)
     user_id: str = auth_payload.get("sub", "")
-    comments = await service.list_for_anchor(tenant_id, anchor_key, user_id)
+    await _consume_rate_limit(
+        limiter=comment_read_rate_limiter,
+        key=f"{tenant_id}:{user_id}",
+        limit=COMMENT_READ_LIMIT_PER_MINUTE,
+        detail="Limite de leitura de comentários excedido",
+    )
+    comments = await service.list_for_anchor(
+        tenant_id, anchor_key, user_id, limit=limit, offset=offset
+    )
     return [CommentOut.model_validate(c) for c in comments]
 
 
@@ -187,13 +247,19 @@ async def update_comment(
     auth_payload = await _require_payload(request)
     tenant_id = _tenant_from_auth_payload(auth_payload)
     user_id: str = auth_payload.get("sub", "")
+    await _consume_rate_limit(
+        limiter=comment_create_rate_limiter,
+        key=f"{tenant_id}:{user_id}",
+        limit=COMMENT_CREATE_LIMIT_PER_MINUTE,
+        detail="Limite de edição de comentários excedido",
+    )
     try:
         comment = await service.update_comment(comment_id, payload, tenant_id, user_id)
         return CommentOut.model_validate(comment)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e  # NOSONAR
+        raise HTTPException(status_code=404, detail="Comentário não encontrado") from e
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e)) from e  # NOSONAR
+        raise HTTPException(status_code=403, detail="Sem permissão") from e
     except Exception as e:
         logger.error("Erro ao editar comentário %s: %s", comment_id, e)
         raise HTTPException(
@@ -221,12 +287,18 @@ async def delete_comment(
     auth_payload = await _require_payload(request)
     tenant_id = _tenant_from_auth_payload(auth_payload)
     user_id: str = auth_payload.get("sub", "")
+    await _consume_rate_limit(
+        limiter=comment_create_rate_limiter,
+        key=f"{tenant_id}:{user_id}",
+        limit=COMMENT_CREATE_LIMIT_PER_MINUTE,
+        detail="Limite de remoção de comentários excedido",
+    )
     try:
         await service.delete_comment(comment_id, tenant_id, user_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e  # NOSONAR
+        raise HTTPException(status_code=404, detail="Comentário não encontrado") from e
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e)) from e  # NOSONAR
+        raise HTTPException(status_code=403, detail="Sem permissão") from e
     except Exception as e:
         logger.error("Erro ao deletar comentário %s: %s", comment_id, e)
         raise HTTPException(
@@ -249,6 +321,13 @@ async def list_commented_anchors(
     """Lista anchor_keys que possuem comentários aprovados (para marcar no frontend)."""
     auth_payload = await _require_payload(request)
     tenant_id = _tenant_from_auth_payload(auth_payload)
+    user_id: str = auth_payload.get("sub", "")
+    await _consume_rate_limit(
+        limiter=comment_read_rate_limiter,
+        key=f"{tenant_id}:{user_id}",
+        limit=COMMENT_READ_LIMIT_PER_MINUTE,
+        detail="Limite de leitura de comentários excedido",
+    )
     return await service.get_commented_anchors(tenant_id)
 
 
@@ -267,11 +346,20 @@ async def list_commented_anchors(
 async def list_pending(
     request: Request,
     service: Annotated[CommentService, Depends(_get_service)],
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ):
     """[Admin] Lista todos os comentários pendentes de moderação."""
     admin_info = await _require_admin_payload(request)
     tenant_id = _tenant_from_auth_payload(admin_info)
-    comments = await service.list_pending(tenant_id)
+    admin_user_id: str = admin_info.get("sub", "")
+    await _consume_rate_limit(
+        limiter=comment_admin_rate_limiter,
+        key=f"{tenant_id}:{admin_user_id}",
+        limit=COMMENT_ADMIN_LIMIT_PER_MINUTE,
+        detail="Limite de moderação excedido",
+    )
+    comments = await service.list_pending(tenant_id, limit=limit, offset=offset)
     return [CommentOut.model_validate(c) for c in comments]
 
 
@@ -296,13 +384,19 @@ async def moderate_comment(
     admin_info = await _require_admin_payload(request)
     tenant_id = _tenant_from_auth_payload(admin_info)
     admin_user_id: str = admin_info.get("sub", "")
+    await _consume_rate_limit(
+        limiter=comment_admin_rate_limiter,
+        key=f"{tenant_id}:{admin_user_id}",
+        limit=COMMENT_ADMIN_LIMIT_PER_MINUTE,
+        detail="Limite de moderação excedido",
+    )
     try:
         comment = await service.moderate(comment_id, payload, tenant_id, admin_user_id)
         return CommentOut.model_validate(comment)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e  # NOSONAR
+        raise HTTPException(status_code=404, detail="Comentário não encontrado") from e
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e)) from e  # NOSONAR
+        raise HTTPException(status_code=403, detail="Sem permissão") from e
     except Exception as e:
         logger.error("Erro ao moderar comentário %s: %s", comment_id, e)
         raise HTTPException(
