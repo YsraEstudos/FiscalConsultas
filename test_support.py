@@ -85,7 +85,8 @@ def _close_shared_db_engine() -> None:
         try:
             asyncio.run(TipiService.close_all_pools())
         finally:
-            TipiService._pool_lock = None
+            TipiService._tipi_connection_pools = {}
+            TipiService._tipi_connection_pool_locks = {}
     except Exception as exc:
         LOGGER.debug("Failed to close TIPI pools during test bootstrap: %s", exc)
 

@@ -64,8 +64,7 @@ class _FakeTipiService:
         self.created_repo = False
 
     @classmethod
-    async def initializeTipiServiceWithRepositoryFactory(cls):
-        await asyncio.sleep(0)
+    def initializeTipiServiceWithRepositoryFactory(cls):
         obj = cls()
         obj.created_repo = True
         obj.mode = "repo"

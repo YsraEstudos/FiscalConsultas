@@ -358,6 +358,8 @@ function NbsDetailSection({
     } else if (nbsState.detail) {
         const detail = nbsState.detail;
         const codeParts = detail.item.code.split('.');
+        const linkedNebs = detail.nebs;
+        const linkedNebsCode = linkedNebs?.code;
 
         detailBody = (
             <>
@@ -389,7 +391,7 @@ function NbsDetailSection({
                     </div>
                 </section>
 
-                {detail.nebs && (
+                {linkedNebs && (
                     <section className={styles.notesCard} style={{ marginTop: '1rem' }}>
                         <div className={styles.notesHeader}>
                             <span className={styles.notesIcon}>i</span>
@@ -403,14 +405,14 @@ function NbsDetailSection({
                     </section>
                 )}
 
-                {detail.nebs && (
+                {linkedNebsCode && (
                     <div className={styles.detailActions}>
                         <button
                             type="button"
                             className={styles.secondaryAction}
-                            onClick={() => openCatalogDoc('nebs', detail.item.code)}
+                            onClick={() => openCatalogDoc('nebs', linkedNebsCode)}
                         >
-                            Ver NBS
+                            Ver NEBS
                         </button>
                     </div>
                 )}
@@ -498,13 +500,13 @@ interface NbsWorkspaceViewProps {
     readonly chapterNotesDialogRef: React.RefObject<HTMLDialogElement | null>;
     readonly chapterNotesHtml: string;
     readonly currentChapterNotesEntry: ReturnType<typeof getNbsChapterNotesEntry>;
+    readonly openCatalogDoc: OpenCatalogDoc;
     readonly nbsChapterNotesNewTab: boolean;
     readonly nbsNoteBodyHtml: string;
     readonly nbsNotesContentRef: React.RefObject<HTMLDivElement | null>;
     readonly nbsPrefixAutoExpand: boolean;
     readonly nbsState: ServicesWorkspaceNbsState;
     readonly onSelectNbs: (code: string) => void;
-    readonly openCatalogDoc: OpenCatalogDoc;
     readonly setIsChapterNotesOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
@@ -513,13 +515,13 @@ function NbsWorkspaceView({
     chapterNotesDialogRef,
     chapterNotesHtml,
     currentChapterNotesEntry,
+    openCatalogDoc,
     nbsChapterNotesNewTab,
     nbsNoteBodyHtml,
     nbsNotesContentRef,
     nbsPrefixAutoExpand,
     nbsState,
     onSelectNbs,
-    openCatalogDoc,
     setIsChapterNotesOpen,
 }: Readonly<NbsWorkspaceViewProps>) {
     const chapterButtonLabel = activeChapterNumber
@@ -659,24 +661,25 @@ function NebsDetailSection({
     if (nebsState.isLoadingDetail) {
         detailBody = <Loading label="Montando nota..." />;
     } else if (nebsState.detail) {
+        const detail = nebsState.detail;
         detailBody = (
             <>
                 <div className={styles.detailHero}>
                     <div
                         className={`${styles.detailCode} ${styles.interactiveCode} service-code-target`}
-                        data-service-code={nebsState.detail.entry.code}
+                        data-service-code={detail.entry.code}
                     >
-                        {nebsState.detail.entry.code}
+                        {detail.entry.code}
                     </div>
-                    <h3>{nebsState.detail.entry.title}</h3>
+                    <h3>{detail.entry.title}</h3>
                     <p className={styles.heroMeta}>
-                        {nebsState.detail.entry.section_title || 'Secao nao informada'} • Paginas {nebsState.detail.entry.page_start} a{' '}
-                        {nebsState.detail.entry.page_end}
+                        {detail.entry.section_title || 'Secao nao informada'} • Paginas {detail.entry.page_start} a{' '}
+                        {detail.entry.page_end}
                     </p>
                 </div>
 
                 <div className={styles.breadcrumbs} aria-label="Hierarquia NBS">
-                    {nebsState.detail.ancestors.map((ancestor) => (
+                    {detail.ancestors.map((ancestor) => (
                         <button
                             key={ancestor.code}
                             type="button"
@@ -690,22 +693,22 @@ function NebsDetailSection({
                     <button
                         type="button"
                         className={`${styles.crumbCurrentButton} ${styles.interactiveCode} service-code-target`}
-                        data-service-code={nebsState.detail?.item.code}
-                        onClick={() => openCatalogDoc('nbs', nebsState.detail?.item.code)}
+                        data-service-code={detail.item.code}
+                        onClick={() => openCatalogDoc('nbs', detail.item.code)}
                     >
-                        {nebsState.detail.item.code}
+                        {detail.item.code}
                     </button>
                 </div>
 
                 <div className={styles.detailGrid}>
                     <section className={styles.card}>
                         <div className={styles.cardLabel}>Servico NBS vinculado</div>
-                        <p>{nebsState.detail.item.description}</p>
+                        <p>{detail.item.description}</p>
                     </section>
 
                     <section className={styles.card}>
                         <div className={styles.cardLabel}>Origem</div>
-                        <p>{nebsState.detail.entry.section_title || 'Secao nao identificada'}</p>
+                        <p>{detail.entry.section_title || 'Secao nao identificada'}</p>
                     </section>
                 </div>
 
@@ -721,7 +724,7 @@ function NebsDetailSection({
                     <button
                         type="button"
                         className={styles.secondaryAction}
-                        onClick={() => openCatalogDoc('nbs', nebsState.detail?.item.code)}
+                        onClick={() => openCatalogDoc('nbs', detail.item.code)}
                     >
                         Abrir item NBS relacionado
                     </button>

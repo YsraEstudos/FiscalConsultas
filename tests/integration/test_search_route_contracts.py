@@ -19,7 +19,7 @@ def _vary_tokens(response) -> set[str]:
 
 
 class _FakeNeshServiceCode:
-    async def process_request(self, query: str):
+    async def executeNeshSearchWithVectorWeights(self, query: str):
         return {
             "success": True,
             "type": "code",
@@ -34,7 +34,7 @@ def test_search_handler_keeps_legacy_alias_to_canonical_name():
 
 
 class _FakeNeshServiceText:
-    async def process_request(self, query: str):
+    async def executeNeshSearchWithVectorWeights(self, query: str):
         return {
             "success": True,
             "type": "text",
@@ -45,13 +45,13 @@ class _FakeNeshServiceText:
 
 
 class _FakeNeshServiceInvalid:
-    async def process_request(self, _query: str):
+    async def executeNeshSearchWithVectorWeights(self, _query: str):
         await asyncio.sleep(0)
         return []
 
 
 class _FakeNeshChapterService:
-    async def fetch_chapter_data(self, chapter: str):
+    async def fetchNeshChapterData(self, chapter: str):
         await asyncio.sleep(0)
         return {
             "content": f"CAPITULO {chapter}\nConteudo detalhado",
@@ -60,12 +60,12 @@ class _FakeNeshChapterService:
             "sections": {"titulo": "Capitulo 84"},
         }
 
-    def strip_chapter_preamble(self, content: str) -> str:
+    def stripNeshChapterPreamble(self, content: str) -> str:
         return content.split("\n", 1)[1] if "\n" in content else content
 
 
 class _FakeNeshServiceCodeEmptyResults:
-    async def process_request(self, query: str):
+    async def executeNeshSearchWithVectorWeights(self, query: str):
         await asyncio.sleep(0)
         return {
             "success": True,
@@ -78,10 +78,7 @@ class _FakeNeshServiceCodeEmptyResults:
 
 
 class _FakeTipiServiceCode:
-    def is_code_query(self, _query: str) -> bool:
-        return True
-
-    async def search_by_code(self, _query: str, view_mode: str = "family"):
+    async def searchTipiByNcmCode(self, _query: str, view_mode: str = "family"):
         return {
             "success": True,
             "type": "code",
@@ -91,10 +88,7 @@ class _FakeTipiServiceCode:
 
 
 class _FakeTipiServiceText:
-    def is_code_query(self, _query: str) -> bool:
-        return False
-
-    async def search_text(self, query: str):
+    async def searchTipiByTextQuery(self, query: str):
         return {
             "success": True,
             "type": "text",
@@ -118,7 +112,9 @@ def test_search_code_response_keeps_resultados_alias(client, monkeypatch):
     monkeypatch.setattr(
         NeshService,
         "executeNeshSearchWithVectorWeights",
-        AsyncMock(side_effect=_FakeNeshServiceCode().process_request),
+        AsyncMock(
+            side_effect=_FakeNeshServiceCode().executeNeshSearchWithVectorWeights
+        ),
     )
 
     response = client.get("/api/search?ncm=8517")
@@ -138,7 +134,9 @@ def test_search_text_response_does_not_inject_resultados(client, monkeypatch):
     monkeypatch.setattr(
         NeshService,
         "executeNeshSearchWithVectorWeights",
-        AsyncMock(side_effect=_FakeNeshServiceText().process_request),
+        AsyncMock(
+            side_effect=_FakeNeshServiceText().executeNeshSearchWithVectorWeights
+        ),
     )
 
     response = client.get("/api/search?ncm=texto")
@@ -153,7 +151,9 @@ def test_search_code_prefers_results_key_even_when_empty(client, monkeypatch):
     monkeypatch.setattr(
         NeshService,
         "executeNeshSearchWithVectorWeights",
-        AsyncMock(side_effect=_FakeNeshServiceCodeEmptyResults().process_request),
+        AsyncMock(
+            side_effect=_FakeNeshServiceCodeEmptyResults().executeNeshSearchWithVectorWeights
+        ),
     )
 
     response = client.get("/api/search?ncm=8517")
@@ -172,7 +172,9 @@ def test_search_invalid_service_response_returns_500_with_cors_header(
     monkeypatch.setattr(
         NeshService,
         "executeNeshSearchWithVectorWeights",
-        AsyncMock(side_effect=_FakeNeshServiceInvalid().process_request),
+        AsyncMock(
+            side_effect=_FakeNeshServiceInvalid().executeNeshSearchWithVectorWeights
+        ),
     )
 
     response = client.get(
@@ -190,13 +192,13 @@ def test_search_chapter_body_allows_anonymous_access(client, monkeypatch):
     fake_service = _FakeNeshChapterService()
     monkeypatch.setattr(
         NeshService,
-        "fetch_chapter_data",
-        AsyncMock(side_effect=fake_service.fetch_chapter_data),
+        "fetchNeshChapterData",
+        AsyncMock(side_effect=fake_service.fetchNeshChapterData),
     )
     monkeypatch.setattr(
         NeshService,
-        "strip_chapter_preamble",
-        fake_service.strip_chapter_preamble,
+        "stripNeshChapterPreamble",
+        fake_service.stripNeshChapterPreamble,
     )
 
     response = client.get("/api/search/chapter/84/body")
@@ -230,7 +232,7 @@ def test_search_chapters_endpoint_returns_available_chapters(client, monkeypatch
 def test_nesh_chapter_notes_endpoint_returns_notes_payload(client, monkeypatch):
     monkeypatch.setattr(
         NeshService,
-        "fetch_chapter_data",
+        "fetchNeshChapterData",
         AsyncMock(
             return_value={
                 "parsed_notes": {"N1": "Nota 1", "N2": "Nota 2"},
@@ -255,7 +257,7 @@ def test_nesh_chapter_notes_endpoint_returns_404_when_chapter_missing(
 ):
     monkeypatch.setattr(
         NeshService,
-        "fetch_chapter_data",
+        "fetchNeshChapterData",
         AsyncMock(return_value=None),
     )
 
@@ -292,7 +294,7 @@ def test_glossary_endpoint_returns_found_and_not_found_contracts(client, monkeyp
 def test_tipi_chapters_endpoint_returns_available_chapters(client, monkeypatch):
     monkeypatch.setattr(
         TipiService,
-        "get_all_chapters",
+        "fetchTipiChapterCatalog",
         AsyncMock(return_value=["01", "02", "11"]),
     )
 
@@ -307,11 +309,11 @@ def test_tipi_chapters_endpoint_returns_available_chapters(client, monkeypatch):
 
 def test_tipi_code_response_enforces_compatibility_fields(client, monkeypatch):
     fake_service = _FakeTipiServiceCode()
-    monkeypatch.setattr(TipiService, "is_code_query", fake_service.is_code_query)
+    monkeypatch.setattr(tipi_route.ncm_utils, "is_code_query", lambda _query: True)
     monkeypatch.setattr(
         TipiService,
-        "search_by_code",
-        AsyncMock(side_effect=fake_service.search_by_code),
+        "searchTipiByNcmCode",
+        AsyncMock(side_effect=fake_service.searchTipiByNcmCode),
     )
 
     response = client.get("/api/tipi/search?ncm=8517")
@@ -329,11 +331,11 @@ def test_tipi_code_response_enforces_compatibility_fields(client, monkeypatch):
 
 def test_tipi_text_response_sets_route_defaults(client, monkeypatch):
     fake_service = _FakeTipiServiceText()
-    monkeypatch.setattr(TipiService, "is_code_query", fake_service.is_code_query)
+    monkeypatch.setattr(tipi_route.ncm_utils, "is_code_query", lambda _query: False)
     monkeypatch.setattr(
         TipiService,
-        "search_text",
-        AsyncMock(side_effect=fake_service.search_text),
+        "searchTipiByTextQuery",
+        AsyncMock(side_effect=fake_service.searchTipiByTextQuery),
     )
 
     response = client.get("/api/tipi/search?ncm=motor")
