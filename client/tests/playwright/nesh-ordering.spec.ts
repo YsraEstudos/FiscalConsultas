@@ -147,6 +147,7 @@ test('navigates to a NESH position from sidebar click and highlights target anch
 
   await expect(resultsContainer).toBeVisible();
   await expect(targetAnchor).toBeVisible();
+  await waitForScrollToSettle(page, '#results-content-tab-1');
 
   await resultsContainer.evaluate((element) => {
     element.scrollTop = 0;

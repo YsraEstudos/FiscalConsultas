@@ -880,11 +880,13 @@ export const ResultDisplay = React.memo(function ResultDisplay({
     // Sidebar collapsed state for lateral layout
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const toggleSidebar = useCallback(() => {
-        if (window.innerWidth <= 1024) {
+        if (window.innerWidth < 1024) {
             if (onToggleMobileMenu) onToggleMobileMenu();
             else if (onCloseMobileMenu && mobileMenuOpen) onCloseMobileMenu();
+            return;
         }
-        setSidebarCollapsed((prev) => !prev);
+
+        setSidebarCollapsed(prev => !prev);
     }, [onToggleMobileMenu, onCloseMobileMenu, mobileMenuOpen]);
 
     // ── Sistema de Comentários (Google Docs Style) ─────────────────────────
@@ -1728,7 +1730,7 @@ export const ResultDisplay = React.memo(function ResultDisplay({
                 <TextSearchResults
                     results={(data.results as SearchResultItem[]) || null}
                     query={latestTextQuery || data.query || ""}
-                    onResultClick={(ncm: string) => globalThis.nesh.openTextResultInNewTab(ncm, latestTextQuery || data.query || '')}
+                    onResultClick={(ncm: string) => globalThis.nesh?.openTextResultInNewTab(ncm, latestTextQuery || data.query || '')}
                     scrollParentRef={containerRef}
                 />
             </div>

@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode, lazy, Suspense } from 'react';
 import { toast } from 'react-hot-toast';
 import { getGlossaryTerm } from '../services/api';
+import type { GlossaryTermApiResponse } from '../types/api.types';
 
 // Lazy load the modal to avoid importing it if not used
 const GlossaryModal = lazy(() => import('../components/GlossaryModal').then(module => ({ default: module.GlossaryModal })));
@@ -8,7 +9,7 @@ const GlossaryModal = lazy(() => import('../components/GlossaryModal').then(modu
 type GlossaryState = {
     isOpen: boolean;
     term: string;
-    definition: any; // Specify strict type once data model is known
+    definition: string | null;
     loading: boolean;
 };
 
@@ -30,9 +31,16 @@ export function GlossaryProvider({ children }: { children: ReactNode }) {
     const openGlossary = useCallback(async (term: string) => {
         setState({ isOpen: true, term, definition: null, loading: true });
         try {
-            const data = await getGlossaryTerm(term);
+            const data: GlossaryTermApiResponse = await getGlossaryTerm(term);
             if (data.found) {
-                setState(prev => ({ ...prev, definition: data.data, loading: false }));
+                const definition = typeof data.data === 'string'
+                    ? data.data
+                    : data.data?.definition ?? null;
+                setState(prev => ({
+                    ...prev,
+                    definition,
+                    loading: false,
+                }));
             } else {
                 setState(prev => ({ ...prev, definition: null, loading: false }));
             }
