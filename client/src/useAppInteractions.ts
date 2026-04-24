@@ -67,12 +67,43 @@ export interface AppInteractionsState {
 }
 
 function createLoadedChaptersByDoc(): Record<DocType, string[]> {
-    return {
-        nesh: [],
-        tipi: [],
-        nbs: [],
-        nebs: [],
-    };
+return {
+nesh: [],
+tipi: [],
+nbs: [],
+nebs: [],
+};
+}
+
+function getCodeSearchResultsMap(results: unknown): Record<string, any> | null {
+if (!results || !isCodeSearchApiResponse(results)) {
+return null;
+}
+
+return results.resultados || results.results || null;
+}
+
+function resolveTargetChapter(
+currentTab: Tab | undefined,
+resultsMap: Record<string, any>,
+query: string,
+chapter?: string,
+): string | undefined {
+if (chapter) {
+return chapter;
+}
+
+const fromQuery = extractChapter(currentTab?.ncm || query || '');
+if (fromQuery && resultsMap[fromQuery]) {
+return fromQuery;
+}
+
+const keys = Object.keys(resultsMap);
+if (keys.length === 1) {
+return keys[0];
+}
+
+return undefined;
 }
 
 export function useAppInteractions({
@@ -184,55 +215,49 @@ export function useAppInteractions({
             return;
         }
 
-        const resultsMap = results.resultados || results.results;
+const resultsMap = getCodeSearchResultsMap(results);
         if (!resultsMap) {
             toast.error('Notas indisponíveis para esta aba.');
             return;
         }
 
-        let targetChapter = chapter;
-        if (!targetChapter) {
-            const fromQuery = extractChapter(currentTab?.ncm || results.query || '');
-            if (fromQuery && resultsMap[fromQuery]) {
-                targetChapter = fromQuery;
-            } else {
-                const keys = Object.keys(resultsMap);
-                if (keys.length === 1) {
-                    targetChapter = keys[0];
-                }
-            }
-        }
+const targetChapter = resolveTargetChapter(
+currentTab,
+resultsMap,
+results.query || '',
+chapter,
+);
 
-        let notesMap: Record<string, string> | null = null;
-        let isCrossChapter = false;
+if (!targetChapter) {
+toast.error('Não foi possível identificar o capítulo da nota.');
+return;
+}
 
-        if (targetChapter && resultsMap[targetChapter]) {
-            const chapterData = (resultsMap as Record<string, ChapterNotesEntry>)[targetChapter] || {};
-            notesMap = chapterData.notas_parseadas || {};
-        } else if (targetChapter) {
-            isCrossChapter = true;
-            const loadingToastId = toast.loading(`Carregando notas do Capítulo ${targetChapter}...`);
+let notesMap: Record<string, string> | null = null;
+let isCrossChapter = false;
 
-            try {
-                notesMap = await fetchCrossChapterNotes(targetChapter);
-            } catch (error) {
-                if (import.meta.env.DEV) {
-                    console.error('Erro no fetchCrossChapterNotes:', error);
-                }
-                toast.error(`Erro ao carregar notas do Capítulo ${targetChapter}.`);
-                return;
-            } finally {
-                toast.dismiss(loadingToastId);
-            }
-        }
+const localChapter = resultsMap[targetChapter] as ChapterNotesEntry | undefined;
+if (localChapter) {
+notesMap = localChapter.notas_parseadas || {};
+} else {
+const loadingToastId = toast.loading(`Carregando notas do Capítulo ${targetChapter}...`);
 
-        if (!targetChapter) {
-            toast.error('Não foi possível identificar o capítulo da nota.');
-            return;
-        }
+try {
+notesMap = await fetchCrossChapterNotes(targetChapter);
+isCrossChapter = true;
+} catch (error) {
+if (import.meta.env.DEV) {
+console.error('Erro no fetchCrossChapterNotes:', error);
+}
+toast.error(`Erro ao carregar notas do Capítulo ${targetChapter}.`);
+return;
+} finally {
+toast.dismiss(loadingToastId);
+}
+}
 
-        const content = notesMap?.[note];
-        if (!content) {
+const content = notesMap?.[note];
+if (!content) {
             const scrolled = !isCrossChapter
                 && scrollToNotesSection(activeTabId, targetChapter);
             if (scrolled) {
