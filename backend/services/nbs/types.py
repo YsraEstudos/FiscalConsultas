@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from collections import OrderedDict
+from contextlib import AbstractAsyncContextManager
 from pathlib import Path
-from typing import AsyncContextManager, AsyncIterator, Callable, Protocol, TypedDict
+from typing import Protocol, TypedDict
 
 import aiosqlite
 
@@ -73,7 +75,9 @@ class NbsServiceState(Protocol):
     _pool_lock: asyncio.Lock
     _pool_max_size: int
     _repository: NbsRepositoryProtocol | None
-    _repository_factory: Callable[[], AsyncContextManager[NbsRepositoryProtocol]] | None
+    _repository_factory: (
+        Callable[[], AbstractAsyncContextManager[NbsRepositoryProtocol]] | None
+    )
     _use_repository: bool
     _search_cache: OrderedDict[str, bytes]
     _detail_cache: OrderedDict[str, bytes]

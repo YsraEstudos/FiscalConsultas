@@ -80,7 +80,7 @@ class TipiService:
     - Connection pooling
     """
 
-    _tipi_connection_pools: dict[Path, list[aiosqlite.Connection]] = {}
+    _tipi_connection_pools: dict[tuple[Path, int], list[aiosqlite.Connection]] = {}
     _tipi_connection_pool_locks: dict[int, asyncio.Lock] = {}
     _tipi_connection_pool_locks_guard = threading.Lock()
     _tipi_connection_pool_max_size: int = 3
@@ -114,12 +114,12 @@ class TipiService:
         )
 
     @classmethod
-    async def initializeTipiServiceWithRepositoryFactory(cls) -> "TipiService":
+    def initializeTipiServiceWithRepositoryFactory(cls) -> "TipiService":
         """
-        Factory assíncrono para criar TipiService com TipiRepository.
+        Factory para criar TipiService com TipiRepository.
 
         Uso:
-            service = await TipiService.initializeTipiServiceWithRepositoryFactory()
+            service = TipiService.initializeTipiServiceWithRepositoryFactory()
             results = await service.searchTipiByTextQuery("bomba")
         """
         if not _REPO_AVAILABLE:
@@ -137,8 +137,8 @@ class TipiService:
         return cls(repository_factory=repo_factory)
 
     @classmethod
-    async def create_with_repository(cls) -> "TipiService":
-        return await cls.initializeTipiServiceWithRepositoryFactory()
+    def create_with_repository(cls) -> "TipiService":
+        return cls.initializeTipiServiceWithRepositoryFactory()
 
     def _get_cache_lock(self) -> asyncio.Lock:
         if self._cache_lock is None:
@@ -166,9 +166,13 @@ class TipiService:
                 cls._tipi_connection_pool_locks[loop_id] = lock
             return lock
 
+    def _get_tipi_connection_pool_key(self) -> tuple[Path, int]:
+        return self.db_path, id(asyncio.get_running_loop())
+
     async def _acquire_tipi_connection(self) -> aiosqlite.Connection:
+        pool_key = self._get_tipi_connection_pool_key()
         async with self._get_tipi_connection_pool_lock():
-            pool = self._tipi_connection_pools.setdefault(self.db_path, [])
+            pool = self._tipi_connection_pools.setdefault(pool_key, [])
             if pool:
                 return pool.pop()
 
@@ -181,8 +185,9 @@ class TipiService:
             raise DatabaseError(f"TIPI DB connection failed: {exc}") from exc
 
     async def _release_tipi_connection(self, conn: aiosqlite.Connection) -> None:
+        pool_key = self._get_tipi_connection_pool_key()
         async with self._get_tipi_connection_pool_lock():
-            pool = self._tipi_connection_pools.setdefault(self.db_path, [])
+            pool = self._tipi_connection_pools.setdefault(pool_key, [])
             if len(pool) < self._tipi_connection_pool_max_size:
                 pool.append(conn)
                 return
@@ -230,17 +235,27 @@ class TipiService:
             metrics.record_eviction()
 
     async def closeTipiConnectionPool(self) -> None:
+        pool_key = self._get_tipi_connection_pool_key()
         async with self._get_tipi_connection_pool_lock():
-            pool = self._tipi_connection_pools.pop(self.db_path, [])
+            pool = self._tipi_connection_pools.pop(pool_key, [])
         await self._close_tipi_pool_connections(pool)
 
     @classmethod
     async def closeAllTipiConnectionPools(cls) -> None:
+        current_loop_id = id(asyncio.get_running_loop())
         async with cls._get_tipi_connection_pool_lock():
-            pools = list(cls._tipi_connection_pools.values())
-            cls._tipi_connection_pools = {}
+            pools = [
+                pool
+                for pool_key, pool in cls._tipi_connection_pools.items()
+                if pool_key[1] == current_loop_id
+            ]
+            cls._tipi_connection_pools = {
+                pool_key: pool
+                for pool_key, pool in cls._tipi_connection_pools.items()
+                if pool_key[1] != current_loop_id
+            }
         with cls._tipi_connection_pool_locks_guard:
-            cls._tipi_connection_pool_locks.clear()
+            cls._tipi_connection_pool_locks.pop(current_loop_id, None)
         for pool in pools:
             await cls._close_tipi_pool_connections(pool)
 

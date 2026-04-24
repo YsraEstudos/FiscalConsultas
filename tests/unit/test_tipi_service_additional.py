@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -13,10 +14,10 @@ pytestmark = pytest.mark.unit
 @pytest.fixture(autouse=True)
 def _reset_pool_state():
     TipiService._tipi_connection_pools = {}
-    TipiService._tipi_connection_pool_lock = None
+    TipiService._tipi_connection_pool_locks = {}
     yield
     TipiService._tipi_connection_pools = {}
-    TipiService._tipi_connection_pool_lock = None
+    TipiService._tipi_connection_pool_locks = {}
 
 
 class _FakeCursor:
@@ -116,7 +117,7 @@ class _FakeHealthRepo:
 async def test_create_with_repository_raises_when_repo_unavailable(monkeypatch):
     monkeypatch.setattr(tipi_module, "_REPO_AVAILABLE", False)
     with pytest.raises(RuntimeError, match="Repository não disponível"):
-        await TipiService.create_with_repository()
+        TipiService.create_with_repository()
 
 
 @pytest.mark.asyncio
@@ -133,7 +134,7 @@ async def test_create_with_repository_success_uses_factory(monkeypatch):
     monkeypatch.setattr(tipi_module, "get_session", _fake_get_session)
     monkeypatch.setattr(tipi_module, "TipiRepository", _RepoFromFactory)
 
-    service = await TipiService.create_with_repository()
+    service = TipiService.create_with_repository()
     async with service._acquire_tipi_repository() as repo:
         assert isinstance(repo, _RepoFromFactory)
         assert repo.session == "session-1"
@@ -185,7 +186,8 @@ async def test_release_connection_closes_when_pool_is_full_and_close_fails(monke
 async def test_close_handles_pool_connection_close_errors():
     service = TipiService()
     failing_conn = _FakeConn(close_error=RuntimeError("boom"))
-    TipiService._tipi_connection_pools = {service.db_path: [failing_conn]}
+    pool_key = service._get_tipi_connection_pool_key()
+    TipiService._tipi_connection_pools = {pool_key: [failing_conn]}
 
     await service.close()
 
@@ -234,9 +236,10 @@ async def test_close_all_pools_closes_connections_across_paths(tmp_path):
     second_service = TipiService(db_path=tmp_path / "tipi-b.db")
     first_conn = _FakeConn()
     second_conn = _FakeConn()
+    current_loop_id = id(asyncio.get_running_loop())
     TipiService._tipi_connection_pools = {
-        first_service.db_path: [first_conn],
-        second_service.db_path: [second_conn],
+        (first_service.db_path, current_loop_id): [first_conn],
+        (second_service.db_path, current_loop_id): [second_conn],
     }
 
     await TipiService.close_all_pools()
@@ -268,6 +271,24 @@ async def test_check_connection_returns_error_when_query_fails(tmp_path, monkeyp
 
     assert payload["ok"] is False
     assert "db broken" in payload["error"]
+
+
+@pytest.mark.asyncio
+async def test_check_connection_returns_error_when_sqlite_driver_fails(
+    tmp_path, monkeypatch
+):
+    db_file = tmp_path / "tipi.db"
+    db_file.write_text("x", encoding="utf-8")
+    service = TipiService(db_path=db_file)
+
+    async def _boom():
+        raise sqlite3.OperationalError("driver broken")
+
+    monkeypatch.setattr(service, "_acquire_tipi_connection", _boom)
+    payload = await service.check_connection()
+
+    assert payload["ok"] is False
+    assert "driver broken" in payload["error"]
 
 
 @pytest.mark.asyncio

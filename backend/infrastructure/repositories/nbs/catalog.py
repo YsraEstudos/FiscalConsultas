@@ -8,6 +8,8 @@ from backend.utils.nbs_parser import clean_nbs_code, normalize_nbs_text
 
 from ..postgres_fts import build_postgres_tsquery
 from .common import (
+    build_nbs_tenant_params,
+    build_nbs_tenant_predicate_sql,
     load_nbs_catalog_item_ancestors,
     load_nbs_catalog_item_by_code,
     load_nbs_catalog_items_by_prefix,
@@ -34,17 +36,16 @@ async def load_nbs_catalog_entries(
     clean_query = clean_nbs_code(raw_query)
 
     if not raw_query:
+        tenant_predicate = build_nbs_tenant_predicate_sql(repo.tenant_id, "nbs_items")
         sql = f"""
             SELECT code, code_clean, description, parent_code, level, has_nebs
             FROM nbs_items
             WHERE parent_code IS NULL
-            {" AND " + "nbs_items.tenant_id IS NULL" if repo.tenant_id is None else " AND (nbs_items.tenant_id = :tenant_id OR nbs_items.tenant_id IS NULL)"}
+            {tenant_predicate}
             ORDER BY source_order ASC
             LIMIT :limit
         """
-        params = {"limit": limit}
-        if repo.tenant_id is not None:
-            params["tenant_id"] = repo.tenant_id
+        params = {"limit": limit, **build_nbs_tenant_params(repo.tenant_id)}
         result = await repo.session.execute(text(sql), params)
         return [row_to_nbs_catalog_item(row) for row in result]
 
@@ -52,11 +53,7 @@ async def load_nbs_catalog_entries(
         return []
 
     tsquery = build_postgres_tsquery(normalized_query or raw_query)
-    tenant_predicate_n = (
-        " AND (n.tenant_id = :tenant_id OR n.tenant_id IS NULL)"
-        if repo.tenant_id is not None
-        else " AND n.tenant_id IS NULL"
-    )
+    tenant_predicate_n = build_nbs_tenant_predicate_sql(repo.tenant_id, "n")
     fts_predicate = f"(n.search_vector @@ {tsquery.sql})"
     sql = f"""
         WITH ranked AS (
@@ -142,10 +139,9 @@ async def load_nbs_catalog_entries(
         "normalized_query": normalized_query,
         "normalized_prefix": f"{normalized_query}%",
         "limit": limit,
+        **build_nbs_tenant_params(repo.tenant_id),
         **tsquery.params,
     }
-    if repo.tenant_id is not None:
-        params["tenant_id"] = repo.tenant_id
     result = await repo.session.execute(text(wrapped_sql), params)
     return [row_to_nbs_catalog_item(row) for row in result]
 
@@ -161,17 +157,19 @@ async def load_nbs_catalog_item_details(
     item = await load_nbs_catalog_item_by_code(repo, code)
     ancestors = await load_nbs_catalog_item_ancestors(repo, item)
     chapter_root = resolve_nbs_catalog_hierarchy_root(item, ancestors)
+    tenant_predicate = build_nbs_tenant_predicate_sql(repo.tenant_id, "nbs_items")
 
     children_sql = f"""
         SELECT code, code_clean, description, parent_code, level, has_nebs
         FROM nbs_items
         WHERE parent_code = :code
-        {" AND (nbs_items.tenant_id = :tenant_id OR nbs_items.tenant_id IS NULL)" if repo.tenant_id is not None else " AND nbs_items.tenant_id IS NULL"}
+        {tenant_predicate}
         ORDER BY source_order ASC
     """
-    children_params = {"code": item["code"]}
-    if repo.tenant_id is not None:
-        children_params["tenant_id"] = repo.tenant_id
+    children_params = {
+        "code": item["code"],
+        **build_nbs_tenant_params(repo.tenant_id),
+    }
     child_rows = await repo.session.execute(text(children_sql), children_params)
     tree_page = (
         await load_nbs_catalog_tree_page(
@@ -214,18 +212,18 @@ async def load_nbs_catalog_tree_page(
     normalized_page = max(int(page or 1), 1)
     normalized_size = min(max(int(page_size or 50), 1), 200)
     offset = (normalized_page - 1) * normalized_size
+    tenant_predicate = build_nbs_tenant_predicate_sql(repo.tenant_id, "nbs_items")
     count_sql = f"""
         SELECT COUNT(*) AS total
         FROM nbs_items
         WHERE (code = :root_code OR code LIKE :root_prefix)
-        {" AND (nbs_items.tenant_id = :tenant_id OR nbs_items.tenant_id IS NULL)" if repo.tenant_id is not None else " AND nbs_items.tenant_id IS NULL"}
+        {tenant_predicate}
     """
     params = {
         "root_code": code,
         "root_prefix": f"{code}%",
+        **build_nbs_tenant_params(repo.tenant_id),
     }
-    if repo.tenant_id is not None:
-        params["tenant_id"] = repo.tenant_id
     total_rows = int(
         (await repo.session.execute(text(count_sql), params)).scalar() or 0
     )

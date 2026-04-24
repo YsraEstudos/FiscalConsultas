@@ -201,13 +201,27 @@ def _build_tipi_payload_cache_context(
 def _extract_tipi_code_search_results(
     response_data: Mapping[str, Any],
 ) -> dict[str, Any]:
-    if "results" in response_data:
-        raw_results = response_data.get("results")
-    elif "resultados" in response_data:
-        raw_results = response_data.get("resultados")
-    else:
-        raw_results = {}
-    return raw_results if isinstance(raw_results, dict) else {}
+    canonical_results = response_data.get("results")
+    if isinstance(canonical_results, dict):
+        return canonical_results
+
+    legacy_results = response_data.get("resultados")
+    if isinstance(legacy_results, dict):
+        return legacy_results
+
+    return {}
+
+
+def _calculate_tipi_result_total(results: Any) -> int:
+    if isinstance(results, list):
+        return len(results)
+    if isinstance(results, dict):
+        return sum(
+            len(cap_data.get("posicoes") or [])
+            for cap_data in results.values()
+            if isinstance(cap_data, dict)
+        )
+    return 0
 
 
 def _build_tipi_payload_response(
@@ -303,13 +317,9 @@ def _apply_tipi_description_highlights(result: dict[str, Any]) -> None:
 def _apply_tipi_code_search_contract(response_data: dict[str, Any]) -> dict[str, Any]:
     results = _extract_tipi_code_search_results(response_data)
     response_data["results"] = results
-    response_data["resultados"] = results
+    response_data["resultados"] = dict(results)
     if response_data.get("total") is None:
-        response_data["total"] = sum(
-            len(cap_data.get("posicoes") or [])
-            for cap_data in results.values()
-            if isinstance(cap_data, dict)
-        )
+        response_data["total"] = _calculate_tipi_result_total(results)
     if response_data.get("total_capitulos") is None:
         response_data["total_capitulos"] = len(results)
     return response_data
@@ -484,7 +494,7 @@ async def handle_tipi_search_request(
     result.setdefault("normalized", result.get("query", ""))
     result.setdefault("warning", None)
     result.setdefault("match_type", "text")
-    result.setdefault("total", len(result.get("results") or []))
+    result.setdefault("total", _calculate_tipi_result_total(result.get("results")))
     _apply_tipi_description_highlights(result)
     return _build_tipi_text_search_response(
         request,

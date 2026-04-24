@@ -239,7 +239,7 @@ async def _init_tipi_service(app: FastAPI) -> None:
 
     if await _postgres_tipi_has_data():
         app.state.tipi_service = (
-            await TipiService.initializeTipiServiceWithRepositoryFactory()
+            TipiService.initializeTipiServiceWithRepositoryFactory()
         )
         logger.info("TipiService initialized in Repository mode (Postgres)")
         return

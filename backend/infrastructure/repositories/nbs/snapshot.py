@@ -37,6 +37,7 @@ async def snapshot_nbs_catalog_metadata(
     sql = (
         "SELECT key, value FROM catalog_metadata WHERE 1=1"
         f"{build_nbs_tenant_predicate_sql(repo.tenant_id, 'catalog_metadata')}"
+        " ORDER BY key ASC, CASE WHEN tenant_id IS NULL THEN 0 ELSE 1 END ASC"
     )
     result = await repo.session.execute(
         text(sql), build_nbs_tenant_params(repo.tenant_id)

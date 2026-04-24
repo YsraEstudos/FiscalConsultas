@@ -414,9 +414,7 @@ async def test_process_request_is_backward_compatible_alias(monkeypatch):
         _canonical,
     )
 
-    assert await service.executeNeshSearchWithVectorWeights("8517") == {
-        "origin": "canonical"
-    }
+    assert await service.process_request("8517") == {"origin": "canonical"}
 
 
 @pytest.mark.asyncio

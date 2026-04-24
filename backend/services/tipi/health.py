@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from typing import TYPE_CHECKING
 
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from ...config.exceptions import DatabaseError
 from ...config.logging_config import service_logger as logger
 from .types import TipiRepositoryHealthPayload, TipiSqliteHealthPayload
 
@@ -80,6 +82,12 @@ async def probe_tipi_sqlite_catalog_health(
             await service._release_tipi_connection(conn)
     except asyncio.CancelledError:
         raise
-    except (SQLAlchemyError, RuntimeError, OSError) as exc:
+    except (
+        SQLAlchemyError,
+        RuntimeError,
+        OSError,
+        sqlite3.Error,
+        DatabaseError,
+    ) as exc:
         logger.error("TIPI Check Connection failed: %s", exc)
         return {"ok": False, "error": str(exc)}

@@ -412,7 +412,7 @@ function NbsDetailSection({
                             className={styles.secondaryAction}
                             onClick={() => openCatalogDoc('nebs', linkedNebsCode)}
                         >
-                            Ver NBS
+                            Ver NEBS
                         </button>
                     </div>
                 )}
@@ -500,13 +500,13 @@ interface NbsWorkspaceViewProps {
     readonly chapterNotesDialogRef: React.RefObject<HTMLDialogElement | null>;
     readonly chapterNotesHtml: string;
     readonly currentChapterNotesEntry: ReturnType<typeof getNbsChapterNotesEntry>;
+    readonly openCatalogDoc: OpenCatalogDoc;
     readonly nbsChapterNotesNewTab: boolean;
     readonly nbsNoteBodyHtml: string;
     readonly nbsNotesContentRef: React.RefObject<HTMLDivElement | null>;
     readonly nbsPrefixAutoExpand: boolean;
     readonly nbsState: ServicesWorkspaceNbsState;
     readonly onSelectNbs: (code: string) => void;
-    readonly openCatalogDoc: OpenCatalogDoc;
     readonly setIsChapterNotesOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
@@ -515,13 +515,13 @@ function NbsWorkspaceView({
     chapterNotesDialogRef,
     chapterNotesHtml,
     currentChapterNotesEntry,
+    openCatalogDoc,
     nbsChapterNotesNewTab,
     nbsNoteBodyHtml,
     nbsNotesContentRef,
     nbsPrefixAutoExpand,
     nbsState,
     onSelectNbs,
-    openCatalogDoc,
     setIsChapterNotesOpen,
 }: Readonly<NbsWorkspaceViewProps>) {
     const chapterButtonLabel = activeChapterNumber

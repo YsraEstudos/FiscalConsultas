@@ -32,7 +32,7 @@ from .nesh.fts import (
     search_nesh_fts_text,
     snapshot_nesh_fts_cache_metrics,
 )
-from .nesh.types import NeshFtsCacheKey, NeshFtsScoredRow
+from .nesh.types import NeshChapterRawPayload, NeshFtsCacheKey, NeshFtsScoredRow
 
 try:
     from ..infrastructure.db_engine import get_session
@@ -145,7 +145,9 @@ class NeshService:
         """
         return parse_nesh_chapter_notes(notes_content)
 
-    async def fetchNeshChapterData(self, chapter_num: str):
+    async def fetchNeshChapterData(
+        self, chapter_num: str
+    ) -> NeshChapterRawPayload | None:
         """
         Recupera os dados hidratados de um capítulo NESH.
 
@@ -208,6 +210,15 @@ class NeshService:
         if is_ncm:
             return await self.searchNeshByNcmCode(query)
         return await self.searchNeshByTextQuery(query)
+
+    async def process_request(self, query: str) -> ServiceResponse:
+        """
+        Backward-compatible alias for the legacy request-processing entrypoint.
+
+        Exemplo:
+            payload = await service.process_request("85.17")
+        """
+        return await self.executeNeshSearchWithVectorWeights(query)
 
     async def prewarmNeshChapterCache(
         self, chapter_nums: Optional[list[str]] = None, concurrency: int = 10
