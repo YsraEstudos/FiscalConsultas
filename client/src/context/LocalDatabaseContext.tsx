@@ -2,15 +2,11 @@ import { createContext, useContext, type ReactNode } from 'react';
 
 import { useOfflineDatabaseController } from './offlineDatabaseController';
 import type {
-    LocalDatabaseContextType,
     OfflineDatabaseContextValue,
 } from './offlineDatabase.types';
 
 export type {
-    DbStatus,
-    DocType,
-    LocalDatabaseContextType,
-    LocalSearchResult,
+    OfflineCatalogSearchResult,
     OfflineDatabaseContextValue,
     OfflineDatabaseStatus,
     OfflineDocumentType,
@@ -47,7 +43,7 @@ const DEFAULT_LOCAL_DATABASE_CONTEXT: OfflineDatabaseContextValue = {
     getNebsDetailLocal: async () => null,
 };
 
-const LocalDatabaseContext = createContext<LocalDatabaseContextType>(
+const LocalDatabaseContext = createContext<OfflineDatabaseContextValue>(
     DEFAULT_LOCAL_DATABASE_CONTEXT,
 );
 

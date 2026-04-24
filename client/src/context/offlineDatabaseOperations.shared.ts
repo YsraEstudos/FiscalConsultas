@@ -10,9 +10,9 @@ import type {
 } from '../types/api.types';
 import type { OfflineDatabaseMetadata } from '../utils/offlineDatabase';
 import type {
-    DbStatus,
     OfflineCatalogSearchResult,
     OfflineDatabaseChannelMessage,
+    OfflineDatabaseStatus,
     OfflineDatabaseWorkerRequest,
     OfflineDatabaseWorkerResponse,
     OfflineDocumentType,
@@ -20,7 +20,7 @@ import type {
 
 export interface OfflineDatabaseOperationsArgs {
     isSupported: boolean;
-    status: DbStatus;
+    status: OfflineDatabaseStatus;
     localVersion: string | null;
     remoteVersion: string | null;
     instanceId: string;
@@ -35,7 +35,7 @@ export interface OfflineDatabaseOperationsArgs {
         force?: boolean,
     ) => Promise<OfflineDatabaseMetadata | null>;
     applyInstalledMetadata: (metadata: OfflineDatabaseMetadata | null) => void;
-    setStatus: Dispatch<SetStateAction<DbStatus>>;
+    setStatus: Dispatch<SetStateAction<OfflineDatabaseStatus>>;
     setProgress: Dispatch<SetStateAction<number>>;
     setProgressStep: Dispatch<SetStateAction<string>>;
     setError: Dispatch<SetStateAction<string | null>>;

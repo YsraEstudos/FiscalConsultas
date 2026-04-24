@@ -2,6 +2,8 @@ import { MAX_ANCESTOR_DEPTH } from "./constants.js";
 import { fetchAll, fetchOne } from "./query.js";
 import { getWorkerDb } from "./state.js";
 
+const NON_TEXT_SEARCH_COLUMNS = new Set(["level", "has_nebs"]);
+
 /**
  * Execute an FTS5 search query with a LIKE fallback.
  * @param {string} table
@@ -49,11 +51,20 @@ export function ftsSearch(
     return rows || [];
   } catch {
     try {
+      const textColumns = columns.filter(
+        (column) => !NON_TEXT_SEARCH_COLUMNS.has(column)
+      );
+      if (textColumns.length === 0) return [];
+
       const likeClause = terms
-        .map(() => `${columns.slice(-1)[0]} LIKE ?`)
+        .map(() =>
+          `(${textColumns.map((column) => `${column} LIKE ? ESCAPE '\\'`).join(" OR ")})`
+        )
         .join(" AND ");
-      const likeParams = terms.map((term) => `%${term}%`);
-      const fallbackColList = columns.join(", ");
+      const likeParams = terms.flatMap((term) =>
+        textColumns.map(() => `%${escapeLikePattern(term)}%`)
+      );
+      const fallbackColList = textColumns.join(", ");
       const sql = `SELECT ${fallbackColList} FROM ${contentTable} WHERE ${likeClause} LIMIT ?`;
       const rows = db.exec(sql, {
         bind: [...likeParams, limit],
@@ -260,20 +271,21 @@ function fetchTreePage(rootCode, page = 1, pageSize = 50) {
   const normalizedPage = Math.max(Number(page || 1), 1);
   const normalizedPageSize = Math.min(Math.max(Number(pageSize || 50), 1), 200);
   const offset = (normalizedPage - 1) * normalizedPageSize;
+  const rootPrefix = `${escapeLikePattern(rootCode)}%`;
   const countRow = fetchOne(
     `SELECT COUNT(*) AS total
      FROM nbs_items
-     WHERE code = ? OR code LIKE ?`,
-    [rootCode, `${rootCode}%`]
+     WHERE code = ? OR code LIKE ? ESCAPE '\\'`,
+    [rootCode, rootPrefix]
   );
   const total = Number(countRow?.total || 0);
   const items = fetchAll(
     `SELECT code, code_clean, description, parent_code, level, has_nebs
      FROM nbs_items
-     WHERE code = ? OR code LIKE ?
+     WHERE code = ? OR code LIKE ? ESCAPE '\\'
      ORDER BY source_order ASC
      LIMIT ? OFFSET ?`,
-    [rootCode, `${rootCode}%`, normalizedPageSize, offset]
+    [rootCode, rootPrefix, normalizedPageSize, offset]
   ).map(rowToNbsItem);
 
   return {
@@ -334,10 +346,11 @@ export function getLocalNbsDetail(code, page = 1, pageSize = 50) {
 export function getLocalNebsDetail(code) {
   if (!getWorkerDb()) return null;
 
-  const item = fetchNbsItemByCode(code);
+  const rawCode = String(code || "").trim();
+  const item = fetchNbsItemByCode(rawCode);
   if (!item) return null;
 
-  const cleanCode = cleanServiceCode(code);
+  const cleanCode = cleanServiceCode(rawCode);
   const entry = fetchOne(
     `SELECT
         code,
@@ -352,7 +365,7 @@ export function getLocalNebsDetail(code) {
         OR (? <> '' AND code_clean = ?)
      ORDER BY LENGTH(code_clean) DESC
      LIMIT 1`,
-    [code, code, cleanCode, cleanCode]
+    [rawCode, rawCode, cleanCode, cleanCode]
   );
   if (!entry) return null;
 

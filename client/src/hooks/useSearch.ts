@@ -30,7 +30,7 @@ const buildLoadedChaptersByDoc = (value?: Record<DocType, string[]>): Record<Doc
 });
 
 /**
- * Normalize local Worker search results into the SearchResponse format.
+ * Normalize local Worker search results into the fiscal API response format.
  */
 function normalizeLocalResults(
     doc: DocType,

@@ -20,8 +20,8 @@ import {
     primeOfflineShellCache,
 } from '../offlineDatabaseSync';
 import type {
-    DbStatus,
     OfflineDatabaseChannelMessage,
+    OfflineDatabaseStatus,
     OfflineDatabaseWorkerRequest,
     OfflineDatabaseWorkerResponse,
 } from '../offlineDatabase.types';
@@ -38,7 +38,7 @@ type UseOfflineDatabaseBroadcastChannelArgs = {
         request: OfflineDatabaseWorkerRequest,
         timeoutMs?: number,
     ) => Promise<OfflineDatabaseWorkerResponse>;
-    setStatus: Dispatch<SetStateAction<DbStatus>>;
+    setStatus: Dispatch<SetStateAction<OfflineDatabaseStatus>>;
     setProgress: Dispatch<SetStateAction<number>>;
     setProgressStep: Dispatch<SetStateAction<string>>;
     setError: Dispatch<SetStateAction<string | null>>;
@@ -81,12 +81,9 @@ export function useOfflineDatabaseBroadcastChannel({
             if (!message || message.source === instanceId) return;
 
             if (message.type === 'INSTALLING') {
-                setStatus((current) =>
-                    current === 'ready'
-                        ? current
-                        : message.payload.mode === 'updating'
-                            ? 'updating'
-                            : 'installing');
+                const nextStatus =
+                    message.payload.mode === 'updating' ? 'updating' : 'installing';
+                setStatus((current) => (current === 'ready' ? current : nextStatus));
                 setProgress((current) => (current > 0 ? current : 5));
                 setProgressStep('waiting_for_other_tab');
                 return;

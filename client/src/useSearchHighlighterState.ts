@@ -39,11 +39,120 @@ export interface SearchHighlighterState {
     handleClose: () => void;
 }
 
+type MatchRange = { start: number; end: number; term: string; priority: number };
+
+function collectMatchRanges(originalText: string, normalizedTerms: string[]): MatchRange[] {
+    const allRanges: MatchRange[] = [];
+
+    normalizedTerms.forEach((term, priority) => {
+        const accentPattern = buildAccentInsensitivePattern(term);
+        if (!accentPattern) {
+            return;
+        }
+
+        const regex = new RegExp(accentPattern, 'gi');
+        let match = regex.exec(originalText);
+        while (match) {
+            const matchedText = match[0];
+            if (!matchedText) {
+                regex.lastIndex += 1;
+                match = regex.exec(originalText);
+                continue;
+            }
+
+            allRanges.push({
+                start: match.index,
+                end: match.index + matchedText.length,
+                term,
+                priority,
+            });
+            match = regex.exec(originalText);
+        }
+    });
+
+    return allRanges;
+}
+
+function compareMatchRangeRank(a: MatchRange, b: MatchRange): number {
+    const lengthDiff = (b.end - b.start) - (a.end - a.start);
+    if (lengthDiff !== 0) {
+        return lengthDiff;
+    }
+    const priorityDiff = a.priority - b.priority;
+    if (priorityDiff !== 0) {
+        return priorityDiff;
+    }
+    return a.start - b.start;
+}
+
+function selectNonOverlappingRanges(ranges: MatchRange[], textLength: number): MatchRange[] {
+    const occupied = new Array(textLength).fill(false);
+    const selectedRanges: MatchRange[] = [];
+
+    for (const range of [...ranges].sort(compareMatchRangeRank)) {
+        const overlaps = occupied
+            .slice(range.start, range.end)
+            .some(Boolean);
+        if (overlaps) {
+            continue;
+        }
+
+        occupied.fill(true, range.start, range.end);
+        selectedRanges.push(range);
+    }
+
+    return selectedRanges.sort((a, b) => a.start - b.start);
+}
+
+function createHighlightedTextWrapper(
+    originalText: string,
+    selectedRanges: MatchRange[],
+): HTMLSpanElement {
+    const wrapper = document.createElement('span');
+    wrapper.dataset.shWrapper = '1';
+    let cursor = 0;
+
+    for (const range of selectedRanges) {
+        if (range.start > cursor) {
+            wrapper.appendChild(document.createTextNode(originalText.slice(cursor, range.start)));
+        }
+        const mark = document.createElement('mark');
+        mark.dataset.shTerm = range.term;
+        mark.className = 'search-highlight search-highlight-partial';
+        mark.textContent = originalText.slice(range.start, range.end);
+        wrapper.appendChild(mark);
+        cursor = range.end;
+    }
+
+    if (cursor < originalText.length) {
+        wrapper.appendChild(document.createTextNode(originalText.slice(cursor)));
+    }
+
+    return wrapper;
+}
+
+function recordWrapperMatches(
+    wrapper: HTMLSpanElement,
+    newMatches: Record<string, SearchHighlighterMatchInstance[]>,
+): void {
+    const marks = wrapper.querySelectorAll('mark[data-sh-term]');
+    marks.forEach((mark) => {
+        const matchedTerm = (mark as HTMLElement).dataset.shTerm;
+        if (matchedTerm && newMatches[matchedTerm]) {
+            newMatches[matchedTerm].push({
+                node: mark as HTMLElement,
+                term: matchedTerm,
+                index: newMatches[matchedTerm].length,
+            });
+        }
+    });
+}
+
 export function useSearchHighlighterState({
     query,
     contentContainerRef,
     isContentReady,
-    isFullyRendered,
+    isFullyRendered = true,
     onHighlightScrollComplete,
 }: SearchHighlighterProps): SearchHighlighterState {
     const [matches, setMatches] = useState<Record<string, SearchHighlighterMatchInstance[]>>({});
@@ -169,7 +278,7 @@ export function useSearchHighlighterState({
             currentNode = treeWalker.nextNode();
         }
 
-        [...nodesToProcess].reverse().forEach((textNode) => {
+        nodesToProcess.forEach((textNode) => {
             const parent = textNode.parentNode;
             if (!parent) {
                 return;
@@ -180,116 +289,22 @@ export function useSearchHighlighterState({
                 return;
             }
 
-            type MatchRange = { start: number; end: number; term: string; priority: number };
-            const allRanges: MatchRange[] = [];
-
-            normalizedTerms.forEach((term, priority) => {
-                const accentPattern = buildAccentInsensitivePattern(term);
-                if (!accentPattern) {
-                    return;
-                }
-
-                const regex = new RegExp(accentPattern, 'gi');
-                let match = regex.exec(originalText);
-                while (match) {
-                    const matchedText = match[0];
-                    if (!matchedText) {
-                        regex.lastIndex += 1;
-                        match = regex.exec(originalText);
-                        continue;
-                    }
-
-                    allRanges.push({
-                        start: match.index,
-                        end: match.index + matchedText.length,
-                        term,
-                        priority,
-                    });
-                    match = regex.exec(originalText);
-                }
-            });
-
+            const allRanges = collectMatchRanges(originalText, normalizedTerms);
             if (allRanges.length === 0) {
                 return;
             }
 
-            const rankedRanges = [...allRanges].sort((a, b) => {
-                const lengthDiff = (b.end - b.start) - (a.end - a.start);
-                if (lengthDiff !== 0) {
-                    return lengthDiff;
-                }
-                const priorityDiff = a.priority - b.priority;
-                if (priorityDiff !== 0) {
-                    return priorityDiff;
-                }
-                return a.start - b.start;
-            });
-
-            const occupied = new Array(originalText.length).fill(false);
-            const selectedRanges: MatchRange[] = [];
-
-            for (const range of rankedRanges) {
-                let overlaps = false;
-                for (let i = range.start; i < range.end; i += 1) {
-                    if (occupied[i]) {
-                        overlaps = true;
-                        break;
-                    }
-                }
-                if (overlaps) {
-                    continue;
-                }
-
-                for (let i = range.start; i < range.end; i += 1) {
-                    occupied[i] = true;
-                }
-                selectedRanges.push(range);
-            }
-
+            const selectedRanges = selectNonOverlappingRanges(
+                allRanges,
+                originalText.length,
+            );
             if (selectedRanges.length === 0) {
                 return;
             }
 
-            selectedRanges.sort((a, b) => a.start - b.start);
-
-            const wrapper = document.createElement('span');
-            wrapper.dataset.shWrapper = '1';
-            let cursor = 0;
-            for (const range of selectedRanges) {
-                if (range.start > cursor) {
-                    wrapper.appendChild(document.createTextNode(originalText.slice(cursor, range.start)));
-                }
-                const mark = document.createElement('mark');
-                mark.dataset.shTerm = range.term;
-                mark.className = 'search-highlight search-highlight-partial';
-                mark.textContent = originalText.slice(range.start, range.end);
-                wrapper.appendChild(mark);
-                cursor = range.end;
-            }
-            if (cursor < originalText.length) {
-                wrapper.appendChild(document.createTextNode(originalText.slice(cursor)));
-            }
-
+            const wrapper = createHighlightedTextWrapper(originalText, selectedRanges);
             textNode.replaceWith(wrapper);
-
-            const marks = wrapper.querySelectorAll('mark[data-sh-term]');
-            marks.forEach((mark) => {
-                const matchedTerm = (mark as HTMLElement).dataset.shTerm;
-                if (matchedTerm && newMatches[matchedTerm]) {
-                    newMatches[matchedTerm].push({
-                        node: mark as HTMLElement,
-                        term: matchedTerm,
-                        index: newMatches[matchedTerm].length,
-                    });
-                }
-            });
-        });
-
-        normalizedTerms.forEach((term) => {
-            newMatches[term].reverse();
-            newMatches[term].forEach((match, idx) => {
-                match.index = idx;
-            });
+            recordWrapperMatches(wrapper, newMatches);
         });
 
         setTerms(normalizedTerms);

@@ -9,8 +9,15 @@ export type ClerkTokenGetter = (options?: ClerkTokenGetterOptions) => Promise<st
 
 export type AuthRetryRequestConfig = InternalAxiosRequestConfig & { _retryAuth?: boolean };
 
+export type AuthRefreshMode =
+    | 'fresh'
+    | 'in_flight'
+    | 'cooldown'
+    | 'not_applicable'
+    | 'unknown';
+
 export type RetryUnauthorizedResult = {
     response: AxiosResponse<unknown> | null;
     refreshAttempt: 'skipped' | 'attempted';
-    refreshMode: 'fresh' | 'in_flight' | 'cooldown' | 'not_applicable';
+    refreshMode: AuthRefreshMode;
 };

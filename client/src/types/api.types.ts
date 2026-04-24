@@ -18,6 +18,3 @@ export type FiscalSearchApiResponse =
     | TipiSearchApiResponse
     | NbsCatalogSearchApiResponse
     | NebsExplanatorySearchApiResponse;
-
-/** @deprecated Use `FiscalSearchApiResponse`. */
-export type SearchResponse = FiscalSearchApiResponse;

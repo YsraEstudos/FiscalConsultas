@@ -33,9 +33,12 @@ export function GlossaryProvider({ children }: { children: ReactNode }) {
         try {
             const data: GlossaryTermApiResponse = await getGlossaryTerm(term);
             if (data.found) {
+                const definition = typeof data.data === 'string'
+                    ? data.data
+                    : data.data?.definition ?? null;
                 setState(prev => ({
                     ...prev,
-                    definition: data.data?.definition ?? null,
+                    definition,
                     loading: false,
                 }));
             } else {

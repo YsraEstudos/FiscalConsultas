@@ -373,7 +373,7 @@ describe('api service', () => {
         path: '/comments/anchors',
         detail: 'Token inválido ou expirado',
         refreshAttempt: 'attempted',
-        refreshMode: 'fresh',
+        refreshMode: 'unknown',
       }),
     );
 

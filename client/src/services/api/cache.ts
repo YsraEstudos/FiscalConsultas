@@ -76,11 +76,21 @@ function clearLegacyPersistentCodeCache(): void {
 }
 
 function sanitizeStringForStorage(value: string): string {
-    return value.split('\0').join('');
+    return value
+        .replaceAll('\0', '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;')
+        .replaceAll('`', '&#96;');
 }
 
 function sanitizeCacheStorageKey(key: string): string {
-    return sanitizeStringForStorage(key);
+    return key
+        .replaceAll('\0', '')
+        .replaceAll(/[^A-Za-z0-9:._-]/g, '_')
+        .slice(0, 240);
 }
 
 function sanitizeValueForStorage(value: unknown): StorageSafeValue | undefined {
@@ -135,6 +145,10 @@ function sanitizeCacheEntryForStorage<T>(entry: CacheEntry<T>): CacheEntry<Stora
         data: sanitizedData,
         timestamp: entry.timestamp,
     };
+}
+
+function serializeSanitizedCacheEntry(entry: CacheEntry<StorageSafeValue>): string {
+    return JSON.stringify(entry);
 }
 
 function setMemoryCacheEntry<T>(key: string, entry: CacheEntry<T>): void {
@@ -264,7 +278,10 @@ export function setCache<T>(key: string, data: T): void {
         }
 
         index[storageKey] = entry.timestamp;
-        localStorage.setItem(CACHE_PREFIX + storageKey, JSON.stringify(sanitizedEntry));
+        localStorage.setItem(
+            CACHE_PREFIX + storageKey,
+            serializeSanitizedCacheEntry(sanitizedEntry),
+        );
         saveCacheIndex(index);
     } catch {
         // localStorage full or unavailable.

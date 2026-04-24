@@ -1,5 +1,5 @@
 import type {
-    LocalSearchResult,
+    OfflineCatalogSearchResult,
     OfflineDatabaseWorkerMessage,
     OfflineDatabaseWorkerRequest,
     OfflineDatabaseWorkerResponse,
@@ -52,7 +52,7 @@ export function isOfflineDatabaseWorkerReadyMessage(
 
 export function extractOfflineCatalogSearchResult(
     response: OfflineDatabaseWorkerResponse,
-): LocalSearchResult | null {
+): OfflineCatalogSearchResult | null {
     if (response.type !== 'RESULT') return null;
     if (response.payload.results === null) return null;
 

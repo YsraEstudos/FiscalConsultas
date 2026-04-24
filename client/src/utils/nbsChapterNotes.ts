@@ -92,6 +92,8 @@ export function resolveNbsChapterNumberFromCode(code: string | null | undefined)
     return digits.slice(1, 3);
 }
 
+export const getNbsChapterNumber = resolveNbsChapterNumberFromCode;
+
 /**
  * Look up the official chapter-notes entry that matches the provided NBS code.
  *
@@ -104,6 +106,10 @@ export function lookupNbsChapterNotesEntry(code: string | null | undefined): Nbs
 
     return NBS_CHAPTER_NOTES[chapter] ?? null;
 }
+
+export const getNbsChapterNotesEntry = lookupNbsChapterNotesEntry;
+export const renderNbsChapterNotesHtml = buildNbsChapterNotesMarkup;
+export const openNbsChapterNotesTab = openNbsChapterNotesPreviewWindow;
 
 /**
  * Return the immutable snapshot of the bundled chapter-notes catalog.

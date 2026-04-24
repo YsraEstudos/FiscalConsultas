@@ -9,7 +9,7 @@ import styles from './Header.module.css';
 
 const DOC_SUBTITLES: Record<string, string> = {
     nbs: 'Classificação Brasileira de Serviços',
-    nebs: 'Classificação Brasileira de Serviços',
+    nebs: 'Notas Explicativas da Nomenclatura Brasileira de Serviços',
     nesh: 'Notas Explicativas do Sistema Harmonizado',
     tipi: 'Tabela de Incidência do IPI',
 };

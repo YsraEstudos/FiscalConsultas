@@ -24,7 +24,7 @@ import {
     shouldAuthenticateRequest,
     shouldRetryUnauthorizedRequest,
 } from './authSession';
-import type { AuthRetryRequestConfig } from './authTypes';
+import type { AuthRefreshMode, AuthRetryRequestConfig } from './authTypes';
 
 const configuredApiInstances = new WeakSet<AxiosInstance>();
 export { registerClerkTokenGetter, unregisterClerkTokenGetter } from './authSession';
@@ -55,7 +55,7 @@ export function configureApiAuthTransport(apiInstance: AxiosInstance): void {
             }
             return config;
         },
-        (error: AxiosError) => {
+        async (error: AxiosError) => {
             const axiosMetadata = axios.isAxiosError(error)
                 ? {
                     code: error.code,
@@ -71,7 +71,7 @@ export function configureApiAuthTransport(apiInstance: AxiosInstance): void {
                 message: error instanceof Error ? error.message : 'API request could not be prepared',
                 metadata: axiosMetadata,
             });
-            return Promise.reject(error);
+            throw error;
         },
     );
 
@@ -84,7 +84,7 @@ export function configureApiAuthTransport(apiInstance: AxiosInstance): void {
             const detailText = typeof detail === 'string' ? detail : undefined;
             const requestId = getResponseRequestId(originalRequest);
             let refreshAttempt: 'skipped' | 'attempted' = 'skipped';
-            let refreshMode: 'fresh' | 'in_flight' | 'cooldown' | 'not_applicable' = 'not_applicable';
+            let refreshMode: AuthRefreshMode = 'not_applicable';
 
             if (shouldRetryUnauthorizedRequest(status, originalRequest, detailText)) {
                 const retryResult = await retryUnauthorizedRequest(
@@ -109,7 +109,7 @@ export function configureApiAuthTransport(apiInstance: AxiosInstance): void {
                 refreshMode,
             );
             reportApiFailure(error, originalRequest, requestId, status);
-            return Promise.reject(error);
+            throw error;
         },
     );
 }

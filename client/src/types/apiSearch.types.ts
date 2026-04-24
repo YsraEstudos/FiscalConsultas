@@ -98,9 +98,6 @@ export type NeshSearchApiResponse =
     | NeshTextSearchApiResponse
     | NeshCodeSearchApiResponse;
 
-/** @deprecated Use `NeshSearchApiResponse`. */
-export type NeshSearchResponse = NeshSearchApiResponse;
-
 export interface TipiPosition {
     ncm: string;
     codigo: string;
@@ -158,6 +155,3 @@ export type TipiTextSearchResponse = TipiTextSearchApiResponse;
 export type TipiSearchApiResponse =
     | TipiCodeSearchApiResponse
     | TipiTextSearchApiResponse;
-
-/** @deprecated Use `TipiSearchApiResponse`. */
-export type TipiSearchResponse = TipiSearchApiResponse;

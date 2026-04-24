@@ -56,7 +56,7 @@ export function useOfflineDatabaseQueries({
             if (status !== 'ready') return null;
 
             const response = await searchOfflineCatalog('nesh', chapter);
-            if (!response || response.searchType !== 'code') {
+            if (response?.searchType !== 'code') {
                 return null;
             }
 

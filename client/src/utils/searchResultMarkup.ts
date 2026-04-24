@@ -106,7 +106,7 @@ function renderTipiChapter(chapter: any): string | null {
 
 function renderTipiFallback(resultados: CodeResults): string | null {
     const chapters = Object.values(resultados)
-        .sort((a: any, b: any) => parseInt(a?.capitulo || '0', 10) - parseInt(b?.capitulo || '0', 10));
+        .sort((a: any, b: any) => Number.parseInt(a?.capitulo || '0', 10) - Number.parseInt(b?.capitulo || '0', 10));
 
     if (chapters.length === 0) {
         return null;

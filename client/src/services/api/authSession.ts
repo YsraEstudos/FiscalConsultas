@@ -11,6 +11,7 @@ import {
     normalizeRequestPath,
 } from './authLogging';
 import type {
+    AuthRefreshMode,
     AuthRetryRequestConfig,
     ClerkTokenGetter,
     ClerkTokenGetterOptions,
@@ -19,6 +20,14 @@ import type {
 
 const CLERK_TOKEN_TEMPLATE = (import.meta.env.VITE_CLERK_TOKEN_TEMPLATE || '').trim() || undefined;
 const AUTH_REFRESH_COOLDOWN_MS = 2500;
+const AUTH_REFRESHABLE_401_DETAILS = new Set([
+    'token invalido',
+    'token invalido ou expirado',
+    'token expirado',
+    'expired token',
+    'unauthorized',
+    'invalid asaas webhook token',
+]);
 
 let clerkGetToken: ClerkTokenGetter | null = null;
 let inFlightForcedRefreshPromise: Promise<string | null> | null = null;
@@ -35,31 +44,34 @@ function buildTokenGetterOptions(skipCache = false): ClerkTokenGetterOptions {
     return options;
 }
 
+function canonicalizeAuthDetail(detail: string): string {
+    return detail
+        .normalize('NFD')
+        .replaceAll(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replaceAll(/[.!?]+$/g, '')
+        .replaceAll(/\s+/g, ' ')
+        .trim();
+}
+
 function shouldAttemptAuthRefresh(detail?: string): boolean {
     if (!detail) return true;
-    const normalized = detail.toLowerCase();
+    const normalized = canonicalizeAuthDetail(detail);
 
     if (
-        normalized.includes('token ausente')
-        || normalized.includes('missing token')
+        normalized === 'token ausente'
+        || normalized === 'missing token'
     ) {
         return false;
     }
 
-    return (
-        normalized.includes('token inválido')
-        || normalized.includes('token invalido')
-        || normalized.includes('token expirado')
-        || normalized.includes('expired')
-        || normalized.includes('invalid')
-        || normalized.includes('unauthorized')
-    );
+    return AUTH_REFRESHABLE_401_DETAILS.has(normalized);
 }
 
 async function getForcedRefreshToken(path: string, reason: string): Promise<{
     token: string | null;
     options: ClerkTokenGetterOptions;
-    mode: 'fresh' | 'in_flight' | 'cooldown' | 'not_applicable';
+    mode: AuthRefreshMode;
 }> {
     const options = buildTokenGetterOptions(true);
     if (!clerkGetToken) {
@@ -83,6 +95,7 @@ async function getForcedRefreshToken(path: string, reason: string): Promise<{
         return { token: null, options, mode: 'cooldown' };
     }
 
+    lastForcedRefreshAtMs = now;
     inFlightForcedRefreshPromise = clerkGetToken(options);
     try {
         const token = await inFlightForcedRefreshPromise;
@@ -182,9 +195,10 @@ export async function retryUnauthorizedRequest(
     }
 
     originalRequest._retryAuth = true;
+    let refresh: Awaited<ReturnType<typeof getForcedRefreshToken>> | null = null;
 
     try {
-        const refresh = await getForcedRefreshToken(
+        refresh = await getForcedRefreshToken(
             normalizedPath,
             detailText || '401_without_detail',
         );
@@ -216,7 +230,7 @@ export async function retryUnauthorizedRequest(
         return {
             response: null,
             refreshAttempt: 'attempted',
-            refreshMode: 'fresh',
+            refreshMode: refresh?.mode ?? 'unknown',
         };
     }
 }

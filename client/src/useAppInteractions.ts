@@ -231,7 +231,8 @@ export function useAppInteractions({
 
         const content = notesMap?.[note];
         if (!content) {
-            const scrolled = scrollToNotesSection(activeTabId, targetChapter);
+            const scrolled = !isCrossChapter
+                && scrollToNotesSection(activeTabId, targetChapter);
             if (scrolled) {
                 toast(`Nota ${note} não encontrada. Mostrando notas do capítulo.`);
             } else {
@@ -260,7 +261,7 @@ export function useAppInteractions({
         }
 
         updateTab(incomingTabId, (currentTab) => {
-            if (!currentTab || currentTab.id !== incomingTabId) {
+            if (currentTab?.id !== incomingTabId) {
                 return undefined;
             }
 

@@ -57,7 +57,7 @@ async function handleInitMessage(id, payload) {
 }
 
 async function readEncryptedDatabaseBlob(dlResp, id) {
-  const contentLength = parseInt(dlResp.headers.get("content-length") || "0", 10);
+  const contentLength = Number.parseInt(dlResp.headers.get("content-length") || "0", 10);
   const reader = dlResp.body?.getReader();
   if (!reader) throw new Error("No response body");
 

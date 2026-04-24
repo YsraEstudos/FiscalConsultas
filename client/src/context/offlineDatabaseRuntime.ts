@@ -24,9 +24,7 @@ import {
     primeOfflineShellCache,
 } from './offlineDatabaseSync';
 import type {
-    DbStatus,
-    OfflineDatabaseWorkerRequest,
-    OfflineDatabaseWorkerResponse,
+    OfflineDatabaseStatus,
 } from './offlineDatabase.types';
 import type { OfflineDatabaseOperationsArgs } from './offlineDatabaseOperations.shared';
 import { useOfflineDatabaseBroadcastChannel } from './offlineDatabaseRuntime/useOfflineDatabaseBroadcastChannel';
@@ -34,7 +32,7 @@ import { useOfflineDatabaseSyncWaiter } from './offlineDatabaseRuntime/useOfflin
 import { useOfflineDatabaseWorkerBridge } from './offlineDatabaseRuntime/useOfflineDatabaseWorkerBridge';
 
 export interface OfflineDatabaseRuntimeState {
-    status: DbStatus;
+    status: OfflineDatabaseStatus;
     progress: number;
     progressStep: string;
     localVersion: string | null;
@@ -63,7 +61,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
         readStoredOfflineDatabaseMetadata(),
     );
 
-    const [status, setStatus] = useState<DbStatus>(
+    const [status, setStatus] = useState<OfflineDatabaseStatus>(
         isSupported ? 'checking' : 'unsupported',
     );
     const [progress, setProgress] = useState(0);
@@ -162,7 +160,11 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
                     setRemoteVersion(metadata?.version ?? null);
                     setDbSizeBytes((current) => current ?? metadata?.size_bytes ?? null);
                     return metadata;
-                } catch {
+                } catch (err) {
+                    console.warn(
+                        'fetchOfflineDatabaseAvailabilityMetadata failed',
+                        err,
+                    );
                     return remoteMetaRef.current;
                 }
             })();
@@ -247,10 +249,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             remoteMetadataRef: remoteMetaRef,
             broadcast,
             waitForOtherTabSync,
-            sendToWorker: (
-                request: OfflineDatabaseWorkerRequest,
-                timeoutMs?: number,
-            ): Promise<OfflineDatabaseWorkerResponse> => sendToWorker(request, timeoutMs),
+            sendToWorker,
             refreshOfflineDatabaseAvailability,
             applyInstalledMetadata,
             setStatus,

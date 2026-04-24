@@ -176,7 +176,7 @@ export function logUnauthorizedResponse(
     requestId: string | undefined,
     detailText: string | undefined,
     refreshAttempt: 'skipped' | 'attempted',
-    refreshMode: 'fresh' | 'in_flight' | 'cooldown' | 'not_applicable',
+    refreshMode: 'fresh' | 'in_flight' | 'cooldown' | 'not_applicable' | 'unknown',
 ): void {
     if (status !== 401 || !AUTH_DEBUG_ENABLED) return;
     console.warn('[API] 401 Unauthorized - Token missing, expired, or invalid', {

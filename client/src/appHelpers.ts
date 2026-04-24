@@ -22,6 +22,11 @@ export interface NeshBridge {
     ) => void;
 }
 
+const notesSectionFlashTimeouts = new WeakMap<
+    Element,
+    ReturnType<typeof globalThis.setTimeout>
+>();
+
 export function splitSearchTerms(raw: string): string[] {
     return raw
         .split(/,/)
@@ -119,7 +124,16 @@ export function scrollToNotesSection(
     }
 
     target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const existingTimeout = notesSectionFlashTimeouts.get(target);
+    if (existingTimeout) {
+        globalThis.clearTimeout(existingTimeout);
+    }
+
     target.classList.add('flash-highlight');
-    globalThis.setTimeout(() => target?.classList.remove('flash-highlight'), 2000);
+    const timeout = globalThis.setTimeout(() => {
+        target.classList.remove('flash-highlight');
+        notesSectionFlashTimeouts.delete(target);
+    }, 2000);
+    notesSectionFlashTimeouts.set(target, timeout);
     return true;
 }

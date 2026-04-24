@@ -9,7 +9,7 @@ import {
 
 import { formatOfflineDatabaseErrorMessage } from '../../utils/offlineDatabase';
 import type {
-    DbStatus,
+    OfflineDatabaseStatus,
     OfflineDatabaseWorkerRequest,
     OfflineDatabaseWorkerResponse,
     PendingOfflineDatabaseRequest,
@@ -21,13 +21,41 @@ import {
 
 type UseOfflineDatabaseWorkerBridgeArgs = {
     isSupported: boolean;
-    setStatus: Dispatch<SetStateAction<DbStatus>>;
+    setStatus: Dispatch<SetStateAction<OfflineDatabaseStatus>>;
     setProgress: Dispatch<SetStateAction<number>>;
     setProgressStep: Dispatch<SetStateAction<string>>;
     setError: Dispatch<SetStateAction<string | null>>;
     setLocalVersion: Dispatch<SetStateAction<string | null>>;
     setDbSizeBytes: Dispatch<SetStateAction<number | null>>;
 };
+
+function resolvePendingWorkerRequest(
+    pendingRequests: Map<string, PendingOfflineDatabaseRequest>,
+    id: string | null,
+    pending: PendingOfflineDatabaseRequest | undefined,
+    response: OfflineDatabaseWorkerResponse,
+): void {
+    if (!id || !pending) return;
+    clearTimeout(pending.timeout);
+    pendingRequests.delete(id);
+    pending.resolve(response);
+}
+
+function rejectPendingWorkerRequest(
+    pendingRequests: Map<string, PendingOfflineDatabaseRequest>,
+    id: string | null,
+    pending: PendingOfflineDatabaseRequest | undefined,
+    error: Error,
+): void {
+    if (!id || !pending) return;
+    clearTimeout(pending.timeout);
+    pendingRequests.delete(id);
+    pending.reject(error);
+}
+
+function shouldResolveStatusRequest(status: OfflineDatabaseStatus): boolean {
+    return status === 'ready' || status === 'not_installed';
+}
 
 export interface OfflineDatabaseWorkerBridgeValue {
     isWorkerReady: boolean;
@@ -87,23 +115,24 @@ export function useOfflineDatabaseWorkerBridge({
                     setProgressStep('done');
                     setError(null);
                 }
-                if (
-                    id
-                    && pending
-                    && (payload.status === 'ready' || payload.status === 'not_installed')
-                ) {
-                    clearTimeout(pending.timeout);
-                    pendingRef.current.delete(id);
-                    pending.resolve(event.data);
+                if (shouldResolveStatusRequest(payload.status)) {
+                    resolvePendingWorkerRequest(
+                        pendingRef.current,
+                        id,
+                        pending,
+                        event.data,
+                    );
                 }
                 return;
             }
 
             if (type === 'RESULT') {
-                if (!id || !pending) return;
-                clearTimeout(pending.timeout);
-                pendingRef.current.delete(id);
-                pending.resolve(event.data);
+                resolvePendingWorkerRequest(
+                    pendingRef.current,
+                    id,
+                    pending,
+                    event.data,
+                );
                 return;
             }
 
@@ -111,10 +140,12 @@ export function useOfflineDatabaseWorkerBridge({
                 const normalizedError = formatOfflineDatabaseErrorMessage(payload.error);
                 setError(normalizedError);
                 setStatus('error');
-                if (!id || !pending) return;
-                clearTimeout(pending.timeout);
-                pendingRef.current.delete(id);
-                pending.reject(new Error(normalizedError));
+                rejectPendingWorkerRequest(
+                    pendingRef.current,
+                    id,
+                    pending,
+                    new Error(normalizedError),
+                );
             }
         },
         [

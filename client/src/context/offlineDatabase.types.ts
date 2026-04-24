@@ -13,13 +13,7 @@ export type OfflineDatabaseStatus =
     | 'error'
     | 'unsupported';
 
-/** @deprecated Use `OfflineDatabaseStatus`. */
-export type DbStatus = OfflineDatabaseStatus;
-
 export type OfflineDocumentType = 'nbs' | 'nebs' | 'tipi' | 'ncm' | 'nesh';
-
-/** @deprecated Use `OfflineDocumentType`. */
-export type DocType = OfflineDocumentType;
 
 export interface OfflineDatabaseState {
     status: OfflineDatabaseStatus;
@@ -44,9 +38,6 @@ export interface OfflineCatalogSearchResult {
         cacheHit: boolean;
     };
 }
-
-/** @deprecated Use `OfflineCatalogSearchResult`. */
-export type LocalSearchResult = OfflineCatalogSearchResult;
 
 export interface OfflineDatabaseContextValue extends OfflineDatabaseState {
     installOfflineDatabase: () => Promise<void>;
@@ -90,9 +81,6 @@ export interface OfflineDatabaseContextValue extends OfflineDatabaseState {
         code: string,
     ) => Promise<NebsExplanatoryDetailApiResponse | null>;
 }
-
-/** @deprecated Use `OfflineDatabaseContextValue`. */
-export type LocalDatabaseContextType = OfflineDatabaseContextValue;
 
 export interface PendingOfflineDatabaseRequest {
     resolve: (value: OfflineDatabaseWorkerResponse) => void;
