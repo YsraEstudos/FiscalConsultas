@@ -10,7 +10,7 @@ pytestmark = pytest.mark.integration
 
 
 class _FakeServicesCatalog:
-    async def search(self, query: str):
+    async def search_nbs_catalog_entries(self, query: str):
         return {
             "success": True,
             "query": query,
@@ -19,7 +19,7 @@ class _FakeServicesCatalog:
             "total": 1,
         }
 
-    async def get_item_details(
+    async def fetch_nbs_catalog_item_details(
         self,
         code: str,
         *,
@@ -54,7 +54,7 @@ class _FakeServicesCatalog:
             "nebs": None,
         }
 
-    async def search_nebs(self, query: str):
+    async def search_nbs_explanatory_entries(self, query: str):
         return {
             "success": True,
             "query": query,
@@ -72,7 +72,7 @@ class _FakeServicesCatalog:
             "total": 1,
         }
 
-    async def get_item_tree_page(
+    async def fetch_nbs_catalog_tree_page(
         self,
         code: str,
         *,
@@ -113,7 +113,7 @@ class _FakeServicesCatalog:
             },
         }
 
-    async def get_nebs_details(self, code: str):
+    async def fetch_nbs_explanatory_entry_details(self, code: str):
         return {
             "success": True,
             "item": {
@@ -165,28 +165,28 @@ def _setup_fake_services_catalog(monkeypatch):
     fake_service = _FakeServicesCatalog()
     monkeypatch.setattr(
         NbsService,
-        "search",
-        AsyncMock(side_effect=fake_service.search),
+        "searchNbsCatalogEntries",
+        AsyncMock(side_effect=fake_service.search_nbs_catalog_entries),
     )
     monkeypatch.setattr(
         NbsService,
-        "get_item_details",
-        AsyncMock(side_effect=fake_service.get_item_details),
+        "fetchNbsCatalogItemDetails",
+        AsyncMock(side_effect=fake_service.fetch_nbs_catalog_item_details),
     )
     monkeypatch.setattr(
         NbsService,
-        "search_nebs",
-        AsyncMock(side_effect=fake_service.search_nebs),
+        "searchNbsExplanatoryEntries",
+        AsyncMock(side_effect=fake_service.search_nbs_explanatory_entries),
     )
     monkeypatch.setattr(
         NbsService,
-        "get_item_tree_page",
-        AsyncMock(side_effect=fake_service.get_item_tree_page),
+        "fetchNbsCatalogTreePage",
+        AsyncMock(side_effect=fake_service.fetch_nbs_catalog_tree_page),
     )
     monkeypatch.setattr(
         NbsService,
-        "get_nebs_details",
-        AsyncMock(side_effect=fake_service.get_nebs_details),
+        "fetchNbsExplanatoryEntryDetails",
+        AsyncMock(side_effect=fake_service.fetch_nbs_explanatory_entry_details),
     )
 
 
@@ -317,9 +317,9 @@ def test_services_routes_document_public_rate_limit_responses():
 @pytest.mark.parametrize(
     ("endpoint", "service_method"),
     [
-        ("/api/services/nbs/{code}", "get_item_details"),
-        ("/api/services/nbs/{code}/tree", "get_item_tree_page"),
-        ("/api/services/nebs/{code}", "get_nebs_details"),
+        ("/api/services/nbs/{code}", "fetchNbsCatalogItemDetails"),
+        ("/api/services/nbs/{code}/tree", "fetchNbsCatalogTreePage"),
+        ("/api/services/nebs/{code}", "fetchNbsExplanatoryEntryDetails"),
     ],
 )
 def test_services_detail_rejects_overly_long_code(

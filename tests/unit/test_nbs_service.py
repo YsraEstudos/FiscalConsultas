@@ -195,6 +195,47 @@ def _seed_services_db(db_path: Path) -> None:
 
 
 class _FakeNbsRepo:
+    async def snapshot_nbs_catalog_counts(self):
+        return await self.get_catalog_counts()
+
+    async def snapshot_nbs_catalog_metadata(self):
+        return await self.get_catalog_metadata()
+
+    async def load_nbs_catalog_entries(self, _query: str, limit: int = 50):
+        return await self.search(_query, limit=limit)
+
+    async def load_nbs_catalog_item_details(
+        self,
+        _code: str,
+        *,
+        include_tree: bool = True,
+        page: int = 1,
+        page_size: int = 50,
+    ):
+        return await self.get_item_details(
+            _code,
+            include_tree=include_tree,
+            page=page,
+            page_size=page_size,
+        )
+
+    async def load_nbs_catalog_tree_page(
+        self, _code: str, *, page: int = 1, page_size: int = 50
+    ):
+        payload = await self.get_item_details(
+            _code,
+            include_tree=True,
+            page=page,
+            page_size=page_size,
+        )
+        return payload["chapter_page"]
+
+    async def load_nbs_explanatory_entries(self, _query: str, limit: int = 50):
+        return await self.search_nebs(_query, limit=limit)
+
+    async def load_nbs_explanatory_entry_details(self, _code: str):
+        return await self.get_nebs_details(_code)
+
     async def get_catalog_counts(self):
         return {"nbs_items": 12, "nebs_entries": 4}
 

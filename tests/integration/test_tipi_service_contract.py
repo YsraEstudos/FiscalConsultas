@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 from backend.services.tipi_service import TipiService
+from backend.utils import ncm_utils
 
 pytestmark = pytest.mark.integration
 
@@ -110,17 +111,17 @@ class TestTipiServiceContract:
 
     def test_is_code_query_heuristic(self, service):
         """Heurística de detecção de query numérica."""
-        assert service.is_code_query("85") is True
-        assert service.is_code_query("85.17") is True
-        assert service.is_code_query("85-17") is True
-        assert service.is_code_query("85,73") is True
-        assert service.is_code_query("motor eletrico") is False
-        assert service.is_code_query("") is False
+        assert ncm_utils.is_code_query("85") is True
+        assert ncm_utils.is_code_query("85.17") is True
+        assert ncm_utils.is_code_query("85-17") is True
+        assert ncm_utils.is_code_query("85,73") is True
+        assert ncm_utils.is_code_query("motor eletrico") is False
+        assert ncm_utils.is_code_query("") is False
 
     @pytest.mark.asyncio
     async def test_search_by_code_contract_non_empty(self, service):
         """Resposta de busca por código deve seguir contrato."""
-        resp = await service.search_by_code("85")
+        resp = await service.searchTipiByNcmCode("85")
 
         assert resp["success"] is True
         assert resp["type"] == "code"
@@ -144,7 +145,7 @@ class TestTipiServiceContract:
     @pytest.mark.asyncio
     async def test_search_by_code_sets_posicao_alvo(self, service):
         """Deve definir posicao_alvo para auto-scroll."""
-        resp = await service.search_by_code("8517")
+        resp = await service.searchTipiByNcmCode("8517")
         cap = resp["resultados"].get("85")
 
         assert cap is not None
@@ -153,7 +154,7 @@ class TestTipiServiceContract:
     @pytest.mark.asyncio
     async def test_search_by_code_normalizes_8_digit_ncm_for_scroll(self, service):
         """NCM de 8 dígitos deve ser normalizado para scroll."""
-        resp = await service.search_by_code("84139190")
+        resp = await service.searchTipiByNcmCode("84139190")
         cap = resp["resultados"].get("84")
 
         assert cap is not None
@@ -162,7 +163,7 @@ class TestTipiServiceContract:
     @pytest.mark.asyncio
     async def test_search_by_code_contract_empty(self, service):
         """Busca sem resultados deve retornar estrutura vazia."""
-        resp = await service.search_by_code("9999")
+        resp = await service.searchTipiByNcmCode("9999")
 
         assert resp["success"] is True
         assert resp["type"] == "code"
@@ -177,7 +178,7 @@ class TestTipiServiceContract:
         if not test_db["fts"]:
             pytest.skip("SQLite FTS5 não disponível neste ambiente")
 
-        resp = await service.search_text("telefônicos")
+        resp = await service.searchTipiByTextQuery("telefônicos")
 
         assert resp["success"] is True
         assert resp["type"] == "text"
@@ -197,7 +198,7 @@ class TestTipiHierarchy:
         Ao buscar um NCM específico (8 dígitos), deve retornar também
         os NCMs pai (posição 4-dig, subposição 6-dig).
         """
-        resp = await service.search_by_code("39249000", view_mode="family")
+        resp = await service.searchTipiByNcmCode("39249000", view_mode="family")
 
         assert resp["success"] is True
         cap = resp["resultados"].get("39")
@@ -218,7 +219,7 @@ class TestTipiHierarchy:
     @pytest.mark.asyncio
     async def test_family_mode_with_6_digit_query(self, service):
         """Busca com 6 dígitos deve incluir ancestral de 4 dígitos."""
-        resp = await service.search_by_code("392490", view_mode="family")
+        resp = await service.searchTipiByNcmCode("392490", view_mode="family")
 
         cap = resp["resultados"].get("39")
         assert cap is not None
@@ -233,7 +234,7 @@ class TestTipiHierarchy:
     @pytest.mark.asyncio
     async def test_chapter_mode_returns_full_chapter(self, service):
         """Modo chapter deve retornar capítulo completo sem filtro."""
-        resp = await service.search_by_code("39249000", view_mode="chapter")
+        resp = await service.searchTipiByNcmCode("39249000", view_mode="chapter")
 
         cap = resp["resultados"].get("39")
         assert cap is not None
@@ -247,7 +248,7 @@ class TestTipiHierarchy:
     async def test_family_mode_filters_unrelated_positions(self, service):
         """Modo family não deve incluir posições de outras famílias."""
         # Busca específica no cap 84
-        resp = await service.search_by_code("84139190", view_mode="family")
+        resp = await service.searchTipiByNcmCode("84139190", view_mode="family")
 
         cap = resp["resultados"].get("84")
         assert cap is not None

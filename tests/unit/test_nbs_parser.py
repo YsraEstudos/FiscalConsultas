@@ -37,6 +37,16 @@ def test_iter_nbs_rows_skips_header_and_reads_semicolon_data(tmp_path: Path):
     ]
 
 
+def test_iter_nbs_rows_skips_empty_and_partial_rows(tmp_path: Path):
+    csv_path = tmp_path / "nbs_partial.csv"
+    csv_path.write_text(
+        "NBS 2.0;DESCRIÇÃO\n\n1.01;\n;Sem código\n1.02;Descrição válida\n",
+        encoding="utf-8-sig",
+    )
+
+    assert list(iter_nbs_rows(csv_path)) == [("1.02", "Descrição válida")]
+
+
 def test_build_nbs_items_creates_hierarchy_from_prefix_chain():
     items = build_nbs_items(
         [
@@ -62,3 +72,11 @@ def test_clean_nbs_code_keeps_only_digits():
 
 def test_build_nbs_code_variants_returns_empty_literal_for_blank_code():
     assert build_nbs_code_variants("") == ()
+
+
+def test_build_nbs_code_variants_adds_alias_without_trailing_zero_suffix():
+    assert build_nbs_code_variants("1.0101.11.00") == ("1.0101.11.00", "1.0101.11")
+
+
+def test_build_nbs_code_variants_adds_canonical_leaf_suffix():
+    assert build_nbs_code_variants("1.0101.11") == ("1.0101.11", "1.0101.11.00")

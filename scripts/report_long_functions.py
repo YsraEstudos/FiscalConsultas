@@ -76,16 +76,17 @@ def _statement_start_line(statement: ast.stmt) -> int:
     line_numbers = [getattr(statement, "lineno", None)]
 
     decorators = getattr(statement, "decorator_list", None) or []
-    line_numbers.extend(
-        getattr(decorator, "lineno", None) for decorator in decorators
-    )
+    line_numbers.extend(getattr(decorator, "lineno", None) for decorator in decorators)
 
     valid_lines = [line for line in line_numbers if line is not None]
     return min(valid_lines) if valid_lines else 0
 
 
 def _statement_end_line(statement: ast.stmt) -> int:
-    line_numbers = [getattr(statement, "end_lineno", None), getattr(statement, "lineno", None)]
+    line_numbers = [
+        getattr(statement, "end_lineno", None),
+        getattr(statement, "lineno", None),
+    ]
 
     decorators = getattr(statement, "decorator_list", None) or []
     line_numbers.extend(
@@ -203,7 +204,9 @@ def _collect_module_level_findings(
     return findings
 
 
-def _sort_findings(findings: Iterable[LongFunctionFinding]) -> list[LongFunctionFinding]:
+def _sort_findings(
+    findings: Iterable[LongFunctionFinding],
+) -> list[LongFunctionFinding]:
     return sorted(
         findings,
         key=lambda finding: (
@@ -237,7 +240,7 @@ def scan_tree(root: Path | str, threshold: int = DEFAULT_THRESHOLD) -> ScanRepor
             continue
 
         try:
-            tree = ast.parse(source, filename=str(file_path))
+            ast.parse(source, filename=str(file_path))
         except SyntaxError as exc:
             issues.append(
                 ScanIssue(
@@ -252,7 +255,10 @@ def scan_tree(root: Path | str, threshold: int = DEFAULT_THRESHOLD) -> ScanRepor
         )
 
     findings = _sort_findings(collected_findings)
-    numbered_findings = [replace(finding, item_id=f"ITEM_{index:04d}") for index, finding in enumerate(findings, start=1)]
+    numbered_findings = [
+        replace(finding, item_id=f"ITEM_{index:04d}")
+        for index, finding in enumerate(findings, start=1)
+    ]
 
     return ScanReport(
         root=root_path,
