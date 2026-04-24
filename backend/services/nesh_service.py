@@ -13,7 +13,7 @@ from ..config.constants import CacheConfig
 from ..config.logging_config import service_logger as logger
 from ..domain import ServiceResponse
 from ..infrastructure import DatabaseAdapter
-from ..infrastructure.redis_client import redis_cache  # noqa: F401
+from ..infrastructure.redis_client import redis_cache
 from ..utils import ncm_utils
 from ..utils.payload_cache_metrics import PayloadCacheMetrics
 from ..utils.text_processor import NeshTextProcessor
@@ -33,6 +33,9 @@ from .nesh.fts import (
     snapshot_nesh_fts_cache_metrics,
 )
 from .nesh.types import NeshChapterRawPayload, NeshFtsCacheKey, NeshFtsScoredRow
+from .nesh.types import NeshChapterSearchResponse, NeshFtsSearchResponse
+
+__all__ = ["NeshService", "redis_cache"]
 
 try:
     from ..infrastructure.db_engine import get_session
@@ -176,12 +179,12 @@ class NeshService:
 
     async def _fts_scored_cached(
         self, query: str, tier: int, limit: int, words_matched: int, total_words: int
-    ):
+    ) -> list[NeshFtsScoredRow]:
         return await fetch_nesh_fts_scored_rows_cached(
             self, query, tier, limit, words_matched, total_words
         )
 
-    async def searchNeshByTextQuery(self, query: str) -> ServiceResponse:
+    async def searchNeshByTextQuery(self, query: str) -> NeshFtsSearchResponse:
         """
         Executa busca textual FTS sobre o conteúdo NESH.
 
@@ -190,7 +193,7 @@ class NeshService:
         """
         return await search_nesh_fts_text(self, query)
 
-    async def searchNeshByNcmCode(self, ncm_query: str) -> ServiceResponse:
+    async def searchNeshByNcmCode(self, ncm_query: str) -> NeshChapterSearchResponse:
         """
         Busca capítulos NESH a partir de uma query NCM normalizada.
 

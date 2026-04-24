@@ -244,6 +244,11 @@ class TipiService:
     async def closeAllTipiConnectionPools(cls) -> None:
         current_loop_id = id(asyncio.get_running_loop())
         async with cls._get_tipi_connection_pool_lock():
+            leftover_counts = {
+                pool_key[1]: len(pool)
+                for pool_key, pool in cls._tipi_connection_pools.items()
+                if pool_key[1] != current_loop_id
+            }
             pools = [
                 pool
                 for pool_key, pool in cls._tipi_connection_pools.items()
@@ -256,6 +261,11 @@ class TipiService:
             }
         with cls._tipi_connection_pool_locks_guard:
             cls._tipi_connection_pool_locks.pop(current_loop_id, None)
+        if leftover_counts:
+            logger.warning(
+                "TIPI connection pools for other event loops were left open: %s",
+                leftover_counts,
+            )
         for pool in pools:
             await cls._close_tipi_pool_connections(pool)
 

@@ -81,8 +81,8 @@ async def load_nbs_catalog_entries(
                 CASE
                     WHEN :raw_query <> '' AND n.code = :raw_query THEN 480
                     WHEN :clean_query <> '' AND n.code_clean LIKE :clean_prefix THEN 420
-                    WHEN n.description_normalized = :normalized_query THEN 360
-                    WHEN n.description_normalized LIKE :normalized_prefix THEN 320
+                    WHEN :normalized_query <> '' AND n.description_normalized = :normalized_query THEN 360
+                    WHEN :normalized_query <> '' AND n.description_normalized LIKE :normalized_prefix THEN 320
                     ELSE 280
                 END AS match_score,
                 0::float AS fts_rank

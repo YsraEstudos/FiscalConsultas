@@ -250,6 +250,38 @@ async def test_close_all_pools_closes_connections_across_paths(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_close_all_pools_warns_about_other_loop_pools(tmp_path, monkeypatch):
+    current_conn = _FakeConn()
+    leftover_conn = _FakeConn()
+    current_loop_id = id(asyncio.get_running_loop())
+    other_loop_id = current_loop_id + 1
+    TipiService._tipi_connection_pools = {
+        (tmp_path / "current.db", current_loop_id): [current_conn],
+        (tmp_path / "leftover.db", other_loop_id): [leftover_conn],
+    }
+    warnings: list[tuple[str, object]] = []
+
+    def _capture_warning(message: str, payload: object) -> None:
+        warnings.append((message, payload))
+
+    monkeypatch.setattr(tipi_module.logger, "warning", _capture_warning)
+
+    await TipiService.close_all_pools()
+
+    assert current_conn.closed is True
+    assert leftover_conn.closed is False
+    assert list(TipiService._tipi_connection_pools) == [
+        (tmp_path / "leftover.db", other_loop_id)
+    ]
+    assert warnings == [
+        (
+            "TIPI connection pools for other event loops were left open: %s",
+            {other_loop_id: 1},
+        )
+    ]
+
+
+@pytest.mark.asyncio
 async def test_check_connection_returns_error_when_db_missing(tmp_path):
     service = TipiService(db_path=tmp_path / "missing-tipi.db")
     payload = await service.check_connection()

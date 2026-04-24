@@ -320,7 +320,9 @@ def build_nesh_fts_response(
     }
 
 
-async def search_nesh_fts_text(service: "NeshService", query: str) -> NeshFtsSearchResponse:
+async def search_nesh_fts_text(
+    service: "NeshService", query: str
+) -> NeshFtsSearchResponse:
     logger.info("Busca FTS: '%s'", query)
 
     original_words = [word.strip() for word in query.split() if word.strip()]
@@ -372,9 +374,7 @@ async def search_nesh_fts_text(service: "NeshService", query: str) -> NeshFtsSea
             warning=f'Nenhum resultado encontrado para "{query}"',
         )
 
-    match_metadata = resolve_nesh_fts_match_metadata(
-        all_results, query, original_words
-    )
+    match_metadata = resolve_nesh_fts_match_metadata(all_results, query, original_words)
     logger.info(
         "FTS total: %s resultados, melhor tier: %s",
         len(all_results),

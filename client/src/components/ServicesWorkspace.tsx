@@ -358,8 +358,8 @@ function NbsDetailSection({
     } else if (nbsState.detail) {
         const detail = nbsState.detail;
         const codeParts = detail.item.code.split('.');
-        const linkedNebs = detail.nebs ?? null;
-        const linkedNebsCode = linkedNebs?.code ?? null;
+        const linkedNebs = detail.nebs;
+        const linkedNebsCode = linkedNebs?.code;
 
         detailBody = (
             <>

@@ -67,7 +67,7 @@ def parse_nesh_chapter_notes(notes_content: str) -> dict[str, str]:
 
 
 def enrich_nesh_positions_with_anchor_ids(
-    positions: list[dict[str, Any]]
+    positions: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     for pos in positions:
         if pos.get("anchor_id"):
