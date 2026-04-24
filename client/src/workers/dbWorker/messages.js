@@ -143,45 +143,65 @@ async function handleInstallMessage(id, payload) {
   postWorkerProgress(id, 0, "requesting_token");
 
   const apiBase = payload?.apiBase || "/api";
-  const tokenData = await requestInstallToken(apiBase);
-  const {
-    token,
-    encrypted_sha256: expectedEncryptedSha256,
-    chunk_size: chunkSize = 65536,
-    pbkdf2_iterations: iterations = 600000,
-  } = tokenData;
+  /** @type {Uint8Array | null} */
+  let plaintext = null;
 
-  postWorkerProgress(id, 10, "fetching_database");
+  try {
+    const tokenData = await requestInstallToken(apiBase);
+    const {
+      token,
+      encrypted_sha256: expectedEncryptedSha256,
+      chunk_size: chunkSize = 65536,
+      pbkdf2_iterations: iterations = 600000,
+    } = tokenData;
 
-  const dlResp = await fetchEncryptedDatabase(apiBase, token);
-  const encryptedBlob = await readEncryptedDatabaseBlob(dlResp, id);
+    postWorkerProgress(id, 10, "fetching_database");
 
-  if (expectedEncryptedSha256) {
-    postWorkerProgress(id, 72, "verifying_integrity");
-    const actualEncryptedSha256 = await sha256Hex(encryptedBlob);
-    if (actualEncryptedSha256 !== expectedEncryptedSha256) {
-      throw new Error("Offline database integrity verification failed");
+    const dlResp = await fetchEncryptedDatabase(apiBase, token);
+    const encryptedBlob = await readEncryptedDatabaseBlob(dlResp, id);
+
+    if (expectedEncryptedSha256) {
+      postWorkerProgress(id, 72, "verifying_integrity");
+      const actualEncryptedSha256 = await sha256Hex(encryptedBlob);
+      if (actualEncryptedSha256 !== expectedEncryptedSha256) {
+        throw new Error("Offline database integrity verification failed");
+      }
+    }
+
+    postWorkerProgress(id, 75, "decrypting");
+    plaintext = await decryptDatabase(encryptedBlob, chunkSize, iterations);
+
+    postWorkerProgress(id, 85, "loading");
+    await loadDatabaseFromBytes(plaintext);
+
+    postWorkerProgress(id, 90, "saving");
+    await saveToOpfs(encryptedBlob);
+    await updateInstalledVersion(apiBase);
+
+    setWorkerStatus("ready");
+    postWorkerProgress(id, 100, "done");
+    postWorkerStatus(id, {
+      status: "ready",
+      version: getWorkerVersion(),
+      sizeBytes: encryptedBlob.length,
+    });
+  } catch (error) {
+    setWorkerStatus("error");
+    const message = error instanceof Error ? error.message : "Unknown error";
+    const recoverableMessage = `${message}. Reinstale o banco offline para continuar.`;
+    postWorkerStatus(id, {
+      status: "error",
+      error: recoverableMessage,
+      recoverable: true,
+    });
+    postWorkerError(id, recoverableMessage);
+    await removeFromOpfs().catch(() => undefined);
+    return;
+  } finally {
+    if (plaintext) {
+      plaintext.fill(0);
     }
   }
-
-  postWorkerProgress(id, 75, "decrypting");
-  const plaintext = await decryptDatabase(encryptedBlob, chunkSize, iterations);
-
-  postWorkerProgress(id, 85, "loading");
-  await loadDatabaseFromBytes(plaintext);
-  plaintext.fill(0);
-
-  postWorkerProgress(id, 90, "saving");
-  await saveToOpfs(encryptedBlob);
-  await updateInstalledVersion(apiBase);
-
-  setWorkerStatus("ready");
-  postWorkerProgress(id, 100, "done");
-  postWorkerStatus(id, {
-    status: "ready",
-    version: getWorkerVersion(),
-    sizeBytes: encryptedBlob.length,
-  });
 }
 
 function handleSearchMessage(id, payload) {

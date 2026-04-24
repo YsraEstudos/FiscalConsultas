@@ -21,6 +21,7 @@ import {
 } from '../offlineDatabaseSync';
 import type {
     OfflineDatabaseChannelMessage,
+    OfflineDatabaseInitResult,
     OfflineDatabaseStatus,
     OfflineDatabaseWorkerRequest,
     OfflineDatabaseWorkerResponse,
@@ -31,7 +32,9 @@ type UseOfflineDatabaseBroadcastChannelArgs = {
     instanceId: string;
     remoteMetaRef: MutableRefObject<OfflineDatabaseMetadata | null>;
     applyInstalledMetadata: (metadata: OfflineDatabaseMetadata | null) => void;
-    initializeInstalledDatabase: (metadata?: OfflineDatabaseMetadata | null) => Promise<void>;
+    initializeInstalledDatabase: (
+        metadata?: OfflineDatabaseMetadata | null,
+    ) => Promise<OfflineDatabaseInitResult>;
     resolveSyncWaiter: () => void;
     rejectSyncWaiter: (message: string) => void;
     sendToWorker: (
@@ -94,11 +97,18 @@ export function useOfflineDatabaseBroadcastChannel({
                 setProgress(95);
                 setProgressStep('syncing_with_other_tab');
                 runOfflineDatabaseTaskInBackground(
-                    initializeInstalledDatabase(message.payload.metadata)
-                        .finally(() => primeOfflineShellCache())
-                        .finally(() => {
+                    (async () => {
+                        const result = await initializeInstalledDatabase(
+                            message.payload.metadata,
+                        );
+                        await primeOfflineShellCache();
+                        if (result.ok) {
                             resolveSyncWaiter();
-                        }),
+                            return;
+                        }
+
+                        rejectSyncWaiter(result.error);
+                    })(),
                 );
                 return;
             }
@@ -109,21 +119,31 @@ export function useOfflineDatabaseBroadcastChannel({
                 setProgressStep('');
                 setRemoteVersion(remoteMetaRef.current?.version ?? null);
                 runOfflineDatabaseTaskInBackground(
-                    sendToWorker(
-                        {
-                            type: 'REMOVE',
-                            id: null,
-                            payload: {},
-                        },
-                        10_000,
-                    ).catch(() => {
-                        setStatus('not_installed');
-                        setLocalVersion(null);
-                        setDbSizeBytes(null);
-                        setError(null);
-                    }),
+                    (async () => {
+                        try {
+                            await sendToWorker(
+                                {
+                                    type: 'REMOVE',
+                                    id: null,
+                                    payload: {},
+                                },
+                                10_000,
+                            );
+                            resolveSyncWaiter();
+                        } catch (error) {
+                            setStatus('not_installed');
+                            setLocalVersion(null);
+                            setDbSizeBytes(null);
+                            setError(null);
+                            rejectSyncWaiter(
+                                formatOfflineDatabaseErrorMessage(
+                                    error,
+                                    'Falha ao remover o banco offline',
+                                ),
+                            );
+                        }
+                    })(),
                 );
-                resolveSyncWaiter();
                 return;
             }
 

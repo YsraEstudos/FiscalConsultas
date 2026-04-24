@@ -113,10 +113,12 @@ export function useAppInteractions({
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
+            const activeElement = globalThis.document.activeElement;
             if (
-                globalThis.document.activeElement &&
                 event.key === '/' &&
-                !['INPUT', 'TEXTAREA'].includes(globalThis.document.activeElement.tagName)
+                activeElement instanceof HTMLElement &&
+                !activeElement.isContentEditable &&
+                !['INPUT', 'TEXTAREA', 'SELECT'].includes(activeElement.tagName)
             ) {
                 event.preventDefault();
                 const searchInput = globalThis.document.getElementById('ncmInput');
@@ -377,10 +379,6 @@ export function useAppInteractions({
         }
 
         await executeSearchForTab(tabId, doc, ncm, false);
-
-        if (nextTextQuery) {
-            updateTab(tabId, { latestTextQuery: nextTextQuery });
-        }
     }, [createTab, executeSearchForTab, updateTab]);
 
     useEffect(() => {

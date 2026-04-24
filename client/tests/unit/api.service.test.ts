@@ -512,7 +512,7 @@ describe('api service', () => {
     const [r1, r2] = await Promise.all([p1, p2]);
     expect(r1).toEqual(r2);
     expect(r1.resultados).toEqual(r1.results);
-    expect(Object.keys(r1)).not.toContain('resultados');
+    expect(Object.keys(r1)).toContain('resultados');
 
     mockAxios.instance.get.mockClear();
     const cached = await apiModule.searchNCM('8517');

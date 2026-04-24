@@ -25,9 +25,10 @@ export function sendOfflineDatabaseWorkerRequest(
             return;
         }
 
-        const effectiveRequest: OfflineDatabaseWorkerRequest & { id: string } = request.id
-            ? { ...request, id: request.id }
-            : { ...request, id: createOfflineDatabaseWorkerRequestId() };
+        const effectiveRequest: OfflineDatabaseWorkerRequest & { id: string } = {
+            ...request,
+            id: request.id ?? createOfflineDatabaseWorkerRequestId(),
+        };
 
         const timeout = setTimeout(() => {
             pendingRequests.delete(effectiveRequest.id);
@@ -54,11 +55,11 @@ export function extractOfflineCatalogSearchResult(
     response: OfflineDatabaseWorkerResponse,
 ): OfflineCatalogSearchResult | null {
     if (response.type !== 'RESULT') return null;
-    if (response.payload.results === null) return null;
+    if (response.payload.results == null) return null;
 
     return {
-        results: response.payload.results || null,
-        searchType: response.payload.searchType || 'text',
+        results: response.payload.results,
+        searchType: response.payload.searchType ?? 'text',
         markdown: response.payload.markdown,
         timing: response.payload.timing,
     };
@@ -68,5 +69,5 @@ export function extractOfflineWorkerDetail<T>(
     response: OfflineDatabaseWorkerResponse,
 ): T | null {
     if (response.type !== 'RESULT') return null;
-    return (response.payload.detail as T | null | undefined) || null;
+    return (response.payload.detail as T | null | undefined) ?? null;
 }

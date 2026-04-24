@@ -112,13 +112,13 @@ export const renderNbsChapterNotesHtml = buildNbsChapterNotesMarkup;
 export const openNbsChapterNotesTab = openNbsChapterNotesPreviewWindow;
 
 /**
- * Return the immutable snapshot of the bundled chapter-notes catalog.
+ * Return a frozen snapshot of the bundled chapter-notes catalog.
  *
  * Example:
  * `const catalog = getNbsChapterNotesCatalogSnapshot()`
  */
-export function getNbsChapterNotesCatalogSnapshot(): Record<string, NbsChapterNotesEntry> {
-    return NBS_CHAPTER_NOTES;
+export function getNbsChapterNotesCatalogSnapshot(): Readonly<Record<string, NbsChapterNotesEntry>> {
+    return Object.freeze(structuredClone(NBS_CHAPTER_NOTES));
 }
 
 /**

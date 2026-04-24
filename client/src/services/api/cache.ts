@@ -4,7 +4,7 @@ const CACHE_TTL_MS = 60 * 60 * 1000;
 const CACHE_MAX_ENTRIES = 30;
 const CACHE_EVICT_BATCH_SIZE = 10;
 const MEMORY_CACHE_MAX = 50;
-const PERSISTENT_CODE_CACHE_PREFIXES = ['nesh:', 'tipi:'] as const;
+const MEMORY_ONLY_CACHE_PREFIXES = ['nesh:', 'tipi:'] as const;
 
 interface CacheEntry<T> {
     data: T;
@@ -27,7 +27,7 @@ const memoryCache = new Map<string, CacheEntry<unknown>>();
 const inFlightRequests = new Map<string, Promise<unknown>>();
 
 function shouldUsePersistentCache(key: string): boolean {
-    return !PERSISTENT_CODE_CACHE_PREFIXES.some((prefix) => key.startsWith(prefix));
+    return !MEMORY_ONLY_CACHE_PREFIXES.some((prefix) => key.startsWith(prefix));
 }
 
 function getCacheIndex(): CacheIndex {
@@ -61,7 +61,7 @@ function clearLegacyPersistentCodeCache(): void {
         let changed = false;
 
         for (const key of Object.keys(index)) {
-            if (PERSISTENT_CODE_CACHE_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+            if (MEMORY_ONLY_CACHE_PREFIXES.some((prefix) => key.startsWith(prefix))) {
                 removeLocalStorageCacheEntry(key, index);
                 changed = true;
             }
@@ -76,14 +76,7 @@ function clearLegacyPersistentCodeCache(): void {
 }
 
 function sanitizeStringForStorage(value: string): string {
-    return value
-        .replaceAll('\0', '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;')
-        .replaceAll('`', '&#96;');
+    return value.replaceAll('\0', '');
 }
 
 function sanitizeCacheStorageKey(key: string): string {
@@ -187,13 +180,10 @@ export function normalizeCodeResponseAliases<T>(data: T): T {
         const hasResultados = hasOwn(candidate, 'resultados');
 
         if (candidate.type === 'code' && hasResults && !hasResultados) {
-            Object.defineProperty(candidate, 'resultados', {
-                get() {
-                    return this.results;
-                },
-                enumerable: false,
-                configurable: true,
-            });
+            return {
+                ...(candidate as Record<string, unknown>),
+                resultados: candidate.results,
+            } as T;
         }
     }
 

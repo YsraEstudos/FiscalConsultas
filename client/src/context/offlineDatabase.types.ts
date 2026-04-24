@@ -28,6 +28,10 @@ export interface OfflineDatabaseState {
     isRemoving: boolean;
 }
 
+export type OfflineDatabaseInitResult =
+    | { ok: true }
+    | { ok: false; error: string };
+
 export interface OfflineCatalogSearchResult {
     results: Record<string, unknown>[] | Record<string, unknown> | null;
     searchType: 'text' | 'code';

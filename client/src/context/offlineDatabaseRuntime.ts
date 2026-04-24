@@ -8,6 +8,7 @@ import {
 
 import {
     compareOfflineVersions,
+    formatOfflineDatabaseErrorMessage,
     type OfflineDatabaseMetadata,
 } from '../utils/offlineDatabase';
 import {
@@ -24,6 +25,7 @@ import {
     primeOfflineShellCache,
 } from './offlineDatabaseSync';
 import type {
+    OfflineDatabaseInitResult,
     OfflineDatabaseStatus,
 } from './offlineDatabase.types';
 import type { OfflineDatabaseOperationsArgs } from './offlineDatabaseOperations.shared';
@@ -45,7 +47,9 @@ export interface OfflineDatabaseRuntimeState {
 }
 
 export interface OfflineDatabaseRuntimeActions extends OfflineDatabaseOperationsArgs {
-    initializeInstalledDatabase: (metadata?: OfflineDatabaseMetadata | null) => Promise<void>;
+    initializeInstalledDatabase: (
+        metadata?: OfflineDatabaseMetadata | null,
+    ) => Promise<OfflineDatabaseInitResult>;
 }
 
 export interface OfflineDatabaseRuntimeValue {
@@ -120,8 +124,10 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
     );
 
     const initializeInstalledDatabase = useCallback(
-        async (metadata?: OfflineDatabaseMetadata | null) => {
-            if (!isWorkerReady) return;
+        async (metadata?: OfflineDatabaseMetadata | null): Promise<OfflineDatabaseInitResult> => {
+            if (!isWorkerReady) {
+                return { ok: false, error: 'Worker not ready' };
+            }
 
             const initMetadata =
                 metadata ?? remoteMetaRef.current ?? readStoredOfflineDatabaseMetadata();
@@ -134,11 +140,15 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
                     },
                     30_000,
                 );
+                return { ok: true };
             } catch (err) {
-                setStatus('error');
-                setError(
-                    err instanceof Error ? err.message : 'Falha ao carregar o banco local',
+                const message = formatOfflineDatabaseErrorMessage(
+                    err,
+                    'Falha ao carregar o banco local',
                 );
+                setStatus('error');
+                setError(message);
+                return { ok: false, error: message };
             }
         },
         [isWorkerReady, sendToWorker],

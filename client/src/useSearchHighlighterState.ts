@@ -167,11 +167,29 @@ export function useSearchHighlighterState({
     const hasAutoJumpedRef = useRef(false);
     const activeTermRef = useRef<string | null>(null);
     const pendingScrollCompletionCleanupRef = useRef<(() => void) | null>(null);
+    const pendingAutoScrollTimeoutRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
 
     const clearPendingScrollCompletion = useCallback(() => {
         pendingScrollCompletionCleanupRef.current?.();
         pendingScrollCompletionCleanupRef.current = null;
     }, []);
+
+    const clearPendingAutoScrollTimeout = useCallback(() => {
+        if (pendingAutoScrollTimeoutRef.current === null) {
+            return;
+        }
+
+        clearTimeout(pendingAutoScrollTimeoutRef.current);
+        pendingAutoScrollTimeoutRef.current = null;
+    }, []);
+
+    const scheduleAutoScroll = useCallback((action: () => void) => {
+        clearPendingAutoScrollTimeout();
+        pendingAutoScrollTimeoutRef.current = globalThis.setTimeout(() => {
+            pendingAutoScrollTimeoutRef.current = null;
+            action();
+        }, 50);
+    }, [clearPendingAutoScrollTimeout]);
 
     const reportHighlightScrollCompletion = useCallback(() => {
         const contentContainer = contentContainerRef.current;
@@ -191,13 +209,20 @@ export function useSearchHighlighterState({
     useEffect(() => {
         hasAutoJumpedRef.current = false;
         clearPendingScrollCompletion();
-    }, [clearPendingScrollCompletion, query]);
+        clearPendingAutoScrollTimeout();
+    }, [clearPendingAutoScrollTimeout, clearPendingScrollCompletion, query]);
 
     useEffect(() => {
         activeTermRef.current = activeTerm;
     }, [activeTerm]);
 
-    useEffect(() => () => clearPendingScrollCompletion(), [clearPendingScrollCompletion]);
+    useEffect(
+        () => () => {
+            clearPendingScrollCompletion();
+            clearPendingAutoScrollTimeout();
+        },
+        [clearPendingAutoScrollTimeout, clearPendingScrollCompletion],
+    );
 
     const normalizedTerms = useMemo(() => {
         const trimmedQuery = query?.trim() ?? '';
@@ -399,23 +424,23 @@ export function useSearchHighlighterState({
             if (bestCandidateId) {
                 const element = container.querySelector(`[id="${CSS.escape(bestCandidateId)}"]`);
                 if (element) {
-                    setTimeout(() => {
+                    scheduleAutoScroll(() => {
                         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         reportHighlightScrollCompletion();
-                    }, 50);
+                    });
                 }
             }
         } else if (normalizedTerms.length === 1 && !hasAutoJumpedRef.current && (matches[activeTerm ?? '']?.length ?? 0) > 0) {
             hasAutoJumpedRef.current = true;
             const match = matches[activeTerm ?? '']?.[0];
             if (match?.node) {
-                setTimeout(() => {
+                scheduleAutoScroll(() => {
                     match.node.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     reportHighlightScrollCompletion();
-                }, 50);
+                });
             }
         }
-    }, [activeTerm, contentContainerRef, highSubpositionKeys, isFullyRendered, matches, normalizedTerms.length, reportHighlightScrollCompletion]);
+    }, [activeTerm, contentContainerRef, highSubpositionKeys, isFullyRendered, matches, normalizedTerms.length, reportHighlightScrollCompletion, scheduleAutoScroll]);
 
     useEffect(() => {
         if (!activeTerm || (matches[activeTerm]?.length ?? 0) === 0) {

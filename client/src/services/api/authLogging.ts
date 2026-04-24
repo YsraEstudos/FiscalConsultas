@@ -64,8 +64,12 @@ export function logMissingRequestToken(path: string, requestId: string): void {
 }
 
 export function logRequestTokenFailure(error: unknown): void {
-    if (!AUTH_DEBUG_ENABLED) return;
-    console.warn('[API] Failed to get auth token:', error);
+    if (AUTH_DEBUG_ENABLED) {
+        console.warn('[API] Failed to get auth token:', error);
+        return;
+    }
+
+    console.warn('[API] Failed to get auth token');
 }
 
 function decodeJwtSegment<T extends object>(segment: string): T | null {

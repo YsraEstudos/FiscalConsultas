@@ -169,8 +169,16 @@ export function useOfflineDatabaseWorkerBridge({
         setIsWorkerReady(false);
         worker.onmessage = handleWorkerMessage;
         worker.onerror = (event) => {
-            setError(formatOfflineDatabaseErrorMessage(`Worker error: ${event.message}`));
+            const normalizedError = formatOfflineDatabaseErrorMessage(
+                `Worker error: ${event.message || 'unknown'}`,
+            );
+            setError(normalizedError);
             setStatus('error');
+            for (const [, pending] of pendingRef.current) {
+                clearTimeout(pending.timeout);
+                pending.reject(new Error(normalizedError));
+            }
+            pendingRef.current.clear();
         };
 
         const readyListener = (event: MessageEvent<OfflineDatabaseWorkerResponse>) => {

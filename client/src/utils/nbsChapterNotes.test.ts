@@ -25,6 +25,7 @@ describe('nbsChapterNotes', () => {
         const catalog = getNbsChapterNotesCatalogSnapshot();
 
         expect(Object.keys(catalog)).toHaveLength(26);
+        expect(Object.isFrozen(catalog)).toBe(true);
         expect(catalog['06']?.title).toContain('apoio aos transportes');
         expect(catalog['16']?.hasOfficialNotes).toBe(false);
     });
