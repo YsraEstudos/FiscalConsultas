@@ -6,7 +6,7 @@ Sistema de consulta fiscal com backend FastAPI, frontend React/Vite e modo offli
 
 - Busca por código e texto nas Notas Explicativas do Sistema Harmonizado (NESH).
 - Busca na TIPI com visualização por família (`family`) ou capítulo (`chapter`).
-- Busca local em `NBS` e `NEBS`, com detalhe de catálogo e navegação por prefixo.
+- Busca em `NBS` e `NEBS`, com detalhe de catálogo e navegação por prefixo; a consulta pública dessas bases nao exige login.
 - Frontend com navegação por abas, smart-links e recursos de produtividade (glossário, notas, chat IA).
 - Instalação offline em um botão: o app shell é cacheado e o banco local fica disponível no navegador após a instalação.
 
@@ -170,6 +170,8 @@ Checklist rápido Clerk (dev local):
 - `AUTH__CLERK_AUTHORIZED_PARTIES` deve incluir `http://localhost:5173` e `http://127.0.0.1:5173`.
 - `SECURITY__AI_CHAT_ALLOWED_EMAILS` controla a allowlist real do backend para `/api/ai/chat`.
 - `SECURITY__RESTRICTED_UI_ALLOWED_EMAILS` é opcional; se omitido, a UI restrita usa a mesma allowlist do chat IA.
+- `VITE_RESTRICTED_UI_EMAILS` e opcional e afeta apenas superficies restritas no frontend; nao substitui autorizacao no backend.
+- NBS/NEBS sao publicos para busca e detalhe; login continua necessario apenas para areas autenticadas como comentarios, chat IA e gestao/admin.
 
 ### 3) Preparar dados locais (SQLite)
 

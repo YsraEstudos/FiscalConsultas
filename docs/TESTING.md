@@ -21,14 +21,14 @@
 ## Top 10 Risk Areas (Execution Order)
 1. Instalacao offline (`/api/database/version`, `/api/database/token`, `/api/database/download`) e validacao de metadata.
 2. App shell offline via `coi-serviceworker.js` e reabertura sem rede.
-3. Busca local e detalhe local para `NESH`, `TIPI`, `NBS` e `NEBS`.
-4. Sanitização de HTML/backend-rendered content no frontend (`contentSecurity.ts`, `MarkdownPane`, `ResultDisplay`).
-5. Gating de moderação/admin por role do Clerk (`AuthContext`, `authz.ts`, `ModalManager`).
-6. Capacidades de UI restrita vindas de `/api/auth/me`, sem expor allowlists no bundle público.
-7. Auth enforcement on `/api/ai/chat` (`401` vs `403` vs `200` contract).
-8. AI chat rate-limit behavior (`429` + `Retry-After` header).
-9. Webhook contract for `/api/webhooks/asaas` (token validation, payload validation, event routing).
-10. Existing NCM/TIPI/services unit+integration regression tests.
+3. Busca local e publica e detalhe para `NESH`, `TIPI`, `NBS` e `NEBS`.
+4. Contrato das rotas publicas de `NBS`/`NEBS` (`200` anonimo, `429` ainda aplicado, sem modal de login).
+5. Sanitização de HTML/backend-rendered content no frontend (`contentSecurity.ts`, `MarkdownPane`, `ResultDisplay`).
+6. Gating de moderação/admin por role do Clerk (`AuthContext`, `authz.ts`, `ModalManager`).
+7. Capacidades de UI restrita vindas de `/api/auth/me`, sem expor allowlists no bundle público.
+8. Auth enforcement on `/api/ai/chat` (`401` vs `403` vs `200` contract).
+9. AI chat rate-limit behavior (`429` + `Retry-After` header).
+10. Webhook contract for `/api/webhooks/asaas` (token validation, payload validation, event routing).
 
 ## Fase 1B Report (2026-04-17): Gap Analysis por Risco
 
