@@ -1,0 +1,317 @@
+import { decryptDatabase, sha256Hex } from "./crypto.js";
+import { getLocalNebsDetail, getLocalNbsDetail } from "./catalogSearch.js";
+import { readFromOpfs, readVersion, removeFromOpfs, saveToOpfs, saveVersion } from "./opfs.js";
+import { postWorkerError, postWorkerProgress, postWorkerResult, postWorkerStatus } from "./protocol.js";
+import { getStructuredSearchWithCache } from "./searchRuntime.js";
+import { loadDatabaseFromBytes } from "./sqlite.js";
+import { clearSearchCache, closeWorkerDb, getWorkerDb, getWorkerStatus, getWorkerVersion, setWorkerStatus, setWorkerVersion } from "./state.js";
+
+async function handleInitMessage(id, payload) {
+  const encData = await readFromOpfs();
+  const version = await readVersion();
+
+  if (!encData || !version) {
+    setWorkerStatus("not_installed");
+    postWorkerStatus(id, { status: "not_installed" });
+    return;
+  }
+
+  setWorkerStatus("checking");
+  postWorkerStatus(id, { status: "checking" });
+
+  const chunkSize = payload?.chunkSize || 65536;
+  const iterations = payload?.pbkdf2Iterations || 600000;
+  /** @type {Uint8Array | null} */
+  let plaintext = null;
+
+  try {
+    plaintext = await decryptDatabase(encData, chunkSize, iterations);
+    await loadDatabaseFromBytes(plaintext);
+  } catch (error) {
+    if (plaintext) {
+      plaintext.fill(0);
+    }
+    closeWorkerDb();
+    setWorkerVersion(null);
+    setWorkerStatus("error");
+    await removeFromOpfs();
+    const message = error instanceof Error ? error.message : "Unknown error";
+    const recoverableMessage = `${message}. Reinstale o banco offline para continuar.`;
+    postWorkerStatus(id, {
+      status: "error",
+      error: recoverableMessage,
+      recoverable: true,
+    });
+    postWorkerError(id, recoverableMessage);
+    return;
+  }
+
+  plaintext.fill(0);
+  setWorkerStatus("ready");
+  setWorkerVersion(version);
+  postWorkerStatus(id, {
+    status: "ready",
+    version,
+    sizeBytes: encData.length,
+  });
+}
+
+async function readEncryptedDatabaseBlob(dlResp, id) {
+  const contentLength = Number.parseInt(dlResp.headers.get("content-length") || "0", 10);
+  const reader = dlResp.body?.getReader();
+  if (!reader) throw new Error("No response body");
+
+  const chunks = [];
+  let received = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+
+    if (contentLength > 0) {
+      const dlProgress = 10 + Math.round((received / contentLength) * 60);
+      postWorkerProgress(id, dlProgress, "fetching_database");
+    }
+  }
+
+  const encryptedBlob = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    encryptedBlob.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return encryptedBlob;
+}
+
+async function requestInstallToken(apiBase) {
+  const tokenResp = await fetch(`${apiBase}/database/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  if (!tokenResp.ok) {
+    const errText = await tokenResp.text();
+    throw new Error(`Token request failed (${tokenResp.status}): ${errText}`);
+  }
+
+  return tokenResp.json();
+}
+
+async function fetchEncryptedDatabase(apiBase, token) {
+  const dlResp = await fetch(`${apiBase}/database/download`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+
+  if (!dlResp.ok) {
+    const errText = await dlResp.text();
+    throw new Error(
+      `Offline database retrieval failed (${dlResp.status}): ${errText}`
+    );
+  }
+
+  return dlResp;
+}
+
+async function updateInstalledVersion(apiBase) {
+  let nextVersion = null;
+
+  try {
+    const versionResp = await fetch(`${apiBase}/database/version`);
+    if (versionResp.ok) {
+      const versionData = await versionResp.json();
+      nextVersion = versionData.version;
+    }
+  } catch {
+    nextVersion = null;
+  }
+
+  if (!nextVersion) {
+    nextVersion = new Date().toISOString().slice(0, 10);
+  }
+
+  setWorkerVersion(nextVersion);
+  await saveVersion(nextVersion || "unknown");
+}
+
+async function handleInstallMessage(id, payload) {
+  setWorkerStatus("installing");
+  postWorkerProgress(id, 0, "requesting_token");
+
+  const apiBase = payload?.apiBase || "/api";
+  /** @type {Uint8Array | null} */
+  let plaintext = null;
+
+  try {
+    const tokenData = await requestInstallToken(apiBase);
+    const {
+      token,
+      encrypted_sha256: expectedEncryptedSha256,
+      chunk_size: chunkSize = 65536,
+      pbkdf2_iterations: iterations = 600000,
+    } = tokenData;
+
+    postWorkerProgress(id, 10, "fetching_database");
+
+    const dlResp = await fetchEncryptedDatabase(apiBase, token);
+    const encryptedBlob = await readEncryptedDatabaseBlob(dlResp, id);
+
+    if (expectedEncryptedSha256) {
+      postWorkerProgress(id, 72, "verifying_integrity");
+      const actualEncryptedSha256 = await sha256Hex(encryptedBlob);
+      if (actualEncryptedSha256 !== expectedEncryptedSha256) {
+        throw new Error("Offline database integrity verification failed");
+      }
+    }
+
+    postWorkerProgress(id, 75, "decrypting");
+    plaintext = await decryptDatabase(encryptedBlob, chunkSize, iterations);
+
+    postWorkerProgress(id, 85, "loading");
+    await loadDatabaseFromBytes(plaintext);
+
+    postWorkerProgress(id, 90, "saving");
+    await saveToOpfs(encryptedBlob);
+    await updateInstalledVersion(apiBase);
+
+    setWorkerStatus("ready");
+    postWorkerProgress(id, 100, "done");
+    postWorkerStatus(id, {
+      status: "ready",
+      version: getWorkerVersion(),
+      sizeBytes: encryptedBlob.length,
+    });
+  } catch (error) {
+    setWorkerStatus("error");
+    const message = error instanceof Error ? error.message : "Unknown error";
+    const recoverableMessage = `${message}. Reinstale o banco offline para continuar.`;
+    postWorkerStatus(id, {
+      status: "error",
+      error: recoverableMessage,
+      recoverable: true,
+    });
+    postWorkerError(id, recoverableMessage);
+    await removeFromOpfs().catch(() => undefined);
+    return;
+  } finally {
+    if (plaintext) {
+      plaintext.fill(0);
+    }
+  }
+}
+
+function handleSearchMessage(id, payload) {
+  if (!getWorkerDb() || getWorkerStatus() !== "ready") {
+    postWorkerResult(id, { results: null, source: "not_ready" });
+    return;
+  }
+
+  const t0 = performance.now();
+  const { docType, query, viewMode } = payload;
+  const cachedSearch = getStructuredSearchWithCache(docType, query, viewMode);
+
+  if (cachedSearch.cacheHit) {
+    const totalDurationMs = performance.now() - t0;
+    postWorkerResult(id, {
+      results: cachedSearch.results,
+      source: "local",
+      docType,
+      query,
+      searchType: cachedSearch.searchType,
+      markdown: cachedSearch.markdown,
+      timing: { sqlDurationMs: 0, totalDurationMs, cacheHit: true },
+    });
+    return;
+  }
+
+  const totalDurationMs = performance.now() - t0;
+  postWorkerResult(id, {
+    results: cachedSearch.results,
+    source: "local",
+    docType,
+    query,
+    searchType: cachedSearch.searchType,
+    markdown:
+      typeof cachedSearch.markdown === "string"
+        ? cachedSearch.markdown
+        : undefined,
+    timing: {
+      sqlDurationMs: totalDurationMs,
+      totalDurationMs,
+      cacheHit: false,
+    },
+  });
+}
+
+function handleNbsDetailMessage(id, payload) {
+  if (!getWorkerDb() || getWorkerStatus() !== "ready") {
+    postWorkerResult(id, { detail: null, source: "not_ready" });
+    return;
+  }
+
+  const detail = getLocalNbsDetail(
+    String(payload.code || ""),
+    Number(payload.page || 1),
+    Number(payload.pageSize || 50)
+  );
+  postWorkerResult(id, { detail, source: "local" });
+}
+
+function handleNebsDetailMessage(id, payload) {
+  if (!getWorkerDb() || getWorkerStatus() !== "ready") {
+    postWorkerResult(id, { detail: null, source: "not_ready" });
+    return;
+  }
+
+  const detail = getLocalNebsDetail(String(payload.code || ""));
+  postWorkerResult(id, { detail, source: "local" });
+}
+
+function handleGetStatusMessage(id) {
+  postWorkerStatus(id, {
+    status: getWorkerStatus(),
+    version: getWorkerVersion(),
+  });
+}
+
+async function handleRemoveMessage(id) {
+  closeWorkerDb();
+  setWorkerVersion(null);
+  setWorkerStatus("not_installed");
+  clearSearchCache();
+
+  await removeFromOpfs();
+  postWorkerStatus(id, { status: "not_installed" });
+}
+
+export async function dispatchWorkerMessage(type, id, payload) {
+  switch (type) {
+    case "INIT":
+      await handleInitMessage(id, payload);
+      return;
+    case "INSTALL":
+      await handleInstallMessage(id, payload);
+      return;
+    case "SEARCH":
+      handleSearchMessage(id, payload);
+      return;
+    case "GET_NBS_DETAIL":
+      handleNbsDetailMessage(id, payload);
+      return;
+    case "GET_NEBS_DETAIL":
+      handleNebsDetailMessage(id, payload);
+      return;
+    case "GET_STATUS":
+      handleGetStatusMessage(id);
+      return;
+    case "REMOVE":
+      await handleRemoveMessage(id);
+      return;
+    default:
+      postWorkerError(id, `Unknown message type: ${type}`);
+  }
+}

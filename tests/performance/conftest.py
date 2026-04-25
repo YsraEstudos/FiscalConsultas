@@ -11,7 +11,13 @@ from tests.shared_fixtures import (  # noqa: F401
     _reset_rate_limiters,
     client,
 )
-from backend.server.rate_limit import public_search_rate_limiter, status_rate_limiter
+from backend.server.rate_limit import (
+    ai_chat_rate_limiter,
+    public_search_rate_limiter,
+    services_detail_rate_limiter,
+    services_search_rate_limiter,
+    status_rate_limiter,
+)
 
 STARTUP_READY_MARKERS = (
     "Application startup complete",
@@ -34,8 +40,11 @@ def _disable_rate_limits(monkeypatch):
     async def _allow(*_args, **_kwargs):  # NOSONAR
         return True, 0
 
+    monkeypatch.setattr(ai_chat_rate_limiter, "consume", _allow)
     monkeypatch.setattr(status_rate_limiter, "consume", _allow)
     monkeypatch.setattr(public_search_rate_limiter, "consume", _allow)
+    monkeypatch.setattr(services_search_rate_limiter, "consume", _allow)
+    monkeypatch.setattr(services_detail_rate_limiter, "consume", _allow)
     yield
 
 

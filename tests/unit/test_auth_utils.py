@@ -53,18 +53,23 @@ def test_trusted_proxy_resolution_and_client_ip(monkeypatch) -> None:
     original_trusted = list(settings.security.trusted_proxy_ips)
     original_env = settings.server.env
     try:
-        settings.security.trusted_proxy_ips = ["", "10.0.0.0/8", "invalid", " "]
+        settings.security.trusted_proxy_ips = [
+            "",
+            "198.51.100.0/24",
+            "invalid",
+            " ",
+        ]
         settings.server.env = "production"
 
-        assert auth.is_trusted_proxy("10.1.2.3") is True
+        assert auth.is_trusted_proxy("198.51.100.23") is True
         assert auth.is_trusted_proxy("203.0.113.5") is False
         assert auth.is_trusted_proxy(None) is False
 
         request = _build_request(
-            headers={"X-Forwarded-For": "198.51.100.7, 10.0.0.1"},
-            client_host="10.1.2.3",
+            headers={"X-Forwarded-For": "192.0.2.7, 198.51.100.1"},
+            client_host="198.51.100.23",
         )
-        assert auth.extract_client_ip(request) == "198.51.100.7"
+        assert auth.extract_client_ip(request) == "192.0.2.7"
 
         request = _build_request(
             headers={"X-Forwarded-For": "198.51.100.7"},
@@ -74,9 +79,9 @@ def test_trusted_proxy_resolution_and_client_ip(monkeypatch) -> None:
 
         request = _build_request(
             headers={"X-Forwarded-For": "not-an-ip"},
-            client_host="10.1.2.3",
+            client_host="198.51.100.23",
         )
-        assert auth.extract_client_ip(request) == "10.1.2.3"
+        assert auth.extract_client_ip(request) == "198.51.100.23"
     finally:
         settings.security.trusted_proxy_ips = original_trusted
         settings.server.env = original_env

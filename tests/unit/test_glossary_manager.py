@@ -5,7 +5,11 @@ import os
 
 import pytest
 
-from backend.data.glossary_manager import GlossaryManager, glossary_manager, init_glossary
+from backend.data.glossary_manager import (
+    GlossaryManager,
+    glossary_manager,
+    init_glossary,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -77,8 +81,14 @@ def test_load_from_json_accepts_list_payload_and_ignores_invalid_entries(
 
     manager = GlossaryManager()
     assert manager.load_from_json(str(path)) is True
-    assert manager.get_definition("bomba") == {"term": "bomba", "definition": "equipamento"}
-    assert manager.get_definition("válvula") == {"term": "válvula", "definition": "controle"}
+    assert manager.get_definition("bomba") == {
+        "term": "bomba",
+        "definition": "equipamento",
+    }
+    assert manager.get_definition("válvula") == {
+        "term": "válvula",
+        "definition": "controle",
+    }
     assert manager.get_definition("") is None
 
 
@@ -87,7 +97,10 @@ def test_init_glossary_tries_backend_then_data_locations(monkeypatch) -> None:
 
     def fake_load_from_json(path: str) -> bool:
         calls.append(path)
-        return path.endswith(os.path.join("data", "glossary_db.json")) and "backend" not in path
+        return (
+            path.endswith(os.path.join("data", "glossary_db.json"))
+            and "backend" not in path
+        )
 
     monkeypatch.setattr(glossary_manager, "load_from_json", fake_load_from_json)
 

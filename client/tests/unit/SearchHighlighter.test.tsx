@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SearchHighlighter } from '../../src/components/SearchHighlighter';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -155,6 +155,7 @@ describe('SearchHighlighter', () => {
             });
         }
         const scrollSpy = vi.spyOn(globalThis.HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => { });
+        const scrollCompleteSpy = vi.fn();
 
         render(
             <SearchHighlighter
@@ -162,6 +163,7 @@ describe('SearchHighlighter', () => {
                 contentContainerRef={containerRef}
                 isContentReady={true}
                 isFullyRendered={true}
+                onHighlightScrollComplete={scrollCompleteSpy}
             />
         );
 
@@ -177,6 +179,9 @@ describe('SearchHighlighter', () => {
         progress = screen.getByText("2 / 2");
         expect(progress).toBeInTheDocument();
         expect(scrollSpy).toHaveBeenCalled();
+        await waitFor(() => {
+            expect(scrollCompleteSpy).toHaveBeenCalled();
+        });
 
         // Navigate Prev
         fireEvent.click(prevBtn);
@@ -324,6 +329,7 @@ describe('SearchHighlighter', () => {
         const scrollSpy = vi
             .spyOn(globalThis.HTMLElement.prototype, 'scrollIntoView')
             .mockImplementation(() => {});
+        const scrollCompleteSpy = vi.fn();
 
         const div = document.createElement('div');
         div.innerHTML = `
@@ -342,12 +348,16 @@ describe('SearchHighlighter', () => {
                 contentContainerRef={testContainerRef}
                 isContentReady={true}
                 isFullyRendered={true}
+                onHighlightScrollComplete={scrollCompleteSpy}
             />
         );
 
         await screen.findByText("2 subposições com alta correspondência");
         const select = screen.getByRole('combobox');
         fireEvent.change(select, { target: { value: 'pos-84-11' } });
+        await waitFor(() => {
+            expect(scrollCompleteSpy).toHaveBeenCalled();
+        });
 
         expect(scrollSpy).toHaveBeenCalled();
     });

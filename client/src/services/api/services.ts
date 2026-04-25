@@ -1,0 +1,85 @@
+import type {
+    NbsCatalogDetailApiResponse,
+    NbsCatalogSearchApiResponse,
+    NebsExplanatoryDetailApiResponse,
+    NebsExplanatorySearchApiResponse,
+} from '../../types/api.types';
+
+import { api, withDevCacheBust } from './httpClient';
+
+type NbsTreePageApiResponse = {
+    success: true;
+    item: NbsCatalogDetailApiResponse['item'];
+    chapter_root?: NbsCatalogDetailApiResponse['chapter_root'];
+    chapter_page: NonNullable<NbsCatalogDetailApiResponse['chapter_page']>;
+};
+
+export const searchNbsServices = async (query: string): Promise<NbsCatalogSearchApiResponse> => {
+    const response = await api.get<NbsCatalogSearchApiResponse>(
+        withDevCacheBust(`/services/nbs/search?q=${encodeURIComponent(query)}`),
+    );
+    return response.data;
+};
+
+export const getNbsServiceDetail = async (code: string): Promise<NbsCatalogDetailApiResponse> => {
+    const response = await api.get<NbsCatalogDetailApiResponse>(
+        withDevCacheBust(`/services/nbs/${encodeURIComponent(code)}`),
+    );
+    return response.data;
+};
+
+export const getNbsServiceDetailPage = async (
+    code: string,
+    options: {
+        includeTree?: boolean;
+        page?: number;
+        pageSize?: number;
+    } = {},
+): Promise<NbsCatalogDetailApiResponse> => {
+    const {
+        includeTree = true,
+        page = 1,
+        pageSize = 50,
+    } = options;
+
+    const params = new URLSearchParams({
+        include_tree: String(includeTree),
+        page: String(page),
+        page_size: String(pageSize),
+    });
+
+    const response = await api.get<NbsCatalogDetailApiResponse>(
+        withDevCacheBust(`/services/nbs/${encodeURIComponent(code)}?${params.toString()}`),
+    );
+    return response.data;
+};
+
+export const getNbsServiceTreePage = async (
+    code: string,
+    page = 1,
+    pageSize = 50,
+): Promise<NbsTreePageApiResponse> => {
+    const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+    });
+
+    const response = await api.get<NbsTreePageApiResponse>(
+        withDevCacheBust(`/services/nbs/${encodeURIComponent(code)}/tree?${params.toString()}`),
+    );
+    return response.data;
+};
+
+export const searchNebsEntries = async (query: string): Promise<NebsExplanatorySearchApiResponse> => {
+    const response = await api.get<NebsExplanatorySearchApiResponse>(
+        withDevCacheBust(`/services/nebs/search?q=${encodeURIComponent(query)}`),
+    );
+    return response.data;
+};
+
+export const getNebsEntryDetail = async (code: string): Promise<NebsExplanatoryDetailApiResponse> => {
+    const response = await api.get<NebsExplanatoryDetailApiResponse>(
+        withDevCacheBust(`/services/nebs/${encodeURIComponent(code)}`),
+    );
+    return response.data;
+};

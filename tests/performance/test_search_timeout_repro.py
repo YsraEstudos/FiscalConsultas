@@ -4,8 +4,15 @@ import pytest
 from backend.config import CONFIG
 from backend.infrastructure.database import DatabaseAdapter
 from backend.services.nesh_service import NeshService
+from backend.utils import ncm_utils
 
 pytestmark = pytest.mark.perf
+
+
+async def _run_nesh_query(service, query: str):
+    if ncm_utils.is_code_query(query):
+        return await service.searchNeshByNcmCode(query)
+    return await service.searchNeshByTextQuery(query)
 
 
 @pytest.mark.asyncio
@@ -42,8 +49,8 @@ async def test_search_performance_repro():
         for query in test_queries:
             start_time = time.perf_counter()
 
-            # Call the service method directly to isolate business logic perfermance
-            await service.process_request(query)
+            # Call the canonical service method directly to isolate business logic.
+            await _run_nesh_query(service, query)
 
             duration = time.perf_counter() - start_time
             print(f"Query: '{query}' took {duration:.4f}s")

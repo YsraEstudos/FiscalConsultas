@@ -123,7 +123,7 @@ describe('Header', () => {
     expect(screen.getByText('Notas Explicativas do Sistema Harmonizado')).toBeInTheDocument();
   });
 
-  it('uses NBS and NEBS in the selector when the active document is a service tab', () => {
+  it('uses NEBS in the selector when the active document is NBS', () => {
     const setDoc = vi.fn();
 
     render(
@@ -208,36 +208,39 @@ describe('Header', () => {
     expect(screen.getByText('Tabela de Incidência do IPI')).toBeInTheDocument();
   });
 
-  it('shows menu shortcuts to return to NESH and TIPI from service tabs', () => {
-    const setDoc = vi.fn();
+  it.each(['nbs', 'nebs'] as const)(
+    'shows menu shortcuts to return to NESH and TIPI from service tabs when doc=%s',
+    (doc) => {
+      const setDoc = vi.fn();
 
-    render(
-      <Header
-        onSearch={vi.fn()}
-        doc="nebs"
-        setDoc={setDoc}
-        searchKey="search-1"
-        onOpenSettings={vi.fn()}
-        onOpenTutorial={vi.fn()}
-        onOpenStats={vi.fn()}
-        onOpenComparator={vi.fn()}
-        onOpenModerate={vi.fn()}
-        onOpenProfile={vi.fn()}
-        history={[]}
-        onClearHistory={vi.fn()}
-        onRemoveHistory={vi.fn()}
-        onMenuOpen={vi.fn()}
-      />,
-    );
+      render(
+        <Header
+          onSearch={vi.fn()}
+          doc={doc}
+          setDoc={setDoc}
+          searchKey="search-1"
+          onOpenSettings={vi.fn()}
+          onOpenTutorial={vi.fn()}
+          onOpenStats={vi.fn()}
+          onOpenComparator={vi.fn()}
+          onOpenModerate={vi.fn()}
+          onOpenProfile={vi.fn()}
+          history={[]}
+          onClearHistory={vi.fn()}
+          onRemoveHistory={vi.fn()}
+          onMenuOpen={vi.fn()}
+        />,
+      );
 
-    openMenu();
-    fireEvent.click(screen.getByText('Voltar para NESH').closest('button') as HTMLButtonElement);
-    fireEvent.click(getMenuButton());
-    fireEvent.click(screen.getByText('Ir para TIPI').closest('button') as HTMLButtonElement);
+      openMenu();
+      fireEvent.click(screen.getByText('Voltar para NESH').closest('button') as HTMLButtonElement);
+      fireEvent.click(getMenuButton());
+      fireEvent.click(screen.getByText('Ir para TIPI').closest('button') as HTMLButtonElement);
 
-    expect(setDoc).toHaveBeenNthCalledWith(1, 'nesh');
-    expect(setDoc).toHaveBeenNthCalledWith(2, 'tipi');
-  });
+      expect(setDoc).toHaveBeenNthCalledWith(1, 'nesh');
+      expect(setDoc).toHaveBeenNthCalledWith(2, 'tipi');
+    },
+  );
 
   it('renders fallback user labels when auth profile is missing', () => {
     userNameRef.value = null;

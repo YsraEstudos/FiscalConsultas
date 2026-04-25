@@ -101,6 +101,26 @@ def test_safe_get_unverified_claims_parses_payload_and_handles_malformed():
     assert middleware._safe_get_unverified_claims("a.b") == {}
 
 
+def test_safe_get_unverified_header_parses_payload_and_rejects_malformed():
+    header = (
+        base64.urlsafe_b64encode(
+            json.dumps({"alg": "none", "typ": "JWT"}, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        )
+        .decode("ascii")
+        .rstrip("=")
+    )
+    token = f"{header}.payload.sig"
+
+    assert middleware._safe_get_unverified_header(token) == {
+        "alg": "none",
+        "typ": "JWT",
+    }
+    assert middleware._safe_get_unverified_header("not-a-jwt") == {}
+    assert middleware._safe_get_unverified_header(".payload.sig") == {}
+
+
 def test_jwt_observability_logs_do_not_include_token_fingerprint(monkeypatch):
     warning_messages: list[str] = []
     debug_calls: list[tuple[str, str]] = []
@@ -897,6 +917,14 @@ async def test_ensure_clerk_entities_skips_when_recently_cached(monkeypatch):
     await middleware.ensure_clerk_entities({"sub": "u1"}, "org1")
 
 
+def test_is_recently_provisioned_treats_zero_timestamp_as_valid():
+    cache_key = ("org1", "u1")
+    cache = {cache_key: 0.0}
+
+    assert middleware._is_recently_provisioned(cache_key, 10.0, cache, 30.0) is True
+    assert middleware._is_recently_provisioned(cache_key, 10.0, {}, 30.0) is False
+
+
 @pytest.mark.asyncio
 async def test_ensure_clerk_entities_creates_tenant_and_user(monkeypatch):
     monkeypatch.setattr(
@@ -921,6 +949,28 @@ async def test_ensure_clerk_entities_creates_tenant_and_user(monkeypatch):
     assert middleware._provisioned_entities_cache[("org_1", "user_1")] == pytest.approx(
         123.0
     )
+
+
+@pytest.mark.asyncio
+async def test_ensure_clerk_entities_uses_placeholder_email_when_missing(monkeypatch):
+    monkeypatch.setattr(
+        middleware.settings.database, "engine", "postgresql", raising=False
+    )
+    monkeypatch.setattr(middleware.time, "monotonic", lambda: 124.0)
+    middleware._provisioned_entities_cache.clear()
+
+    session = _FakeProvisionSession(tenant=None, user=None)
+    _install_fake_get_session(monkeypatch, session)
+
+    payload = {
+        "sub": "user_missing_email",
+        "org_name": "Org Name",
+        "name": "User Name",
+    }
+    await middleware.ensure_clerk_entities(payload, "org_missing")
+
+    user = next(obj for obj in session.added if obj.__class__.__name__ == "User")
+    assert user.email == "user_missing_email@clerk.invalid"
 
 
 @pytest.mark.asyncio

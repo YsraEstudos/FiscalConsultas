@@ -6,9 +6,9 @@ from starlette.requests import Request
 from backend.config.constants import SearchConfig
 from backend.config.exceptions import ValidationError
 from backend.presentation.routes.search import (
-    _accepts_gzip,
-    _build_search_cache_request_context,
-    _normalize_query_for_cache,
+    _build_search_payload_cache_context,
+    _normalize_search_query_for_cache_key,
+    _request_accepts_gzip_encoding,
     _validate_public_search_query_input,
 )
 from backend.utils.cache import weak_etag
@@ -16,7 +16,7 @@ from backend.utils.ncm_utils import is_code_query
 
 
 def _normalize_query(ncm: str) -> str:
-    return _normalize_query_for_cache(ncm, is_code_query=is_code_query(ncm))
+    return _normalize_search_query_for_cache_key(ncm, is_code_query=is_code_query(ncm))
 
 
 def _build_request_with_accept_encoding(value: str) -> Request:
@@ -71,19 +71,19 @@ class TestTextQueryNormalization:
 class TestAcceptsGzip:
     def test_accepts_plain_gzip(self):
         request = _build_request_with_accept_encoding("gzip")
-        assert _accepts_gzip(request) is True
+        assert _request_accepts_gzip_encoding(request) is True
 
     def test_rejects_gzip_with_zero_quality(self):
         request = _build_request_with_accept_encoding("gzip;q=0")
-        assert _accepts_gzip(request) is False
+        assert _request_accepts_gzip_encoding(request) is False
 
     def test_accepts_wildcard_with_positive_quality(self):
         request = _build_request_with_accept_encoding("*;q=1")
-        assert _accepts_gzip(request) is True
+        assert _request_accepts_gzip_encoding(request) is True
 
     def test_rejects_gzip_and_wildcard_with_zero_quality(self):
         request = _build_request_with_accept_encoding("gzip;q=0,*;q=0")
-        assert _accepts_gzip(request) is False
+        assert _request_accepts_gzip_encoding(request) is False
 
 
 class TestPublicSearchQueryValidation:
@@ -100,31 +100,33 @@ class TestPublicSearchQueryValidation:
         _validate_public_search_query_input("8517")
 
 
-class TestSearchCacheRequestContext:
+class TestSearchPayloadCacheContext:
     def test_builds_code_query_context(self):
         request = _build_request_with_accept_encoding("gzip")
 
-        context = _build_search_cache_request_context(
+        context = _build_search_payload_cache_context(
             request,
             ncm="85.17",
-            shape="full",
         )
 
         assert context.is_code_query is True
         assert context.normalized_query == "8517"
-        assert context.payload_cache_key is not None
-        assert context.payload_cache_key.endswith(":8517:full")
-        assert context.cache_headers["Vary"] == "Authorization, X-Tenant-Id, Accept-Encoding"
+        assert context.build_code_payload_cache_key(shape="full").endswith(":8517:full")
+        assert (
+            context.cache_headers["Vary"]
+            == "Authorization, X-Tenant-Id, Accept-Encoding"
+        )
 
     def test_builds_text_query_context_without_payload_key(self):
         request = _build_request_with_accept_encoding("gzip")
 
-        context = _build_search_cache_request_context(
+        context = _build_search_payload_cache_context(
             request,
             ncm="motor de arranque",
-            shape="summary",
         )
 
         assert context.is_code_query is False
         assert context.normalized_query == "motor de arranque"
-        assert context.payload_cache_key is None
+        assert context.build_code_payload_cache_key(shape="summary").endswith(
+            ":motor de arranque:summary"
+        )

@@ -33,18 +33,20 @@ SERVICE_DETAIL_RESPONSES = {
 }
 
 
-def _services_limiter_key(request: Request, payload: dict | None = None) -> str:
+def build_nbs_services_rate_limit_key(
+    request: Request, payload: dict | None = None
+) -> str:
     user_id = (payload or {}).get("sub")
     if isinstance(user_id, str) and user_id.strip():
         return f"services:user:{user_id.strip()}"
     return f"services:ip:{extract_client_ip(request)}"
 
 
-async def _apply_search_rate_limit(
+async def apply_nbs_services_search_rate_limit(
     request: Request, payload: dict | None = None
 ) -> None:
     allowed, retry_after = await services_search_rate_limiter.consume(
-        key=_services_limiter_key(request, payload),
+        key=build_nbs_services_rate_limit_key(request, payload),
         limit=settings.security.services_search_requests_per_minute,
     )
     if allowed:
@@ -56,11 +58,11 @@ async def _apply_search_rate_limit(
     )
 
 
-async def _apply_detail_rate_limit(
+async def apply_nbs_services_detail_rate_limit(
     request: Request, payload: dict | None = None
 ) -> None:
     allowed, retry_after = await services_detail_rate_limiter.consume(
-        key=_services_limiter_key(request, payload),
+        key=build_nbs_services_rate_limit_key(request, payload),
         limit=settings.security.services_detail_requests_per_minute,
     )
     if allowed:
@@ -72,7 +74,7 @@ async def _apply_detail_rate_limit(
     )
 
 
-def _validate_service_code(code: str) -> str:
+def normalize_nbs_service_code(code: str) -> str:
     normalized = code.strip()
     if not normalized:
         raise ValidationError("Parâmetro 'code' é obrigatório", field="code")
@@ -85,22 +87,22 @@ def _validate_service_code(code: str) -> str:
 
 
 @router.get("/nbs/search", responses=SERVICE_SEARCH_RESPONSES)
-async def search_nbs(
+async def search_nbs_catalog_entries_route(
     request: Request,
     service: Annotated[NbsService, Depends(get_nbs_service)],
     q: Annotated[str, Query(description="Código NBS ou descrição")] = "",
 ):
-    await _apply_search_rate_limit(request)
+    await apply_nbs_services_search_rate_limit(request)
     if len(q) > SearchConfig.MAX_QUERY_LENGTH:
         raise ValidationError(
             f"Query muito longa (máximo {SearchConfig.MAX_QUERY_LENGTH} caracteres)",
             field="q",
         )
-    return await service.search(q)
+    return await service.searchNbsCatalogEntries(q)
 
 
 @router.get("/nbs/{code}", responses=SERVICE_DETAIL_RESPONSES)
-async def get_nbs_detail(
+async def fetch_nbs_catalog_item_details_route(
     request: Request,
     code: str,
     service: Annotated[NbsService, Depends(get_nbs_service)],
@@ -119,9 +121,9 @@ async def get_nbs_detail(
         ),
     ] = DEFAULT_TREE_PAGE_SIZE,
 ):
-    await _apply_detail_rate_limit(request)
-    normalized_code = _validate_service_code(code)
-    return await service.get_item_details(
+    await apply_nbs_services_detail_rate_limit(request)
+    normalized_code = normalize_nbs_service_code(code)
+    return await service.fetchNbsCatalogItemDetails(
         normalized_code,
         include_tree=include_tree,
         page=page,
@@ -130,7 +132,7 @@ async def get_nbs_detail(
 
 
 @router.get("/nbs/{code}/tree", responses=SERVICE_DETAIL_RESPONSES)
-async def get_nbs_detail_tree(
+async def fetch_nbs_catalog_tree_page_route(
     request: Request,
     code: str,
     service: Annotated[NbsService, Depends(get_nbs_service)],
@@ -146,9 +148,9 @@ async def get_nbs_detail_tree(
         ),
     ] = DEFAULT_TREE_PAGE_SIZE,
 ):
-    await _apply_detail_rate_limit(request)
-    normalized_code = _validate_service_code(code)
-    return await service.get_item_tree_page(
+    await apply_nbs_services_detail_rate_limit(request)
+    normalized_code = normalize_nbs_service_code(code)
+    return await service.fetchNbsCatalogTreePage(
         normalized_code,
         page=page,
         page_size=page_size,
@@ -156,26 +158,26 @@ async def get_nbs_detail_tree(
 
 
 @router.get("/nebs/search", responses=SERVICE_SEARCH_RESPONSES)
-async def search_nebs(
+async def search_nbs_explanatory_entries_route(
     request: Request,
     service: Annotated[NbsService, Depends(get_nbs_service)],
     q: Annotated[str, Query(description="Código NEBS ou termo textual")] = "",
 ):
-    await _apply_search_rate_limit(request)
+    await apply_nbs_services_search_rate_limit(request)
     if len(q) > SearchConfig.MAX_QUERY_LENGTH:
         raise ValidationError(
             f"Query muito longa (máximo {SearchConfig.MAX_QUERY_LENGTH} caracteres)",
             field="q",
         )
-    return await service.search_nebs(q)
+    return await service.searchNbsExplanatoryEntries(q)
 
 
 @router.get("/nebs/{code}", responses=SERVICE_DETAIL_RESPONSES)
-async def get_nebs_detail(
+async def fetch_nbs_explanatory_entry_details_route(
     request: Request,
     code: str,
     service: Annotated[NbsService, Depends(get_nbs_service)],
 ):
-    await _apply_detail_rate_limit(request)
-    normalized_code = _validate_service_code(code)
-    return await service.get_nebs_details(normalized_code)
+    await apply_nbs_services_detail_rate_limit(request)
+    normalized_code = normalize_nbs_service_code(code)
+    return await service.fetchNbsExplanatoryEntryDetails(normalized_code)

@@ -63,7 +63,6 @@ describe('Sidebar Autoscroll', () => {
             <Sidebar
                 results={mockResults}
                 onNavigate={mockNavigate}
-                isOpen={true}
                 onClose={mockClose}
                 searchQuery=""
             />
@@ -82,7 +81,6 @@ describe('Sidebar Autoscroll', () => {
             <Sidebar
                 results={mockResults}
                 onNavigate={mockNavigate}
-                isOpen={true}
                 onClose={mockClose}
                 searchQuery="8417"
             />
@@ -105,7 +103,6 @@ describe('Sidebar Autoscroll', () => {
             <Sidebar
                 results={mockResults}
                 onNavigate={mockNavigate}
-                isOpen={true}
                 onClose={mockClose}
                 searchQuery=""
             />
@@ -123,7 +120,6 @@ describe('Sidebar Autoscroll', () => {
             <Sidebar
                 results={mockResults}
                 onNavigate={mockNavigate}
-                isOpen={true}
                 onClose={mockClose}
                 searchQuery="841710" // Unformatted input
             />
