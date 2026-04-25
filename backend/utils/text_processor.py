@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from functools import lru_cache
 from typing import List
 
 # Pre-compiled regex for word extraction (performance optimization)
@@ -69,15 +70,21 @@ class PortugueseStemmer:
         # NCMs usam pouco aumentativo, mas...
         return word
 
-    def stem(self, word: str) -> str:
+    @staticmethod
+    @lru_cache(maxsize=10240)
+    def _cached_stem(word: str) -> str:
+        stemmer = PortugueseStemmer()
         word = word.lower()
-        word = self._remove_accent(word)
+        word = stemmer._remove_accent(word)
 
         # Ordem de aplicação
-        word = self.step_plural(word)
-        word = self.step_feminine(word)
+        word = stemmer.step_plural(word)
+        word = stemmer.step_feminine(word)
 
         return word
+
+    def stem(self, word: str) -> str:
+        return self._cached_stem(word)
 
 
 class NeshTextProcessor:
