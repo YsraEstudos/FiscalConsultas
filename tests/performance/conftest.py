@@ -11,6 +11,13 @@ from tests.shared_fixtures import (  # noqa: F401
     _reset_rate_limiters,
     client,
 )
+from backend.server.rate_limit import (
+    ai_chat_rate_limiter,
+    public_search_rate_limiter,
+    services_detail_rate_limiter,
+    services_search_rate_limiter,
+    status_rate_limiter,
+)
 
 STARTUP_READY_MARKERS = (
     "Application startup complete",
@@ -28,6 +35,19 @@ def _performance_environment():
         yield environment
 
 
+@pytest.fixture(autouse=True)
+def _disable_rate_limits(monkeypatch):
+    async def _allow(*_args, **_kwargs):  # NOSONAR
+        return True, 0
+
+    monkeypatch.setattr(ai_chat_rate_limiter, "consume", _allow)
+    monkeypatch.setattr(status_rate_limiter, "consume", _allow)
+    monkeypatch.setattr(public_search_rate_limiter, "consume", _allow)
+    monkeypatch.setattr(services_search_rate_limiter, "consume", _allow)
+    monkeypatch.setattr(services_detail_rate_limiter, "consume", _allow)
+    yield
+
+
 @pytest.fixture(scope="session")
 def nesh_service(_performance_environment):
     """Instancia DatabaseAdapter/NeshService in-process (warm benchmarks)."""
@@ -41,17 +61,21 @@ def nesh_service(_performance_environment):
 
     db = DatabaseAdapter(CONFIG.db_path)
     svc = NeshService(db)
-    yield svc
-    asyncio.run(db.close())
+    try:
+        yield svc
+    finally:
+        asyncio.run(db.close())
 
 
 @pytest.fixture(scope="session")
 def tipi_service(_performance_environment):
     from backend.services.tipi_service import TipiService
 
-    service = TipiService()
-    yield service
-    asyncio.run(service.close())
+    svc = TipiService()
+    try:
+        yield svc
+    finally:
+        asyncio.run(svc.close())
 
 
 @pytest.fixture(scope="session")

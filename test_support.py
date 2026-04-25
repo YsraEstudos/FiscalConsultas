@@ -68,7 +68,15 @@ class SQLiteTestEnvironment:
         _close_shared_db_engine()
 
     def cleanup(self) -> None:
-        self.temporary_directory.cleanup()
+        _close_shared_db_engine()
+        try:
+            self.temporary_directory.cleanup()
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning(
+                "Failed to cleanup SQLite test directory %s: %s",
+                self.temporary_directory.name,
+                exc,
+            )
 
 
 def _close_shared_db_engine() -> None:
