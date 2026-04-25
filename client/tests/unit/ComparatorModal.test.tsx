@@ -25,7 +25,6 @@ const localDatabaseDefaults = {
   remove: async () => undefined,
   refreshAvailability: async () => null,
   getNbsDetailLocal: async () => null,
-  getNebsDetailLocal: async () => null,
 };
 
 vi.mock('../../src/services/api', () => ({

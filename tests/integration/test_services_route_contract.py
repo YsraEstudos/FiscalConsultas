@@ -54,24 +54,6 @@ class _FakeServicesCatalog:
             "nebs": None,
         }
 
-    async def search_nbs_explanatory_entries(self, query: str):
-        return {
-            "success": True,
-            "query": query,
-            "normalized": query,
-            "results": [
-                {
-                    "code": "1.0102.61",
-                    "title": "Serviços de construção de usinas de geração de energia",
-                    "excerpt": "Esta subposição inclui serviços de construção de usinas.",
-                    "page_start": 21,
-                    "page_end": 22,
-                    "section_title": "SEÇÃO I - SERVIÇOS DE CONSTRUÇÃO",
-                }
-            ],
-            "total": 1,
-        }
-
     async def fetch_nbs_catalog_tree_page(
         self,
         code: str,
@@ -113,33 +95,6 @@ class _FakeServicesCatalog:
             },
         }
 
-    async def fetch_nbs_explanatory_entry_details(self, code: str):
-        return {
-            "success": True,
-            "item": {
-                "code": code,
-                "description": "Serviços de construção de usinas de geração de energia",
-            },
-            "ancestors": [
-                {
-                    "code": "1.0102.6",
-                    "description": "Serviços de construção de instalações industriais",
-                }
-            ],
-            "entry": {
-                "code": code,
-                "code_clean": "1010261",
-                "title": "Serviços de construção de usinas de geração de energia",
-                "title_normalized": "servicos de construcao de usinas de geracao de energia",
-                "body_text": "Esta subposição inclui serviços de construção de usinas.",
-                "body_markdown": "Esta subposição inclui serviços de construção de usinas.",
-                "body_normalized": "esta subposicao inclui servicos de construcao de usinas",
-                "section_title": "SEÇÃO I - SERVIÇOS DE CONSTRUÇÃO",
-                "page_start": 21,
-                "page_end": 22,
-            },
-        }
-
 
 @pytest.fixture(autouse=True)
 def _cleanup_overrides():
@@ -175,18 +130,8 @@ def _setup_fake_services_catalog(monkeypatch):
     )
     monkeypatch.setattr(
         NbsService,
-        "searchNbsExplanatoryEntries",
-        AsyncMock(side_effect=fake_service.search_nbs_explanatory_entries),
-    )
-    monkeypatch.setattr(
-        NbsService,
         "fetchNbsCatalogTreePage",
         AsyncMock(side_effect=fake_service.fetch_nbs_catalog_tree_page),
-    )
-    monkeypatch.setattr(
-        NbsService,
-        "fetchNbsExplanatoryEntryDetails",
-        AsyncMock(side_effect=fake_service.fetch_nbs_explanatory_entry_details),
     )
 
 
@@ -195,14 +140,12 @@ def test_services_routes_allow_anonymous_access(client, monkeypatch):
     nbs_search = client.get("/api/services/nbs/search?q=construcao")
     nbs_detail = client.get("/api/services/nbs/1.01")
     nbs_tree = client.get("/api/services/nbs/1.01/tree")
-    nebs_search = client.get("/api/services/nebs/search?q=energia")
-    nebs_detail = client.get("/api/services/nebs/1.0102.61")
 
     assert nbs_search.status_code == 200
     assert nbs_detail.status_code == 200
     assert nbs_tree.status_code == 200
-    assert nebs_search.status_code == 200
-    assert nebs_detail.status_code == 200
+    assert client.get("/api/services/nebs/search?q=energia").status_code == 404
+    assert client.get("/api/services/nebs/1.0102.61").status_code == 404
 
 
 def test_services_routes_ignore_invalid_authorization_headers(client, monkeypatch):
@@ -212,14 +155,12 @@ def test_services_routes_ignore_invalid_authorization_headers(client, monkeypatc
     nbs_search = client.get("/api/services/nbs/search?q=construcao", headers=headers)
     nbs_detail = client.get("/api/services/nbs/1.01", headers=headers)
     nbs_tree = client.get("/api/services/nbs/1.01/tree", headers=headers)
-    nebs_search = client.get("/api/services/nebs/search?q=energia", headers=headers)
-    nebs_detail = client.get("/api/services/nebs/1.0102.61", headers=headers)
 
     assert nbs_search.status_code == 200
     assert nbs_detail.status_code == 200
     assert nbs_tree.status_code == 200
-    assert nebs_search.status_code == 200
-    assert nebs_detail.status_code == 200
+    assert client.get("/api/services/nebs/search?q=energia", headers=headers).status_code == 404
+    assert client.get("/api/services/nebs/1.0102.61", headers=headers).status_code == 404
 
 
 def test_services_routes_rate_limit_anonymous_requests(client, monkeypatch):
@@ -243,22 +184,18 @@ def test_services_routes_rate_limit_anonymous_requests(client, monkeypatch):
     assert consumed_keys == ["services:ip:testclient"]
 
 
-def test_services_routes_expose_nbs_and_nebs_contracts(client, monkeypatch):
+def test_services_routes_expose_nbs_contracts(client, monkeypatch):
     _setup_fake_services_catalog(monkeypatch)
 
     nbs_search = client.get("/api/services/nbs/search?q=construcao")
     nbs_detail = client.get("/api/services/nbs/1.01")
     nbs_tree_page_1 = client.get("/api/services/nbs/1.01/tree?page=1&page_size=1")
     nbs_tree_page_2 = client.get("/api/services/nbs/1.01/tree?page=2&page_size=1")
-    nebs_search = client.get("/api/services/nebs/search?q=energia")
-    nebs_detail = client.get("/api/services/nebs/1.0102.61")
 
     assert nbs_search.status_code == 200
     assert nbs_detail.status_code == 200
     assert nbs_tree_page_1.status_code == 200
     assert nbs_tree_page_2.status_code == 200
-    assert nebs_search.status_code == 200
-    assert nebs_detail.status_code == 200
 
     assert nbs_search.json()["results"][0]["code"] == "1.01"
     assert nbs_detail.json()["item"]["code"] == "1.01"
@@ -290,22 +227,13 @@ def test_services_routes_expose_nbs_and_nebs_contracts(client, monkeypatch):
     ] == [
         "1.0101",
     ]
-    assert nebs_search.json()["results"][0]["page_start"] == 21
-    assert nebs_detail.json()["entry"]["page_end"] == 22
-    assert "parser_status" not in nebs_detail.json()["entry"]
-    assert "parse_warnings" not in nebs_detail.json()["entry"]
-    assert "source_hash" not in nebs_detail.json()["entry"]
-    assert "updated_at" not in nebs_detail.json()["entry"]
-
 
 def test_services_routes_document_public_rate_limit_responses():
     openapi = app.openapi()
     expected_paths = {
         "/api/services/nbs/search": "Limite de requisições para busca de serviços excedido.",
-        "/api/services/nebs/search": "Limite de requisições para busca de serviços excedido.",
         "/api/services/nbs/{code}": "Limite de requisições para detalhes de serviços excedido.",
         "/api/services/nbs/{code}/tree": "Limite de requisições para detalhes de serviços excedido.",
-        "/api/services/nebs/{code}": "Limite de requisições para detalhes de serviços excedido.",
     }
 
     for path, expected_429 in expected_paths.items():
@@ -319,7 +247,6 @@ def test_services_routes_document_public_rate_limit_responses():
     [
         ("/api/services/nbs/{code}", "fetchNbsCatalogItemDetails"),
         ("/api/services/nbs/{code}/tree", "fetchNbsCatalogTreePage"),
-        ("/api/services/nebs/{code}", "fetchNbsExplanatoryEntryDetails"),
     ],
 )
 def test_services_detail_rejects_overly_long_code(
@@ -358,7 +285,7 @@ def test_services_search_returns_retry_after_when_rate_limited(client, monkeypat
         services_routes.services_search_rate_limiter, "consume", _deny_consume
     )
 
-    response = client.get("/api/services/nebs/search?q=energia")
+    response = client.get("/api/services/nbs/search?q=energia")
 
     assert response.status_code == 429
     assert response.headers["Retry-After"] == "23"
@@ -377,7 +304,6 @@ def test_services_detail_returns_retry_after_when_rate_limited(client, monkeypat
 
     nbs_response = client.get("/api/services/nbs/1.01")
     nbs_tree_response = client.get("/api/services/nbs/1.01/tree")
-    nebs_response = client.get("/api/services/nebs/1.0102.61")
 
     assert nbs_response.status_code == 429
     assert nbs_response.headers["Retry-After"] == "11"
@@ -389,6 +315,3 @@ def test_services_detail_returns_retry_after_when_rate_limited(client, monkeypat
         "Rate limit exceeded for services detail" in nbs_tree_response.json()["detail"]
     )
 
-    assert nebs_response.status_code == 429
-    assert nebs_response.headers["Retry-After"] == "11"
-    assert "Rate limit exceeded for services detail" in nebs_response.json()["detail"]

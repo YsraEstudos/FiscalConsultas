@@ -138,8 +138,9 @@ async def test_get_status_uses_app_state_services_when_available():
     assert payload["database"]["status"] == "online"
     assert payload["tipi"]["status"] == "online"
     assert payload["nbs"]["status"] == "online"
-    assert payload["nebs"]["status"] == "online"
     assert payload["catalogs"]["nesh"]["status"] == "online"
+    assert "nebs" not in payload
+    assert "nebs" not in payload["catalogs"]
     assert "version" not in payload
     assert "chapters" not in payload["database"]
 
@@ -185,7 +186,7 @@ async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypat
     assert payload["database"]["status"] == "online"
     assert payload["tipi"]["status"] == "online"
     assert payload["nbs"]["status"] == "online"
-    assert payload["nebs"]["status"] == "online"
+    assert "nebs" not in payload
 
 
 @pytest.mark.asyncio
@@ -214,7 +215,7 @@ async def test_get_status_handles_db_and_tipi_exceptions(monkeypatch):
     assert payload["database"]["status"] == "error"
     assert payload["tipi"]["status"] == "error"
     assert payload["nbs"]["status"] == "error"
-    assert payload["nebs"]["status"] == "error"
+    assert "nebs" not in payload
     assert "error" not in payload["database"]
     assert "error" not in payload["tipi"]
 
@@ -362,12 +363,10 @@ async def test_get_status_details_returns_sensitive_fields_for_admin(monkeypatch
     assert payload["database"]["positions"] == 9
     assert payload["tipi"]["chapters"] == 3
     assert payload["nbs"]["items"] == 6
-    assert payload["nebs"]["entries"] == 2
+    assert payload["nbs"]["explanatory_entries"] == 2
     assert payload["catalogs"]["nbs"]["status"] == "online"
-    assert (
-        payload["catalogs"]["nebs"]["metadata"]["updated_at"]
-        == "2026-03-25T10:05:00+00:00"
-    )
+    assert "nebs" not in payload
+    assert "nebs" not in payload["catalogs"]
 
 
 @pytest.mark.asyncio

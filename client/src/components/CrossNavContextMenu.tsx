@@ -4,7 +4,7 @@ import styles from './CrossNavContextMenu.module.css';
 import { formatNcmTipi } from '../utils/id_utils';
 import { extractServiceCode } from '../utils/serviceCodes';
 
-type DocType = 'nesh' | 'tipi' | 'nbs' | 'nebs';
+type DocType = 'nesh' | 'tipi' | 'nbs';
 
 type MenuState = {
     open: boolean;
@@ -44,11 +44,11 @@ export function CrossNavContextMenu({ currentDoc, onOpenInDoc, onOpenInNewTab }:
     const [state, setState] = useState<MenuState>(initialState);
     const menuRef = useRef<HTMLDivElement>(null);
 
-    const isServiceDoc = currentDoc === 'nbs' || currentDoc === 'nebs';
+    const isServiceDoc = currentDoc === 'nbs';
     const otherDoc: DocType = useMemo(() => {
         if (currentDoc === 'nesh') return 'tipi';
         if (currentDoc === 'tipi') return 'nesh';
-        return currentDoc === 'nbs' ? 'nebs' : 'nbs';
+        return 'nbs';
     }, [currentDoc]);
 
     const hide = useCallback(() => setState(initialState), []);

@@ -87,15 +87,6 @@ export function searchNbsByText(query) {
   );
 }
 
-export function searchNebsByText(query) {
-  return ftsSearch(
-    "nebs_fts",
-    query,
-    ["code", "code_clean", "title", "body_text", "section_title"],
-    "nebs_entries"
-  );
-}
-
 function cleanServiceCode(code) {
   return String(code || "").replace(/[^0-9]/g, "");
 }
@@ -174,51 +165,6 @@ export function searchNbsByCode(query, limit = 50) {
       limit,
     ]
   ).map(rowToNbsItem);
-}
-
-export function searchNebsByCode(query, limit = 50) {
-  const rawQuery = String(query || "").trim();
-  const cleanQuery = cleanServiceCode(rawQuery);
-  if (!rawQuery && !cleanQuery) return [];
-
-  const rawPrefix = `${escapeLikePattern(rawQuery)}%`;
-  const cleanPrefix = `${escapeLikePattern(cleanQuery)}%`;
-
-  return fetchAll(
-    `SELECT
-        code,
-        code_clean,
-        title,
-        body_text,
-        section_title,
-        page_start,
-        page_end
-     FROM nebs_entries
-     WHERE (? <> '' AND (code = ? OR code LIKE ? ESCAPE '\\'))
-        OR (? <> '' AND (code_clean = ? OR code_clean LIKE ? ESCAPE '\\'))
-     ORDER BY
-        CASE
-          WHEN code = ? OR code_clean = ? THEN 0
-          WHEN code LIKE ? ESCAPE '\\' OR code_clean LIKE ? ESCAPE '\\' THEN 1
-          ELSE 2
-        END,
-        page_start ASC,
-        LENGTH(code_clean) ASC
-     LIMIT ?`,
-    [
-      rawQuery,
-      rawQuery,
-      rawPrefix,
-      cleanQuery,
-      cleanQuery,
-      cleanPrefix,
-      rawQuery,
-      cleanQuery,
-      rawPrefix,
-      cleanPrefix,
-      limit,
-    ]
-  ).map(rowToNebsEntry);
 }
 
 function fetchNbsItemByCode(code) {
@@ -321,6 +267,7 @@ export function getLocalNbsDetail(code, page = 1, pageSize = 50) {
         code_clean,
         title,
         body_text,
+        body_markdown,
         section_title,
         page_start,
         page_end
@@ -343,36 +290,3 @@ export function getLocalNbsDetail(code, page = 1, pageSize = 50) {
   };
 }
 
-export function getLocalNebsDetail(code) {
-  if (!getWorkerDb()) return null;
-
-  const rawCode = String(code || "").trim();
-  const item = fetchNbsItemByCode(rawCode);
-  if (!item) return null;
-
-  const cleanCode = cleanServiceCode(rawCode);
-  const entry = fetchOne(
-    `SELECT
-        code,
-        code_clean,
-        title,
-        body_text,
-        section_title,
-        page_start,
-        page_end
-     FROM nebs_entries
-     WHERE (? <> '' AND code = ?)
-        OR (? <> '' AND code_clean = ?)
-     ORDER BY LENGTH(code_clean) DESC
-     LIMIT 1`,
-    [rawCode, rawCode, cleanCode, cleanCode]
-  );
-  if (!entry) return null;
-
-  return {
-    success: true,
-    item,
-    ancestors: fetchAncestors(item),
-    entry: rowToNebsEntry(entry),
-  };
-}

@@ -22,12 +22,10 @@ export {
     deleteMyAccount,
 } from './api/profile';
 export {
-    getNebsEntryDetail,
     getNbsServiceDetail,
     getNbsServiceDetailPage,
     getNbsServiceTreePage,
     searchNbsServices,
-    searchNebsEntries,
 } from './api/services';
 export {
     getAuthSession,

@@ -53,7 +53,6 @@ def test_status_endpoint(client):
         if data.get("database", {}).get("status") == "online"
         and data.get("tipi", {}).get("status") == "online"
         and data.get("nbs", {}).get("status") == "online"
-        and data.get("nebs", {}).get("status") == "online"
         else "error"
     )
     assert data.get("status") == expected_global, (
@@ -67,9 +66,9 @@ def test_status_endpoint(client):
     assert "ok" not in data.get("tipi", {})
     assert "error" not in data.get("tipi", {})
     assert "items" not in data.get("nbs", {})
-    assert "entries" not in data.get("nebs", {})
+    assert "nebs" not in data
     assert "catalogs" in data
-    assert set(data["catalogs"].keys()) == {"nesh", "tipi", "nbs", "nebs"}
+    assert set(data["catalogs"].keys()) == {"nesh", "tipi", "nbs"}
 
 
 def test_status_details_requires_admin(client):
@@ -91,7 +90,8 @@ def test_status_details_returns_internal_data_for_admin(client, monkeypatch):
     assert "chapters" in data["database"]
     assert "positions" in data["database"]
     assert "items" in data["nbs"]
-    assert "entries" in data["nebs"]
+    assert "explanatory_entries" in data["nbs"]
+    assert "nebs" not in data
     assert "catalogs" in data
 
 

@@ -418,9 +418,7 @@
 .resultCard[data-level="4"] { --level-indent: 3; }
 .resultCard[data-level="5"] { --level-indent: 4; }
 
-.codeBadge,
-.noteBadge,
-.childCode {
+.codeBadge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -439,23 +437,12 @@
   color: #000;
 }
 
-.noteBadge {
-  color: white;
-  background: var(--app-purple, #a855f7);
-}
-
 .levelHint {
   display: none; /* Hide default level hint text to clean UI */
 }
 
-.resultExcerpt {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.55;
-}
-
-/* Right Panel - Detalhamento Tecnico (Formerly detailPanel) */
-.detailPanel, .rightPanel {
+/* Right Panel - Detalhamento Tecnico */
+.rightPanel {
   flex: 1;
   background: var(--dark-card-bg, #14141e);
   border: 1px solid var(--border-color);
@@ -467,7 +454,7 @@
   overflow-y: auto;
 }
 
-.rightPanelTitle, .detailHeroInline h3 {
+.rightPanelTitle {
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0;
@@ -542,49 +529,41 @@
   line-height: 1.6;
 }
 
-.notesContent,
-.noteBody {
+.notesContent {
   display: grid;
   gap: 0.75rem;
 }
 
 /* stylelint-disable selector-pseudo-class-no-unknown -- CSS Modules :global(...) */
-.notesContent :global(p),
-.noteBody :global(p) {
+.notesContent :global(p) {
   margin: 0;
   color: var(--text-secondary);
   line-height: 1.75;
 }
 
 .notesContent :global(ul),
-.notesContent :global(ol),
-.noteBody :global(ul),
-.noteBody :global(ol) {
+.notesContent :global(ol) {
   display: grid;
   gap: 0.55rem;
   margin: 0;
   padding-left: 1.5rem;
 }
 
-.notesContent :global(li),
-.noteBody :global(li) {
+.notesContent :global(li) {
   color: var(--text-secondary);
   line-height: 1.7;
 }
 
-.notesContent :global(li::marker),
-.noteBody :global(li::marker) {
+.notesContent :global(li::marker) {
   color: var(--accent-secondary);
 }
 
-.notesContent :global(strong),
-.noteBody :global(strong) {
+.notesContent :global(strong) {
   color: var(--accent-secondary);
   font-weight: 700;
 }
 
-.notesContent :global(a),
-.noteBody :global(a) {
+.notesContent :global(a) {
   color: var(--accent-primary);
   text-decoration: underline;
   text-decoration-style: dotted;
@@ -592,14 +571,12 @@
   transition: color 0.2s ease;
 }
 
-.notesContent :global(a:hover),
-.noteBody :global(a:hover) {
+.notesContent :global(a:hover) {
   color: var(--accent-secondary);
   text-decoration-style: solid;
 }
 
-.notesContent :global(.service-smart-link),
-.noteBody :global(.service-smart-link) {
+.notesContent :global(.service-smart-link) {
   color: var(--accent-primary);
   cursor: pointer;
   text-decoration: underline;
@@ -608,33 +585,28 @@
   transition: color 0.2s ease;
 }
 
-.notesContent :global(.service-smart-link:hover),
-.noteBody :global(.service-smart-link:hover) {
+.notesContent :global(.service-smart-link:hover) {
   color: var(--accent-secondary);
   text-decoration-style: solid;
 }
 
-.notesContent :global(em),
-.noteBody :global(em) {
+.notesContent :global(em) {
   color: var(--accent-secondary);
 }
 
-.notesContent :global(mark),
-.noteBody :global(mark) {
+.notesContent :global(mark) {
   background: color-mix(in srgb, var(--accent-primary) 22%, transparent);
   color: var(--text-primary);
   border-radius: 4px;
   padding: 0 0.25rem;
 }
 
-.notesContent :global(.highlight-exclusion),
-.noteBody :global(.highlight-exclusion) {
+.notesContent :global(.highlight-exclusion) {
   color: var(--accent-secondary);
   font-weight: 700;
 }
 
-.notesContent :global(.highlight-unit),
-.noteBody :global(.highlight-unit) {
+.notesContent :global(.highlight-unit) {
   background: color-mix(in srgb, var(--accent-primary) 20%, transparent);
   color: var(--text-primary);
   border-radius: 4px;
@@ -738,125 +710,6 @@
     font-size: 1.55rem;
 }
 
-.detailHeroInline {
-    display: flex;
-    flex-direction: column;
-    gap: 0.65rem;
-    padding: 0.5rem 0 1.5rem;
-}
-
-.detailHeroInline h3 {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: 1.85rem;
-    line-height: 1.35;
-    font-family: Georgia, serif;
-}
-
-.detailCodeInline {
-    color: var(--accent-primary);
-    font-size: 0.95rem;
-    letter-spacing: 0.14em;
-    font-weight: 700;
-}
-
-.crumbText {
-    border: none;
-    background: transparent;
-    padding: 0;
-    color: var(--text-muted);
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: color 0.2s ease;
-}
-
-.crumbText:hover {
-    color: var(--accent-primary);
-    text-decoration: underline;
-}
-
-.crumbSeparator {
-    color: var(--border-color);
-    font-size: 0.85rem;
-    margin: 0 0.4rem;
-}
-
-.crumbCurrentText {
-    color: var(--text-primary);
-    font-size: 0.85rem;
-    font-weight: 600;
-}
-
-/* NEBS Detail View Styles */
-.detailHero {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding-bottom: 1.5rem;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.detailCode {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--success, #4ade80);
-}
-
-.detailHero h3 {
-  font-size: 1.5rem;
-  color: var(--text-primary);
-  margin: 0;
-  line-height: 1.4;
-}
-
-.heroMeta {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin: 0;
-}
-
-.crumb {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-secondary);
-  padding: 0.4rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.crumb:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
-}
-
-.crumbCurrentButton {
-  background: var(--success, #4ade80);
-  border: 1px solid var(--success, #4ade80);
-  color: #000;
-  padding: 0.4rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.detailGrid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-@media (min-width: 768px) {
-  .detailGrid {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
 .card {
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.05);
@@ -881,27 +734,3 @@
   font-weight: 700;
 }
 
-.detailActions {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--border-color);
-  margin-top: auto;
-}
-
-.secondaryAction {
-  background: transparent;
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 0.75rem 1.5rem;
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.secondaryAction:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: var(--text-muted);
-}

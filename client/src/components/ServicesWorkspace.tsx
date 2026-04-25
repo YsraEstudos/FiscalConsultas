@@ -4,8 +4,6 @@ import { marked } from 'marked';
 import type {
     NbsDetailResponse,
     NbsServiceItem,
-    NebsDetailResponse,
-    NebsSearchItem,
     ServiceDocType,
 } from '../types/api.types';
 import { Loading } from './Loading';
@@ -29,21 +27,10 @@ export interface ServicesWorkspaceNbsState {
     readonly query: string;
 }
 
-export interface ServicesWorkspaceNebsState {
-    readonly results: readonly NebsSearchItem[];
-    readonly selectedCode: string | null;
-    readonly detail: NebsDetailResponse | null;
-    readonly isSearching: boolean;
-    readonly isLoadingDetail: boolean;
-    readonly hasSearched: boolean;
-}
-
 interface ServicesWorkspaceProps {
     readonly doc: ServiceDocType;
     readonly nbsState: ServicesWorkspaceNbsState;
-    readonly nebsState: ServicesWorkspaceNebsState;
     readonly onSelectNbs: (code: string) => void;
-    readonly onSelectNebs: (code: string) => void;
     readonly onSwitchDoc: (doc: ServiceDocType, query?: string) => void;
     readonly onOpenDocInNewTab?: (doc: ServiceDocType, query?: string) => void;
 }
@@ -52,12 +39,6 @@ type NoteContent = {
     readonly body_markdown?: string | null;
     readonly body_text?: string | null;
 } | null | undefined;
-
-type OpenCatalogDoc = (
-    targetDoc: ServiceDocType,
-    query?: string,
-    forceNewTab?: boolean,
-) => void;
 
 function getNbsChapterCodeSource(
     doc: ServiceDocType,
@@ -299,7 +280,6 @@ function NbsHierarchySection({
                             >
                                 {item.code}
                             </span>
-                            {item.has_nebs && <span className={styles.noteBadge}>NEBS</span>}
                         </div>
                         <strong className={`${styles.interactiveCode} service-code-target`} data-service-code={item.code}>
                             {item.description}
@@ -342,14 +322,12 @@ interface NbsDetailSectionProps {
     readonly nbsNoteBodyHtml: string;
     readonly nbsNotesContentRef: React.RefObject<HTMLDivElement | null>;
     readonly nbsState: ServicesWorkspaceNbsState;
-    readonly openCatalogDoc: OpenCatalogDoc;
 }
 
 function NbsDetailSection({
     nbsNoteBodyHtml,
     nbsNotesContentRef,
     nbsState,
-    openCatalogDoc,
 }: Readonly<NbsDetailSectionProps>) {
     let detailBody: React.ReactNode;
 
@@ -359,7 +337,6 @@ function NbsDetailSection({
         const detail = nbsState.detail;
         const codeParts = detail.item.code.split('.');
         const linkedNebs = detail.nebs;
-        const linkedNebsCode = linkedNebs?.code;
 
         detailBody = (
             <>
@@ -405,17 +382,7 @@ function NbsDetailSection({
                     </section>
                 )}
 
-                {linkedNebsCode && (
-                    <div className={styles.detailActions}>
-                        <button
-                            type="button"
-                            className={styles.secondaryAction}
-                            onClick={() => openCatalogDoc('nebs', linkedNebsCode)}
-                        >
-                            Ver NEBS
-                        </button>
-                    </div>
-                )}
+
             </>
         );
     } else {
@@ -500,7 +467,6 @@ interface NbsWorkspaceViewProps {
     readonly chapterNotesDialogRef: React.RefObject<HTMLDialogElement | null>;
     readonly chapterNotesHtml: string;
     readonly currentChapterNotesEntry: ReturnType<typeof getNbsChapterNotesEntry>;
-    readonly openCatalogDoc: OpenCatalogDoc;
     readonly nbsChapterNotesNewTab: boolean;
     readonly nbsNoteBodyHtml: string;
     readonly nbsNotesContentRef: React.RefObject<HTMLDivElement | null>;
@@ -515,7 +481,6 @@ function NbsWorkspaceView({
     chapterNotesDialogRef,
     chapterNotesHtml,
     currentChapterNotesEntry,
-    openCatalogDoc,
     nbsChapterNotesNewTab,
     nbsNoteBodyHtml,
     nbsNotesContentRef,
@@ -563,7 +528,6 @@ function NbsWorkspaceView({
                 nbsNoteBodyHtml={nbsNoteBodyHtml}
                 nbsNotesContentRef={nbsNotesContentRef}
                 nbsState={nbsState}
-                openCatalogDoc={openCatalogDoc}
             />
             <NbsChapterNotesDialog
                 chapterNotesDialogRef={chapterNotesDialogRef}
@@ -575,217 +539,16 @@ function NbsWorkspaceView({
     );
 }
 
-interface NebsResultsSectionProps {
-    readonly nebsState: ServicesWorkspaceNebsState;
-    readonly onSelectNebs: (code: string) => void;
-}
 
-function NebsResultsSection({
-    nebsState,
-    onSelectNebs,
-}: Readonly<NebsResultsSectionProps>) {
-    let sectionBody: React.ReactNode;
-
-    if (nebsState.isSearching) {
-        sectionBody = <Loading label="Buscando notas..." />;
-    } else if (!nebsState.hasSearched) {
-        sectionBody = (
-            <div className={styles.emptyState}>
-                <strong>Busque uma nota explicativa</strong>
-                <p>Digite um codigo NEBS ou um termo textual para pesquisar a NEBS.</p>
-            </div>
-        );
-    } else if (nebsState.results.length > 0) {
-        sectionBody = (
-            <div className={styles.resultList}>
-                {nebsState.results.map((item) => (
-                    <button
-                        key={item.code}
-                        type="button"
-                        className={`${styles.resultCard} ${nebsState.selectedCode === item.code ? styles.resultCardActive : ''}`}
-                        onClick={() => onSelectNebs(item.code)}
-                    >
-                        <div className={styles.resultMeta}>
-                            <span
-                                className={`${styles.codeBadge} ${styles.interactiveCode} service-code-target`}
-                                data-service-code={item.code}
-                            >
-                                {item.code}
-                            </span>
-                            <span className={styles.noteBadge}>NEBS</span>
-                        </div>
-                        <strong className={`${styles.interactiveCode} service-code-target`} data-service-code={item.code}>
-                            {item.code} - {item.title}
-                        </strong>
-                        <span className={styles.resultExcerpt}>{item.excerpt}</span>
-                        <span className={styles.levelHint}>
-                            Paginas {item.page_start} a {item.page_end}
-                        </span>
-                    </button>
-                ))}
-            </div>
-        );
-    } else {
-        sectionBody = (
-            <div className={styles.emptyState}>
-                <strong>Nenhuma nota encontrada</strong>
-                <p>Tente um termo mais amplo ou um codigo completo.</p>
-            </div>
-        );
-    }
-
-    return (
-        <aside className={styles.sidebar}>
-            <div className={styles.sidebarHeader}>
-                <span>Resultados</span>
-                <strong>{nebsState.results.length}</strong>
-            </div>
-            {sectionBody}
-        </aside>
-    );
-}
-
-interface NebsDetailSectionProps {
-    readonly nebsNoteBodyHtml: string;
-    readonly nebsState: ServicesWorkspaceNebsState;
-    readonly openCatalogDoc: OpenCatalogDoc;
-}
-
-function NebsDetailSection({
-    nebsNoteBodyHtml,
-    nebsState,
-    openCatalogDoc,
-}: Readonly<NebsDetailSectionProps>) {
-    let detailBody: React.ReactNode;
-
-    if (nebsState.isLoadingDetail) {
-        detailBody = <Loading label="Montando nota..." />;
-    } else if (nebsState.detail) {
-        const detail = nebsState.detail;
-        detailBody = (
-            <>
-                <div className={styles.detailHero}>
-                    <div
-                        className={`${styles.detailCode} ${styles.interactiveCode} service-code-target`}
-                        data-service-code={detail.entry.code}
-                    >
-                        {detail.entry.code}
-                    </div>
-                    <h3>{detail.entry.title}</h3>
-                    <p className={styles.heroMeta}>
-                        {detail.entry.section_title || 'Secao nao informada'} • Paginas {detail.entry.page_start} a{' '}
-                        {detail.entry.page_end}
-                    </p>
-                </div>
-
-                <div className={styles.breadcrumbs} aria-label="Hierarquia NBS">
-                    {detail.ancestors.map((ancestor) => (
-                        <button
-                            key={ancestor.code}
-                            type="button"
-                            className={`${styles.crumb} ${styles.interactiveCode} service-code-target`}
-                            data-service-code={ancestor.code}
-                            onClick={() => openCatalogDoc('nbs', ancestor.code)}
-                        >
-                            {ancestor.code}
-                        </button>
-                    ))}
-                    <button
-                        type="button"
-                        className={`${styles.crumbCurrentButton} ${styles.interactiveCode} service-code-target`}
-                        data-service-code={detail.item.code}
-                        onClick={() => openCatalogDoc('nbs', detail.item.code)}
-                    >
-                        {detail.item.code}
-                    </button>
-                </div>
-
-                <div className={styles.detailGrid}>
-                    <section className={styles.card}>
-                        <div className={styles.cardLabel}>Servico NBS vinculado</div>
-                        <p>{detail.item.description}</p>
-                    </section>
-
-                    <section className={styles.card}>
-                        <div className={styles.cardLabel}>Origem</div>
-                        <p>{detail.entry.section_title || 'Secao nao identificada'}</p>
-                    </section>
-                </div>
-
-                <section className={styles.card}>
-                    <div className={styles.cardLabel}>Conteudo da nota</div>
-                    <div
-                        className={styles.noteBody}
-                        dangerouslySetInnerHTML={{ __html: nebsNoteBodyHtml }}
-                    />
-                </section>
-
-                <div className={styles.detailActions}>
-                    <button
-                        type="button"
-                        className={styles.secondaryAction}
-                        onClick={() => openCatalogDoc('nbs', detail.item.code)}
-                    >
-                        Abrir item NBS relacionado
-                    </button>
-                </div>
-            </>
-        );
-    } else {
-        detailBody = (
-            <div className={styles.emptyDetail}>
-                <strong>Selecione uma nota</strong>
-                <p>O painel mostra a nota explicativa publicada, a seção de origem e o vínculo com o serviço NBS.</p>
-            </div>
-        );
-    }
-
-    return (
-        <section className={styles.detailPanel}>
-            {detailBody}
-        </section>
-    );
-}
-
-interface NebsWorkspaceViewProps {
-    readonly nebsNoteBodyHtml: string;
-    readonly nebsState: ServicesWorkspaceNebsState;
-    readonly onSelectNebs: (code: string) => void;
-    readonly openCatalogDoc: OpenCatalogDoc;
-}
-
-function NebsWorkspaceView({
-    nebsNoteBodyHtml,
-    nebsState,
-    onSelectNebs,
-    openCatalogDoc,
-}: Readonly<NebsWorkspaceViewProps>) {
-    return (
-        <div className={styles.body}>
-            <NebsResultsSection
-                nebsState={nebsState}
-                onSelectNebs={onSelectNebs}
-            />
-            <NebsDetailSection
-                nebsNoteBodyHtml={nebsNoteBodyHtml}
-                nebsState={nebsState}
-                openCatalogDoc={openCatalogDoc}
-            />
-        </div>
-    );
-}
 
 export function ServicesWorkspace({
     doc,
     nbsState,
-    nebsState,
     onSelectNbs,
-    onSelectNebs,
     onSwitchDoc,
     onOpenDocInNewTab,
 }: Readonly<ServicesWorkspaceProps>) {
     const nbsNoteBodyHtml = useMemo(() => renderNoteHtml(nbsState.detail?.nebs), [nbsState.detail]);
-    const nebsNoteBodyHtml = useMemo(() => renderNoteHtml(nebsState.detail?.entry), [nebsState.detail]);
     const { openNewTab, nbsPrefixAutoExpand, nbsChapterNotesNewTab } = useSettings();
     const [isChapterNotesOpen, setIsChapterNotesOpen] = useState(false);
     const chapterNotesDialogRef = useRef<HTMLDialogElement | null>(null);
@@ -832,7 +595,7 @@ export function ServicesWorkspace({
             event.stopPropagation();
 
             const forceNewTab = event.metaKey || event.ctrlKey || event.button === 1;
-            openCatalogDoc('nebs', serviceCode, forceNewTab);
+            openCatalogDoc('nbs', serviceCode, forceNewTab);
         };
 
         container.addEventListener('mousedown', handlePointer);
@@ -866,31 +629,19 @@ export function ServicesWorkspace({
         }
     }, [currentChapterNotesEntry, isChapterNotesOpen]);
 
-    if (doc === 'nbs') {
-        return (
-            <NbsWorkspaceView
-                activeChapterNumber={activeChapterNumber}
-                chapterNotesDialogRef={chapterNotesDialogRef}
-                chapterNotesHtml={chapterNotesHtml}
-                currentChapterNotesEntry={currentChapterNotesEntry}
-                nbsChapterNotesNewTab={nbsChapterNotesNewTab}
-                nbsNoteBodyHtml={nbsNoteBodyHtml}
-                nbsNotesContentRef={nbsNotesContentRef}
-                nbsPrefixAutoExpand={nbsPrefixAutoExpand}
-                nbsState={nbsState}
-                onSelectNbs={onSelectNbs}
-                openCatalogDoc={openCatalogDoc}
-                setIsChapterNotesOpen={setIsChapterNotesOpen}
-            />
-        );
-    }
-
     return (
-        <NebsWorkspaceView
-            nebsNoteBodyHtml={nebsNoteBodyHtml}
-            nebsState={nebsState}
-            onSelectNebs={onSelectNebs}
-            openCatalogDoc={openCatalogDoc}
+        <NbsWorkspaceView
+            activeChapterNumber={activeChapterNumber}
+            chapterNotesDialogRef={chapterNotesDialogRef}
+            chapterNotesHtml={chapterNotesHtml}
+            currentChapterNotesEntry={currentChapterNotesEntry}
+            nbsChapterNotesNewTab={nbsChapterNotesNewTab}
+            nbsNoteBodyHtml={nbsNoteBodyHtml}
+            nbsNotesContentRef={nbsNotesContentRef}
+            nbsPrefixAutoExpand={nbsPrefixAutoExpand}
+            nbsState={nbsState}
+            onSelectNbs={onSelectNbs}
+            setIsChapterNotesOpen={setIsChapterNotesOpen}
         />
     );
 }

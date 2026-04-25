@@ -17,7 +17,6 @@ const baseItem = {
   description: 'Servico teste',
   parent_code: null,
   level: 1,
-  has_nebs: true,
 } as const;
 
 const baseNote = {
@@ -39,15 +38,7 @@ const baseNbsState = {
   detail: null,
   isSearching: false,
   isLoadingDetail: false,
-} as const;
-
-const baseNebsState = {
-  results: [],
-  selectedCode: null,
-  detail: null,
-  isSearching: false,
-  isLoadingDetail: false,
-  hasSearched: true,
+  query: '1.01',
 } as const;
 
 function buildNbsDetail(noteOverrides: Partial<typeof baseNote>) {
@@ -63,45 +54,15 @@ function buildNbsDetail(noteOverrides: Partial<typeof baseNote>) {
   } as const;
 }
 
-function buildNebsDetail(entryOverrides: Partial<typeof baseNote>) {
-  return {
-    success: true,
-    item: baseItem,
-    ancestors: [],
-    entry: {
-      ...baseNote,
-      ...entryOverrides,
-    },
-  } as const;
-}
-
 function renderNbsWorkspace(noteOverrides: Partial<typeof baseNote>) {
   return render(
     <ServicesWorkspace
       doc="nbs"
       nbsState={{
         ...baseNbsState,
-        detail: buildNbsDetail(noteOverrides),
-      }}
-      nebsState={baseNebsState}
-      onSelectNbs={noop}
-      onSelectNebs={noop}
-      onSwitchDoc={noop}
-    />,
-  );
-}
-
-function renderNebsWorkspace(entryOverrides: Partial<typeof baseNote>) {
-  return render(
-    <ServicesWorkspace
-      doc="nebs"
-      nbsState={baseNbsState}
-      nebsState={{
-        ...baseNebsState,
-        detail: buildNebsDetail(entryOverrides),
+          detail: buildNbsDetail(noteOverrides),
       }}
       onSelectNbs={noop}
-      onSelectNebs={noop}
       onSwitchDoc={noop}
     />,
   );
@@ -120,9 +81,7 @@ describe('ServicesWorkspace security', () => {
             body_normalized: 'ver detalhes na subposição 1.1703.2',
           }),
         }}
-        nebsState={baseNebsState}
         onSelectNbs={noop}
-        onSelectNebs={noop}
         onSwitchDoc={onSwitchDoc}
       />,
     );
@@ -135,7 +94,7 @@ describe('ServicesWorkspace security', () => {
 
     fireEvent.click(noteCodeLink);
 
-    expect(onSwitchDoc).toHaveBeenCalledWith('nebs', '1.1703.2');
+    expect(onSwitchDoc).toHaveBeenCalledWith('nbs', '1.1703.2');
   });
 
   it('routes service-code middle mouse down inside NBS note content to NEBS detail', () => {
@@ -150,9 +109,7 @@ describe('ServicesWorkspace security', () => {
             body_normalized: 'ver detalhes na subposição 1.1703.2',
           }),
         }}
-        nebsState={baseNebsState}
         onSelectNbs={noop}
-        onSelectNebs={noop}
         onSwitchDoc={onSwitchDoc}
       />,
     );
@@ -165,7 +122,7 @@ describe('ServicesWorkspace security', () => {
 
     fireEvent.mouseDown(noteCodeLink, { bubbles: true, button: 1 });
 
-    expect(onSwitchDoc).toHaveBeenCalledWith('nebs', '1.1703.2');
+    expect(onSwitchDoc).toHaveBeenCalledWith('nbs', '1.1703.2');
   });
 
   it('escapes raw NBS note body_text instead of injecting it as HTML', () => {
@@ -192,8 +149,8 @@ describe('ServicesWorkspace security', () => {
     expect(screen.getByText('Novo paragrafo')).toBeInTheDocument();
   });
 
-  it('sanitizes NEBS markdown output before rendering the note detail', () => {
-    const { container } = renderNebsWorkspace({
+  it('sanitizes NBS inline explanatory markdown output before rendering the note detail', () => {
+    const { container } = renderNbsWorkspace({
       body_markdown: [
         '# Titulo seguro',
         '<script>alert(1)</script>',
@@ -208,8 +165,8 @@ describe('ServicesWorkspace security', () => {
     expect(unsafeLink).not.toHaveAttribute('href');
   });
 
-  it('falls back to plain text when markdown is fully stripped by sanitization', () => {
-    const { container } = renderNebsWorkspace({
+  it('falls back to plain text when inline explanatory markdown is fully stripped by sanitization', () => {
+    const { container } = renderNbsWorkspace({
       body_markdown: '<script>alert(1)</script>',
       body_text: 'fallback seguro',
       body_normalized: 'fallback seguro',

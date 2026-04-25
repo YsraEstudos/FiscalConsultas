@@ -3,15 +3,12 @@ import { toast } from 'react-hot-toast';
 import {
     getNbsServiceDetailPage,
     getNbsServiceTreePage,
-    getNebsEntryDetail,
 } from '../services/api';
 import { useLocalDatabase } from '../context/LocalDatabaseContext';
 import type {
     NbsDetailResponse,
     NbsServiceItem,
     NbsSearchResponse,
-    NebsDetailResponse,
-    NebsSearchResponse,
     ServiceDocType,
 } from '../types/api.types';
 import {
@@ -20,39 +17,21 @@ import {
 } from '../utils/servicesCatalog';
 import {
     ServicesWorkspace,
-    type ServicesWorkspaceNebsState,
     type ServicesWorkspaceNbsState,
 } from './ServicesWorkspace';
 import styles from './ServicesTabContent.module.css';
 
-type ServicesSearchResponse = NbsSearchResponse | NebsSearchResponse;
 type DetailStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 interface ServicesTabContentProps {
     readonly doc: ServiceDocType;
-    readonly data: ServicesSearchResponse;
+    readonly data: NbsSearchResponse;
     readonly onSwitchDoc: (nextDoc: ServiceDocType, query?: string) => void;
     readonly onOpenDocInNewTab?: (nextDoc: ServiceDocType, query?: string) => void;
     readonly onContentReady?: () => void;
 }
 
-const EMPTY_NBS_STATE: ServicesWorkspaceNbsState = {
-    results: [],
-    selectedCode: null,
-    detail: null,
-    isSearching: false,
-    isLoadingDetail: false,
-    query: '',
-};
 
-const EMPTY_NEBS_STATE: ServicesWorkspaceNebsState = {
-    results: [],
-    selectedCode: null,
-    detail: null,
-    isSearching: false,
-    isLoadingDetail: false,
-    hasSearched: false,
-};
 
 const DEFAULT_NBS_TREE_PAGE_SIZE = 50;
 
@@ -175,7 +154,6 @@ export function ServicesTabContent({
 }: Readonly<ServicesTabContentProps>) {
     const [selectedCode, setSelectedCode] = useState<string | null>(null);
     const [nbsDetail, setNbsDetail] = useState<NbsDetailResponse | null>(null);
-    const [nebsDetail, setNebsDetail] = useState<NebsDetailResponse | null>(null);
     const [detailStatus, setDetailStatus] = useState<DetailStatus>('idle');
     const [isWorkspaceReady, setIsWorkspaceReady] = useState(false);
     const detailRequestRef = useRef(0);
@@ -183,7 +161,6 @@ export function ServicesTabContent({
     const {
         status: localDbStatus,
         getNbsDetailLocal,
-        getNebsDetailLocal,
     } = useLocalDatabase();
 
     const isCurrentDetailRequest = useCallback(
@@ -274,7 +251,6 @@ export function ServicesTabContent({
             if (!hydratedResponse) return;
 
             setNbsDetail(hydratedResponse);
-            setNebsDetail(null);
             setSelectedCode(hydratedResponse.item.code);
             setDetailStatus('ready');
         } catch (error) {
@@ -288,48 +264,9 @@ export function ServicesTabContent({
         }
     }, [getNbsDetailLocal, hydrateNbsDetailResponse, isCurrentDetailRequest, localDbStatus]);
 
-    const loadNebsDetail = useCallback(async (code: string) => {
-        const requestId = detailRequestRef.current + 1;
-        detailRequestRef.current = requestId;
-        setSelectedCode(code);
-        setDetailStatus('loading');
-
-        try {
-            let response: NebsDetailResponse | null = null;
-            if (localDbStatus === 'ready') {
-                try {
-                    response = await getNebsDetailLocal(code);
-                } catch {
-                    response = null;
-                }
-            }
-            if (!response) {
-                response = await getNebsEntryDetail(code);
-            }
-            if (detailRequestRef.current !== requestId) return;
-            setNebsDetail(response);
-            setNbsDetail(null);
-            setSelectedCode(response.entry.code);
-            setDetailStatus('ready');
-        } catch (error) {
-            console.error(error);
-            if (detailRequestRef.current !== requestId) return;
-            setNebsDetail(null);
-            setDetailStatus('error');
-            const serviceError = getServiceCatalogErrorInfo(error, 'nebs');
-            reportServiceCatalogError(error, 'nebs', serviceError);
-            toast.error(serviceError.message);
-        }
-    }, [getNebsDetailLocal, localDbStatus]);
-
     const startNbsDetailLoad = useCallback((code: string) => {
         runInBackground(loadNbsDetail(code));
     }, [loadNbsDetail]);
-
-    const startNebsDetailLoad = useCallback((code: string) => {
-        runInBackground(loadNebsDetail(code));
-    }, [loadNebsDetail]);
-
     const firstResultCode = data.results[0]?.code || null;
     const preferredNbsCode = useMemo(() => {
         if (doc !== 'nbs') return null;
@@ -361,23 +298,18 @@ export function ServicesTabContent({
         setIsWorkspaceReady(false);
         setSelectedCode(null);
         setNbsDetail(null);
-        setNebsDetail(null);
 
         if (!firstResultCode) {
             setDetailStatus('idle');
             return;
         }
 
-        if (doc === 'nbs') {
-            if (!preferredNbsCode) {
-                setDetailStatus('idle');
-                return;
-            }
-            startNbsDetailLoad(preferredNbsCode);
-        } else {
-            startNebsDetailLoad(firstResultCode);
+        if (!preferredNbsCode) {
+            setDetailStatus('idle');
+            return;
         }
-    }, [doc, firstResultCode, preferredNbsCode, startNebsDetailLoad, startNbsDetailLoad]);
+        startNbsDetailLoad(preferredNbsCode);
+    }, [firstResultCode, preferredNbsCode, startNbsDetailLoad]);
 
     useEffect(() => {
         if (readySignalRef.current) return;
@@ -391,34 +323,17 @@ export function ServicesTabContent({
         onContentReady?.();
     }, [data.results.length, detailStatus, onContentReady]);
 
-    const nbsState = useMemo<ServicesWorkspaceNbsState>(() => (
-        doc === 'nbs'
-            ? {
-                results: data.results as NbsSearchResponse['results'],
-                selectedCode,
-                detail: nbsDetail,
-                isSearching: false,
-                isLoadingDetail: detailStatus === 'loading',
-                query: data.query,
-            }
-            : EMPTY_NBS_STATE
-    ), [data.query, data.results, detailStatus, doc, nbsDetail, selectedCode]);
+    const nbsState = useMemo<ServicesWorkspaceNbsState>(() => ({
+        results: data.results as NbsSearchResponse['results'],
+        selectedCode,
+        detail: nbsDetail,
+        isSearching: false,
+        isLoadingDetail: detailStatus === 'loading',
+        query: data.query,
+    }), [data.query, data.results, detailStatus, nbsDetail, selectedCode]);
 
-    const nebsState = useMemo<ServicesWorkspaceNebsState>(() => (
-        doc === 'nebs'
-            ? {
-                results: data.results as NebsSearchResponse['results'],
-                selectedCode,
-                detail: nebsDetail,
-                isSearching: false,
-                isLoadingDetail: detailStatus === 'loading',
-                hasSearched: true,
-            }
-            : EMPTY_NEBS_STATE
-    ), [data.results, detailStatus, doc, nebsDetail, selectedCode]);
-
-    const title = doc === 'nbs' ? 'Resultados NBS' : 'Resultados NEBS';
-    const countLabel = `${data.total} ${doc === 'nbs' ? 'itens' : 'notas'}`;
+    const title = 'Resultados NBS';
+    const countLabel = `${data.total} itens`;
     const queryLabel = data.query.trim() || 'catalogo raiz';
     const shellClassName = `${styles.shell} ${isWorkspaceReady ? styles.shellVisible : styles.shellHidden}`;
 
@@ -440,12 +355,8 @@ export function ServicesTabContent({
                 <ServicesWorkspace
                     doc={doc}
                     nbsState={nbsState}
-                    nebsState={nebsState}
                     onSelectNbs={(code) => {
                         startNbsDetailLoad(code);
-                    }}
-                    onSelectNebs={(code) => {
-                        startNebsDetailLoad(code);
                     }}
                     onSwitchDoc={onSwitchDoc}
                     onOpenDocInNewTab={onOpenDocInNewTab}

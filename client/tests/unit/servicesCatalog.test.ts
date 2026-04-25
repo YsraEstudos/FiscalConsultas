@@ -69,7 +69,7 @@ function makeAxiosError({
 }
 
 describe('servicesCatalog utils', () => {
-  it('builds offline messages for both catalogs, individual catalogs, and the generic fallback', () => {
+  it('builds offline messages for the NBS catalog and the generic fallback', () => {
     expect(
       getServicesCatalogOfflineMessage(
         makeStatusResponse({
@@ -77,7 +77,7 @@ describe('servicesCatalog utils', () => {
           nebs: { status: 'error' },
         }),
       ),
-    ).toBe('Catálogo NBS/NEBS indisponível no momento.');
+    ).toBe('Catálogo NBS indisponível no momento.');
 
     expect(
       getServicesCatalogOfflineMessage(
@@ -87,21 +87,6 @@ describe('servicesCatalog utils', () => {
         }),
       ),
     ).toBe('Catálogo NBS indisponível no momento.');
-
-    expect(
-      getServicesCatalogOfflineMessage(
-        makeStatusResponse({
-          nbs: undefined,
-          nebs: undefined,
-          catalogs: {
-            nesh: { status: 'online' },
-            tipi: { status: 'online' },
-            nbs: { status: 'online' },
-            nebs: { status: 'error' },
-          },
-        }),
-      ),
-    ).toBe('Catálogo NEBS indisponível no momento.');
 
     expect(getServicesCatalogOfflineMessage(undefined)).toBe(
       'Catálogo de serviços indisponível no momento.',
@@ -157,7 +142,7 @@ describe('servicesCatalog utils', () => {
 
   it('detects valid service catalog documents', () => {
     expect(isServiceCatalogDoc('nbs')).toBe(true);
-    expect(isServiceCatalogDoc('nebs')).toBe(true);
+    expect(isServiceCatalogDoc('nebs')).toBe(false);
     expect(isServiceCatalogDoc('nesh')).toBe(false);
   });
 
@@ -185,7 +170,7 @@ describe('servicesCatalog utils', () => {
         status: 401,
         requestId: 'req-auth',
       }),
-      'nebs',
+      'nbs',
     );
 
     expect(unauthorized.message).toContain(
@@ -213,9 +198,6 @@ describe('servicesCatalog utils', () => {
     expect(getServiceCatalogErrorMessage(new Error('boom'), 'nbs')).toBe(
       'Erro ao carregar o catálogo NBS.',
     );
-    expect(getServiceCatalogErrorMessage({ reason: 'bad' }, 'nebs')).toBe(
-      'Erro ao carregar o catálogo NEBS.',
-    );
   });
 
   it('reports dev warnings only when axios errors carry the required context', () => {
@@ -239,14 +221,14 @@ describe('servicesCatalog utils', () => {
           detail: 'upstream down',
           url: '/api/services/failure',
         }),
-        'nebs',
+        'nbs',
       );
 
       reportServiceCatalogError(
         makeAxiosError({
           status: 503,
         }),
-        'nebs',
+        'nbs',
       );
 
       reportServiceCatalogError(new Error('plain error'), 'nbs');
@@ -267,7 +249,7 @@ describe('servicesCatalog utils', () => {
         2,
         '[servicesCatalog] Catalog request failed',
         expect.objectContaining({
-          doc: 'nebs',
+          doc: 'nbs',
           status: 503,
           requestId: 'req-server-error',
           detail: 'upstream down',

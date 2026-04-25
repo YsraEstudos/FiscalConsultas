@@ -396,9 +396,13 @@ def build_public_status_payload(
         "tipi": {"status": normalized_tipi.get("status", "error")},
     }
     if normalized_nbs is not None:
-        catalogs["nbs"] = {"status": normalized_nbs.get("status", "error")}
-    if normalized_nebs is not None:
-        catalogs["nebs"] = {"status": normalized_nebs.get("status", "error")}
+        nbs_public_status = normalized_nbs.get("status", "error")
+        if (
+            normalized_nebs is not None
+            and normalized_nebs.get("status") != "online"
+        ):
+            nbs_public_status = "error"
+        catalogs["nbs"] = {"status": nbs_public_status}
 
     payload = {
         "status": overall_status,
@@ -408,9 +412,7 @@ def build_public_status_payload(
     if not legacy_mode:
         payload["catalogs"] = catalogs
     if normalized_nbs is not None:
-        payload["nbs"] = {"status": normalized_nbs.get("status", "error")}
-    if normalized_nebs is not None:
-        payload["nebs"] = {"status": normalized_nebs.get("status", "error")}
+        payload["nbs"] = {"status": catalogs["nbs"]["status"]}
     return payload
 
 
@@ -425,8 +427,16 @@ def build_detailed_status_payload(
     catalogs = {
         "nesh": normalized_db,
         "tipi": normalized_tipi,
-        "nbs": normalized_nbs,
-        "nebs": normalized_nebs,
+        "nbs": {
+            **normalized_nbs,
+            "status": (
+                "online"
+                if normalized_nbs.get("status") == "online"
+                and normalized_nebs.get("status") == "online"
+                else "error"
+            ),
+            "explanatory_entries": int(normalized_nebs.get("entries") or 0),
+        },
     }
     return {
         "status": overall_status,
@@ -435,8 +445,9 @@ def build_detailed_status_payload(
         "database": normalized_db,
         "tipi": normalized_tipi,
         "nbs": {
-            "status": normalized_nbs.get("status", "error"),
+            "status": catalogs["nbs"].get("status", "error"),
             "items": int(normalized_nbs.get("items") or 0),
+            "explanatory_entries": int(normalized_nebs.get("entries") or 0),
             **(
                 {"metadata": normalized_nbs["metadata"]}
                 if isinstance(normalized_nbs.get("metadata"), dict)
@@ -445,20 +456,6 @@ def build_detailed_status_payload(
             **(
                 {"error": normalized_nbs["error"]}
                 if normalized_nbs.get("error")
-                else {}
-            ),
-        },
-        "nebs": {
-            "status": normalized_nebs.get("status", "error"),
-            "entries": int(normalized_nebs.get("entries") or 0),
-            **(
-                {"metadata": normalized_nebs["metadata"]}
-                if isinstance(normalized_nebs.get("metadata"), dict)
-                else {}
-            ),
-            **(
-                {"error": normalized_nebs["error"]}
-                if normalized_nebs.get("error")
                 else {}
             ),
         },

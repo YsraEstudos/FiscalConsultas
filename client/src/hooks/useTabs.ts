@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useRef } from "react";
 import type { FiscalSearchApiResponse } from "../types/api.types";
 
 /** Tipo de documento suportado */
-export type DocType = "nesh" | "tipi" | "nbs" | "nebs";
+export type DocType = "nesh" | "tipi" | "nbs";
 
 /** Representa uma aba no sistema */
 export interface Tab {
@@ -43,7 +43,6 @@ const createLoadedChaptersByDoc = (): Record<DocType, string[]> => ({
   nesh: [],
   tipi: [],
   nbs: [],
-  nebs: [],
 });
 
 let fallbackTabIdCounter = 0;

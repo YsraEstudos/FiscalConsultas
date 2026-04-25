@@ -30,7 +30,6 @@ describe("useTabs", () => {
       nesh: [],
       tipi: [],
       nbs: [],
-      nebs: [],
     });
     expect(result.current.tabsById.get("tab-1")?.title).toBe("Nova busca");
   });
@@ -53,7 +52,6 @@ describe("useTabs", () => {
         nesh: [],
         tipi: [],
         nbs: [],
-        nebs: [],
       },
     );
 

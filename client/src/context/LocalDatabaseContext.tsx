@@ -31,7 +31,6 @@ const DEFAULT_LOCAL_DATABASE_CONTEXT: OfflineDatabaseContextValue = {
     searchOfflineCatalog: async () => null,
     fetchOfflineNeshChapterNotes: async () => null,
     fetchOfflineNbsCatalogDetail: async () => null,
-    fetchOfflineNebsEntryDetail: async () => null,
     install: async () => {
         throw new Error('Offline DB not supported in this browser');
     },
@@ -40,7 +39,6 @@ const DEFAULT_LOCAL_DATABASE_CONTEXT: OfflineDatabaseContextValue = {
     searchLocal: async () => null,
     getNeshChapterNotesLocal: async () => null,
     getNbsDetailLocal: async () => null,
-    getNebsDetailLocal: async () => null,
 };
 
 const LocalDatabaseContext = createContext<OfflineDatabaseContextValue>(

@@ -1,8 +1,6 @@
 import type {
     NbsCatalogDetailApiResponse,
     NbsCatalogSearchApiResponse,
-    NebsExplanatoryDetailApiResponse,
-    NebsExplanatorySearchApiResponse,
 } from '../../types/api.types';
 
 import { api, withDevCacheBust } from './httpClient';
@@ -66,20 +64,6 @@ export const getNbsServiceTreePage = async (
 
     const response = await api.get<NbsTreePageApiResponse>(
         withDevCacheBust(`/services/nbs/${encodeURIComponent(code)}/tree?${params.toString()}`),
-    );
-    return response.data;
-};
-
-export const searchNebsEntries = async (query: string): Promise<NebsExplanatorySearchApiResponse> => {
-    const response = await api.get<NebsExplanatorySearchApiResponse>(
-        withDevCacheBust(`/services/nebs/search?q=${encodeURIComponent(query)}`),
-    );
-    return response.data;
-};
-
-export const getNebsEntryDetail = async (code: string): Promise<NebsExplanatoryDetailApiResponse> => {
-    const response = await api.get<NebsExplanatoryDetailApiResponse>(
-        withDevCacheBust(`/services/nebs/${encodeURIComponent(code)}`),
     );
     return response.data;
 };

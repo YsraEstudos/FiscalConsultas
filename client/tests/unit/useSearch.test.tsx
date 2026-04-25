@@ -10,7 +10,6 @@ const localDatabaseState = vi.hoisted(() => ({
     status: 'not_installed',
     searchLocal: vi.fn().mockResolvedValue(null),
     getNbsDetailLocal: vi.fn().mockResolvedValue(null),
-    getNebsDetailLocal: vi.fn().mockResolvedValue(null),
     getNeshChapterNotesLocal: vi.fn().mockResolvedValue(null),
     progress: 0,
     progressStep: '',
@@ -29,7 +28,6 @@ vi.mock('../../src/services/api', () => ({
     searchNCM: vi.fn(),
     searchTipi: vi.fn(),
     searchNbsServices: vi.fn(),
-    searchNebsEntries: vi.fn(),
 }));
 
 vi.mock('../../src/context/LocalDatabaseContext', () => ({
@@ -194,8 +192,7 @@ describe('useSearch Hook', () => {
                     nesh: expect.arrayContaining(['84', '73']),
                     tipi: [],
                     nbs: [],
-                    nebs: []
-                }
+                    }
             })
         ]);
     });

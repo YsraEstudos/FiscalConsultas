@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { STORAGE_KEYS } from '../constants';
 import { SettingsProvider } from '../context/SettingsContext';
-import { ServicesWorkspace, type ServicesWorkspaceNebsState, type ServicesWorkspaceNbsState } from './ServicesWorkspace';
+import { ServicesWorkspace, type ServicesWorkspaceNbsState } from './ServicesWorkspace';
 
 function makeItem(code: string, description: string, level: number) {
     return {
@@ -13,18 +13,8 @@ function makeItem(code: string, description: string, level: number) {
         description,
         parent_code: null,
         level,
-        has_nebs: false,
     };
 }
-
-const EMPTY_NEBS_STATE: ServicesWorkspaceNebsState = {
-    results: [],
-    selectedCode: null,
-    detail: null,
-    isSearching: false,
-    isLoadingDetail: false,
-    hasSearched: false,
-};
 
 function renderWorkspace(nbsState: ServicesWorkspaceNbsState) {
     return render(
@@ -32,9 +22,7 @@ function renderWorkspace(nbsState: ServicesWorkspaceNbsState) {
             <ServicesWorkspace
                 doc="nbs"
                 nbsState={nbsState}
-                nebsState={EMPTY_NEBS_STATE}
                 onSelectNbs={vi.fn()}
-                onSelectNebs={vi.fn()}
                 onSwitchDoc={vi.fn()}
             />
         </SettingsProvider>,
