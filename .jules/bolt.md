@@ -1,0 +1,3 @@
+## 2025-04-26 - [Cache Optimization for String Processing]
+**Learning:** Applying `lru_cache` directly to an instance method includes `self` in the cache key, causing cache misses across different instances and potential memory leaks. When optimizing pure text processing logic like NLP stemming, using `lru_cache` on a `@staticmethod` or module-level function is much more efficient because it caches words globally across multiple documents and queries.
+**Action:** Extract pure computational functions from classes into static methods or module-level functions before applying `lru_cache` to ensure the cache is shared globally and no instance state is leaked.
