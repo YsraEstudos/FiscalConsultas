@@ -461,6 +461,32 @@ async def test_get_item_details_escapes_html_in_nebs_body_fields(tmp_path: Path)
 
 
 @pytest.mark.asyncio
+async def test_get_item_details_resolves_inline_nebs_by_alias_in_sqlite(tmp_path: Path):
+    db_path = tmp_path / "services.db"
+    _seed_services_db(db_path)
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            UPDATE nebs_entries
+            SET code = ?, code_clean = ?
+            WHERE code = ?
+            """,
+            ("1.0101.11", "101011", "1.0101.11.00"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    async with NbsService(db_path) as service:
+        payload = await service.get_item_details("1.0101.11.00")
+
+    assert payload["item"]["code"] == "1.0101.11.00"
+    assert payload["nebs"]["code"] == "1.0101.11"
+    assert "parser_status" not in payload["nebs"]
+
+
+@pytest.mark.asyncio
 async def test_search_raises_when_database_is_missing(tmp_path: Path):
     async with NbsService(tmp_path / "missing-services.db") as service:
         with pytest.raises(DatabaseNotFoundError):

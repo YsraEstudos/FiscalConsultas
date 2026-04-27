@@ -15,6 +15,7 @@ from .sqlite_common import (
     fetch_nbs_item_by_code,
     fetch_nbs_tree_page_sqlite,
     release_nbs_sqlite_connection,
+    resolve_nbs_code_aliases,
     resolve_nbs_hierarchy_root,
     sanitize_nbs_detail_payload,
     sanitize_nbs_html_fields,
@@ -93,7 +94,7 @@ async def fetch_nbs_catalog_item_details(
 
         children_cursor = await conn.execute(
             """
-            SELECT code, code_clean, description, parent_code, level, has_nebs
+            SELECT code, code_clean, description, parent_code, level
             FROM nbs_items
             WHERE parent_code = ?
             ORDER BY source_order ASC
@@ -112,8 +113,22 @@ async def fetch_nbs_catalog_item_details(
             else None
         )
 
+        code_aliases, clean_aliases = resolve_nbs_code_aliases(str(item["code"]))
+        nebs_where_clauses: list[str] = []
+        nebs_params: list[object] = []
+        if code_aliases:
+            nebs_where_clauses.append(
+                f"code IN ({', '.join(['?'] * len(code_aliases))})"
+            )
+            nebs_params.extend(code_aliases)
+        if clean_aliases:
+            nebs_where_clauses.append(
+                f"code_clean IN ({', '.join(['?'] * len(clean_aliases))})"
+            )
+            nebs_params.extend(clean_aliases)
+
         nebs_cursor = await conn.execute(
-            """
+            f"""
             SELECT
                 code,
                 code_clean,
@@ -130,10 +145,12 @@ async def fetch_nbs_catalog_item_details(
                 source_hash,
                 updated_at
             FROM nebs_entries
-            WHERE code = ? AND parser_status = 'trusted'
+            WHERE ({" OR ".join(nebs_where_clauses)})
+              AND parser_status = 'trusted'
+            ORDER BY LENGTH(code_clean) DESC
             LIMIT 1
             """,
-            (item["code"],),
+            nebs_params,
         )
         nebs_row = await nebs_cursor.fetchone()
         nebs_payload = (

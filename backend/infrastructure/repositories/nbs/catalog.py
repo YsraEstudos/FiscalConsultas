@@ -178,7 +178,7 @@ async def load_nbs_catalog_item_details(
             await load_trusted_nbs_explanatory_entry(
                 repo,
                 item["code"],
-                allow_aliases=False,
+                allow_aliases=True,
             )
         )
     )

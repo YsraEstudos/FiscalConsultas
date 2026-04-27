@@ -271,7 +271,8 @@ export function getLocalNbsDetail(code, page = 1, pageSize = 50) {
         page_start,
         page_end
      FROM nebs_entries
-     WHERE code = ? OR code_clean = ?
+     WHERE (code = ? OR code_clean = ?)
+       AND parser_status = 'trusted'
      ORDER BY LENGTH(code_clean) DESC
      LIMIT 1`,
     [item.code, item.code_clean]

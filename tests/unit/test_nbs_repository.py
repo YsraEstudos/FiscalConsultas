@@ -140,8 +140,8 @@ async def test_get_item_details_inline_nebs_public_scope_filters_to_null_tenant(
             _FakeRowsResult(
                 [
                     SimpleNamespace(
-                        code="1.0102.61",
-                        code_clean="1010261",
+                        code="1.0102.61.00",
+                        code_clean="101026100",
                         description="Serviços de construção",
                         parent_code=None,
                         level=0,
@@ -173,10 +173,10 @@ async def test_get_item_details_inline_nebs_public_scope_filters_to_null_tenant(
     )
     repo = NbsRepository(session)
 
-    details = await repo.load_nbs_catalog_item_details("1.0102.61", include_tree=False)
+    details = await repo.load_nbs_catalog_item_details("1.0102.61.00", include_tree=False)
 
     assert details["success"] is True
-    assert details["item"]["code"] == "1.0102.61"
+    assert details["item"]["code"] == "1.0102.61.00"
     assert details["nebs"]["code"] == "1.0102.61"
     assert "parser_status" not in details["nebs"]
 
@@ -184,3 +184,9 @@ async def test_get_item_details_inline_nebs_public_scope_filters_to_null_tenant(
     for stmt, params in session.calls:
         assert "tenant_id IS NULL" in str(stmt)
         assert "tenant_id" not in params
+    nebs_stmt, nebs_params = session.calls[2]
+    assert "code_clean" in str(nebs_stmt)
+    assert "parser_status = :parser_status" in str(nebs_stmt)
+    assert nebs_params["nebs_code_0"] == "1.0102.61.00"
+    assert nebs_params["nebs_code_1"] == "1.0102.61"
+    assert nebs_params["parser_status"] == "trusted"
