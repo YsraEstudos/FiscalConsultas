@@ -56,74 +56,32 @@ async def load_nbs_catalog_entries(
     tenant_predicate_n = build_nbs_tenant_predicate_sql(repo.tenant_id, "n")
     fts_predicate = f"(n.search_vector @@ {tsquery.sql})"
     sql = f"""
-        WITH ranked AS (
-            SELECT
-                n.code,
-                n.code_clean,
-                n.description,
-                n.parent_code,
-                n.level,
-                500 AS match_score,
-                0::float AS fts_rank
-            FROM nbs_items AS n
-            WHERE :clean_query <> ''
-              AND n.code_clean = :clean_query
-              {tenant_predicate_n}
-            UNION ALL
-            SELECT
-                n.code,
-                n.code_clean,
-                n.description,
-                n.parent_code,
-                n.level,
-                CASE
-                    WHEN :raw_query <> '' AND n.code = :raw_query THEN 480
-                    WHEN :clean_query <> '' AND n.code_clean LIKE :clean_prefix THEN 420
-                    WHEN :normalized_query <> '' AND n.description_normalized = :normalized_query THEN 360
-                    WHEN :normalized_query <> '' AND n.description_normalized LIKE :normalized_prefix THEN 320
-                    ELSE 280
-                END AS match_score,
-                0::float AS fts_rank
-            FROM nbs_items AS n
-            WHERE (
-                (:clean_query <> '' AND n.code_clean LIKE :clean_prefix)
-                OR (:raw_query <> '' AND n.code LIKE :raw_prefix)
-                OR (:normalized_query <> '' AND n.description_normalized = :normalized_query)
-                OR (:normalized_query <> '' AND n.description_normalized LIKE :normalized_prefix)
-            )
-            {tenant_predicate_n}
-            UNION ALL
-            SELECT
-                n.code,
-                n.code_clean,
-                n.description,
-                n.parent_code,
-                n.level,
-                220 AS match_score,
-                ts_rank(n.search_vector, {tsquery.sql}) AS fts_rank
-            FROM nbs_items AS n
-            WHERE {fts_predicate}
-            {tenant_predicate_n}
-        )
-        SELECT DISTINCT ON (code)
-            code,
-            code_clean,
-            description,
-            parent_code,
-            level,
-            match_score
-        FROM ranked
-        ORDER BY code, match_score DESC, fts_rank DESC
-    """
-    wrapped_sql = f"""
         SELECT
-            code,
-            code_clean,
-            description,
-            parent_code,
-            level
-        FROM ({sql}) AS deduped
-        ORDER BY match_score DESC, LENGTH(code_clean) ASC, code ASC
+            n.code,
+            n.code_clean,
+            n.description,
+            n.parent_code,
+            n.level,
+            CASE
+                WHEN :clean_query <> '' AND n.code_clean = :clean_query THEN 500
+                WHEN :raw_query <> '' AND n.code = :raw_query THEN 480
+                WHEN :clean_query <> '' AND n.code_clean LIKE :clean_prefix THEN 420
+                WHEN :normalized_query <> '' AND n.description_normalized = :normalized_query THEN 360
+                WHEN :normalized_query <> '' AND n.description_normalized LIKE :normalized_prefix THEN 320
+                WHEN {fts_predicate} THEN 220
+                ELSE 200
+            END AS match_score
+        FROM nbs_items AS n
+        WHERE (
+            (:clean_query <> '' AND n.code_clean = :clean_query)
+            OR (:clean_query <> '' AND n.code_clean LIKE :clean_prefix)
+            OR (:raw_query <> '' AND n.code LIKE :raw_prefix)
+            OR (:normalized_query <> '' AND n.description_normalized = :normalized_query)
+            OR (:normalized_query <> '' AND n.description_normalized LIKE :normalized_prefix)
+            OR {fts_predicate}
+        )
+        {tenant_predicate_n}
+        ORDER BY match_score DESC, LENGTH(n.code_clean) ASC, n.code ASC
         LIMIT :limit
     """
     params = {
@@ -137,7 +95,7 @@ async def load_nbs_catalog_entries(
         **build_nbs_tenant_params(repo.tenant_id),
         **tsquery.params,
     }
-    result = await repo.session.execute(text(wrapped_sql), params)
+    result = await repo.session.execute(text(sql), params)
     return [row_to_nbs_catalog_item(row) for row in result]
 
 

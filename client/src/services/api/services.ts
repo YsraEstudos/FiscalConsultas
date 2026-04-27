@@ -3,6 +3,7 @@ import type {
     NbsCatalogSearchApiResponse,
 } from '../../types/api.types';
 
+import { getCached, setCache, withInFlightDedup } from './cache';
 import { api, withDevCacheBust } from './httpClient';
 
 type NbsTreePageApiResponse = {
@@ -13,10 +14,20 @@ type NbsTreePageApiResponse = {
 };
 
 export const searchNbsServices = async (query: string): Promise<NbsCatalogSearchApiResponse> => {
-    const response = await api.get<NbsCatalogSearchApiResponse>(
-        withDevCacheBust(`/services/nbs/search?q=${encodeURIComponent(query)}`),
-    );
-    return response.data;
+    const cacheKey = `nbs:search:${query}`;
+    const cached = getCached<NbsCatalogSearchApiResponse>(cacheKey);
+    if (cached) return cached;
+
+    return withInFlightDedup(`nbs:search:${query}`, async () => {
+        const response = await api.get<NbsCatalogSearchApiResponse>(
+            withDevCacheBust(`/services/nbs/search?q=${encodeURIComponent(query)}`),
+        );
+        const data = response.data;
+        if (data?.success) {
+            setCache(cacheKey, data);
+        }
+        return data;
+    });
 };
 
 export const getNbsServiceDetail = async (code: string): Promise<NbsCatalogDetailApiResponse> => {

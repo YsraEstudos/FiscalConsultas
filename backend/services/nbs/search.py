@@ -108,7 +108,7 @@ async def search_nbs_catalog_entries(
                     raw_query,
                     f"{raw_query}%",
                     normalized_query,
-                    f"%{normalized_query}%",
+                    f"{normalized_query}%",
                     limit,
                 ),
             )

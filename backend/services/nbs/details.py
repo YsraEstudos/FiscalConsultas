@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from backend.config.exceptions import NotFoundError
-
 from .bootstrap import acquire_nbs_repository
 from .cache import (
     build_nbs_cache_key,
@@ -40,53 +38,85 @@ def public_nbs_explanatory_entry(
     return sanitize_nbs_html_fields(public_entry)
 
 
-async def fetch_nbs_catalog_item_details(
+async def _fetch_nbs_detail_from_repository(
     service: NbsServiceState,
-    code: str,
+    normalized_code: str,
     *,
-    include_tree: bool = True,
-    page: int = 1,
-    page_size: int = DEFAULT_TREE_PAGE_SIZE,
+    include_tree: bool,
+    normalized_page: int,
+    normalized_page_size: int,
+    cache_key: str,
+    scope: str,
 ) -> dict[str, object]:
-    normalized_code = (code or "").strip()
-    normalized_page = max(int(page or 1), 1)
-    normalized_page_size = min(
-        max(int(page_size or DEFAULT_TREE_PAGE_SIZE), 1), MAX_TREE_PAGE_SIZE
-    )
-    cache_key = build_nbs_cache_key(
-        "nbs-detail",
-        normalized_code,
-        include_tree,
-        normalized_page,
-        normalized_page_size,
-    )
-    scope = resolve_nbs_cache_scope(service._repository)
-    cached = await read_nbs_detail_cache_payload(service, "nbs", scope, cache_key)
-    if cached is not None:
-        return cached
-
-    if service._use_repository:
-        async with acquire_nbs_repository(service) as repo:
-            if repo is None:
-                raise RuntimeError("NBS repository unavailable")
-            scoped_key = resolve_nbs_cache_scope(repo)
-            if scoped_key != scope:
-                cached = await read_nbs_detail_cache_payload(
-                    service, "nbs", scoped_key, cache_key
-                )
-                if cached is not None:
-                    return cached
-            scope = scoped_key
-            payload = await repo.load_nbs_catalog_item_details(
-                normalized_code,
-                include_tree=include_tree,
-                page=normalized_page,
-                page_size=normalized_page_size,
+    async with acquire_nbs_repository(service) as repo:
+        if repo is None:
+            raise RuntimeError("NBS repository unavailable")
+        scoped_key = resolve_nbs_cache_scope(repo)
+        if scoped_key != scope:
+            cached = await read_nbs_detail_cache_payload(
+                service, "nbs", scoped_key, cache_key
             )
-        payload = sanitize_nbs_detail_payload(payload)
-        await write_nbs_detail_cache_payload(service, "nbs", scope, cache_key, payload)
-        return payload
+            if cached is not None:
+                return cached
+        payload = await repo.load_nbs_catalog_item_details(
+            normalized_code,
+            include_tree=include_tree,
+            page=normalized_page,
+            page_size=normalized_page_size,
+        )
+    payload = sanitize_nbs_detail_payload(payload)
+    await write_nbs_detail_cache_payload(service, "nbs", scoped_key, cache_key, payload)
+    return payload
 
+
+async def _fetch_inline_nebs_payload(conn, code: str) -> dict[str, object] | None:
+    code_aliases, clean_aliases = resolve_nbs_code_aliases(code)
+    nebs_where_clauses, nebs_params = resolve_nbs_explanatory_alias_filters(
+        code_aliases,
+        clean_aliases,
+    )
+    if not nebs_where_clauses:
+        return None
+
+    nebs_cursor = await conn.execute(
+        f"""
+        SELECT
+            code,
+            code_clean,
+            title,
+            title_normalized,
+            body_text,
+            body_markdown,
+            body_normalized,
+            section_title,
+            page_start,
+            page_end,
+            parser_status,
+            parse_warnings,
+            source_hash,
+            updated_at
+        FROM nebs_entries
+        WHERE ({" OR ".join(nebs_where_clauses)})
+          AND parser_status = 'trusted'
+        ORDER BY LENGTH(code_clean) DESC
+        LIMIT 1
+        """,
+        nebs_params,
+    )
+    nebs_row = await nebs_cursor.fetchone()
+    if nebs_row is None:
+        return None
+    return public_nbs_explanatory_entry(row_to_nbs_explanatory_entry(nebs_row))
+
+
+async def _fetch_nbs_detail_from_sqlite(
+    service: NbsServiceState,
+    normalized_code: str,
+    *,
+    include_tree: bool,
+    normalized_page: int,
+    normalized_page_size: int,
+) -> dict[str, object]:
     conn = await acquire_nbs_sqlite_connection(service)
     try:
         item = await fetch_nbs_item_by_code(conn, normalized_code)
@@ -113,62 +143,67 @@ async def fetch_nbs_catalog_item_details(
             if include_tree
             else None
         )
-
-        code_aliases, clean_aliases = resolve_nbs_code_aliases(str(item["code"]))
-        nebs_where_clauses, nebs_params = resolve_nbs_explanatory_alias_filters(
-            code_aliases,
-            clean_aliases,
-        )
-        nebs_row = None
-        if nebs_where_clauses:
-            nebs_cursor = await conn.execute(
-                f"""
-                SELECT
-                    code,
-                    code_clean,
-                    title,
-                    title_normalized,
-                    body_text,
-                    body_markdown,
-                    body_normalized,
-                    section_title,
-                    page_start,
-                    page_end,
-                    parser_status,
-                    parse_warnings,
-                    source_hash,
-                    updated_at
-                FROM nebs_entries
-                WHERE ({" OR ".join(nebs_where_clauses)})
-                  AND parser_status = 'trusted'
-                ORDER BY LENGTH(code_clean) DESC
-                LIMIT 1
-                """,
-                nebs_params,
-            )
-            nebs_row = await nebs_cursor.fetchone()
-        nebs_payload = (
-            None
-            if nebs_row is None
-            else public_nbs_explanatory_entry(row_to_nbs_explanatory_entry(nebs_row))
-        )
-
         payload = {
             "success": True,
             "item": item,
             "ancestors": ancestors,
             "children": [row_to_nbs_item(row) for row in child_rows],
             "chapter_root": chapter_root,
-            "nebs": nebs_payload,
+            "nebs": await _fetch_inline_nebs_payload(conn, str(item["code"])),
         }
         if tree_page is not None:
             payload["chapter_items"] = tree_page["items"]
             payload["chapter_page"] = tree_page
-        payload = sanitize_nbs_detail_payload(payload)
-        await write_nbs_detail_cache_payload(service, "nbs", scope, cache_key, payload)
-        return payload
+        return sanitize_nbs_detail_payload(payload)
     finally:
         await release_nbs_sqlite_connection(service, conn)
+
+
+async def fetch_nbs_catalog_item_details(
+    service: NbsServiceState,
+    code: str,
+    *,
+    include_tree: bool = True,
+    page: int = 1,
+    page_size: int = DEFAULT_TREE_PAGE_SIZE,
+) -> dict[str, object]:
+    normalized_code = (code or "").strip()
+    normalized_page = max(int(page or 1), 1)
+    normalized_page_size = min(
+        max(int(page_size or DEFAULT_TREE_PAGE_SIZE), 1), MAX_TREE_PAGE_SIZE
+    )
+    cache_key = build_nbs_cache_key(
+        "nbs-detail",
+        normalized_code,
+        include_tree,
+        normalized_page,
+        normalized_page_size,
+    )
+    scope = resolve_nbs_cache_scope(service._repository)
+    cached = await read_nbs_detail_cache_payload(service, "nbs", scope, cache_key)
+    if cached is not None:
+        return cached
+
+    if service._use_repository:
+        return await _fetch_nbs_detail_from_repository(
+            service,
+            normalized_code,
+            include_tree=include_tree,
+            normalized_page=normalized_page,
+            normalized_page_size=normalized_page_size,
+            cache_key=cache_key,
+            scope=scope,
+        )
+
+    payload = await _fetch_nbs_detail_from_sqlite(
+        service,
+        normalized_code,
+        include_tree=include_tree,
+        normalized_page=normalized_page,
+        normalized_page_size=normalized_page_size,
+    )
+    await write_nbs_detail_cache_payload(service, "nbs", scope, cache_key, payload)
+    return payload
 
 
 async def fetch_nbs_catalog_tree_page(

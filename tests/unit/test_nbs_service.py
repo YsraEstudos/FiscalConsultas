@@ -1,3 +1,4 @@
+import asyncio
 import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -240,15 +241,18 @@ class _FakeNbsRepo:
         return payload["chapter_page"]
 
     async def get_catalog_counts(self):
+        await asyncio.sleep(0)
         return {"nbs_items": 12, "nebs_entries": 4}
 
     async def get_catalog_metadata(self):
+        await asyncio.sleep(0)
         return {
             "nbs_updated_at": "2026-03-25T10:00:00+00:00",
             "nebs_updated_at": "2026-03-25T10:05:00+00:00",
         }
 
     async def search(self, _query: str, limit: int = 50):
+        await asyncio.sleep(0)
         del limit
         return [
             {
@@ -268,6 +272,7 @@ class _FakeNbsRepo:
         page: int = 1,
         page_size: int = 50,
     ):
+        await asyncio.sleep(0)
         chapter_items = [{"code": "1.01"}] if include_tree else []
         return {
             "success": True,
@@ -700,6 +705,7 @@ async def test_repository_mode_search_uses_redis_before_repository(monkeypatch):
     monkeypatch.setattr(nbs_service_module.redis_cache, "_client", object())
 
     async def _fake_get_services_search(namespace: str, scope: str, key: str):
+        await asyncio.sleep(0)
         assert namespace == "nbs"
         assert scope == "tenant-a"
         assert key
@@ -708,6 +714,7 @@ async def test_repository_mode_search_uses_redis_before_repository(monkeypatch):
     async def _fake_set_services_search(
         namespace: str, scope: str, key: str, value: dict
     ):
+        await asyncio.sleep(0)
         raise AssertionError("Redis set should not run on cache hit")
 
     monkeypatch.setattr(

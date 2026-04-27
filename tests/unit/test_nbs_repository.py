@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -38,6 +39,7 @@ class _FakeSession:
         self.calls = []
 
     async def execute(self, stmt, params=None):
+        await asyncio.sleep(0)
         self.calls.append((stmt, params))
         return self._results.pop(0)
 
