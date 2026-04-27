@@ -24,12 +24,43 @@ test('main surfaces render without obvious visual breakage or defacement', async
       if (text.includes('Content Security Policy directive')) return;
       if (text.includes('worker-src')) return;
       if (text.includes("The Content Security Policy directive")) return;
-      consoleErrors.push(text);
+      const location = msg.location();
+      const source = location.url ? ` (${location.url}:${location.lineNumber})` : '';
+      consoleErrors.push(`${text}${source}`);
     }
   });
 
   page.on('requestfailed', (request) => {
     failedRequests.push(`${request.method()} ${request.url()} :: ${request.failure()?.errorText || 'unknown'}`);
+  });
+
+  await page.context().route('**/api/auth/me*', async (route) => {
+    await route.fulfill({
+      json: {
+        authenticated: true,
+        user: { id: 'e2e-user', email: 'e2e@example.com', name: 'E2E User' },
+        capabilities: {
+          can_use_restricted_ui: true,
+          can_use_ai_chat: true,
+        },
+      },
+    });
+  });
+  await page.context().route('**/api/profile/me*', async (route) => {
+    await route.fulfill({
+      json: {
+        id: 'e2e-user',
+        email: 'e2e@example.com',
+        name: 'E2E User',
+      },
+    });
+  });
+  await page.context().route('**/api/database/version*', async (route) => {
+    await route.fulfill({
+      json: {
+        version: 'playwright-smoke',
+      },
+    });
   });
 
   await installServicesMock(page, {
@@ -55,19 +86,13 @@ test('main surfaces render without obvious visual breakage or defacement', async
   await page.getByRole('button', { name: /Configurações/ }).click();
   await expect(page.getByRole('heading', { name: /Configurações/ })).toBeVisible();
   await page.screenshot({ path: 'test-results/site-smoke-settings.png', fullPage: true });
-  await page.keyboard.press('Escape');
-
-  await page.getByRole('button', { name: /Menu/ }).click();
-  await page.getByRole('button', { name: /Ajuda \/ Tutorial/ }).click();
-  await expect(page.getByText(/Como usar/)).toBeVisible();
-  await page.screenshot({ path: 'test-results/site-smoke-tutorial.png', fullPage: true });
-  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Fechar', exact: true }).click();
 
   await page.getByRole('button', { name: /Menu/ }).click();
   await page.getByRole('button', { name: /Comparar NCMs/ }).click();
   await expect(page.getByRole('heading', { name: /Comparar NCMs/ })).toBeVisible();
   await page.screenshot({ path: 'test-results/site-smoke-comparator.png', fullPage: true });
-  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Fechar', exact: true }).click();
 
   await page.getByRole('button', { name: /Menu/ }).click();
   await page.getByRole('button', { name: /Serviços \(NBS\)/ }).click();

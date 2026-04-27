@@ -14,8 +14,17 @@ from backend.config.services_db_schema import (
     SERVICES_INDEXES_SQL,
 )
 from backend.services.nbs_service import NbsService
+from backend.services.nbs.health import build_nbs_health_payload
 
 pytestmark = pytest.mark.unit
+
+
+def test_nbs_health_payload_keeps_catalog_online_when_explanatory_entries_empty():
+    payload = build_nbs_health_payload(12, 0, {})
+
+    assert payload["status"] == "online"
+    assert payload["nbs_items"] == 12
+    assert payload["nebs_entries"] == 0
 
 
 @pytest.fixture(autouse=True)
@@ -230,12 +239,6 @@ class _FakeNbsRepo:
         )
         return payload["chapter_page"]
 
-    async def load_nbs_explanatory_entries(self, _query: str, limit: int = 50):
-        return await self.search_nebs(_query, limit=limit)
-
-    async def load_nbs_explanatory_entry_details(self, _code: str):
-        return await self.get_nebs_details(_code)
-
     async def get_catalog_counts(self):
         return {"nbs_items": 12, "nebs_entries": 4}
 
@@ -254,7 +257,6 @@ class _FakeNbsRepo:
                 "description": "Serviços de construção",
                 "parent_code": None,
                 "level": 0,
-                "has_nebs": True,
             }
         ]
 
@@ -284,27 +286,6 @@ class _FakeNbsRepo:
             "nebs": None,
         }
 
-    async def search_nebs(self, _query: str, limit: int = 50):
-        del limit
-        return [
-            {
-                "code": "1.01",
-                "title": "Serviços de construção",
-                "excerpt": "Trecho público",
-                "page_start": 1,
-                "page_end": 2,
-                "section_title": "SEÇÃO I",
-            }
-        ]
-
-    async def get_nebs_details(self, _code: str):
-        return {
-            "success": True,
-            "item": {"code": "1.01"},
-            "ancestors": [],
-            "entry": {"code": "1.01", "body_text": "Trecho público"},
-        }
-
 
 class _CountingNbsRepo(_FakeNbsRepo):
     def __init__(self, *, tenant_id: str | None = None):
@@ -312,8 +293,6 @@ class _CountingNbsRepo(_FakeNbsRepo):
         self.calls = {
             "search": 0,
             "get_item_details": 0,
-            "search_nebs": 0,
-            "get_nebs_details": 0,
         }
 
     async def search(self, query: str, limit: int = 50):
@@ -323,15 +302,6 @@ class _CountingNbsRepo(_FakeNbsRepo):
     async def get_item_details(self, code: str, **kwargs):
         self.calls["get_item_details"] += 1
         return await super().get_item_details(code, **kwargs)
-
-    async def search_nebs(self, query: str, limit: int = 50):
-        self.calls["search_nebs"] += 1
-        return await super().search_nebs(query, limit=limit)
-
-    async def get_nebs_details(self, code: str):
-        self.calls["get_nebs_details"] += 1
-        return await super().get_nebs_details(code)
-
 
 def _seed_services_db_with_custom_root(
     db_path: Path, root_code: str, root_description: str
@@ -460,76 +430,6 @@ async def test_get_item_details_returns_ancestors_children_and_chapter_payload(
 
 
 @pytest.mark.asyncio
-async def test_search_nebs_matches_full_nbs_code_against_canonical_nebs_entry(
-    tmp_path: Path,
-):
-    db_path = tmp_path / "services.db"
-    _seed_services_db(db_path)
-    async with NbsService(db_path) as service:
-        payload = await service.search_nebs("1.0101.11.00")
-
-    assert payload["success"] is True
-    assert payload["results"][0]["code"] == "1.0101.11.00"
-
-
-@pytest.mark.asyncio
-async def test_search_nebs_returns_only_trusted_entries_and_prioritizes_exact_code(
-    tmp_path: Path,
-):
-    db_path = tmp_path / "services.db"
-    _seed_services_db(db_path)
-    async with NbsService(db_path) as service:
-        payload = await service.search_nebs("1.0101")
-
-    assert payload["success"] is True
-    assert payload["total"] == 2
-    assert payload["results"][0]["code"] == "1.0101"
-    assert payload["results"][0]["excerpt"] == ""
-
-
-@pytest.mark.asyncio
-async def test_search_nebs_uses_fts_for_body_terms(tmp_path: Path):
-    db_path = tmp_path / "services.db"
-    _seed_services_db(db_path)
-    async with NbsService(db_path) as service:
-        payload = await service.search_nebs("novas construcoes reparo")
-
-    assert payload["success"] is True
-    assert payload["results"][0]["code"] == "1.0101.11.00"
-
-
-@pytest.mark.asyncio
-async def test_search_nebs_with_empty_query_returns_empty_result_set(tmp_path: Path):
-    db_path = tmp_path / "services.db"
-    _seed_services_db(db_path)
-    async with NbsService(db_path) as service:
-        payload = await service.search_nebs("")
-
-    assert payload["success"] is True
-    assert payload["results"] == []
-    assert payload["total"] == 0
-
-
-@pytest.mark.asyncio
-async def test_get_nebs_details_resolves_short_nebs_code_to_canonical_nbs_entry(
-    tmp_path: Path,
-):
-    db_path = tmp_path / "services.db"
-    _seed_services_db(db_path)
-    async with NbsService(db_path) as service:
-        payload = await service.get_nebs_details("1.0101.11")
-
-    assert payload["item"]["code"] == "1.0101.11.00"
-    assert [item["code"] for item in payload["ancestors"]] == [
-        "1.01",
-        "1.0101",
-        "1.0101.1",
-    ]
-    assert payload["entry"]["code"] == "1.0101.11.00"
-    assert payload["entry"]["section_title"] == "SEÇÃO I - SERVIÇOS DE CONSTRUÇÃO"
-
-
-@pytest.mark.asyncio
 async def test_get_item_details_escapes_html_in_nebs_body_fields(tmp_path: Path):
     db_path = tmp_path / "services.db"
     _seed_services_db(db_path)
@@ -558,15 +458,6 @@ async def test_get_item_details_escapes_html_in_nebs_body_fields(tmp_path: Path)
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in payload["nebs"]["body_text"]
     assert "<img" not in payload["nebs"]["body_markdown"]
     assert "&lt;img src=x onerror=alert(1)&gt;" in payload["nebs"]["body_markdown"]
-
-
-@pytest.mark.asyncio
-async def test_get_nebs_details_raises_not_found_for_non_trusted_entry(tmp_path: Path):
-    db_path = tmp_path / "services.db"
-    _seed_services_db(db_path)
-    async with NbsService(db_path) as service:
-        with pytest.raises(NotFoundError):
-            await service.get_nebs_details("1.0101.1")
 
 
 @pytest.mark.asyncio
@@ -699,34 +590,14 @@ async def test_repository_mode_escapes_html_in_nebs_payload_fields():
                 },
             }
 
-        async def get_nebs_details(self, _code: str):
-            return {
-                "success": True,
-                "item": {"code": "1.01"},
-                "ancestors": [],
-                "entry": {
-                    "code": "1.01",
-                    "body_text": "<script>alert(1)</script>",
-                    "body_markdown": "<img src=x onerror=alert(1)>",
-                },
-            }
-
     service = NbsService(repository=_MaliciousNbsRepo())
 
     item_payload = await service.get_item_details("1.01")
-    nebs_payload = await service.get_nebs_details("1.01")
 
     assert "<script" not in item_payload["nebs"]["body_text"]
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in item_payload["nebs"]["body_text"]
     assert "<img" not in item_payload["nebs"]["body_markdown"]
     assert "&lt;img src=x onerror=alert(1)&gt;" in item_payload["nebs"]["body_markdown"]
-
-    assert "<script" not in nebs_payload["entry"]["body_text"]
-    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in nebs_payload["entry"]["body_text"]
-    assert "<img" not in nebs_payload["entry"]["body_markdown"]
-    assert (
-        "&lt;img src=x onerror=alert(1)&gt;" in nebs_payload["entry"]["body_markdown"]
-    )
 
 
 @pytest.mark.asyncio

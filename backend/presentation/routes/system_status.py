@@ -246,8 +246,7 @@ async def collect_status_payloads_uncached(
         "online"
         if normalized_db.get("status") == "online"
         and normalized_tipi.get("status") == "online"
-        and normalized_nbs.get("status") == "online"
-        and normalized_nebs.get("status") == "online"
+        and resolve_nbs_public_status(normalized_nbs, normalized_nebs) == "online"
         else "error"
     )
     return (
@@ -292,7 +291,19 @@ def resolve_nbs_public_status(
     nbs_status = normalized_nbs.get("status", "error")
     if nbs_status != "online":
         return "error"
-    if normalized_nebs and normalized_nebs.get("status") not in (None, "online"):
+
+    if not normalized_nebs:
+        return "online"
+
+    nebs_status = normalized_nebs.get("status")
+    if nebs_status in (None, "online"):
+        return "online"
+
+    explanatory_entries = coerce_int(normalized_nebs.get("entries"))
+    if explanatory_entries == 0 and not normalized_nebs.get("error"):
+        return "online"
+
+    if nebs_status != "online":
         return "error"
     return "online"
 

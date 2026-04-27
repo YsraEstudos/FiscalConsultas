@@ -35,7 +35,6 @@ class _FakeServicesCatalog:
             "description": "Serviços de construção",
             "parent_code": None,
             "level": 0,
-            "has_nebs": False,
         }
         child = {
             "code": "1.0101",
@@ -43,7 +42,6 @@ class _FakeServicesCatalog:
             "description": "Serviços de construção de edificações",
             "parent_code": code,
             "level": 1,
-            "has_nebs": True,
         }
         return {
             "success": True,
@@ -52,7 +50,6 @@ class _FakeServicesCatalog:
             "children": [child],
             "chapter_root": item,
             "chapter_items": [item, child] if include_tree else [],
-            "nebs": None,
         }
 
     async def fetch_nbs_catalog_tree_page(
@@ -62,6 +59,8 @@ class _FakeServicesCatalog:
         page: int = 1,
         page_size: int = 50,
     ):
+        # No-op await keeps this fake aligned with the async service contract
+        # and satisfies static analysis that expects a real await.
         await asyncio.sleep(0)
         item = {
             "code": code,
@@ -69,7 +68,6 @@ class _FakeServicesCatalog:
             "description": "Serviços de construção",
             "parent_code": None,
             "level": 0,
-            "has_nebs": False,
         }
         child = {
             "code": "1.0101",
@@ -77,7 +75,6 @@ class _FakeServicesCatalog:
             "description": "Serviços de construção de edificações",
             "parent_code": code,
             "level": 1,
-            "has_nebs": True,
         }
         items = [item, child]
         normalized_page = max(page, 1)

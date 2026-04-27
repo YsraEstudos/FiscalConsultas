@@ -269,11 +269,11 @@ export function ServicesTabContent({
     }, [loadNbsDetail]);
     const firstResultCode = data.results[0]?.code || null;
     const preferredNbsCode = useMemo(() => {
-        if (doc !== 'nbs') return null;
+        const firstCode = data.results[0]?.code || null;
 
         const rawQuery = data.query.trim();
         if (!rawQuery) {
-            return firstResultCode;
+            return firstCode;
         }
 
         const cleanQuery = rawQuery.replaceAll(/[^0-9.]/g, '');
@@ -282,15 +282,15 @@ export function ServicesTabContent({
         );
 
         if (!isCodeLike) {
-            return firstResultCode;
+            return firstCode;
         }
 
-        const exactMatch = (data.results as NbsSearchResponse['results']).find(
+        const exactMatch = data.results.find(
             (item) => item.code === rawQuery || item.code_clean === cleanQuery.replaceAll('.', ''),
         );
 
-        return exactMatch?.code || firstResultCode;
-    }, [data.query, data.results, doc, firstResultCode]);
+        return exactMatch?.code || firstCode;
+    }, [data.query, data.results]);
 
     useEffect(() => {
         detailRequestRef.current += 1;
@@ -324,7 +324,7 @@ export function ServicesTabContent({
     }, [data.results.length, detailStatus, onContentReady]);
 
     const nbsState = useMemo<ServicesWorkspaceNbsState>(() => ({
-        results: data.results as NbsSearchResponse['results'],
+        results: data.results,
         selectedCode,
         detail: nbsDetail,
         isSearching: false,

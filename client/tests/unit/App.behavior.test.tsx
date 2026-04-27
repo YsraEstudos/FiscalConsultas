@@ -583,6 +583,9 @@ describe('App behavior', () => {
   });
 
   it('wires the restored services tab callbacks back into App state transitions', async () => {
+    // This intentionally clicks nbs -> nbs: the test protects that
+    // switchTabDocument still resets state via updateTabMock and re-triggers
+    // executeSearchForTab instead of short-circuiting same-document services links.
     setTabsState([
       buildTab({
         document: 'nbs',

@@ -184,11 +184,11 @@ describe('services tabs flow', () => {
     const { container } = render(<ServicesTabsHarness initialDoc="nbs" initialQuery="1.0101.11.00" />);
 
     await waitFor(() => {
-      expect(container.querySelector('[class*="notesContent"] [data-service-code="1.1703.2"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="notes-content"] [data-service-code="1.1703.2"]')).not.toBeNull();
     });
-    const noteCodeLink = container.querySelector('[class*="notesContent"] [data-service-code="1.1703.2"]');
+    const noteCodeLink = container.querySelector('[data-testid="notes-content"] [data-service-code="1.1703.2"]');
     if (!noteCodeLink) throw new Error('Expected service code link inside inline explanatory note');
-    fireEvent.click(noteCodeLink);
+    fireEvent.mouseDown(noteCodeLink, { bubbles: true, button: 1 });
 
     await waitFor(() => {
       expect(screen.getByTestId('tab-list')).toHaveAttribute('data-count', '1');
@@ -218,11 +218,11 @@ describe('services tabs flow', () => {
     );
 
     await waitFor(() => {
-      expect(container.querySelector('[class*="notesContent"] [data-service-code="1.1703.2"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="notes-content"] [data-service-code="1.1703.2"]')).not.toBeNull();
     });
-    const noteCodeLink = container.querySelector('[class*="notesContent"] [data-service-code="1.1703.2"]');
+    const noteCodeLink = container.querySelector('[data-testid="notes-content"] [data-service-code="1.1703.2"]');
     if (!noteCodeLink) throw new Error('Expected service code link inside inline explanatory note');
-    fireEvent.click(noteCodeLink);
+    fireEvent.mouseDown(noteCodeLink, { bubbles: true, button: 1 });
 
     expect(onOpenDocInNewTab).toHaveBeenCalledWith('nbs', '1.1703.2');
     expect(screen.getByTestId('active-tab-meta')).toHaveTextContent('nbs:1.0101.11.00');

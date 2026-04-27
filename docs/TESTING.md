@@ -44,13 +44,13 @@
 | 1 | Instalação offline (`/api/database/version`, `/token`, `/download`) | Forte | Limitada | Ausente | Parcial | P0 |
 | 2 | App shell offline + reabertura sem rede | Limitada | Ausente | Ausente | Não coberto | P0 |
 | 3 | Busca/detalhe local (`NESH`, `TIPI`, `NBS`, `NEBS`) | Forte | Forte | Parcial | Parcial | P0 |
-| 4 | Sanitização de HTML renderizado | Forte | Limitada | Ausente | Coberto | P1 |
-| 5 | Gating de moderação/admin por role | Forte | Limitada | Ausente | Parcial | P1 |
-| 6 | Capacidades de UI restrita vindas de `/api/auth/me` | Forte | Forte | Sim (`auth-capabilities.spec.ts`) | Coberto | P0 |
-| 7 | Auth enforcement `/api/ai/chat` (`401/403/200`) | Limitada | Forte | Ausente | Coberto | P1 |
-| 8 | Rate limit de AI chat (`429` + `Retry-After`) | Limitada | Forte | Ausente | Coberto | P1 |
-| 9 | Contrato de webhook `/api/webhooks/asaas` | Limitada | Forte | N/A | Coberto | P1 |
-| 10 | Regressão NCM/TIPI/services | Forte | Forte | Parcial | Parcial | P2 |
+| 4 | Contrato das rotas públicas de `NBS`/`NEBS` | Forte | Forte | Parcial | Parcial | P0 |
+| 5 | Sanitização de HTML renderizado | Forte | Limitada | Ausente | Coberto | P1 |
+| 6 | Gating de moderação/admin por role | Forte | Limitada | Ausente | Parcial | P1 |
+| 7 | Capacidades de UI restrita vindas de `/api/auth/me` | Forte | Forte | Sim (`auth-capabilities.spec.ts`) | Coberto | P0 |
+| 8 | Auth enforcement `/api/ai/chat` (`401/403/200`) | Limitada | Forte | Ausente | Coberto | P1 |
+| 9 | Rate limit de AI chat (`429` + `Retry-After`) | Limitada | Forte | Ausente | Coberto | P1 |
+| 10 | Contrato de webhook `/api/webhooks/asaas` | Limitada | Forte | N/A | Coberto | P1 |
 
 ### Evidências usadas na classificação (amostra)
 - Offline contract backend: `tests/unit/test_database_download_route.py`

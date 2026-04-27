@@ -174,6 +174,26 @@ def test_status_payloads_tolerate_legacy_empty_nebs_snapshot():
     assert detailed_payload["catalogs"]["nbs"]["status"] == "online"
 
 
+def test_nbs_public_status_ignores_empty_explanatory_entries():
+    normalized_nbs = {"status": "online", "items": 6}
+    normalized_nebs = {"status": "error", "entries": 0}
+
+    assert (
+        system_status.resolve_nbs_public_status(normalized_nbs, normalized_nebs)
+        == "online"
+    )
+
+
+def test_nbs_public_status_fails_on_explanatory_service_error():
+    normalized_nbs = {"status": "online", "items": 6}
+    normalized_nebs = {"status": "error", "entries": 0, "error": "db down"}
+
+    assert (
+        system_status.resolve_nbs_public_status(normalized_nbs, normalized_nebs)
+        == "error"
+    )
+
+
 @pytest.mark.asyncio
 async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypatch):
     class _ScalarResult:

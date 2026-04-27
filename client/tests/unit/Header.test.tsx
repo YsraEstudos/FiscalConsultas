@@ -200,15 +200,13 @@ describe('Header', () => {
     expect(screen.getByText('Tabela de Incidência do IPI')).toBeInTheDocument();
   });
 
-  it.each(['nbs'] as const)(
-    'shows menu shortcuts to return to NESH and TIPI from service tabs when doc=%s',
-    (doc) => {
+  it('shows menu shortcuts to return to NESH and TIPI from service tabs when doc=nbs', () => {
       const setDoc = vi.fn();
 
       render(
         <Header
           onSearch={vi.fn()}
-          doc={doc}
+          doc="nbs"
           setDoc={setDoc}
           searchKey="search-1"
           onOpenSettings={vi.fn()}
@@ -230,8 +228,7 @@ describe('Header', () => {
 
       expect(setDoc).toHaveBeenNthCalledWith(1, 'nesh');
       expect(setDoc).toHaveBeenNthCalledWith(2, 'tipi');
-    },
-  );
+  });
 
   it('renders fallback user labels when auth profile is missing', () => {
     userNameRef.value = null;

@@ -192,7 +192,7 @@ describe('useSearch Hook', () => {
                     nesh: expect.arrayContaining(['84', '73']),
                     tipi: [],
                     nbs: [],
-                    }
+                }
             })
         ]);
     });
@@ -251,7 +251,7 @@ describe('useSearch Hook', () => {
                 error: null,
                 ncm: '',
                 results: null,
-                loadedChaptersByDoc: { nesh: [], tipi: [], nbs: [], nebs: [] }
+                loadedChaptersByDoc: { nesh: [], tipi: [], nbs: [] }
             }
         ];
         const tabsById = new Map(tabs.map(tab => [tab.id, tab]));
@@ -298,7 +298,7 @@ describe('useSearch Hook', () => {
                 error: null,
                 ncm: '',
                 results: null,
-                loadedChaptersByDoc: { nesh: [], tipi: [], nbs: [], nebs: [] }
+                loadedChaptersByDoc: { nesh: [], tipi: [], nbs: [] }
             }
         ];
         const tabsById = new Map(tabs.map(tab => [tab.id, tab]));
@@ -347,7 +347,7 @@ describe('useSearch Hook', () => {
                 error: null,
                 ncm: '',
                 results: null,
-                loadedChaptersByDoc: { nesh: [], tipi: [], nbs: [], nebs: [] }
+                loadedChaptersByDoc: { nesh: [], tipi: [], nbs: [] }
             }
         ];
         const tabsById = new Map(tabs.map(tab => [tab.id, tab]));

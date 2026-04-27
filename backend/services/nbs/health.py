@@ -15,7 +15,7 @@ def build_nbs_health_payload(
     nebs_entries: int,
     metadata: dict[str, str],
 ) -> dict[str, object]:
-    status = "online" if nbs_items > 0 and nebs_entries > 0 else "error"
+    status = "online" if nbs_items > 0 else "error"
     return {
         "status": status,
         "nbs_items": nbs_items,

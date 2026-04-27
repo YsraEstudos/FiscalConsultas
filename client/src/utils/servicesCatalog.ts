@@ -132,6 +132,8 @@ export function isServiceCatalogDoc(doc: string): doc is ServiceCatalogDoc {
     return doc === 'nbs';
 }
 
+// ServiceCatalogDoc is currently always 'nbs'; keep the parameter to preserve
+// the shared error-helper signature if service catalog variants return later.
 export function getServiceCatalogErrorInfo(
     error: unknown,
     _doc: ServiceCatalogDoc,

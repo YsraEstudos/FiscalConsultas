@@ -75,7 +75,12 @@ describe('servicesCatalog utils', () => {
     expect(
       getServicesCatalogOfflineMessage(
         makeStatusResponse({
-          nbs: { status: 'error' },
+          nbs: undefined,
+          catalogs: {
+            nesh: { status: 'online' },
+            tipi: { status: 'online' },
+            nbs: { status: 'error' },
+          },
         }),
       ),
     ).toBe('Catálogo NBS indisponível no momento.');

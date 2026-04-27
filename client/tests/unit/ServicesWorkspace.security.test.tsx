@@ -69,7 +69,7 @@ function renderNbsWorkspace(noteOverrides: Partial<typeof baseNote>) {
 }
 
 describe('ServicesWorkspace security', () => {
-  it('routes service-code clicks inside NBS note content to NEBS detail', () => {
+  it('routes service-code clicks inside NBS note content to NBS detail', () => {
     const onSwitchDoc = vi.fn();
     const { container } = render(
       <ServicesWorkspace
@@ -97,7 +97,7 @@ describe('ServicesWorkspace security', () => {
     expect(onSwitchDoc).toHaveBeenCalledWith('nbs', '1.1703.2');
   });
 
-  it('routes service-code middle mouse down inside NBS note content to NEBS detail', () => {
+  it('routes service-code middle mouse down inside NBS note content to NBS detail', () => {
     const onSwitchDoc = vi.fn();
     const { container } = render(
       <ServicesWorkspace

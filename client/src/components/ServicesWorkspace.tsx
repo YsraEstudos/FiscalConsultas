@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type {
@@ -44,7 +44,9 @@ function getNbsChapterCodeSource(
     doc: ServiceDocType,
     nbsState: ServicesWorkspaceNbsState,
 ): string | null {
-    if (doc !== 'nbs') return null;
+    // ServiceDocType is presently 'nbs'; ServicesWorkspaceProps and this helper
+    // keep doc available for future catalog variants.
+    void doc;
     if (nbsState.detail?.item.code) return nbsState.detail.item.code;
     if (nbsState.selectedCode) return nbsState.selectedCode;
     if (isCodeLikeNbsQuery(nbsState.query)) {
@@ -377,6 +379,7 @@ function NbsDetailSection({
                         <div
                             ref={nbsNotesContentRef}
                             className={styles.notesContent}
+                            data-testid="notes-content"
                             dangerouslySetInnerHTML={{ __html: nbsNoteBodyHtml }}
                         />
                     </section>
@@ -553,6 +556,7 @@ export function ServicesWorkspace({
     const [isChapterNotesOpen, setIsChapterNotesOpen] = useState(false);
     const chapterNotesDialogRef = useRef<HTMLDialogElement | null>(null);
     const nbsNotesContentRef = useRef<HTMLDivElement | null>(null);
+    const hasInlineNotes = Boolean(nbsState.detail?.nebs);
     const chapterCodeSource = getNbsChapterCodeSource(doc, nbsState);
     const activeChapterNumber = getNbsChapterNumber(chapterCodeSource);
     const currentChapterNotesEntry = getNbsChapterNotesEntry(chapterCodeSource);
@@ -560,7 +564,7 @@ export function ServicesWorkspace({
         ? renderNbsChapterNotesHtml(currentChapterNotesEntry)
         : '';
 
-    const openCatalogDoc = (targetDoc: ServiceDocType, query?: string, forceNewTab?: boolean) => {
+    const openCatalogDoc = useCallback((targetDoc: ServiceDocType, query?: string, forceNewTab?: boolean) => {
         if (!query) return;
 
         if ((openNewTab || forceNewTab) && onOpenDocInNewTab) {
@@ -569,7 +573,7 @@ export function ServicesWorkspace({
         }
 
         onSwitchDoc(targetDoc, query);
-    };
+    }, [onOpenDocInNewTab, onSwitchDoc, openNewTab]);
 
     useEffect(() => {
         const container = nbsNotesContentRef.current;
@@ -605,7 +609,7 @@ export function ServicesWorkspace({
             container.removeEventListener('mousedown', handlePointer);
             container.removeEventListener('click', handlePointer);
         };
-    }, [openCatalogDoc]);
+    }, [hasInlineNotes, openCatalogDoc]);
 
     useEffect(() => {
         if (!isChapterNotesOpen || !currentChapterNotesEntry) {
