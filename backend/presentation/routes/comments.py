@@ -29,7 +29,11 @@ from backend.server.rate_limit import (
     comment_create_rate_limiter,
     comment_read_rate_limiter,
 )
-from backend.services.comment_service import COMMENT_NOT_FOUND, CommentService
+from backend.services.comment_service import (
+    COMMENT_NOT_FOUND,
+    CommentNotEditableError,
+    CommentService,
+)
 from backend.utils.auth import extract_bearer_token, is_admin_payload
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -262,6 +266,8 @@ async def update_comment(
     try:
         comment = await service.update_comment(comment_id, payload, tenant_id, user_id)
         return CommentOut.model_validate(comment)
+    except CommentNotEditableError as e:
+        raise HTTPException(status_code=403, detail=PERMISSION_DENIED) from e
     except ValueError as e:
         raise HTTPException(status_code=404, detail=COMMENT_NOT_FOUND) from e
     except PermissionError as e:
@@ -403,6 +409,8 @@ async def moderate_comment(
     try:
         comment = await service.moderate(comment_id, payload, tenant_id, admin_user_id)
         return CommentOut.model_validate(comment)
+    except CommentNotEditableError as e:
+        raise HTTPException(status_code=403, detail=PERMISSION_DENIED) from e
     except ValueError as e:
         raise HTTPException(status_code=404, detail=COMMENT_NOT_FOUND) from e
     except PermissionError as e:

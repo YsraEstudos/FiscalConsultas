@@ -140,7 +140,7 @@ async def _require_auth_payload(request: Request) -> dict:
     payload = await decode_clerk_jwt(token)
     if not payload:
         reason = get_last_jwt_failure_reason()
-        if settings.server.env == "development" and reason:
+        if settings.server.env.lower() == "development" and reason:
             raise HTTPException(
                 status_code=401,
                 detail=f"Invalid or expired token ({reason})",
@@ -197,13 +197,17 @@ async def _consume_token(jti: str, client_ip: str) -> bool:
 
     # Memory fallback
     now = time.monotonic()
-    entry = _memory_tokens.pop(jti, None)
+    entry = _memory_tokens.get(jti)
     if entry is None:
         return False
     created_at, stored_ip = entry
     if now - created_at > _TOKEN_TTL_SECONDS:
+        _memory_tokens.pop(jti, None)
         return False  # Expired
-    return stored_ip == client_ip
+    if stored_ip != client_ip:
+        return False
+    _memory_tokens.pop(jti, None)
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -293,7 +297,7 @@ async def download_database(
     _enforce_secure_request(request)
     await _require_auth_payload(request)
     token = payload.token.strip()
-    if not token or len(token) < 16:
+    if not token:
         raise HTTPException(status_code=400, detail="Invalid token format")
 
     is_valid = await _consume_token(token, extract_client_ip(request))

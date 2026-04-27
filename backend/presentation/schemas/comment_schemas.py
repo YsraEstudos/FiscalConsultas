@@ -10,20 +10,44 @@ from typing import Optional, Literal
 from pydantic import BaseModel, Field, field_validator
 
 ANCHOR_KEY_PATTERN = r"^[A-Za-z0-9._:-]{1,255}$"
+_MAX_HTML_TAG_SCAN = 512
 
 
 def _contains_html_tag(value: str) -> bool:
     for index, char in enumerate(value):
         if char != "<":
             continue
+        close_index = value.find(">", index + 1, index + _MAX_HTML_TAG_SCAN + 1)
+        if close_index == -1:
+            continue
+        if "<" in value[index + 1 : close_index]:
+            continue
+
         cursor = index + 1
-        while cursor < len(value) and value[cursor].isspace():
+        while cursor < close_index and value[cursor].isspace():
             cursor += 1
-        if cursor < len(value) and value[cursor] == "/":
+        if cursor < close_index and value[cursor] == "/":
             cursor += 1
-        while cursor < len(value) and value[cursor].isspace():
+        while cursor < close_index and value[cursor].isspace():
             cursor += 1
-        if cursor < len(value) and value[cursor].isalpha() and ">" in value[cursor:]:
+        if (
+            cursor >= close_index
+            or value[cursor] not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        ):
+            continue
+
+        cursor += 1
+        while cursor < close_index:
+            current = value[cursor]
+            if current.isspace() or current in {">", "/"}:
+                return True
+            if not (
+                current.isascii()
+                and (current.isalnum() or current in {"-", ":", "_"})
+            ):
+                break
+            cursor += 1
+        else:
             return True
     return False
 

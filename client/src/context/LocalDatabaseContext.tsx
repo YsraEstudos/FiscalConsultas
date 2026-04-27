@@ -312,6 +312,7 @@ export function LocalDatabaseProvider({
   const channelRef = useRef<BroadcastChannel | null>(null);
   const workerReadyRef = useRef(false);
   const idCounterRef = useRef(0);
+  const getTokenRef = useRef(getToken);
   const syncWaiterRef = useRef<{
     resolve: () => void;
     reject: (reason: Error) => void;
@@ -338,6 +339,10 @@ export function LocalDatabaseProvider({
     remoteMetaRef.current?.size_bytes || null
   );
   const [isRemoving, setIsRemoving] = useState(false);
+
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
 
   const updateAvailable = useMemo(
     () =>
@@ -499,8 +504,11 @@ export function LocalDatabaseProvider({
       const pending = id ? pendingRef.current.get(id) : undefined;
 
       if (type === "REFRESH_TOKEN") {
-        if (!id) return;
-        getToken({ skipCache: true })
+        if (!id) {
+          console.warn("[LocalDatabase] REFRESH_TOKEN message missing id");
+          return;
+        }
+        getTokenRef.current({ skipCache: true })
           .then((token) => {
             workerRef.current?.postMessage({
               type: "TOKEN_RESPONSE",
@@ -509,12 +517,30 @@ export function LocalDatabaseProvider({
             });
           })
           .catch((err: unknown) => {
+            const errorDetails: {
+              message: string;
+              name?: string;
+              stack?: string;
+              value?: string;
+            } =
+              err instanceof Error
+                ? {
+                    message: err.message,
+                    name: err.name,
+                    stack: err.stack,
+                  }
+                : {
+                    message: "Token refresh failed",
+                    value: String(err),
+                  };
             workerRef.current?.postMessage({
               type: "TOKEN_RESPONSE",
               id,
               payload: {
-                error:
-                  err instanceof Error ? err.message : "Token refresh failed",
+                error: errorDetails.message,
+                errorName: errorDetails.name,
+                errorStack: errorDetails.stack,
+                errorValue: errorDetails.value,
               },
             });
           });
@@ -570,7 +596,7 @@ export function LocalDatabaseProvider({
         pending.reject(new Error(normalizedError));
       }
     },
-    [getToken]
+    []
   );
 
   useEffect(() => {
@@ -612,7 +638,7 @@ export function LocalDatabaseProvider({
       }
       pendingRef.current.clear();
     };
-  }, [handleWorkerMessage, initializeInstalledDatabase, isSupported, refreshAvailability]);
+  }, [initializeInstalledDatabase, isSupported, refreshAvailability]);
 
   useEffect(() => {
     if (!isSupported || typeof BroadcastChannel === "undefined") return undefined;
@@ -731,7 +757,7 @@ export function LocalDatabaseProvider({
       }
 
       runInBackground(primeOfflineShellCache());
-      const clerkToken = await getToken({ skipCache: true });
+      const clerkToken = await getTokenRef.current({ skipCache: true });
       if (!clerkToken) {
         throw new Error("Faça login para instalar o banco offline.");
       }
@@ -773,7 +799,6 @@ export function LocalDatabaseProvider({
   }, [
     applyInstalledMetadata,
     broadcast,
-    getToken,
     isSupported,
     localVersion,
     refreshAvailability,

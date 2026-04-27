@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock
 import pytest
 from pydantic import ValidationError
 
-from backend.presentation.schemas.comment_schemas import CommentCreate
-from backend.services.comment_service import CommentService
+from backend.presentation.schemas.comment_schemas import CommentCreate, CommentUpdate
+from backend.services.comment_service import CommentNotEditableError, CommentService
 
 pytestmark = pytest.mark.unit
 
@@ -129,6 +129,37 @@ def test_comment_create_rejects_html_body():
             body="<script>alert(1)</script>",
             is_private=False,
         )
+
+
+def test_comment_create_allows_angle_brackets_that_are_not_html_tags():
+    payload = CommentCreate(
+        anchor_key="pos-84-13",
+        selected_text="valor < outro valor",
+        body="Use <comparacao sem fechamento proximo ou <123 aninhado> seguro",
+        is_private=False,
+    )
+
+    assert payload.body.startswith("Use <comparacao")
+
+
+@pytest.mark.asyncio
+async def test_update_comment_rejected_raises_not_editable_error():
+    comment = SimpleNamespace(tenant_id="tenant-1", user_id="user-1", status="rejected")
+    repo = SimpleNamespace(
+        get_by_id_and_tenant=AsyncMock(return_value=comment),
+        update_body=AsyncMock(),
+    )
+    service = _make_service_with_repo(repo)
+
+    with pytest.raises(CommentNotEditableError):
+        await service.update_comment(
+            7,
+            CommentUpdate(body="novo comentario"),
+            "tenant-1",
+            "user-1",
+        )
+
+    repo.update_body.assert_not_awaited()
 
 
 def test_comment_create_rejects_invalid_anchor_key():

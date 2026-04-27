@@ -18,6 +18,11 @@ from backend.presentation.schemas.comment_schemas import (
 
 logger = logging.getLogger("service.comments")
 COMMENT_NOT_FOUND = "Comentário não encontrado"
+COMMENT_NOT_EDITABLE = "Comentário rejeitado não pode ser editado"
+
+
+class CommentNotEditableError(ValueError):
+    """Raised when a comment exists but cannot be edited."""
 
 
 class CommentService:
@@ -122,7 +127,7 @@ class CommentService:
         if comment.user_id != user_id:
             raise PermissionError("Somente o autor pode editar")
         if comment.status == "rejected":
-            raise ValueError("Comentário rejeitado não pode ser editado")
+            raise CommentNotEditableError(COMMENT_NOT_EDITABLE)
 
         updated = await self.repo.update_body(comment, data.body)
         logger.info("Comentário %s editado por %s", comment_id, user_id)

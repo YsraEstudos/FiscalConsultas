@@ -124,14 +124,22 @@ async def test_download_accepts_fresh_token(offline_bundle):
 async def test_download_token_is_bound_to_request_ip(offline_bundle):
     token_request = _build_request("/api/database/token", client_host="203.0.113.10")
     token_payload = await database_download.create_download_token(token_request)
+    token = token_payload["token"]
 
     with pytest.raises(HTTPException) as exc:
         await database_download.download_database(
             _build_request("/api/database/download", client_host="203.0.113.20"),
-            database_download.DownloadDatabaseRequest(token=token_payload["token"]),
+            database_download.DownloadDatabaseRequest(token=token),
         )
 
     assert exc.value.status_code == 403
+
+    response = await database_download.download_database(
+        _build_request("/api/database/download", client_host="203.0.113.10"),
+        database_download.DownloadDatabaseRequest(token=token),
+    )
+
+    assert Path(response.path).read_bytes() == b"encrypted-bundle"
 
 
 @pytest.mark.asyncio
