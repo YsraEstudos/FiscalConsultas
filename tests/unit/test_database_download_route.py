@@ -28,7 +28,7 @@ def _build_request(
     headers = {"Authorization": "Bearer test-token", **(headers or {})}
     scope_headers = [
         (key.lower().encode("latin-1"), value.encode("latin-1"))
-        for key, value in (headers or {}).items()
+        for key, value in headers.items()
     ]
     scope = {
         "type": "http",
@@ -180,6 +180,17 @@ async def test_local_development_requests_are_not_rate_limited_for_download_toke
     offline_bundle,
 ):
     request = _build_request("/api/database/token", client_host="127.0.0.1")
+
+    for _ in range(database_download._TOKEN_LIMIT_PER_HOUR + 2):
+        payload = await database_download.create_download_token(request)
+        assert payload["token"]
+
+
+@pytest.mark.asyncio
+async def test_ipv4_mapped_loopback_is_treated_as_local_for_download_tokens(
+    offline_bundle,
+):
+    request = _build_request("/api/database/token", client_host="::ffff:127.0.0.1")
 
     for _ in range(database_download._TOKEN_LIMIT_PER_HOUR + 2):
         payload = await database_download.create_download_token(request)

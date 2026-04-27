@@ -83,6 +83,7 @@ _PROVISION_CACHE_TTL = 300.0
 _PROVISION_CACHE_MAX_SIZE = 5000
 _cached_expected_azp_regex_raw: Optional[str] = None
 _cached_expected_azp_regex: Optional[Pattern[str]] = None
+_dev_fallback_logged = False
 
 
 def get_jwks_client() -> Optional[PyJWKClient]:
@@ -184,7 +185,7 @@ def _cache_decoded_jwt(
 async def decode_clerk_jwt(token: str) -> Optional[dict]:
     """
     Valida e decodifica JWT do Clerk.
-    Performance: Cacheia resultado por hash do token (TTL 60s).
+    Performance: Cacheia resultado por hash do token (_JWT_CACHE_TTL).
 
     Returns:
         Payload decodificado ou None se inválido/expirado.
@@ -416,12 +417,15 @@ class TenantMiddleware:
     def _resolve_dev_fallback_tenant(
         org_id: Optional[str], *, allow_dev_fallback: bool
     ) -> Optional[str]:
+        global _dev_fallback_logged
         if org_id:
             return org_id
         if allow_dev_fallback:
-            logger.warning(
-                "Using development fallback tenant org_default for a loopback request"
-            )
+            if not _dev_fallback_logged:
+                logger.warning(
+                    "Using development fallback tenant org_default for a loopback request"
+                )
+                _dev_fallback_logged = True
             return "org_default"
         return None
 

@@ -78,7 +78,6 @@ async def test_delete_comment_raises_when_comment_is_missing():
 
 @pytest.mark.asyncio
 async def test_delete_comment_raises_when_tenant_does_not_match():
-    comment = SimpleNamespace(tenant_id="tenant-2", user_id="user-1")
     repo = SimpleNamespace(
         get_by_id_and_tenant=AsyncMock(return_value=None),
         delete=AsyncMock(),
@@ -88,6 +87,7 @@ async def test_delete_comment_raises_when_tenant_does_not_match():
     with pytest.raises(ValueError, match="Comentário não encontrado"):
         await service.delete_comment(7, "tenant-1", "user-1")
 
+    repo.get_by_id_and_tenant.assert_awaited_once_with(7, "tenant-1")
     repo.delete.assert_not_awaited()
 
 

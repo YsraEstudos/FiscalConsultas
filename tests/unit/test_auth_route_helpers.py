@@ -58,6 +58,7 @@ def test_extract_client_ip_returns_unknown_when_not_available():
 def test_is_admin_payload_accepts_org_prefixed_role():
     assert is_admin_payload({"org_role": "org:admin"}) is True
     assert is_admin_payload({"roles": ["member", "org:owner"]}) is True
+    assert is_admin_payload({"org_role": "org:member"}) is False
 
 
 @pytest.mark.asyncio

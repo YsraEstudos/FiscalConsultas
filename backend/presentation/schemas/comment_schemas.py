@@ -6,19 +6,33 @@ e validação nas entradas/saídas da API.
 """
 
 from datetime import datetime
-import re
 from typing import Optional, Literal
 from pydantic import BaseModel, Field, field_validator
 
 ANCHOR_KEY_PATTERN = r"^[A-Za-z0-9._:-]{1,255}$"
-_HTML_TAG_PATTERN = re.compile(r"<\s*/?\s*[a-zA-Z][^>]*>")
+
+
+def _contains_html_tag(value: str) -> bool:
+    for index, char in enumerate(value):
+        if char != "<":
+            continue
+        cursor = index + 1
+        while cursor < len(value) and value[cursor].isspace():
+            cursor += 1
+        if cursor < len(value) and value[cursor] == "/":
+            cursor += 1
+        while cursor < len(value) and value[cursor].isspace():
+            cursor += 1
+        if cursor < len(value) and value[cursor].isalpha() and ">" in value[cursor:]:
+            return True
+    return False
 
 
 def _clean_plain_text(value: str, *, field_name: str) -> str:
     cleaned = value.strip()
     if not cleaned:
         raise ValueError(f"{field_name} não pode ficar vazio")
-    if _HTML_TAG_PATTERN.search(cleaned):
+    if _contains_html_tag(cleaned):
         raise ValueError(f"{field_name} não aceita HTML")
     return cleaned
 
@@ -39,7 +53,7 @@ class CommentCreate(BaseModel):
     )
     model_config = {"extra": "forbid"}
 
-    @field_validator("anchor_key", "body", "selected_text")
+    @field_validator("body", "selected_text")
     @classmethod
     def strip_whitespace(cls, v: str, info) -> str:
         return _clean_plain_text(v, field_name=info.field_name)

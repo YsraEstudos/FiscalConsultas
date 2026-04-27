@@ -29,7 +29,7 @@ from backend.server.rate_limit import (
     comment_create_rate_limiter,
     comment_read_rate_limiter,
 )
-from backend.services.comment_service import CommentService
+from backend.services.comment_service import COMMENT_NOT_FOUND, CommentService
 from backend.utils.auth import extract_bearer_token, is_admin_payload
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +39,9 @@ logger = logging.getLogger("routes.comments")
 router = APIRouter(prefix="/comments", tags=["Comments"])
 
 ERROR_TENANT_MISSING = "Tenant não identificado"
+PERMISSION_DENIED = "Sem permissão"
+COMMENT_WRITE_LIMIT_DETAIL = "Limite de operações de escrita em comentários excedido"
+RATE_LIMIT_RESPONSE = {429: {"description": "Rate limit exceeded"}}
 COMMENT_CREATE_LIMIT_PER_MINUTE = 10
 COMMENT_READ_LIMIT_PER_MINUTE = 60
 COMMENT_ADMIN_LIMIT_PER_MINUTE = 30
@@ -160,6 +163,7 @@ def _get_service(session: Annotated[AsyncSession, Depends(get_db)]) -> CommentSe
     responses={
         400: {"description": "Bad Request"},
         401: {"description": "Unauthorized"},
+        **RATE_LIMIT_RESPONSE,
         500: {"description": "Internal Server Error"},
     },
 )
@@ -176,7 +180,7 @@ async def create_comment(
         limiter=comment_create_rate_limiter,
         key=f"{tenant_id}:{user_id}",
         limit=COMMENT_CREATE_LIMIT_PER_MINUTE,
-        detail="Limite de criação de comentários excedido",
+        detail=COMMENT_WRITE_LIMIT_DETAIL,
     )
     user_name, user_image_url = _resolve_comment_author_identity(auth_payload)
     try:
@@ -201,6 +205,7 @@ async def create_comment(
     responses={
         400: {"description": "Bad Request"},
         401: {"description": "Unauthorized"},
+        **RATE_LIMIT_RESPONSE,
     },
 )
 async def list_by_anchor(
@@ -234,6 +239,7 @@ async def list_by_anchor(
         401: {"description": "Unauthorized"},
         403: {"description": "Forbidden"},
         404: {"description": "Not Found"},
+        **RATE_LIMIT_RESPONSE,
         500: {"description": "Internal Server Error"},
     },
 )
@@ -251,15 +257,15 @@ async def update_comment(
         limiter=comment_create_rate_limiter,
         key=f"{tenant_id}:{user_id}",
         limit=COMMENT_CREATE_LIMIT_PER_MINUTE,
-        detail="Limite de edição de comentários excedido",
+        detail=COMMENT_WRITE_LIMIT_DETAIL,
     )
     try:
         comment = await service.update_comment(comment_id, payload, tenant_id, user_id)
         return CommentOut.model_validate(comment)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail="Comentário não encontrado") from e
+        raise HTTPException(status_code=404, detail=COMMENT_NOT_FOUND) from e
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail="Sem permissão") from e
+        raise HTTPException(status_code=403, detail=PERMISSION_DENIED) from e
     except Exception as e:
         logger.error("Erro ao editar comentário %s: %s", comment_id, e)
         raise HTTPException(
@@ -275,6 +281,7 @@ async def update_comment(
         401: {"description": "Unauthorized"},
         403: {"description": "Forbidden"},
         404: {"description": "Not Found"},
+        **RATE_LIMIT_RESPONSE,
         500: {"description": "Internal Server Error"},
     },
 )
@@ -291,14 +298,14 @@ async def delete_comment(
         limiter=comment_create_rate_limiter,
         key=f"{tenant_id}:{user_id}",
         limit=COMMENT_CREATE_LIMIT_PER_MINUTE,
-        detail="Limite de remoção de comentários excedido",
+        detail=COMMENT_WRITE_LIMIT_DETAIL,
     )
     try:
         await service.delete_comment(comment_id, tenant_id, user_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail="Comentário não encontrado") from e
+        raise HTTPException(status_code=404, detail=COMMENT_NOT_FOUND) from e
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail="Sem permissão") from e
+        raise HTTPException(status_code=403, detail=PERMISSION_DENIED) from e
     except Exception as e:
         logger.error("Erro ao deletar comentário %s: %s", comment_id, e)
         raise HTTPException(
@@ -312,6 +319,7 @@ async def delete_comment(
     responses={
         400: {"description": "Bad Request"},
         401: {"description": "Unauthorized"},
+        **RATE_LIMIT_RESPONSE,
     },
 )
 async def list_commented_anchors(
@@ -341,6 +349,7 @@ async def list_commented_anchors(
         400: {"description": "Bad Request"},
         401: {"description": "Unauthorized"},
         403: {"description": "Forbidden"},
+        **RATE_LIMIT_RESPONSE,
     },
 )
 async def list_pending(
@@ -371,6 +380,7 @@ async def list_pending(
         401: {"description": "Unauthorized"},
         403: {"description": "Forbidden"},
         404: {"description": "Not Found"},
+        **RATE_LIMIT_RESPONSE,
         500: {"description": "Internal Server Error"},
     },
 )
@@ -394,9 +404,9 @@ async def moderate_comment(
         comment = await service.moderate(comment_id, payload, tenant_id, admin_user_id)
         return CommentOut.model_validate(comment)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail="Comentário não encontrado") from e
+        raise HTTPException(status_code=404, detail=COMMENT_NOT_FOUND) from e
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail="Sem permissão") from e
+        raise HTTPException(status_code=403, detail=PERMISSION_DENIED) from e
     except Exception as e:
         logger.error("Erro ao moderar comentário %s: %s", comment_id, e)
         raise HTTPException(

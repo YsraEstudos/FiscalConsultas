@@ -23,8 +23,13 @@ from pydantic import BaseModel, Field
 from backend.config.settings import settings
 from backend.infrastructure.redis_client import redis_cache
 from backend.server.middleware import decode_clerk_jwt, get_last_jwt_failure_reason
+from backend.server.middleware_network import is_loopback_host
 from backend.server.rate_limit import RedisBackedRateLimiter
-from backend.utils.auth import extract_bearer_token, extract_client_ip, is_trusted_proxy
+from backend.utils.auth import (
+    extract_bearer_token,
+    extract_client_ip,
+    is_trusted_proxy,
+)
 
 logger = logging.getLogger("routes.database_download")
 
@@ -56,6 +61,7 @@ _REDIS_TOKEN_PREFIX = "dbtoken:"
 # In-memory token store (fallback when Redis unavailable)
 _memory_tokens: dict[str, tuple[float, str]] = {}  # jti -> (created_at, client_ip)
 _MEMORY_TOKEN_MAX = 100
+_OFFLINE_UNAVAILABLE_DETAIL = "Offline database not available"
 
 _VERSION_RESPONSES = {503: {"description": "Offline database metadata is unavailable."}}
 _TOKEN_RESPONSES = {
@@ -95,8 +101,7 @@ def _generate_token_jti() -> str:
 
 
 def _is_local_request(request: Request) -> bool:
-    direct_ip = (request.client.host if request.client else "") or ""
-    return direct_ip.strip().lower() in {"127.0.0.1", "::1"}
+    return is_loopback_host(request.client.host if request.client else None)
 
 
 def _resolve_request_scheme(request: Request) -> str:
@@ -149,7 +154,7 @@ def _require_app_seed(meta: dict) -> str:
     if isinstance(seed, str) and seed.strip():
         return seed.strip()
     logger.error("Offline DB metadata is missing app_seed; rebuild the offline bundle")
-    raise HTTPException(status_code=503, detail="Offline database not available")
+    raise HTTPException(status_code=503, detail=_OFFLINE_UNAVAILABLE_DETAIL)
 
 
 async def _store_token(jti: str, client_ip: str) -> None:
@@ -215,7 +220,7 @@ async def get_database_version():
     """
     meta = _load_metadata()
     if meta is None:
-        raise HTTPException(status_code=503, detail="Offline database not available")
+        raise HTTPException(status_code=503, detail=_OFFLINE_UNAVAILABLE_DETAIL)
 
     return {
         "version": meta.get("version"),
@@ -252,7 +257,7 @@ async def create_download_token(request: Request):
 
     meta = _load_metadata()
     if meta is None:
-        raise HTTPException(status_code=503, detail="Offline database not available")
+        raise HTTPException(status_code=503, detail=_OFFLINE_UNAVAILABLE_DETAIL)
 
     if not ENCRYPTED_DB.exists():
         raise HTTPException(status_code=503, detail="Offline database file missing")

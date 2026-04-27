@@ -498,6 +498,29 @@ export function LocalDatabaseProvider({
       const { type, id, payload } = event.data;
       const pending = id ? pendingRef.current.get(id) : undefined;
 
+      if (type === "REFRESH_TOKEN") {
+        if (!id) return;
+        getToken({ skipCache: true })
+          .then((token) => {
+            workerRef.current?.postMessage({
+              type: "TOKEN_RESPONSE",
+              id,
+              payload: { clerkToken: token ?? null },
+            });
+          })
+          .catch((err: unknown) => {
+            workerRef.current?.postMessage({
+              type: "TOKEN_RESPONSE",
+              id,
+              payload: {
+                error:
+                  err instanceof Error ? err.message : "Token refresh failed",
+              },
+            });
+          });
+        return;
+      }
+
       if (type === "PROGRESS") {
         setProgress((payload.progress as number) || 0);
         setProgressStep((payload.step as string) || "");
@@ -547,7 +570,7 @@ export function LocalDatabaseProvider({
         pending.reject(new Error(normalizedError));
       }
     },
-    []
+    [getToken]
   );
 
   useEffect(() => {
@@ -708,7 +731,7 @@ export function LocalDatabaseProvider({
       }
 
       runInBackground(primeOfflineShellCache());
-      const clerkToken = await getToken();
+      const clerkToken = await getToken({ skipCache: true });
       if (!clerkToken) {
         throw new Error("Faça login para instalar o banco offline.");
       }

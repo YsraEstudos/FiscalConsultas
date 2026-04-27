@@ -17,6 +17,7 @@ from backend.presentation.schemas.comment_schemas import (
 )
 
 logger = logging.getLogger("service.comments")
+COMMENT_NOT_FOUND = "Comentário não encontrado"
 
 
 class CommentService:
@@ -92,7 +93,7 @@ class CommentService:
         """
         comment = await self.repo.get_by_id_and_tenant(comment_id, tenant_id)
         if not comment:
-            raise ValueError("Comentário não encontrado")
+            raise ValueError(COMMENT_NOT_FOUND)
 
         new_status = "approved" if data.action == "approve" else "rejected"
         updated = await self.repo.update_status(
@@ -117,7 +118,7 @@ class CommentService:
         """
         comment = await self.repo.get_by_id_and_tenant(comment_id, tenant_id)
         if not comment:
-            raise ValueError("Comentário não encontrado")
+            raise ValueError(COMMENT_NOT_FOUND)
         if comment.user_id != user_id:
             raise PermissionError("Somente o autor pode editar")
         if comment.status == "rejected":
@@ -139,7 +140,7 @@ class CommentService:
         """
         comment = await self.repo.get_by_id_and_tenant(comment_id, tenant_id)
         if not comment:
-            raise ValueError("Comentário não encontrado")
+            raise ValueError(COMMENT_NOT_FOUND)
         if comment.user_id != user_id:
             raise PermissionError("Somente o autor pode deletar")
 
