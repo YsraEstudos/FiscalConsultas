@@ -285,6 +285,18 @@ def unpack_status_snapshot(snapshot: dict) -> tuple[dict, dict, dict, dict, str]
     )
 
 
+def resolve_nbs_public_status(
+    normalized_nbs: dict,
+    normalized_nebs: dict | None,
+) -> str:
+    nbs_status = normalized_nbs.get("status", "error")
+    if nbs_status != "online":
+        return "error"
+    if normalized_nebs and normalized_nebs.get("status") not in (None, "online"):
+        return "error"
+    return "online"
+
+
 def store_status_snapshot(snapshot: dict, *, expires_at: float) -> dict:
     _STATUS_CACHE["value"] = snapshot
     _STATUS_CACHE["expires_at"] = expires_at
@@ -396,12 +408,10 @@ def build_public_status_payload(
         "tipi": {"status": normalized_tipi.get("status", "error")},
     }
     if normalized_nbs is not None:
-        nbs_public_status = normalized_nbs.get("status", "error")
-        if (
-            normalized_nebs is not None
-            and normalized_nebs.get("status") != "online"
-        ):
-            nbs_public_status = "error"
+        nbs_public_status = resolve_nbs_public_status(
+            normalized_nbs,
+            normalized_nebs,
+        )
         catalogs["nbs"] = {"status": nbs_public_status}
 
     payload = {
@@ -429,12 +439,7 @@ def build_detailed_status_payload(
         "tipi": normalized_tipi,
         "nbs": {
             **normalized_nbs,
-            "status": (
-                "online"
-                if normalized_nbs.get("status") == "online"
-                and normalized_nebs.get("status") == "online"
-                else "error"
-            ),
+            "status": resolve_nbs_public_status(normalized_nbs, normalized_nebs),
             "explanatory_entries": int(normalized_nebs.get("entries") or 0),
         },
     }

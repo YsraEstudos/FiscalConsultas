@@ -2,7 +2,7 @@ import { MAX_ANCESTOR_DEPTH } from "./constants.js";
 import { fetchAll, fetchOne } from "./query.js";
 import { getWorkerDb } from "./state.js";
 
-const NON_TEXT_SEARCH_COLUMNS = new Set(["level", "has_nebs"]);
+const NON_TEXT_SEARCH_COLUMNS = new Set(["level"]);
 
 /**
  * Execute an FTS5 search query with a LIKE fallback.
@@ -56,10 +56,11 @@ export function ftsSearch(
       );
       if (textColumns.length === 0) return [];
 
+      const textLikeClause = textColumns
+        .map((column) => `${column} LIKE ? ESCAPE '\\'`)
+        .join(" OR ");
       const likeClause = terms
-        .map(() =>
-          `(${textColumns.map((column) => `${column} LIKE ? ESCAPE '\\'`).join(" OR ")})`
-        )
+        .map(() => `(${textLikeClause})`)
         .join(" AND ");
       const likeParams = terms.flatMap((term) =>
         textColumns.map(() => `%${escapeLikePattern(term)}%`)
@@ -82,7 +83,7 @@ export function searchNbsByText(query) {
   return ftsSearch(
     "nbs_fts",
     query,
-    ["code", "code_clean", "description", "parent_code", "level", "has_nebs"],
+    ["code", "code_clean", "description", "parent_code", "level"],
     "nbs_items"
   );
 }
@@ -102,7 +103,6 @@ function rowToNbsItem(row) {
     description: String(row.description || ""),
     parent_code: row.parent_code ? String(row.parent_code) : null,
     level: Number(row.level || 0),
-    has_nebs: Boolean(row.has_nebs),
   };
 }
 
@@ -136,8 +136,7 @@ export function searchNbsByCode(query, limit = 50) {
         code_clean,
         description,
         parent_code,
-        level,
-        has_nebs
+        level
      FROM nbs_items
      WHERE (? <> '' AND (code = ? OR code LIKE ? ESCAPE '\\'))
         OR (? <> '' AND (code_clean = ? OR code_clean LIKE ? ESCAPE '\\'))
@@ -173,7 +172,7 @@ function fetchNbsItemByCode(code) {
   if (!rawCode && !cleanCode) return null;
 
   const rows = fetchAll(
-    `SELECT code, code_clean, description, parent_code, level, has_nebs
+    `SELECT code, code_clean, description, parent_code, level
      FROM nbs_items
      WHERE (? <> '' AND code = ?)
         OR (? <> '' AND code_clean = ?)
@@ -191,7 +190,7 @@ function fetchAncestors(item) {
 
   while (currentParent && depth < MAX_ANCESTOR_DEPTH) {
     const parent = fetchOne(
-      `SELECT code, code_clean, description, parent_code, level, has_nebs
+      `SELECT code, code_clean, description, parent_code, level
        FROM nbs_items
        WHERE code = ?
        LIMIT 1`,
@@ -226,7 +225,7 @@ function fetchTreePage(rootCode, page = 1, pageSize = 50) {
   );
   const total = Number(countRow?.total || 0);
   const items = fetchAll(
-    `SELECT code, code_clean, description, parent_code, level, has_nebs
+    `SELECT code, code_clean, description, parent_code, level
      FROM nbs_items
      WHERE code = ? OR code LIKE ? ESCAPE '\\'
      ORDER BY source_order ASC
@@ -251,7 +250,7 @@ export function getLocalNbsDetail(code, page = 1, pageSize = 50) {
 
   const ancestors = fetchAncestors(item);
   const children = fetchAll(
-    `SELECT code, code_clean, description, parent_code, level, has_nebs
+    `SELECT code, code_clean, description, parent_code, level
      FROM nbs_items
      WHERE parent_code = ?
      ORDER BY source_order ASC`,

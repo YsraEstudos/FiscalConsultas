@@ -18,12 +18,10 @@ function makeStatusResponse(
     database: { status: 'online' },
     tipi: { status: 'online' },
     nbs: { status: 'online' },
-    nebs: { status: 'online' },
     catalogs: {
       nesh: { status: 'online' },
       tipi: { status: 'online' },
       nbs: { status: 'online' },
-      nebs: { status: 'online' },
     },
     ...overrides,
   };
@@ -44,15 +42,19 @@ function makeAxiosError({
   url?: string;
   useGetterHeaders?: boolean;
 } = {}) {
-  const headers = useGetterHeaders
-    ? {
-        get(name: string) {
-          return name.toLowerCase() === 'x-request-id' ? requestId : null;
-        },
-      }
-    : requestId
-      ? { 'x-request-id': requestId }
-      : undefined;
+  let headers:
+    | { get(name: string): string | undefined | null }
+    | { 'x-request-id': string }
+    | undefined;
+  if (useGetterHeaders) {
+    headers = {
+      get(name: string) {
+        return name.toLowerCase() === 'x-request-id' ? requestId : null;
+      },
+    };
+  } else if (requestId) {
+    headers = { 'x-request-id': requestId };
+  }
 
   return {
     isAxiosError: true,
@@ -74,7 +76,6 @@ describe('servicesCatalog utils', () => {
       getServicesCatalogOfflineMessage(
         makeStatusResponse({
           nbs: { status: 'error' },
-          nebs: { status: 'error' },
         }),
       ),
     ).toBe('Catálogo NBS indisponível no momento.');
@@ -83,7 +84,6 @@ describe('servicesCatalog utils', () => {
       getServicesCatalogOfflineMessage(
         makeStatusResponse({
           nbs: { status: 'error' },
-          nebs: { status: 'online' },
         }),
       ),
     ).toBe('Catálogo NBS indisponível no momento.');
@@ -107,12 +107,10 @@ describe('servicesCatalog utils', () => {
         buildServiceCatalogSnapshot(
           makeStatusResponse({
             nbs: undefined,
-            nebs: undefined,
             catalogs: {
               nesh: { status: 'online' },
               tipi: { status: 'online' },
               nbs: { status: 'error' },
-              nebs: { status: 'online' },
             },
           }),
         ),
@@ -126,7 +124,6 @@ describe('servicesCatalog utils', () => {
         buildServiceCatalogSnapshot(
           makeStatusResponse({
             nbs: undefined,
-            nebs: undefined,
             catalogs: undefined,
           }),
         ),

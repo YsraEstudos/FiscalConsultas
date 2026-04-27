@@ -58,7 +58,7 @@ async def search_nbs_catalog_entries(
         if not raw_query:
             cursor = await conn.execute(
                 """
-                SELECT code, code_clean, description, parent_code, level, has_nebs
+                SELECT code, code_clean, description, parent_code, level
                 FROM nbs_items
                 WHERE parent_code IS NULL
                 ORDER BY source_order ASC
@@ -78,7 +78,6 @@ async def search_nbs_catalog_entries(
                     description,
                     parent_code,
                     level,
-                    has_nebs,
                     CASE
                         WHEN code_clean = ? THEN 500
                         WHEN code = ? THEN 480

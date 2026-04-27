@@ -38,7 +38,7 @@ async def load_nbs_catalog_entries(
     if not raw_query:
         tenant_predicate = build_nbs_tenant_predicate_sql(repo.tenant_id, "nbs_items")
         sql = f"""
-            SELECT code, code_clean, description, parent_code, level, has_nebs
+            SELECT code, code_clean, description, parent_code, level
             FROM nbs_items
             WHERE parent_code IS NULL
             {tenant_predicate}
@@ -63,7 +63,6 @@ async def load_nbs_catalog_entries(
                 n.description,
                 n.parent_code,
                 n.level,
-                n.has_nebs,
                 500 AS match_score,
                 0::float AS fts_rank
             FROM nbs_items AS n
@@ -77,7 +76,6 @@ async def load_nbs_catalog_entries(
                 n.description,
                 n.parent_code,
                 n.level,
-                n.has_nebs,
                 CASE
                     WHEN :raw_query <> '' AND n.code = :raw_query THEN 480
                     WHEN :clean_query <> '' AND n.code_clean LIKE :clean_prefix THEN 420
@@ -101,7 +99,6 @@ async def load_nbs_catalog_entries(
                 n.description,
                 n.parent_code,
                 n.level,
-                n.has_nebs,
                 220 AS match_score,
                 ts_rank(n.search_vector, {tsquery.sql}) AS fts_rank
             FROM nbs_items AS n
@@ -114,7 +111,6 @@ async def load_nbs_catalog_entries(
             description,
             parent_code,
             level,
-            has_nebs,
             match_score
         FROM ranked
         ORDER BY code, match_score DESC, fts_rank DESC
@@ -125,8 +121,7 @@ async def load_nbs_catalog_entries(
             code_clean,
             description,
             parent_code,
-            level,
-            has_nebs
+            level
         FROM ({sql}) AS deduped
         ORDER BY match_score DESC, LENGTH(code_clean) ASC, code ASC
         LIMIT :limit
@@ -160,7 +155,7 @@ async def load_nbs_catalog_item_details(
     tenant_predicate = build_nbs_tenant_predicate_sql(repo.tenant_id, "nbs_items")
 
     children_sql = f"""
-        SELECT code, code_clean, description, parent_code, level, has_nebs
+        SELECT code, code_clean, description, parent_code, level
         FROM nbs_items
         WHERE parent_code = :code
         {tenant_predicate}

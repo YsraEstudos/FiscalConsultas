@@ -26,7 +26,6 @@ class NbsCatalogItemPayload(TypedDict, total=False):
     description: str
     parent_code: str | None
     level: int
-    has_nebs: bool
 
 
 class NbsCatalogSearchPayload(TypedDict):

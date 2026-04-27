@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -61,6 +62,7 @@ class _FakeServicesCatalog:
         page: int = 1,
         page_size: int = 50,
     ):
+        await asyncio.sleep(0)
         item = {
             "code": code,
             "code_clean": "101",

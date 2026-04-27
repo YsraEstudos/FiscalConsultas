@@ -145,6 +145,35 @@ async def test_get_status_uses_app_state_services_when_available():
     assert "chapters" not in payload["database"]
 
 
+def test_status_payloads_tolerate_legacy_empty_nebs_snapshot():
+    normalized_db = {"status": "online", "chapters": 5, "positions": 9}
+    normalized_tipi = {"status": "online", "chapters": 3, "positions": 4}
+    normalized_nbs = {"status": "online", "items": 6}
+    normalized_nebs = {}
+
+    public_payload = system_status.build_public_status_payload(
+        normalized_db,
+        normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
+        "online",
+    )
+    detailed_payload = system_status.build_detailed_status_payload(
+        _build_request("/api/status/details"),
+        normalized_db,
+        normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
+        "online",
+    )
+
+    assert public_payload["nbs"]["status"] == "online"
+    assert public_payload["catalogs"]["nbs"]["status"] == "online"
+    assert detailed_payload["nbs"]["status"] == "online"
+    assert detailed_payload["nbs"]["explanatory_entries"] == 0
+    assert detailed_payload["catalogs"]["nbs"]["status"] == "online"
+
+
 @pytest.mark.asyncio
 async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypatch):
     class _ScalarResult:
@@ -295,6 +324,7 @@ async def test_get_status_deduplicates_concurrent_refresh(monkeypatch):
 @pytest.mark.asyncio
 async def test_refresh_status_snapshot_ignores_redis_write_failures(monkeypatch):
     async def _fake_collect(_request):
+        await asyncio.sleep(0)
         return (
             {"status": "online", "chapters": 5, "positions": 9},
             {"status": "online", "chapters": 3, "positions": 4},

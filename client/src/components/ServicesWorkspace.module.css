@@ -527,9 +527,6 @@
   color: var(--text-secondary);
   font-size: 0.95rem;
   line-height: 1.6;
-}
-
-.notesContent {
   display: grid;
   gap: 0.75rem;
 }

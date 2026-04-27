@@ -55,7 +55,7 @@ describe('catalogSearch', () => {
         ftsSearch(
             'nbs_fts',
             'limpeza urbana',
-            ['code', 'code_clean', 'description', 'parent_code', 'level', 'has_nebs'],
+            ['code', 'code_clean', 'description', 'parent_code', 'level'],
             'nbs_items',
         );
 
@@ -65,7 +65,6 @@ describe('catalogSearch', () => {
         expect(sql).toContain("code LIKE ? ESCAPE '\\'");
         expect(sql).toContain("description LIKE ? ESCAPE '\\'");
         expect(sql).not.toContain("level LIKE");
-        expect(sql).not.toContain("has_nebs LIKE");
         expect(options.bind).toEqual([
             '%limpeza%',
             '%limpeza%',
@@ -88,7 +87,6 @@ describe('catalogSearch', () => {
                     description: 'root',
                     parent_code: null,
                     level: 1,
-                    has_nebs: false,
                 },
             ])
             .mockReturnValueOnce([])
@@ -116,7 +114,6 @@ describe('catalogSearch', () => {
                     description: 'service',
                     parent_code: null,
                     level: 2,
-                    has_nebs: true,
                 },
             ])
             .mockReturnValueOnce([])

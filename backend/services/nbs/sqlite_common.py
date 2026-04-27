@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from html import escape, unescape
 from typing import cast
 
@@ -101,7 +100,6 @@ def row_to_nbs_item(row: aiosqlite.Row) -> dict[str, object]:
         "description": row["description"],
         "parent_code": row["parent_code"],
         "level": row["level"],
-        "has_nebs": bool(row["has_nebs"]),
     }
 
 
@@ -154,13 +152,6 @@ def sanitize_nbs_detail_payload(
     return sanitized_payload
 
 
-def build_nbs_fts_query(normalized_query: str) -> str:
-    tokens = re.findall(r"[0-9a-z]+", normalized_query or "")
-    if not tokens:
-        return ""
-    return " AND ".join(f"{token}*" for token in tokens)
-
-
 def build_nbs_excerpt(body_text: str, limit: int = 220) -> str:
     compact = " ".join((body_text or "").split())
     if len(compact) <= limit:
@@ -197,7 +188,7 @@ async def fetch_nbs_items_by_prefix(
     offset: int = 0,
 ) -> list[dict[str, object]]:
     sql = """
-        SELECT code, code_clean, description, parent_code, level, has_nebs
+        SELECT code, code_clean, description, parent_code, level
         FROM nbs_items
         WHERE code = ? OR code LIKE ?
         ORDER BY source_order ASC
@@ -266,7 +257,7 @@ async def fetch_nbs_item_by_code(
 
     cursor = await conn.execute(
         f"""
-        SELECT code, code_clean, description, parent_code, level, has_nebs
+        SELECT code, code_clean, description, parent_code, level
         FROM nbs_items
         WHERE {" OR ".join(where_clauses)}
         ORDER BY LENGTH(code_clean) DESC, source_order ASC
@@ -304,7 +295,7 @@ async def fetch_nbs_ancestors(
             break
         parent_cursor = await conn.execute(
             """
-            SELECT code, code_clean, description, parent_code, level, has_nebs
+            SELECT code, code_clean, description, parent_code, level
             FROM nbs_items
             WHERE code = ?
             LIMIT 1
