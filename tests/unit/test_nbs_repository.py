@@ -173,7 +173,9 @@ async def test_get_item_details_inline_nebs_public_scope_filters_to_null_tenant(
     )
     repo = NbsRepository(session)
 
-    details = await repo.load_nbs_catalog_item_details("1.0102.61.00", include_tree=False)
+    details = await repo.load_nbs_catalog_item_details(
+        "1.0102.61.00", include_tree=False
+    )
 
     assert details["success"] is True
     assert details["item"]["code"] == "1.0102.61.00"

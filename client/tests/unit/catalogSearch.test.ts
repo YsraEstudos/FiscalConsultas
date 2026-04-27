@@ -8,15 +8,19 @@ describe('dbWorker catalogSearch', () => {
     setWorkerDb(null);
   });
 
-  it('loads inline NBS explanatory notes only from trusted NEBS rows', () => {
-    let nebsSql = '';
-    const item = {
+  function makeNbsItem() {
+    return {
       code: '1.0101.11.00',
       code_clean: '10101100',
       description: 'Serviços residenciais',
       parent_code: null,
       level: 3,
     };
+  }
+
+  it('loads inline NBS explanatory notes only from trusted NEBS rows', () => {
+    let nebsSql = '';
+    const item = makeNbsItem();
     const db = {
       exec: vi.fn((sql: string) => {
         if (sql.includes('FROM nebs_entries')) {
@@ -55,5 +59,34 @@ describe('dbWorker catalogSearch', () => {
 
     expect(detail?.nebs?.title).toBe('Nota confiável');
     expect(nebsSql).toContain("parser_status = 'trusted'");
+  });
+
+  it('returns null inline notes when no trusted NEBS row is available', () => {
+    const item = makeNbsItem();
+    const db = {
+      exec: vi.fn((sql: string) => {
+        if (sql.includes('FROM nebs_entries')) {
+          return [];
+        }
+        if (sql.includes('COUNT(*) AS total')) {
+          return [{ total: 1 }];
+        }
+        if (sql.includes('WHERE parent_code = ?')) {
+          return [];
+        }
+        if (sql.includes('WHERE code = ?') && sql.includes('OR code LIKE ?')) {
+          return [item];
+        }
+        if (sql.includes('FROM nbs_items')) {
+          return [item];
+        }
+        return [];
+      }),
+    };
+    setWorkerDb(db);
+
+    const detail = getLocalNbsDetail('1.0101.11.00');
+
+    expect(detail?.nebs).toBeNull();
   });
 });

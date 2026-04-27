@@ -303,6 +303,7 @@ class _CountingNbsRepo(_FakeNbsRepo):
         self.calls["get_item_details"] += 1
         return await super().get_item_details(code, **kwargs)
 
+
 def _seed_services_db_with_custom_root(
     db_path: Path, root_code: str, root_description: str
 ) -> None:
@@ -472,7 +473,15 @@ async def test_get_item_details_resolves_inline_nebs_by_alias_in_sqlite(tmp_path
             SET code = ?, code_clean = ?
             WHERE code = ?
             """,
-            ("1.0101.11", "101011", "1.0101.11.00"),
+            ("1.0101.11", "1010111", "1.0101.11.00"),
+        )
+        conn.execute(
+            """
+            UPDATE nebs_entries_fts
+            SET code = ?
+            WHERE code = ?
+            """,
+            ("1.0101.11", "1.0101.11.00"),
         )
         conn.commit()
     finally:

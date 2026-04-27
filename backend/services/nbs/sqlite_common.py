@@ -167,6 +167,21 @@ def resolve_nbs_code_aliases(code: str) -> tuple[list[str], list[str]]:
     return aliases, list(dict.fromkeys(clean_aliases))
 
 
+def resolve_nbs_explanatory_alias_filters(
+    code_aliases: list[str],
+    clean_aliases: list[str],
+) -> tuple[list[str], list[object]]:
+    where_clauses: list[str] = []
+    params: list[object] = []
+    if code_aliases:
+        where_clauses.append(f"code IN ({', '.join(['?'] * len(code_aliases))})")
+        params.extend(code_aliases)
+    if clean_aliases:
+        where_clauses.append(f"code_clean IN ({', '.join(['?'] * len(clean_aliases))})")
+        params.extend(clean_aliases)
+    return where_clauses, params
+
+
 def resolve_nbs_hierarchy_root(
     item: dict[str, object], ancestors: list[dict[str, object]]
 ) -> dict[str, object]:

@@ -16,6 +16,7 @@ from .sqlite_common import (
     fetch_nbs_tree_page_sqlite,
     release_nbs_sqlite_connection,
     resolve_nbs_code_aliases,
+    resolve_nbs_explanatory_alias_filters,
     resolve_nbs_hierarchy_root,
     sanitize_nbs_detail_payload,
     sanitize_nbs_html_fields,
@@ -114,45 +115,38 @@ async def fetch_nbs_catalog_item_details(
         )
 
         code_aliases, clean_aliases = resolve_nbs_code_aliases(str(item["code"]))
-        nebs_where_clauses: list[str] = []
-        nebs_params: list[object] = []
-        if code_aliases:
-            nebs_where_clauses.append(
-                f"code IN ({', '.join(['?'] * len(code_aliases))})"
-            )
-            nebs_params.extend(code_aliases)
-        if clean_aliases:
-            nebs_where_clauses.append(
-                f"code_clean IN ({', '.join(['?'] * len(clean_aliases))})"
-            )
-            nebs_params.extend(clean_aliases)
-
-        nebs_cursor = await conn.execute(
-            f"""
-            SELECT
-                code,
-                code_clean,
-                title,
-                title_normalized,
-                body_text,
-                body_markdown,
-                body_normalized,
-                section_title,
-                page_start,
-                page_end,
-                parser_status,
-                parse_warnings,
-                source_hash,
-                updated_at
-            FROM nebs_entries
-            WHERE ({" OR ".join(nebs_where_clauses)})
-              AND parser_status = 'trusted'
-            ORDER BY LENGTH(code_clean) DESC
-            LIMIT 1
-            """,
-            nebs_params,
+        nebs_where_clauses, nebs_params = resolve_nbs_explanatory_alias_filters(
+            code_aliases,
+            clean_aliases,
         )
-        nebs_row = await nebs_cursor.fetchone()
+        nebs_row = None
+        if nebs_where_clauses:
+            nebs_cursor = await conn.execute(
+                f"""
+                SELECT
+                    code,
+                    code_clean,
+                    title,
+                    title_normalized,
+                    body_text,
+                    body_markdown,
+                    body_normalized,
+                    section_title,
+                    page_start,
+                    page_end,
+                    parser_status,
+                    parse_warnings,
+                    source_hash,
+                    updated_at
+                FROM nebs_entries
+                WHERE ({" OR ".join(nebs_where_clauses)})
+                  AND parser_status = 'trusted'
+                ORDER BY LENGTH(code_clean) DESC
+                LIMIT 1
+                """,
+                nebs_params,
+            )
+            nebs_row = await nebs_cursor.fetchone()
         nebs_payload = (
             None
             if nebs_row is None

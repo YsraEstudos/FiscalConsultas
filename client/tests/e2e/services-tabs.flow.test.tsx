@@ -224,7 +224,9 @@ describe('services tabs flow', () => {
     if (!noteCodeLink) throw new Error('Expected service code link inside inline explanatory note');
     fireEvent.mouseDown(noteCodeLink, { bubbles: true, button: 1 });
 
-    expect(onOpenDocInNewTab).toHaveBeenCalledWith('nbs', '1.1703.2');
+    await waitFor(() => {
+      expect(onOpenDocInNewTab).toHaveBeenCalledWith('nbs', '1.1703.2');
+    });
     expect(screen.getByTestId('active-tab-meta')).toHaveTextContent('nbs:1.0101.11.00');
   });
 

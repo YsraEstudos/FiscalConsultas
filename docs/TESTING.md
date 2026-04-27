@@ -21,7 +21,7 @@
 ## Top 10 Risk Areas (Execution Order)
 1. Instalacao offline (`/api/database/version`, `/api/database/token`, `/api/database/download`) e validacao de metadata.
 2. App shell offline via `coi-serviceworker.js` e reabertura sem rede.
-3. Busca local e publica e detalhe para `NESH`, `TIPI`, `NBS` e `NEBS`.
+3. Realizar busca local e pública e detalhar `NESH`, `TIPI`, `NBS` e `NEBS`.
 4. Contrato das rotas publicas de `NBS`/`NEBS` (`200` anonimo, `429` ainda aplicado, sem modal de login).
 5. Sanitização de HTML/backend-rendered content no frontend (`contentSecurity.ts`, `MarkdownPane`, `ResultDisplay`).
 6. Gating de moderação/admin por role do Clerk (`AuthContext`, `authz.ts`, `ModalManager`).

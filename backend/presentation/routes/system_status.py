@@ -303,9 +303,7 @@ def resolve_nbs_public_status(
     if explanatory_entries == 0 and not normalized_nebs.get("error"):
         return "online"
 
-    if nebs_status != "online":
-        return "error"
-    return "online"
+    return "error"
 
 
 def store_status_snapshot(snapshot: dict, *, expires_at: float) -> dict:
@@ -445,13 +443,14 @@ def build_detailed_status_payload(
     normalized_nebs: dict,
     overall_status: str,
 ) -> dict:
+    explanatory_entries = int(normalized_nebs.get("entries") or 0)
     catalogs = {
         "nesh": normalized_db,
         "tipi": normalized_tipi,
         "nbs": {
             **normalized_nbs,
             "status": resolve_nbs_public_status(normalized_nbs, normalized_nebs),
-            "explanatory_entries": int(normalized_nebs.get("entries") or 0),
+            "explanatory_entries": explanatory_entries,
         },
     }
     return {
@@ -463,7 +462,7 @@ def build_detailed_status_payload(
         "nbs": {
             "status": catalogs["nbs"].get("status", "error"),
             "items": int(normalized_nbs.get("items") or 0),
-            "explanatory_entries": int(normalized_nebs.get("entries") or 0),
+            "explanatory_entries": explanatory_entries,
             **(
                 {"metadata": normalized_nbs["metadata"]}
                 if isinstance(normalized_nbs.get("metadata"), dict)

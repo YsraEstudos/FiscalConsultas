@@ -110,8 +110,8 @@ test('main surfaces render without obvious visual breakage or defacement', async
   await page.screenshot({ path: 'test-results/site-smoke-nbs.png', fullPage: true });
 
   await expect(page.getByText('NOTAS EXPLICATIVAS')).toBeVisible();
-  await expect(page.locator('div').filter({ hasText: 'Conteudo da nota' }).first()).toBeVisible();
-  await page.screenshot({ path: 'test-results/site-smoke-nebs.png', fullPage: true });
+  await expect(page.getByTestId('notes-content')).toContainText('Conteudo da nota');
+  await page.screenshot({ path: 'test-results/site-smoke-nbs-notes.png', fullPage: true });
 
   expect(consoleErrors, `Console errors found:\n${consoleErrors.join('\n')}`).toEqual([]);
   expect(failedRequests, `Failed requests found:\n${failedRequests.join('\n')}`).toEqual([]);
