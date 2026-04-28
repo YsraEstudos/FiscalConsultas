@@ -32,7 +32,8 @@ def _contains_html_tag(value: str) -> bool:
             cursor += 1
         if (
             cursor >= close_index
-            or value[cursor] not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            or value[cursor]
+            not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
         ):
             continue
 
@@ -42,8 +43,7 @@ def _contains_html_tag(value: str) -> bool:
             if current.isspace() or current in {">", "/"}:
                 return True
             if not (
-                current.isascii()
-                and (current.isalnum() or current in {"-", ":", "_"})
+                current.isascii() and (current.isalnum() or current in {"-", ":", "_"})
             ):
                 break
             cursor += 1

@@ -74,9 +74,7 @@ def _resolve_app_seed() -> str:
         )
 
     generated = secrets.token_hex(32)
-    _log(
-        "WARNING: OFFLINE_DB_APP_SEED not set. Generated a local-only random seed."
-    )
+    _log("WARNING: OFFLINE_DB_APP_SEED not set. Generated a local-only random seed.")
     return generated
 
 
