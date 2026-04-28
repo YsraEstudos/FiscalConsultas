@@ -20,7 +20,7 @@ async def snapshot_nbs_catalog_counts(
         f"{build_nbs_tenant_predicate_sql(repo.tenant_id, 'nbs_items')}"
     )
     nebs_sql = (
-        "SELECT COUNT(*) AS total FROM nebs_entries WHERE parser_status = 'trusted'"
+        "SELECT COUNT(*) AS total FROM nebs_entries WHERE 1=1"
         f"{build_nbs_tenant_predicate_sql(repo.tenant_id, 'nebs_entries')}"
     )
     nbs_result = await repo.session.execute(text(nbs_sql), tenant_params)

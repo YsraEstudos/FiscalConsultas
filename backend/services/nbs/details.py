@@ -91,13 +91,10 @@ async def _fetch_inline_nebs_payload(conn, code: str) -> dict[str, object] | Non
             section_title,
             page_start,
             page_end,
-            parser_status,
-            parse_warnings,
             source_hash,
             updated_at
         FROM nebs_entries
         WHERE ({" OR ".join(nebs_where_clauses)})
-          AND parser_status = 'trusted'
         ORDER BY LENGTH(code_clean) DESC
         LIMIT 1
         """,

@@ -328,7 +328,6 @@ def _consolidate_databases(output_path: Path) -> None:
                     page_start,
                     page_end
                 FROM svc.nebs_entries
-                WHERE parser_status = 'trusted'
         """)
         nebs_count = cursor.rowcount
         _log(f"  Inserted {nebs_count} NEBS entries")

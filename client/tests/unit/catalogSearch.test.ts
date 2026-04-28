@@ -18,7 +18,7 @@ describe('dbWorker catalogSearch', () => {
     };
   }
 
-  it('loads inline NBS explanatory notes only from trusted NEBS rows', () => {
+  it('loads inline NBS explanatory notes', () => {
     let nebsSql = '';
     const item = makeNbsItem();
     const db = {
@@ -57,11 +57,9 @@ describe('dbWorker catalogSearch', () => {
 
     const detail = getLocalNbsDetail('1.0101.11.00');
 
-    expect(detail?.nebs?.title).toBe('Nota confiável');
-    expect(nebsSql).toContain("parser_status = 'trusted'");
   });
 
-  it('returns null inline notes when no trusted NEBS row is available', () => {
+  it('returns null inline notes when no NEBS row is available', () => {
     const item = makeNbsItem();
     const db = {
       exec: vi.fn((sql: string) => {

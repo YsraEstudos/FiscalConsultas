@@ -115,8 +115,6 @@ def row_to_nbs_explanatory_entry(row: aiosqlite.Row) -> dict[str, object]:
         "section_title": row["section_title"],
         "page_start": row["page_start"],
         "page_end": row["page_end"],
-        "parser_status": row["parser_status"],
-        "parse_warnings": row["parse_warnings"],
         "source_hash": row["source_hash"],
         "updated_at": row["updated_at"],
     }
