@@ -13,6 +13,9 @@ import {
 } from '../services/api';
 import { hasPrivilegedRole } from '../utils/authz';
 
+type ClerkGetToken = ReturnType<typeof useClerkAuth>['getToken'];
+type ClerkGetTokenOptions = Parameters<ClerkGetToken>[0];
+
 interface AuthContextType {
     // User Info
     isSignedIn: boolean;
@@ -28,7 +31,7 @@ interface AuthContextType {
     orgSlug: string | null;
 
     // Token for API calls
-    getToken: () => Promise<string | null>;
+    getToken: (options?: ClerkGetTokenOptions) => Promise<string | null>;
     canUseAiChat: boolean;
     canUseRestrictedUi: boolean;
     isAuthConfigured: boolean;
@@ -92,9 +95,9 @@ function buildContextValue(
         orgId: organization?.id || null,
         orgName: organization?.name || null,
         orgSlug: organization?.slug || null,
-        getToken: async () => {
+        getToken: async (options?: ClerkGetTokenOptions) => {
             try {
-                return await getToken();
+                return await getToken(options);
             } catch (error) {
                 console.error('[AuthContext] Failed to get token:', error);
                 return null;

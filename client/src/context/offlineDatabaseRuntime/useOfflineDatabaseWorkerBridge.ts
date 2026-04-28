@@ -7,6 +7,7 @@ import {
     type SetStateAction,
 } from 'react';
 
+import { getRegisteredClerkToken } from '../../services/api';
 import { formatOfflineDatabaseErrorMessage } from '../../utils/offlineDatabase';
 import type {
     OfflineDatabaseStatus,
@@ -96,6 +97,49 @@ export function useOfflineDatabaseWorkerBridge({
         (event: MessageEvent<OfflineDatabaseWorkerResponse>) => {
             const { type, id, payload } = event.data;
             const pending = id ? pendingRef.current.get(id) : undefined;
+
+            if (type === 'REFRESH_TOKEN') {
+                if (!id) {
+                    console.warn('[LocalDatabase] REFRESH_TOKEN message missing id');
+                    return;
+                }
+                getRegisteredClerkToken({ skipCache: true })
+                    .then((token) => {
+                        workerRef.current?.postMessage({
+                            type: 'TOKEN_RESPONSE',
+                            id,
+                            payload: { clerkToken: token ?? null },
+                        });
+                    })
+                    .catch((err: unknown) => {
+                        const errorDetails: {
+                            message: string;
+                            name?: string;
+                            stack?: string;
+                            value?: string;
+                        } = err instanceof Error
+                            ? {
+                                message: err.message,
+                                name: err.name,
+                                stack: err.stack,
+                            }
+                            : {
+                                message: 'Token refresh failed',
+                                value: String(err),
+                            };
+                        workerRef.current?.postMessage({
+                            type: 'TOKEN_RESPONSE',
+                            id,
+                            payload: {
+                                error: errorDetails.message,
+                                errorName: errorDetails.name,
+                                errorStack: errorDetails.stack,
+                                errorValue: errorDetails.value,
+                            },
+                        });
+                    });
+                return;
+            }
 
             if (type === 'PROGRESS') {
                 setProgress(payload.progress ?? 0);

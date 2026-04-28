@@ -18,7 +18,7 @@ describe('dbWorker catalogSearch', () => {
     };
   }
 
-  it('loads inline NBS explanatory notes only from trusted NEBS rows', () => {
+  it('loads inline NBS explanatory notes from offline NEBS entries', () => {
     let nebsSql = '';
     const item = makeNbsItem();
     const db = {
@@ -58,7 +58,9 @@ describe('dbWorker catalogSearch', () => {
     const detail = getLocalNbsDetail('1.0101.11.00');
 
     expect(detail?.nebs?.title).toBe('Nota confiável');
-    expect(nebsSql).toContain("parser_status = 'trusted'");
+    // Offline DB only contains trusted entries (filtered at build time),
+    // so the query should NOT filter by parser_status at runtime.
+    expect(nebsSql).not.toContain('parser_status');
   });
 
   it('returns null inline notes when no trusted NEBS row is available', () => {

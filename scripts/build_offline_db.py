@@ -55,9 +55,8 @@ CHUNK_SIZE = 65536  # 64 KB per encrypted chunk
 PBKDF2_ITERATIONS = 600_000
 MAGIC = b"FCDB"  # File magic bytes
 FORMAT_VERSION = 1
-# The app seed is combined with location.origin on the client for domain binding.
-# This seed MUST match the one in the frontend worker.
-DEFAULT_APP_SEED = "fiscal-consultas-offline-2026"
+# The app seed is delivered by the authenticated token endpoint and is not
+# embedded in the frontend bundle.
 
 
 def _log(msg: str) -> None:
@@ -74,10 +73,9 @@ def _resolve_app_seed() -> str:
             "OFFLINE_DB_APP_SEED must be configured in CI/release builds."
         )
 
-    _log(
-        "WARNING: OFFLINE_DB_APP_SEED not set. Falling back to the local-only default seed."
-    )
-    return DEFAULT_APP_SEED
+    generated = secrets.token_hex(32)
+    _log("WARNING: OFFLINE_DB_APP_SEED not set. Generated a local-only random seed.")
+    return generated
 
 
 APP_SEED = _resolve_app_seed()
@@ -645,6 +643,7 @@ def main() -> int:
         "format_version": FORMAT_VERSION,
         "chunk_size": CHUNK_SIZE,
         "pbkdf2_iterations": PBKDF2_ITERATIONS,
+        "app_seed": APP_SEED,
     }
     OUTPUT_META.write_text(json.dumps(meta, indent=2), encoding="utf-8")
     _log(f"Metadata written to {OUTPUT_META}")

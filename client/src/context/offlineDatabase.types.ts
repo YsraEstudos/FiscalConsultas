@@ -101,7 +101,18 @@ export type OfflineDatabaseWorkerRequest =
     | {
         type: 'INSTALL';
         id: string | null;
-        payload: { apiBase: string };
+        payload: { apiBase: string; clerkToken?: string | null };
+    }
+    | {
+        type: 'TOKEN_RESPONSE';
+        id: string;
+        payload: {
+            clerkToken?: string | null;
+            error?: string;
+            errorName?: string;
+            errorStack?: string;
+            errorValue?: string;
+        };
     }
     | {
         type: 'REMOVE';
@@ -170,12 +181,19 @@ export type OfflineDatabaseWorkerErrorMessage = {
     payload: { error?: unknown };
 };
 
+export type OfflineDatabaseWorkerRefreshTokenMessage = {
+    type: 'REFRESH_TOKEN';
+    id: string | null;
+    payload: Record<string, never>;
+};
+
 export type OfflineDatabaseWorkerResponse =
     | OfflineDatabaseWorkerReadyMessage
     | OfflineDatabaseWorkerProgressMessage
     | OfflineDatabaseWorkerStatusMessage
     | OfflineDatabaseWorkerResultMessage
-    | OfflineDatabaseWorkerErrorMessage;
+    | OfflineDatabaseWorkerErrorMessage
+    | OfflineDatabaseWorkerRefreshTokenMessage;
 
 export type OfflineDatabaseWorkerMessage =
     | OfflineDatabaseWorkerRequest
