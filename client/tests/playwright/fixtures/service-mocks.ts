@@ -76,12 +76,13 @@ function normalizeFixtureText(value: string): string {
 
 function makeNebsEntry(code = '1.0101.11.00'): NebsExplanatoryEntry {
   const bodyText = 'Conteudo da nota. Ver detalhes em 1.1703.2.';
+  const title = 'Serviços de construção de edificações residenciais de um e dois pavimentos';
 
   return {
     code,
     code_clean: code.replaceAll(/\D/g, ''),
-    title: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
-    title_normalized: 'servicos de construcao de edificacoes residenciais de um e dois pavimentos',
+    title,
+    title_normalized: normalizeFixtureText(title),
     body_text: bodyText,
     body_markdown: bodyText,
     body_normalized: normalizeFixtureText(bodyText),

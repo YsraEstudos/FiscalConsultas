@@ -53,11 +53,13 @@ export function buildAccentInsensitivePattern(term: string): string {
         .join('');
 }
 
-function getNoMatchResult(): SearchHighlighterMatchQualityResult {
+function getNoMatchResult(
+    coOccurrenceScope: SearchHighlighterCoOccurrenceScope = 'block',
+): SearchHighlighterMatchQualityResult {
     return {
         matchQuality: 'NENHUM',
         coOccurrenceCount: 0,
-        coOccurrenceScope: 'subposition',
+        coOccurrenceScope,
         highSubpositionKeys: [],
     };
 }
@@ -97,12 +99,14 @@ function findClosestContext(
     return { closestBlock, closestChapter };
 }
 
-type ResolveSubpositionKeyFn = (node: HTMLElement, container: HTMLElement) => string | null;
+type NeshAnchor = HTMLElement;
+type ResolveSubpositionKeyFn = (node: HTMLElement, container: HTMLElement, neshAnchors: NeshAnchor[]) => string | null;
 
 function buildTermMaps(
     currentMatches: Record<string, SearchHighlighterMatchInstance[]>,
     allTerms: string[],
     container: HTMLElement,
+    neshAnchors: NeshAnchor[],
     resolveSubpositionKey: ResolveSubpositionKeyFn,
 ): {
     subpositionTermMap: Map<string, Set<string>>;
@@ -116,7 +120,7 @@ function buildTermMaps(
     for (const term of allTerms) {
         const matchesForTerm = currentMatches[term] ?? [];
         for (const match of matchesForTerm) {
-            const subpositionKey = resolveSubpositionKey(match.node, container);
+            const subpositionKey = resolveSubpositionKey(match.node, container, neshAnchors);
             if (subpositionKey) {
                 addTermToMap(subpositionTermMap, subpositionKey, term);
             }
@@ -148,6 +152,7 @@ function analyzeBlockCoOccurrence(
     blockTermMap: Map<HTMLElement, Set<string>>,
     requiredTermCount: number,
     container: HTMLElement,
+    neshAnchors: NeshAnchor[],
     resolveSubpositionKey: ResolveSubpositionKeyFn,
 ): { highBlocksWithoutSubposition: number; hasFallbackHighBlock: boolean } {
     let highBlocksWithoutSubposition = 0;
@@ -157,7 +162,7 @@ function analyzeBlockCoOccurrence(
         if (termsInBlock.size !== requiredTermCount) {
             continue;
         }
-        if (resolveSubpositionKey(block, container)) {
+        if (resolveSubpositionKey(block, container, neshAnchors)) {
             continue;
         }
         highBlocksWithoutSubposition += 1;
@@ -235,6 +240,7 @@ export function notifyAfterScrollSettles(
 export function resolveSubpositionKey(
     node: HTMLElement,
     container: HTMLElement,
+    neshAnchors?: NeshAnchor[],
 ): string | null {
     const tipiPosition = node.closest<HTMLElement>('article.tipi-position[id]');
     if (tipiPosition?.id) {
@@ -246,12 +252,10 @@ export function resolveSubpositionKey(
         return directPosAnchor.id;
     }
 
-    const neshAnchors = container.querySelectorAll<HTMLElement>(
-        'h3[id^="pos-"], h4[id^="pos-"], h3.nesh-section[id], h4.nesh-subsection[id]',
-    );
+    const anchors = neshAnchors ?? getNeshAnchors(container);
     let nearestBefore: HTMLElement | null = null;
 
-    for (const anchor of neshAnchors) {
+    for (const anchor of anchors) {
         if (!anchor.id) {
             continue;
         }
@@ -272,6 +276,12 @@ export function resolveSubpositionKey(
     return nearestBefore?.id || null;
 }
 
+function getNeshAnchors(container: HTMLElement): NeshAnchor[] {
+    return Array.from(container.querySelectorAll<HTMLElement>(
+        'h3[id^="pos-"], h4[id^="pos-"], h3.nesh-section[id], h4.nesh-subsection[id]',
+    ));
+}
+
 export function collectSearchHighlighterQuality(
     currentMatches: Record<string, SearchHighlighterMatchInstance[]>,
     allTerms: string[],
@@ -281,10 +291,12 @@ export function collectSearchHighlighterQuality(
         return getNoMatchResult();
     }
 
+    const neshAnchors = getNeshAnchors(container);
     const { subpositionTermMap, blockTermMap, chapterTermMap } = buildTermMaps(
         currentMatches,
         allTerms,
         container,
+        neshAnchors,
         resolveSubpositionKey,
     );
 
@@ -295,6 +307,7 @@ export function collectSearchHighlighterQuality(
         blockTermMap,
         requiredTermCount,
         container,
+        neshAnchors,
         resolveSubpositionKey,
     );
 

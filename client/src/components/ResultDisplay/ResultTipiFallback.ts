@@ -6,6 +6,13 @@ const LEGACY_MARKDOWN_PATTERN = /(^|\n)\s{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+\.\s|--
 
 export const isLikelyLegacyMarkdown = (value: string) => LEGACY_MARKDOWN_PATTERN.test(value);
 
+const escapeHtml = (value: unknown): string => String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+
 const getAliquotClass = (aliquota: string) => {
     const normalized = (aliquota || '').toString().trim().toUpperCase();
     if (!normalized || normalized === '0' || normalized === '0%') {
@@ -45,6 +52,8 @@ export const renderTipiFallback = (resultados: ResultRecord) => {
         const capitulo = chapter?.capitulo || '';
         const titulo = chapter?.titulo || `Capítulo ${capitulo}`;
         const posicoes = Array.isArray(chapter?.posicoes) ? chapter.posicoes : [];
+        const safeCapitulo = escapeHtml(capitulo);
+        const safeTitulo = escapeHtml(titulo);
 
         const positionsHtml = posicoes.map((pos: any) => {
             const codigo = pos?.codigo || pos?.ncm || '';
@@ -54,20 +63,26 @@ export const renderTipiFallback = (resultados: ResultRecord) => {
             const indentClass = `tipi-nivel-${Math.min(nivel, 5)}`;
             const { className, tooltip, display } = getAliquotClass(pos?.aliquota);
             const elementId = pos?.anchor_id || generateAnchorId(codigo);
+            const safeElementId = escapeHtml(elementId);
+            const safeNcm = escapeHtml(ncm);
+            const safeCodigo = escapeHtml(codigo);
+            const safeDescricao = escapeHtml(descricao);
+            const safeTooltip = escapeHtml(tooltip);
+            const safeDisplay = escapeHtml(display);
 
             return `
-<article class="tipi-position ${indentClass}" id="${elementId}" data-ncm="${ncm}" aria-label="NCM ${codigo}">
-    <span class="tipi-ncm smart-link" data-ncm="${ncm}" role="link" tabindex="0">${codigo}</span>
-    <span class="tipi-desc">${descricao}</span>
-    <span class="tipi-aliquota ${className}" data-tooltip="${tooltip}" aria-label="${tooltip}">${display}</span>
+<article class="tipi-position ${indentClass}" id="${safeElementId}" data-ncm="${safeNcm}" aria-label="NCM ${safeCodigo}">
+    <span class="tipi-ncm smart-link" data-ncm="${safeNcm}" role="link" tabindex="0">${safeCodigo}</span>
+    <span class="tipi-desc">${safeDescricao}</span>
+    <span class="tipi-aliquota ${className}" data-tooltip="${safeTooltip}" aria-label="${safeTooltip}">${safeDisplay}</span>
 </article>`;
         }).join('');
 
         return `
-<div class="tipi-chapter" id="cap-${capitulo}">
+<div class="tipi-chapter" id="cap-${safeCapitulo}">
     <h2 class="tipi-chapter-header">
-        <span class="tipi-cap-badge">${capitulo}</span>
-        ${titulo}
+        <span class="tipi-cap-badge">${safeCapitulo}</span>
+        ${safeTitulo}
     </h2>
     <div class="tipi-positions">
         ${positionsHtml}

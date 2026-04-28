@@ -144,6 +144,8 @@ function NbsDetailSection({
     nbsState,
     openCatalogDoc,
 }: Readonly<NbsDetailSectionProps>) {
+    const codeParts = nbsState.detail?.item.code.split('.') ?? [];
+
     return (
         <section className={styles.rightPanel}>
             {nbsState.isLoadingDetail ? (
@@ -164,10 +166,10 @@ function NbsDetailSection({
                     <section className={styles.codeComposition}>
                         <span className={styles.codeLabel}>COMPOSIÇÃO DO CÓDIGO</span>
                         <div className={styles.codeBoxes}>
-                            {nbsState.detail.item.code.split('.').map((part, index) => (
+                            {codeParts.map((part, index) => (
                                 <React.Fragment key={index}>
                                     <div className={styles.codeBox}>{part}</div>
-                                    {index < nbsState.detail!.item.code.split('.').length - 1 && (
+                                    {index < codeParts.length - 1 && (
                                         <span className={styles.codeSeparator}>-</span>
                                     )}
                                 </React.Fragment>
@@ -321,27 +323,27 @@ export function NbsWorkspaceView({
         ? 'Abrir explicações oficiais do capítulo'
         : 'Abrir resumo do capítulo';
 
-    const closeChapterNotes = () => {
+    const closeChapterNotes = React.useCallback(() => {
         setIsChapterNotesOpen(false);
-    };
+    }, [setIsChapterNotesOpen]);
 
-    const handleChapterNotesDialogKeyDown = (
+    const handleChapterNotesDialogKeyDown = React.useCallback((
         event: React.KeyboardEvent<HTMLDialogElement>,
     ) => {
         if (event.key === 'Escape') {
             closeChapterNotes();
         }
-    };
+    }, [closeChapterNotes]);
 
-    const handleChapterNotesBackdropClick = (
+    const handleChapterNotesBackdropClick = React.useCallback((
         event: React.MouseEvent<HTMLDialogElement>,
     ) => {
         if (event.target === event.currentTarget) {
             closeChapterNotes();
         }
-    };
+    }, [closeChapterNotes]);
 
-    const handleOpenChapterNotes = () => {
+    const handleOpenChapterNotes = React.useCallback(() => {
         if (!currentChapterNotesEntry) return;
         if (nbsChapterNotesNewTab) {
             openNbsChapterNotesPreviewWindow(currentChapterNotesEntry);
@@ -349,7 +351,7 @@ export function NbsWorkspaceView({
         }
 
         setIsChapterNotesOpen(true);
-    };
+    }, [currentChapterNotesEntry, nbsChapterNotesNewTab, setIsChapterNotesOpen]);
 
     const autoExpandedDescendants = (
         nbsPrefixAutoExpand
