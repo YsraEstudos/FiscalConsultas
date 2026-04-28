@@ -13,7 +13,6 @@ vi.mock("../../src/context/LocalDatabaseContext", () => ({
     status: "not_installed",
     searchLocal: vi.fn().mockResolvedValue(null),
     getNbsDetailLocal: vi.fn().mockResolvedValue(null),
-    getNebsDetailLocal: vi.fn().mockResolvedValue(null),
     progress: 0,
     progressStep: "",
     localVersion: null,

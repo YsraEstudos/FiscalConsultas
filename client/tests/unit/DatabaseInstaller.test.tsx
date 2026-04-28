@@ -22,7 +22,6 @@ const localDatabaseState = {
   refreshAvailability: vi.fn(),
   searchLocal: vi.fn(),
   getNbsDetailLocal: vi.fn(),
-  getNebsDetailLocal: vi.fn(),
 };
 
 vi.mock('../../src/context/LocalDatabaseContext', () => ({

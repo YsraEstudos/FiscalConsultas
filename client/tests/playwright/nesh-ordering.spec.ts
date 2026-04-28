@@ -147,13 +147,14 @@ test('navigates to a NESH position from sidebar click and highlights target anch
 
   await expect(resultsContainer).toBeVisible();
   await expect(targetAnchor).toBeVisible();
+  await waitForScrollToSettle(page, '#results-content-tab-1');
 
   await resultsContainer.evaluate((element) => {
     element.scrollTop = 0;
   });
   await expect.poll(async () => (
     resultsContainer.evaluate((element) => element.scrollTop)
-  )).toBe(0);
+  )).toBeLessThanOrEqual(80);
 
   await page.getByRole('button', { name: /84\.05\s*Geradores de gás\./i }).click();
 

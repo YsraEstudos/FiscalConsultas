@@ -10,7 +10,6 @@ const refs = vi.hoisted(() => ({
   searchNCMMock: vi.fn(),
   searchTipiMock: vi.fn(),
   searchNbsServicesMock: vi.fn(),
-  searchNebsEntriesMock: vi.fn(),
   toastErrorMock: vi.fn(),
 }));
 
@@ -18,7 +17,6 @@ vi.mock('../../src/services/api', () => ({
   searchNCM: refs.searchNCMMock,
   searchTipi: refs.searchTipiMock,
   searchNbsServices: refs.searchNbsServicesMock,
-  searchNebsEntries: refs.searchNebsEntriesMock,
 }));
 
 vi.mock('react-hot-toast', () => ({
@@ -32,7 +30,6 @@ vi.mock('../../src/context/LocalDatabaseContext', () => ({
     status: 'not_installed',
     searchLocal: vi.fn().mockResolvedValue(null),
     getNbsDetailLocal: vi.fn().mockResolvedValue(null),
-    getNebsDetailLocal: vi.fn().mockResolvedValue(null),
     progress: 0,
     progressStep: '',
     localVersion: null,
@@ -61,7 +58,7 @@ function createTab(overrides: Partial<Tab> = {}): Tab {
     error: null,
     ncm: '',
     results: null,
-    loadedChaptersByDoc: { nesh: [], tipi: [], nbs: [], nebs: [] },
+    loadedChaptersByDoc: { nesh: [], tipi: [], nbs: [] },
     ...overrides,
   };
 }
@@ -79,7 +76,6 @@ describe('useSearch behavior', () => {
     refs.searchNCMMock.mockReset();
     refs.searchTipiMock.mockReset();
     refs.searchNbsServicesMock.mockReset();
-    refs.searchNebsEntriesMock.mockReset();
     refs.toastErrorMock.mockReset();
     localStorage.clear();
   });
@@ -111,7 +107,7 @@ describe('useSearch behavior', () => {
     const updateTab = vi.fn();
     const addToHistory = vi.fn();
     const tabsById = new Map([
-      ['tab-1', createTab({ document: 'tipi', loadedChaptersByDoc: { nesh: [], tipi: ['84'], nbs: [], nebs: [] } })],
+      ['tab-1', createTab({ document: 'tipi', loadedChaptersByDoc: { nesh: [], tipi: ['84'], nbs: [] } })],
     ]);
 
     refs.searchTipiMock.mockResolvedValue({
@@ -151,8 +147,7 @@ describe('useSearch behavior', () => {
         nesh: [],
         tipi: ['84', '01'],
         nbs: [],
-        nebs: [],
-      },
+        },
     }));
   });
 
@@ -160,7 +155,7 @@ describe('useSearch behavior', () => {
     const updateTab = vi.fn();
     const addToHistory = vi.fn();
     const tabsById = new Map([
-      ['tab-1', createTab({ loadedChaptersByDoc: { nesh: ['84'], tipi: [], nbs: [], nebs: [] } })],
+      ['tab-1', createTab({ loadedChaptersByDoc: { nesh: ['84'], tipi: [], nbs: [] } })],
     ]);
 
     refs.searchNCMMock.mockResolvedValue({
@@ -187,8 +182,7 @@ describe('useSearch behavior', () => {
         nesh: [],
         tipi: [],
         nbs: [],
-        nebs: [],
-      },
+        },
     }));
   });
 
@@ -223,14 +217,14 @@ describe('useSearch behavior', () => {
   });
 
   it.each([
-    ['nbs', 429, 'Muitas tentativas no catálogo de serviços. Aguarde um instante e tente novamente.'],
-    ['nebs', 503, 'Catálogo de serviços indisponível no momento. Tente novamente em instantes.'],
-  ])('uses the shared catalog error mapper for %s tabs', async (doc, status, message) => {
+    [429, 'Muitas tentativas no catálogo de serviços. Aguarde um instante e tente novamente.'],
+    [503, 'Catálogo de serviços indisponível no momento. Tente novamente em instantes.'],
+  ])('uses the shared catalog error mapper for NBS %s responses', async (status, message) => {
     const updateTab = vi.fn();
     const addToHistory = vi.fn();
     const tabsById = new Map([[
       'tab-1',
-      createTab({ document: doc as Tab['document'] }),
+      createTab({ document: 'nbs' }),
     ]]);
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const error = {
@@ -238,17 +232,13 @@ describe('useSearch behavior', () => {
       response: { status },
     };
 
-    if (doc === 'nbs') {
-      refs.searchNbsServicesMock.mockRejectedValue(error);
-    } else {
-      refs.searchNebsEntriesMock.mockRejectedValue(error);
-    }
+    refs.searchNbsServicesMock.mockRejectedValue(error);
 
     try {
       const { result } = renderHook(() => useSearch(tabsById, updateTab, addToHistory), { wrapper });
 
       await act(async () => {
-        await result.current.executeSearchForTab('tab-1', doc as Tab['document'], '1.0101.11.00', true);
+        await result.current.executeSearchForTab('tab-1', 'nbs', '1.0101.11.00', true);
       });
 
       expect(refs.toastErrorMock).toHaveBeenCalledWith(message);

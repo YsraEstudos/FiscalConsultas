@@ -78,6 +78,16 @@ export function generateAnchorId(ncmCode) {
 }
 
 /**
+ * Escape a value for use in a SQL LIKE prefix pattern.
+ * Port of the SQLite ESCAPE clause behavior for literal prefixes.
+ * @param {string} value
+ * @returns {string}
+ */
+export function escapeLikePattern(value) {
+  return String(value || "").replace(/[\\%_]/g, "\\$&");
+}
+
+/**
  * Extract chapter number and target position from an NCM code.
  * Port of: ncm_utils.extract_chapter_from_ncm()
  * @param {string} ncm

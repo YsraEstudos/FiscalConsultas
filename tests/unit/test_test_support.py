@@ -58,9 +58,10 @@ def test_sqlite_test_environment_overrides_and_restores_services_filename():
     assert settings.database.services_filename == original_services_filename
 
 
-def test_close_shared_db_engine_resets_tipi_pool_lock(monkeypatch):
+def test_close_shared_db_engine_resets_tipi_pool_state(monkeypatch):
     class _TipiServiceStub:
-        _pool_lock = object()
+        _tipi_connection_pools = {"pool": object()}
+        _tipi_connection_pool_locks = {1: object()}
 
         @classmethod
         async def close_all_pools(cls):
@@ -79,7 +80,8 @@ def test_close_shared_db_engine_resets_tipi_pool_lock(monkeypatch):
 
     test_support._close_shared_db_engine()
 
-    assert _TipiServiceStub._pool_lock is None
+    assert _TipiServiceStub._tipi_connection_pools == {}
+    assert _TipiServiceStub._tipi_connection_pool_locks == {}
 
 
 async def _async_noop():

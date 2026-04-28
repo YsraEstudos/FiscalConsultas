@@ -68,7 +68,15 @@ class SQLiteTestEnvironment:
         _close_shared_db_engine()
 
     def cleanup(self) -> None:
-        self.temporary_directory.cleanup()
+        _close_shared_db_engine()
+        try:
+            self.temporary_directory.cleanup()
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning(
+                "Failed to cleanup SQLite test directory %s: %s",
+                self.temporary_directory.name,
+                exc,
+            )
 
 
 def _close_shared_db_engine() -> None:
@@ -85,7 +93,8 @@ def _close_shared_db_engine() -> None:
         try:
             asyncio.run(TipiService.close_all_pools())
         finally:
-            TipiService._pool_lock = None
+            TipiService._tipi_connection_pools = {}
+            TipiService._tipi_connection_pool_locks = {}
     except Exception as exc:
         LOGGER.debug("Failed to close TIPI pools during test bootstrap: %s", exc)
 

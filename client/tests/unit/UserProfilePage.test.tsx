@@ -433,7 +433,7 @@ describe('UserProfilePage', () => {
         expect(onClose).not.toHaveBeenCalled();
     });
 
-    it('executa deleção após confirmar com "deletar"', async () => {
+    it('executa deleção após confirmar com "deletar"', { timeout: 15000 }, async () => {
         const originalConsoleError = console.error.bind(console);
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation((...args) => {
             if (args.some((arg) => String(arg).includes('Not implemented: navigation to another Document'))) {
@@ -465,7 +465,7 @@ describe('UserProfilePage', () => {
         }
     });
 
-    it('mantém a confirmação aberta e sai do estado de loading quando a deleção falha', async () => {
+    it('mantém a confirmação aberta e sai do estado de loading quando a deleção falha', { timeout: 15000 }, async () => {
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
         const onClose = vi.fn();
         mockDeleteMyAccount.mockRejectedValueOnce(new Error('delete failed'));

@@ -13,10 +13,10 @@ declare module '*.css' {
 }
 
 declare global {
-    var nesh: Window['nesh'];
+    var nesh: Window['nesh'] | undefined;
 
     interface Window {
-        nesh: {
+        nesh?: {
             smartLinkSearch: (ncm: string) => void;
             openNote: (note: string, chapter?: string) => void;
             openSettings: () => void;

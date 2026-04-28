@@ -16,6 +16,7 @@ import {
   buildTipiHierarchy,
   buildNeshChapterResult,
   preferMoreSpecific,
+  escapeLikePattern,
 } from "./workerUtils.js";
 
 // ---------------------------------------------------------------------------
@@ -137,6 +138,19 @@ describe("generateAnchorId", () => {
     expect(generateAnchorId("85<script>17")).toBe("pos-85script17");
     // True injection: special chars removed
     expect(generateAnchorId("85&17")).toBe("pos-8517");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// escapeLikePattern
+// ---------------------------------------------------------------------------
+describe("escapeLikePattern", () => {
+  it("escapes SQL LIKE wildcards and backslashes", () => {
+    expect(escapeLikePattern("1_23%45\\67")).toBe("1\\_23\\%45\\\\67");
+  });
+
+  it("leaves plain prefixes unchanged", () => {
+    expect(escapeLikePattern("8413")).toBe("8413");
   });
 });
 

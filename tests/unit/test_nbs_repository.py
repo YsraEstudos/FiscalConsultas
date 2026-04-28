@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -38,6 +39,7 @@ class _FakeSession:
         self.calls = []
 
     async def execute(self, stmt, params=None):
+        await asyncio.sleep(0)
         self.calls.append((stmt, params))
         return self._results.pop(0)
 
@@ -47,13 +49,24 @@ async def test_search_public_scope_filters_to_null_tenant():
     session = _FakeSession([_FakeRowsResult([])])
     repo = NbsRepository(session)
 
-    results = await repo.search("construcao")
+    results = await repo.load_nbs_catalog_entries("construcao")
 
     assert results == []
     stmt, params = session.calls[0]
     assert "n.tenant_id IS NULL" in str(stmt)
     assert params is not None
     assert "tenant_id" not in params
+
+
+@pytest.mark.asyncio
+async def test_search_alias_keeps_migration_compatibility():
+    legacy_repo = NbsRepository(_FakeSession([_FakeRowsResult([])]))
+    canonical_repo = NbsRepository(_FakeSession([_FakeRowsResult([])]))
+
+    legacy_results = await legacy_repo.search("construcao")
+    canonical_results = await canonical_repo.load_nbs_catalog_entries("construcao")
+
+    assert legacy_results == canonical_results == []
 
 
 @pytest.mark.asyncio
@@ -67,8 +80,8 @@ async def test_catalog_counts_and_metadata_public_scope_filter_to_null_tenant():
     )
     repo = NbsRepository(session)
 
-    counts = await repo.get_catalog_counts()
-    metadata = await repo.get_catalog_metadata()
+    counts = await repo.snapshot_nbs_catalog_counts()
+    metadata = await repo.snapshot_nbs_catalog_metadata()
 
     assert counts == {"nbs_items": 12, "nebs_entries": 8}
     assert metadata == {"nbs_version": "2026-04"}
@@ -109,7 +122,7 @@ async def test_get_item_details_public_scope_filters_to_null_tenant():
     )
     repo = NbsRepository(session)
 
-    details = await repo.get_item_details("1.01")
+    details = await repo.load_nbs_catalog_item_details("1.01")
 
     assert details["success"] is True
     assert details["item"]["code"] == "1.01"
@@ -123,21 +136,21 @@ async def test_get_item_details_public_scope_filters_to_null_tenant():
 
 
 @pytest.mark.asyncio
-async def test_get_nebs_details_public_scope_filters_to_null_tenant():
+async def test_get_item_details_inline_nebs_public_scope_filters_to_null_tenant():
     session = _FakeSession(
         [
             _FakeRowsResult(
                 [
                     SimpleNamespace(
-                        code="1.0102.61",
-                        code_clean="1010261",
+                        code="1.0102.61.00",
+                        code_clean="101026100",
                         description="Serviços de construção",
                         parent_code=None,
                         level=0,
-                        has_nebs=True,
                     )
                 ]
             ),
+            _FakeRowsResult([]),
             _FakeRowsResult(
                 [
                     SimpleNamespace(
@@ -162,13 +175,22 @@ async def test_get_nebs_details_public_scope_filters_to_null_tenant():
     )
     repo = NbsRepository(session)
 
-    details = await repo.get_nebs_details("1.0102.61")
+    details = await repo.load_nbs_catalog_item_details(
+        "1.0102.61.00", include_tree=False
+    )
 
     assert details["success"] is True
-    assert details["item"]["code"] == "1.0102.61"
-    assert details["entry"]["code"] == "1.0102.61"
+    assert details["item"]["code"] == "1.0102.61.00"
+    assert details["nebs"]["code"] == "1.0102.61"
+    assert "parser_status" not in details["nebs"]
 
-    assert len(session.calls) == 2
+    assert len(session.calls) == 3
     for stmt, params in session.calls:
         assert "tenant_id IS NULL" in str(stmt)
         assert "tenant_id" not in params
+    nebs_stmt, nebs_params = session.calls[2]
+    assert "code_clean" in str(nebs_stmt)
+    assert "parser_status = :parser_status" in str(nebs_stmt)
+    assert nebs_params["nebs_code_0"] == "1.0102.61.00"
+    assert nebs_params["nebs_code_1"] == "1.0102.61"
+    assert nebs_params["parser_status"] == "trusted"

@@ -36,19 +36,19 @@ describe('servicesCatalog error handling', () => {
                 data: { detail: 'Forbidden' },
                 headers: { 'x-request-id': 'req-403-test' },
             },
-            config: { url: '/services/nebs/search?q=energia' },
+            config: { url: '/services/nbs/search?q=energia' },
         };
 
-        reportServiceCatalogError(error, 'nebs');
+        reportServiceCatalogError(error, 'nbs');
 
         expect(warnSpy).toHaveBeenCalledWith(
             '[servicesCatalog] Public catalog route failed',
             expect.objectContaining({
-                doc: 'nebs',
+                doc: 'nbs',
                 status: 403,
                 requestId: 'req-403-test',
                 detail: 'Forbidden',
-                url: '/services/nebs/search?q=energia',
+                url: '/services/nbs/search?q=energia',
             }),
         );
 

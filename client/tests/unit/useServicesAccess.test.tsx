@@ -24,23 +24,19 @@ type ServiceStatus = 'online' | 'error';
 function makeSystemStatusResponse({
   status = 'online',
   nbs = 'online',
-  nebs = 'online',
 }: {
   status?: 'online' | 'error';
   nbs?: ServiceStatus;
-  nebs?: ServiceStatus;
 } = {}): SystemStatusResponse {
   return {
     status,
     database: { status: 'online' },
     tipi: { status: 'online' },
     nbs: { status: nbs },
-    nebs: { status: nebs },
     catalogs: {
       nesh: { status: 'online' },
       tipi: { status: 'online' },
       nbs: { status: nbs },
-      nebs: { status: nebs },
     },
   };
 }
@@ -64,7 +60,7 @@ describe('useServicesAccess', () => {
     expect(refs.toastErrorMock).not.toHaveBeenCalled();
   });
 
-  it('blocks access and exposes the offline reason when NBS/NEBS are offline', async () => {
+  it('blocks access and exposes the offline reason when NBS is offline', async () => {
     refs.getSystemStatusMock.mockResolvedValue(
       makeSystemStatusResponse({ status: 'error', nbs: 'error' }),
     );
@@ -181,7 +177,7 @@ describe('useServicesAccess', () => {
 
   it('fails fast for service searches when the offline snapshot is still fresh', async () => {
     refs.getSystemStatusMock.mockResolvedValue(
-      makeSystemStatusResponse({ status: 'error', nbs: 'error', nebs: 'error' }),
+      makeSystemStatusResponse({ status: 'error', nbs: 'error' }),
     );
 
     const { result } = renderHook(() => useServicesAccess());
@@ -191,7 +187,7 @@ describe('useServicesAccess', () => {
     });
 
     await waitFor(() => {
-      expect(result.current.servicesUnavailableReason).toBe('Catálogo NBS/NEBS indisponível no momento.');
+      expect(result.current.servicesUnavailableReason).toBe('Catálogo NBS indisponível no momento.');
     });
 
     refs.getSystemStatusMock.mockClear();
@@ -201,7 +197,7 @@ describe('useServicesAccess', () => {
     });
 
     expect(refs.getSystemStatusMock).not.toHaveBeenCalled();
-    expect(refs.toastErrorMock).toHaveBeenCalledWith('Catálogo NBS/NEBS indisponível no momento.');
+    expect(refs.toastErrorMock).toHaveBeenCalledWith('Catálogo NBS indisponível no momento.');
   });
 
   it('allows service search to proceed while status is still unknown', async () => {
