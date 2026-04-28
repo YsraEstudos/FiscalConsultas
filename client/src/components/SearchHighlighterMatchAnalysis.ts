@@ -88,7 +88,7 @@ function findClosestContext(
         if (!closestBlock && BLOCK_ELEMENTS.has(current.tagName)) {
             closestBlock = current;
         }
-        if (isChapterElement(current)) {
+        if (!closestChapter && isChapterElement(current)) {
             closestChapter = current;
         }
         current = current.parentElement;

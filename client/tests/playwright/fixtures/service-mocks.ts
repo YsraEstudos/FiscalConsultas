@@ -67,15 +67,24 @@ function makeItem(code = '1.0101.11.00', overrides: Partial<NbsServiceItem> = {}
   };
 }
 
+function normalizeFixtureText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replaceAll(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
 function makeNebsEntry(code = '1.0101.11.00'): NebsExplanatoryEntry {
+  const bodyText = 'Conteudo da nota. Ver detalhes em 1.1703.2.';
+
   return {
     code,
     code_clean: code.replaceAll(/\D/g, ''),
     title: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
     title_normalized: 'servicos de construcao de edificacoes residenciais de um e dois pavimentos',
-    body_text: 'Conteudo da nota. Ver detalhes em 1.1703.2.',
-    body_markdown: 'Conteudo da nota. Ver detalhes em 1.1703.2.',
-    body_normalized: 'conteudo da nota',
+    body_text: bodyText,
+    body_markdown: bodyText,
+    body_normalized: normalizeFixtureText(bodyText),
     section_title: 'SEÇÃO I - SERVIÇOS DE CONSTRUÇÃO',
     page_start: 12,
     page_end: 13,

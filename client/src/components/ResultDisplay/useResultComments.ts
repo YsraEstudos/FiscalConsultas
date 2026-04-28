@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 
 import toast from 'react-hot-toast';
 
@@ -13,7 +13,7 @@ type CommentMutation = (commentId: string, body: string) => Promise<void>;
 type CommentRemoval = (commentId: string) => Promise<void>;
 
 type UseResultCommentsArgs = {
-    containerRef: React.RefObject<HTMLDivElement | null>;
+    containerRef: RefObject<HTMLDivElement | null>;
     canUseRestrictedUi: boolean;
     isSignedIn: boolean;
     isAuthLoading: boolean;
@@ -24,7 +24,7 @@ type UseResultCommentsArgs = {
 };
 
 export type ResultCommentsUi = {
-    contentRef: React.RefObject<HTMLDivElement | null>;
+    contentRef: RefObject<HTMLDivElement | null>;
     commentsEnabled: boolean;
     toggleComments: () => void;
     selection: SelectionInfo | null;
@@ -194,6 +194,7 @@ export function useResultComments({
 
     useEffect(() => {
         resetFetchedAnchors();
+        commentedAnchorsLoadedRef.current = false;
     }, [data?.markdown, data?.ncm, data?.query, resetFetchedAnchors]);
 
     return {

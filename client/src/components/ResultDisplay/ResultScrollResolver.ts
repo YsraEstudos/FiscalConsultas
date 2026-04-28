@@ -60,6 +60,8 @@ export function findAnchorIdInChapter(
 }
 
 export function getStructuredSectionIds(capitulo: string, secoes: Record<string, unknown>): string[] {
+    if (!capitulo) return [];
+
     const ids: string[] = [];
     for (const sectionType of SECTION_TYPES) {
         const sectionValue = secoes[sectionType];
@@ -112,7 +114,7 @@ function buildDataNcmTargetValues(candidateNcm: string): string[] {
         values.add(`${positionDigits.slice(0, 2)}.${positionDigits.slice(2, 4)}`);
     }
 
-    return Array.from(values);
+    return Array.from(values).sort((left, right) => right.length - left.length);
 }
 
 export function ensureTargetAnchorFromDataNcm(

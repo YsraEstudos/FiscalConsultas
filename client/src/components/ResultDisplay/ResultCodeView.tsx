@@ -175,6 +175,7 @@ export function ResultCodeView({
                 <div
                     className={`${styles.mobileOverlay || ''} ${mobileMenuOpen ? (styles.mobileOverlayOpen || '') : ''}`}
                     onClick={onCloseMobileMenu}
+                    aria-hidden="true"
                 />
             )}
 

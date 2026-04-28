@@ -216,7 +216,7 @@ vi.mock('../../src/components/ServicesTabContent', () => ({
       <button data-testid={`services-switch-${doc}`} onClick={() => onSwitchDoc('nbs', '1.0101.11.00')}>
         switch
       </button>
-      <button data-testid={`services-open-new-${doc}`} onClick={() => onOpenDocInNewTab(doc === 'nbs' ? 'nebs' : 'nbs', '1.0101.11.00')}>
+      <button data-testid={`services-open-new-${doc}`} onClick={() => onOpenDocInNewTab('nbs', '1.0101.11.00')}>
         open-new-tab
       </button>
       <button data-testid={`services-ready-${doc}`} onClick={onContentReady}>
@@ -836,8 +836,8 @@ describe('App behavior', () => {
     fireEvent.click(screen.getByTestId('services-ready-nbs'));
 
     await waitFor(() => {
-      expect(mocks.createTabMock).toHaveBeenCalledWith('nebs');
-      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nebs-1', 'nebs', '1.0101.11.00', false);
+      expect(mocks.createTabMock).toHaveBeenCalledWith('nbs');
+      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nbs-1', 'nbs', '1.0101.11.00', false);
     });
     expect(mocks.updateTabMock).toHaveBeenCalledWith('tab-1', { isContentReady: true });
   });

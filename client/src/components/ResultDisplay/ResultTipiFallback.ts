@@ -53,7 +53,7 @@ export const renderTipiFallback = (resultados: ResultRecord) => {
             const nivel = typeof pos?.nivel === 'number' ? pos.nivel : 1;
             const indentClass = `tipi-nivel-${Math.min(nivel, 5)}`;
             const { className, tooltip, display } = getAliquotClass(pos?.aliquota);
-            const elementId = generateAnchorId(codigo);
+            const elementId = pos?.anchor_id || generateAnchorId(codigo);
 
             return `
 <article class="tipi-position ${indentClass}" id="${elementId}" data-ncm="${ncm}" aria-label="NCM ${codigo}">

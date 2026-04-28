@@ -42,7 +42,7 @@ export function ServicesWorkspace({
         : '';
 
     const openCatalogDoc = useCallback<OpenCatalogDoc>((targetDoc, query, forceNewTab) => {
-        if (!query) return;
+        if (!query.trim()) return;
 
         if ((openNewTab || forceNewTab) && onOpenDocInNewTab) {
             onOpenDocInNewTab(targetDoc, query);
@@ -86,7 +86,7 @@ export function ServicesWorkspace({
             container.removeEventListener('mousedown', handlePointer);
             container.removeEventListener('click', handlePointer);
         };
-    }, [openCatalogDoc]);
+    }, [nbsNoteBodyHtml, openCatalogDoc]);
 
     useEffect(() => {
         if (!isChapterNotesOpen || !currentChapterNotesEntry) {

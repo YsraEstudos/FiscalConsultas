@@ -1,4 +1,5 @@
 import React from 'react';
+import DOMPurify from 'dompurify';
 
 import { Loading } from '../Loading';
 import styles from '../ServicesWorkspace.module.css';
@@ -194,7 +195,7 @@ function NbsDetailSection({
                             <button
                                 type="button"
                                 className={styles.secondaryAction}
-                                onClick={() => openCatalogDoc('nbs', nbsState.detail?.item.code)}
+                                onClick={() => openCatalogDoc('nbs', nbsState.detail!.item.code)}
                             >
                                 Ver NBS
                             </button>
@@ -307,6 +308,12 @@ export function NbsWorkspaceView({
     openCatalogDoc,
     setIsChapterNotesOpen,
 }: Readonly<NbsWorkspaceViewProps>) {
+    const sanitizedChapterNotesHtml = React.useMemo(
+        () => DOMPurify.sanitize(chapterNotesHtml, {
+            USE_PROFILES: { html: true },
+        }),
+        [chapterNotesHtml],
+    );
     const chapterButtonLabel = activeChapterNumber
         ? `Capítulo ${activeChapterNumber}`
         : 'Explicações do capítulo';
@@ -379,7 +386,7 @@ export function NbsWorkspaceView({
             />
             <NbsChapterNotesDialog
                 chapterNotesDialogRef={chapterNotesDialogRef}
-                chapterNotesHtml={chapterNotesHtml}
+                chapterNotesHtml={sanitizedChapterNotesHtml}
                 closeChapterNotes={closeChapterNotes}
                 currentChapterNotesEntry={currentChapterNotesEntry}
                 onBackdropClick={handleChapterNotesBackdropClick}

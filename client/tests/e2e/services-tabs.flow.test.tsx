@@ -172,7 +172,7 @@ describe('services tabs flow', () => {
 
   it('keeps service-code navigation from inline explanatory notes inside the NBS tab', async () => {
     const detail = makeNbsDetail();
-    refs.getNbsServiceDetailPageMock.mockResolvedValueOnce({
+    refs.getNbsServiceDetailPageMock.mockResolvedValue({
       ...detail,
       nebs: {
         ...detail.nebs!,
@@ -200,7 +200,7 @@ describe('services tabs flow', () => {
     const onOpenDocInNewTab = vi.fn();
     const detail = makeNbsDetail();
     refs.openNewTab = true;
-    refs.getNbsServiceDetailPageMock.mockResolvedValueOnce({
+    refs.getNbsServiceDetailPageMock.mockResolvedValue({
       ...detail,
       nebs: {
         ...detail.nebs!,

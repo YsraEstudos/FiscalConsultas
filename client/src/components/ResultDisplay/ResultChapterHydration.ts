@@ -3,9 +3,24 @@ import type { ChapterBodyResponse } from '../../types/api.types';
 
 import type { ChapterHydrationResult, ResultRecord } from './types';
 
+function hasRenderableValue(value: unknown): boolean {
+    if (typeof value === 'string') {
+        return value.trim().length > 0;
+    }
+    if (Array.isArray(value)) {
+        return value.some(hasRenderableValue);
+    }
+    if (value && typeof value === 'object') {
+        return Object.values(value).some(hasRenderableValue);
+    }
+    return false;
+}
+
 export function chapterHasRenderableContent(chapter: any): boolean {
-    const content = chapter?.conteudo;
-    return typeof content === 'string' && content.trim().length > 0;
+    return hasRenderableValue(chapter?.conteudo)
+        || hasRenderableValue(chapter?.secoes)
+        || hasRenderableValue(chapter?.notas_gerais)
+        || hasRenderableValue(chapter?.notas_parseadas);
 }
 
 export function getAnchorCodeFromNcmValue(value: string): string {

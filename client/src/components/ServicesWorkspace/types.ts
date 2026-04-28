@@ -28,6 +28,6 @@ export type NoteContent = {
 
 export type OpenCatalogDoc = (
     targetDoc: ServiceDocType,
-    query?: string,
+    query: string,
     forceNewTab?: boolean,
 ) => void;

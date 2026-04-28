@@ -79,7 +79,7 @@ export function useResultCodeData({
         [codeResults, hydratedCodeResults],
     );
 
-    const missingChapterBodies = useMemo(() => {
+    const chaptersNeedingHydration = useMemo(() => {
         if (!shouldHydrateCodeResults || !renderableCodeResults) return [] as string[];
 
         return Object.entries(renderableCodeResults)
@@ -89,12 +89,20 @@ export function useResultCodeData({
                 return typeof capitulo === 'string' && capitulo.trim()
                     ? capitulo.trim()
                     : chapterKey;
-            })
-            .filter((chapter) => !failedChapterBodies.includes(chapter));
-    }, [failedChapterBodies, renderableCodeResults, shouldHydrateCodeResults]);
+            });
+    }, [renderableCodeResults, shouldHydrateCodeResults]);
+
+    const missingChapterBodies = useMemo(
+        () => chaptersNeedingHydration.filter((chapter) => !failedChapterBodies.includes(chapter)),
+        [chaptersNeedingHydration, failedChapterBodies],
+    );
 
     useEffect(() => {
-        if (!isActive || !shouldHydrateCodeResults || !renderableCodeResults || missingChapterBodies.length === 0) {
+        setFailedChapterBodies([]);
+    }, [renderableCodeResults]);
+
+    useEffect(() => {
+        if (!isActive || !shouldHydrateCodeResults || !renderableCodeResults || chaptersNeedingHydration.length === 0) {
             return;
         }
 
@@ -127,7 +135,7 @@ export function useResultCodeData({
             });
         };
 
-        void fetchChapterBodies(missingChapterBodies)
+        void fetchChapterBodies(chaptersNeedingHydration)
             .then(applyHydrationResult)
             .catch((error) => {
                 console.error('[ResultDisplay] Failed to hydrate chapter bodies', error);
@@ -143,7 +151,7 @@ export function useResultCodeData({
         };
     }, [
         isActive,
-        missingChapterBodies,
+        chaptersNeedingHydration,
         onHydratedResults,
         renderableCodeResults,
         shouldHydrateCodeResults,
