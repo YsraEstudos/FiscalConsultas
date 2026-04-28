@@ -155,5 +155,3 @@ async def fetch_nbs_catalog_tree_page_route(
         page=page,
         page_size=page_size,
     )
-
-
