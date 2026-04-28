@@ -40,13 +40,7 @@ type NoteContent = {
     readonly body_text?: string | null;
 } | null | undefined;
 
-function getNbsChapterCodeSource(
-    doc: ServiceDocType,
-    nbsState: ServicesWorkspaceNbsState,
-): string | null {
-    // ServiceDocType is presently 'nbs'; ServicesWorkspaceProps and this helper
-    // keep doc available for future catalog variants.
-    void doc;
+function getNbsChapterCodeSource(nbsState: ServicesWorkspaceNbsState): string | null {
     if (nbsState.detail?.item.code) return nbsState.detail.item.code;
     if (nbsState.selectedCode) return nbsState.selectedCode;
     if (isCodeLikeNbsQuery(nbsState.query)) {
@@ -545,7 +539,6 @@ function NbsWorkspaceView({
 
 
 export function ServicesWorkspace({
-    doc,
     nbsState,
     onSelectNbs,
     onSwitchDoc,
@@ -557,7 +550,7 @@ export function ServicesWorkspace({
     const chapterNotesDialogRef = useRef<HTMLDialogElement | null>(null);
     const nbsNotesContentRef = useRef<HTMLDivElement | null>(null);
     const hasInlineNotes = Boolean(nbsState.detail?.nebs);
-    const chapterCodeSource = getNbsChapterCodeSource(doc, nbsState);
+    const chapterCodeSource = getNbsChapterCodeSource(nbsState);
     const activeChapterNumber = getNbsChapterNumber(chapterCodeSource);
     const currentChapterNotesEntry = getNbsChapterNotesEntry(chapterCodeSource);
     const chapterNotesHtml = currentChapterNotesEntry

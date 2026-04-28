@@ -12,6 +12,7 @@ pytestmark = pytest.mark.integration
 
 class _FakeServicesCatalog:
     async def search_nbs_catalog_entries(self, query: str):
+        await asyncio.sleep(0)
         return {
             "success": True,
             "query": query,
@@ -28,6 +29,7 @@ class _FakeServicesCatalog:
         page: int = 1,
         page_size: int = 50,
     ):
+        await asyncio.sleep(0)
         del page, page_size
         item = {
             "code": code,
@@ -158,8 +160,13 @@ def test_services_routes_ignore_invalid_authorization_headers(client, monkeypatc
     assert nbs_search.status_code == 200
     assert nbs_detail.status_code == 200
     assert nbs_tree.status_code == 200
-    assert client.get("/api/services/nebs/search?q=energia", headers=headers).status_code == 404
-    assert client.get("/api/services/nebs/1.0102.61", headers=headers).status_code == 404
+    assert (
+        client.get("/api/services/nebs/search?q=energia", headers=headers).status_code
+        == 404
+    )
+    assert (
+        client.get("/api/services/nebs/1.0102.61", headers=headers).status_code == 404
+    )
 
 
 def test_services_routes_rate_limit_anonymous_requests(client, monkeypatch):
@@ -226,6 +233,7 @@ def test_services_routes_expose_nbs_contracts(client, monkeypatch):
     ] == [
         "1.0101",
     ]
+
 
 def test_services_routes_document_public_rate_limit_responses():
     openapi = app.openapi()
@@ -313,4 +321,3 @@ def test_services_detail_returns_retry_after_when_rate_limited(client, monkeypat
     assert (
         "Rate limit exceeded for services detail" in nbs_tree_response.json()["detail"]
     )
-
