@@ -1,5 +1,5 @@
 import { decryptDatabase, setAppSeed, sha256Hex } from "./crypto.js";
-import { getLocalNebsDetail, getLocalNbsDetail } from "./catalogSearch.js";
+import { getLocalNbsDetail } from "./catalogSearch.js";
 import {
   readFromOpfs,
   readSeed,
@@ -353,16 +353,6 @@ function handleNbsDetailMessage(id, payload) {
   postWorkerResult(id, { detail, source: "local" });
 }
 
-function handleNebsDetailMessage(id, payload) {
-  if (!getWorkerDb() || getWorkerStatus() !== "ready") {
-    postWorkerResult(id, { detail: null, source: "not_ready" });
-    return;
-  }
-
-  const detail = getLocalNebsDetail(String(payload.code || ""));
-  postWorkerResult(id, { detail, source: "local" });
-}
-
 function handleGetStatusMessage(id) {
   postWorkerStatus(id, {
     status: getWorkerStatus(),
@@ -398,9 +388,6 @@ export async function dispatchWorkerMessage(type, id, payload) {
       return;
     case "GET_NBS_DETAIL":
       handleNbsDetailMessage(id, payload);
-      return;
-    case "GET_NEBS_DETAIL":
-      handleNebsDetailMessage(id, payload);
       return;
     case "GET_STATUS":
       handleGetStatusMessage(id);

@@ -13,9 +13,7 @@ vi.mock('./state.js', () => ({
 
 import {
     ftsSearch,
-    getLocalNebsDetail,
     getLocalNbsDetail,
-    searchNebsByCode,
     searchNbsByCode,
 } from './catalogSearch.js';
 
@@ -47,28 +45,6 @@ describe('catalogSearch', () => {
         ]);
     });
 
-    it('escapes wildcard characters in NEBS code prefix searches', () => {
-        searchNebsByCode('1_2%');
-
-        expect(mocks.exec).toHaveBeenCalledTimes(1);
-        const [sql, options] = mocks.exec.mock.calls[0];
-
-        expect(sql).toContain("ESCAPE '\\'");
-        expect(options.bind).toEqual([
-            '1_2%',
-            '1_2%',
-            '1\\_2\\%%',
-            '12',
-            '12',
-            '12%',
-            '1_2%',
-            '12',
-            '1\\_2\\%%',
-            '12%',
-            50,
-        ]);
-    });
-
     it('searches all text columns in the FTS fallback', () => {
         mocks.exec
             .mockImplementationOnce(() => {
@@ -79,7 +55,7 @@ describe('catalogSearch', () => {
         ftsSearch(
             'nbs_fts',
             'limpeza urbana',
-            ['code', 'code_clean', 'description', 'parent_code', 'level', 'has_nebs'],
+            ['code', 'code_clean', 'description', 'parent_code', 'level'],
             'nbs_items',
         );
 
@@ -89,7 +65,6 @@ describe('catalogSearch', () => {
         expect(sql).toContain("code LIKE ? ESCAPE '\\'");
         expect(sql).toContain("description LIKE ? ESCAPE '\\'");
         expect(sql).not.toContain("level LIKE");
-        expect(sql).not.toContain("has_nebs LIKE");
         expect(options.bind).toEqual([
             '%limpeza%',
             '%limpeza%',
@@ -112,7 +87,6 @@ describe('catalogSearch', () => {
                     description: 'root',
                     parent_code: null,
                     level: 1,
-                    has_nebs: false,
                 },
             ])
             .mockReturnValueOnce([])
@@ -131,7 +105,7 @@ describe('catalogSearch', () => {
         expect(itemsOptions.bind).toEqual(['1_2%', '1\\_2\\%%', 50, 0]);
     });
 
-    it('trims NEBS detail code binds before lookup', () => {
+    it('loads the explanatory entry inline when loading NBS detail', () => {
         mocks.exec
             .mockReturnValueOnce([
                 {
@@ -140,22 +114,25 @@ describe('catalogSearch', () => {
                     description: 'service',
                     parent_code: null,
                     level: 2,
-                    has_nebs: true,
                 },
             ])
+            .mockReturnValueOnce([])
+            .mockReturnValueOnce([{ total: 1 }])
+            .mockReturnValueOnce([])
             .mockReturnValueOnce([
                 {
                     code: '1.0201',
                     code_clean: '10201',
                     title: 'entry',
                     body_text: 'body',
+                    body_markdown: 'body',
                     section_title: null,
                     page_start: 1,
                     page_end: 1,
                 },
             ]);
 
-        getLocalNebsDetail(' 1.0201 ');
+        const detail = getLocalNbsDetail(' 1.0201 ');
 
         expect(mocks.exec.mock.calls[0][1].bind).toEqual([
             '1.0201',
@@ -163,7 +140,19 @@ describe('catalogSearch', () => {
             '10201',
             '10201',
         ]);
-        expect(mocks.exec.mock.calls[1][1].bind).toEqual([
+        expect(mocks.exec.mock.calls[4][1].bind).toEqual(['1.0201', '10201']);
+        expect(detail?.nebs).toEqual(expect.objectContaining({
+            code: '1.0201',
+            body_markdown: 'body',
+        }));
+    });
+
+    it('trims NBS detail code binds before lookup', () => {
+        mocks.exec.mockReturnValueOnce([]);
+
+        getLocalNbsDetail(' 1.0201 ');
+
+        expect(mocks.exec.mock.calls[0][1].bind).toEqual([
             '1.0201',
             '1.0201',
             '10201',

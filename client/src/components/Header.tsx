@@ -9,7 +9,6 @@ import styles from './Header.module.css';
 
 const DOC_SUBTITLES: Record<string, string> = {
     nbs: 'Classificação Brasileira de Serviços',
-    nebs: 'Notas Explicativas da Nomenclatura Brasileira de Serviços',
     nesh: 'Notas Explicativas do Sistema Harmonizado',
     tipi: 'Tabela de Incidência do IPI',
 };
@@ -20,7 +19,6 @@ interface HeaderProps {
     setDoc: (doc: string) => void;
     searchKey: string;
     onOpenSettings: () => void;
-    onOpenTutorial: () => void;
     onOpenStats: () => void;
     onOpenComparator: () => void;
     onOpenModerate: () => void;
@@ -40,13 +38,11 @@ isActive: boolean;
 } {
 switch (doc) {
 case 'nesh':
-return { label: 'NESH', target: 'nesh', isActive: true };
+    return { label: 'NESH', target: 'nesh', isActive: true };
 case 'nbs':
-return { label: 'NEBS', target: 'nebs', isActive: true };
-case 'nebs':
-return { label: 'NBS', target: 'nbs', isActive: true };
+    return { label: 'NBS', target: 'nbs', isActive: true };
 default:
-return { label: 'NESH', target: 'nesh', isActive: false };
+    return { label: 'NESH', target: 'nesh', isActive: false };
 }
 }
 
@@ -89,7 +85,6 @@ doc,
     setDoc,
     searchKey,
     onOpenSettings,
-    onOpenTutorial,
     onOpenStats,
     onOpenComparator,
     onOpenModerate,
@@ -115,7 +110,7 @@ doc,
         logout
     } = useAuth();
     const isAdmin = useIsAdmin();
-    const isServiceDoc = doc === 'nbs' || doc === 'nebs';
+    const isServiceDoc = doc === 'nbs';
     const titleSubtitle = DOC_SUBTITLES[doc] || DOC_SUBTITLES.tipi;
 const primaryDocButton = getPrimaryDocButtonConfig(doc);
 const primaryDocButtonClassName = getConditionalClassName(
@@ -281,9 +276,7 @@ className={servicesButtonClassName}
                         <button onClick={() => { setIsMenuOpen(false); onOpenSettings(); }}>
                             <span>⚙️</span> Configurações
                         </button>
-                        <button onClick={() => { setIsMenuOpen(false); onOpenTutorial(); }}>
-                            <span>❓</span> Ajuda / Tutorial
-                        </button>
+
                         <div className={styles.menuDivider}></div>
                         {isAdmin && (
                             <button onClick={() => { setIsMenuOpen(false); onOpenStats(); }}>

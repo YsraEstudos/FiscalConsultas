@@ -43,9 +43,9 @@ describe('offlineDatabaseWorkerClient', () => {
       worker,
       pending,
       {
-        type: 'GET_NEBS_DETAIL',
+        type: 'GET_NBS_DETAIL',
         id: null,
-        payload: { code: '01.001' },
+        payload: { code: '01.001', page: 1, pageSize: 50 },
       },
       1000,
     );

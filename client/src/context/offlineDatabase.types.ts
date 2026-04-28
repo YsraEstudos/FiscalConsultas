@@ -1,6 +1,5 @@
 import type {
     NbsCatalogDetailApiResponse,
-    NebsExplanatoryDetailApiResponse,
 } from '../types/api.types';
 import type { OfflineDatabaseMetadata } from '../utils/offlineDatabase';
 
@@ -13,7 +12,7 @@ export type OfflineDatabaseStatus =
     | 'error'
     | 'unsupported';
 
-export type OfflineDocumentType = 'nbs' | 'nebs' | 'tipi' | 'ncm' | 'nesh';
+export type OfflineDocumentType = 'nbs' | 'tipi' | 'ncm' | 'nesh';
 
 export interface OfflineDatabaseState {
     status: OfflineDatabaseStatus;
@@ -61,9 +60,7 @@ export interface OfflineDatabaseContextValue extends OfflineDatabaseState {
         code: string,
         options?: { page?: number; pageSize?: number },
     ) => Promise<NbsCatalogDetailApiResponse | null>;
-    fetchOfflineNebsEntryDetail: (
-        code: string,
-    ) => Promise<NebsExplanatoryDetailApiResponse | null>;
+
 
     // Legacy compatibility
     install: () => Promise<void>;
@@ -81,9 +78,6 @@ export interface OfflineDatabaseContextValue extends OfflineDatabaseState {
         code: string,
         options?: { page?: number; pageSize?: number },
     ) => Promise<NbsCatalogDetailApiResponse | null>;
-    getNebsDetailLocal: (
-        code: string,
-    ) => Promise<NebsExplanatoryDetailApiResponse | null>;
 }
 
 export interface PendingOfflineDatabaseRequest {
@@ -142,11 +136,6 @@ export type OfflineDatabaseWorkerRequest =
             page: number;
             pageSize: number;
         };
-    }
-    | {
-        type: 'GET_NEBS_DETAIL';
-        id: string | null;
-        payload: { code: string };
     };
 
 export type OfflineDatabaseWorkerReadyMessage = {
@@ -182,7 +171,6 @@ export type OfflineDatabaseWorkerResultMessage = {
         timing?: OfflineCatalogSearchResult['timing'];
         detail?:
             | NbsCatalogDetailApiResponse
-            | NebsExplanatoryDetailApiResponse
             | null;
     };
 };

@@ -155,29 +155,3 @@ async def fetch_nbs_catalog_tree_page_route(
         page=page,
         page_size=page_size,
     )
-
-
-@router.get("/nebs/search", responses=SERVICE_SEARCH_RESPONSES)
-async def search_nbs_explanatory_entries_route(
-    request: Request,
-    service: Annotated[NbsService, Depends(get_nbs_service)],
-    q: Annotated[str, Query(description="Código NEBS ou termo textual")] = "",
-):
-    await apply_nbs_services_search_rate_limit(request)
-    if len(q) > SearchConfig.MAX_QUERY_LENGTH:
-        raise ValidationError(
-            f"Query muito longa (máximo {SearchConfig.MAX_QUERY_LENGTH} caracteres)",
-            field="q",
-        )
-    return await service.searchNbsExplanatoryEntries(q)
-
-
-@router.get("/nebs/{code}", responses=SERVICE_DETAIL_RESPONSES)
-async def fetch_nbs_explanatory_entry_details_route(
-    request: Request,
-    code: str,
-    service: Annotated[NbsService, Depends(get_nbs_service)],
-):
-    await apply_nbs_services_detail_rate_limit(request)
-    normalized_code = normalize_nbs_service_code(code)
-    return await service.fetchNbsExplanatoryEntryDetails(normalized_code)

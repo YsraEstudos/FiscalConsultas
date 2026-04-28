@@ -6,7 +6,6 @@ export * from './apiSystem.types';
 
 import type {
     NbsCatalogSearchApiResponse,
-    NebsExplanatorySearchApiResponse,
 } from './apiServices.types';
 import type {
     NeshSearchApiResponse,
@@ -16,5 +15,4 @@ import type {
 export type FiscalSearchApiResponse =
     | NeshSearchApiResponse
     | TipiSearchApiResponse
-    | NbsCatalogSearchApiResponse
-    | NebsExplanatorySearchApiResponse;
+    | NbsCatalogSearchApiResponse;

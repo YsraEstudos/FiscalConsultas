@@ -216,7 +216,7 @@ export function SettingsModal({
                 <div className={styles.label}>
                   <span>Comportamento de Navegação</span>
                   <span className={styles.hint}>
-                    Abrir NBS/NEBS relacionado
+                    Abrir serviço NBS relacionado
                   </span>
                 </div>
                 <div

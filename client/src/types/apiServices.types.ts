@@ -1,6 +1,6 @@
 import type { BaseApiResponse } from './apiCommon.types';
 
-export type ServiceDocType = 'nbs' | 'nebs';
+export type ServiceDocType = 'nbs';
 
 export interface NbsCatalogItem {
     code: string;
@@ -8,7 +8,6 @@ export interface NbsCatalogItem {
     description: string;
     parent_code: string | null;
     level: number;
-    has_nebs: boolean;
 }
 
 /** @deprecated Use `NbsCatalogItem`. */
@@ -29,18 +28,6 @@ export interface NebsExplanatoryEntry {
 
 /** @deprecated Use `NebsExplanatoryEntry`. */
 export type NebsEntry = NebsExplanatoryEntry;
-
-export interface NebsExplanatorySearchItem {
-    code: string;
-    title: string;
-    excerpt: string;
-    page_start: number;
-    page_end: number;
-    section_title: string | null;
-}
-
-/** @deprecated Use `NebsExplanatorySearchItem`. */
-export type NebsSearchItem = NebsExplanatorySearchItem;
 
 export interface NbsCatalogSearchApiResponse extends BaseApiResponse {
     success: true;
@@ -72,24 +59,3 @@ export interface NbsCatalogDetailApiResponse extends BaseApiResponse {
 
 /** @deprecated Use `NbsCatalogDetailApiResponse`. */
 export type NbsDetailResponse = NbsCatalogDetailApiResponse;
-
-export interface NebsExplanatorySearchApiResponse extends BaseApiResponse {
-    success: true;
-    query: string;
-    normalized: string;
-    results: NebsExplanatorySearchItem[];
-    total: number;
-}
-
-/** @deprecated Use `NebsExplanatorySearchApiResponse`. */
-export type NebsSearchResponse = NebsExplanatorySearchApiResponse;
-
-export interface NebsExplanatoryDetailApiResponse extends BaseApiResponse {
-    success: true;
-    item: NbsCatalogItem;
-    ancestors: NbsCatalogItem[];
-    entry: NebsExplanatoryEntry;
-}
-
-/** @deprecated Use `NebsExplanatoryDetailApiResponse`. */
-export type NebsDetailResponse = NebsExplanatoryDetailApiResponse;

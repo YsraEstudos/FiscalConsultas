@@ -4,11 +4,9 @@ import type {
   ChapterData,
   ChapterPosition,
   CodeSearchResponse,
-  NebsEntry,
-  NebsDetailResponse,
-  NebsSearchResponse,
-  NbsDetailResponse,
-  NbsSearchResponse,
+  NebsExplanatoryEntry,
+  NbsCatalogDetailApiResponse,
+  NbsCatalogSearchApiResponse,
   NbsServiceItem,
   TipiCodeSearchResponse,
   TipiChapterData,
@@ -29,8 +27,8 @@ export type ServicesMockOptions = {
   nbsSearchResponses?: MockResponseEntry[];
   tipiSearchResponses?: MockResponseEntry[];
   statusResponses?: MockResponseEntry[];
-  nbsDetailResponses?: Record<string, NbsDetailResponse>;
-  nebsDetailResponses?: Record<string, NebsDetailResponse>;
+  nbsDetailResponses?: Record<string, NbsCatalogDetailApiResponse>;
+  nebsDetailResponses?: Record<string, NbsCatalogDetailApiResponse>;
   unmatchedApiStrategy?: 'abort' | 'continue';
 };
 
@@ -50,12 +48,10 @@ function makeOnlineStatusResponse() {
     database: { status: 'online', latency_ms: 1 },
     tipi: { status: 'online' },
     nbs: { status: 'online' },
-    nebs: { status: 'online' },
     catalogs: {
       nesh: { status: 'online', latency_ms: 1 },
       tipi: { status: 'online' },
       nbs: { status: 'online' },
-      nebs: { status: 'online' },
     },
   };
 }
@@ -67,12 +63,11 @@ function makeItem(code = '1.0101.11.00', overrides: Partial<NbsServiceItem> = {}
     description: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
     parent_code: '1.0101.1',
     level: 3,
-    has_nebs: true,
     ...overrides,
   };
 }
 
-function makeNebsEntry(code = '1.0101.11.00'): NebsEntry {
+function makeNebsEntry(code = '1.0101.11.00'): NebsExplanatoryEntry {
   return {
     code,
     code_clean: code.replaceAll(/\D/g, ''),
@@ -84,10 +79,6 @@ function makeNebsEntry(code = '1.0101.11.00'): NebsEntry {
     section_title: 'SEÇÃO I - SERVIÇOS DE CONSTRUÇÃO',
     page_start: 12,
     page_end: 13,
-    parser_status: 'trusted',
-    parse_warnings: null,
-    source_hash: `fixture-${code.replaceAll(/\D/g, '')}`,
-    updated_at: '2026-03-13T00:00:00.000Z',
   };
 }
 
@@ -147,7 +138,7 @@ export function makeTipiChapterData(
   };
 }
 
-export function makeNbsSearch(query = '1.0101.11.00'): NbsSearchResponse {
+export function makeNbsSearch(query = '1.0101.11.00'): NbsCatalogSearchApiResponse {
   return {
     success: true,
     query,
@@ -157,39 +148,22 @@ export function makeNbsSearch(query = '1.0101.11.00'): NbsSearchResponse {
   };
 }
 
-export function makeNebsSearch(query = '1.0101.11.00'): NebsSearchResponse {
-  return {
-    success: true,
-    query,
-    normalized: query,
-    results: [
-      {
-        code: query,
-        title: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
-        excerpt: 'Esta subposição inclui serviços de novas construções e reparo.',
-        page_start: 12,
-        page_end: 13,
-        section_title: 'SEÇÃO I - SERVIÇOS DE CONSTRUÇÃO',
-      },
-    ],
-    total: 1,
-  };
+export function makeNebsSearch(query = '1.0101.11.00'): NbsCatalogSearchApiResponse {
+  return makeNbsSearch(query);
 }
 
-export function makeNbsDetail(code = '1.0101.11.00'): NbsDetailResponse {
+export function makeNbsDetail(code = '1.0101.11.00'): NbsCatalogDetailApiResponse {
   const root = makeItem('1.0101', {
     code_clean: '10101',
     description: 'Serviços de construção de edificações',
     parent_code: '1.01',
     level: 1,
-    has_nebs: false,
   });
   const parent = makeItem('1.0101.1', {
     code_clean: '101011',
     description: 'Serviços de construção de edificações residenciais',
     parent_code: '1.0101',
     level: 2,
-    has_nebs: false,
   });
   const leaf = makeItem(code, {
     code_clean: code.replaceAll(/\D/g, ''),
@@ -204,7 +178,6 @@ export function makeNbsDetail(code = '1.0101.11.00'): NbsDetailResponse {
         description: 'Serviços de construção',
         parent_code: null,
         level: 0,
-        has_nebs: false,
       }),
       root,
       parent,
@@ -223,35 +196,8 @@ export function makeNbsDetail(code = '1.0101.11.00'): NbsDetailResponse {
   };
 }
 
-export function makeNebsDetail(code = '1.0101.11.00'): NebsDetailResponse {
-  return {
-    success: true,
-    item: makeItem(code),
-    ancestors: [
-      makeItem('1.01', {
-        code_clean: '101',
-        description: 'Serviços de construção',
-        parent_code: null,
-        level: 0,
-        has_nebs: false,
-      }),
-      makeItem('1.0101', {
-        code_clean: '10101',
-        description: 'Serviços de construção de edificações',
-        parent_code: '1.01',
-        level: 1,
-        has_nebs: false,
-      }),
-      makeItem('1.0101.1', {
-        code_clean: '101011',
-        description: 'Serviços de construção de edificações residenciais',
-        parent_code: '1.0101',
-        level: 2,
-        has_nebs: false,
-      }),
-    ],
-    entry: makeNebsEntry(code),
-  };
+export function makeNebsDetail(code = '1.0101.11.00'): NbsCatalogDetailApiResponse {
+  return makeNbsDetail(code);
 }
 
 async function fulfillSearchRoute<TResponse>(
@@ -293,7 +239,7 @@ async function handleNeshSearch(route: Route, query: string, neshQueue: MockResp
 async function handleNbsDetail(
   route: Route,
   code: string,
-  detailResponses: Record<string, NbsDetailResponse>,
+  detailResponses: Record<string, NbsCatalogDetailApiResponse>,
 ) {
   await route.fulfill({ json: detailResponses[code] ?? makeNbsDetail(code) });
 }
@@ -301,7 +247,7 @@ async function handleNbsDetail(
 async function handleNebsDetail(
   route: Route,
   code: string,
-  detailResponses: Record<string, NebsDetailResponse>,
+  detailResponses: Record<string, NbsCatalogDetailApiResponse>,
 ) {
   await route.fulfill({ json: detailResponses[code] ?? makeNebsDetail(code) });
 }

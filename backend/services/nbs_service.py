@@ -1,4 +1,4 @@
-"""Async facade for the NBS / NEBS catalog.
+"""Async facade for the NBS catalog.
 
 Supports the legacy SQLite ``services.db`` mode and the PostgreSQL repository
 mode used by the production/runtime path.
@@ -21,10 +21,9 @@ from backend.infrastructure.redis_client import redis_cache
 from .nbs.details import (
     fetch_nbs_catalog_item_details,
     fetch_nbs_catalog_tree_page,
-    fetch_nbs_explanatory_entry_details,
 )
 from .nbs.health import probe_nbs_catalog_health
-from .nbs.search import search_nbs_catalog_entries, search_nbs_explanatory_entries
+from .nbs.search import search_nbs_catalog_entries
 from .nbs.types import (
     DEFAULT_TREE_PAGE,
     DEFAULT_TREE_PAGE_SIZE,
@@ -50,7 +49,7 @@ if TYPE_CHECKING:
 
 
 class NbsService:
-    """Query helper for the NBS/NEBS catalog database."""
+    """Query helper for the NBS catalog database."""
 
     def __init__(
         self,
@@ -184,24 +183,8 @@ class NbsService:
     ) -> dict[str, object]:
         return await self.fetchNbsCatalogTreePage(code, page=page, page_size=page_size)
 
-    async def searchNbsExplanatoryEntries(
-        self, query: str, *, limit: int = 50
-    ) -> dict[str, object]:
-        """Busca entradas NEBS por código ou texto."""
-        return await search_nbs_explanatory_entries(self, query, limit=limit)
-
-    async def search_nebs(self, query: str, *, limit: int = 50) -> dict[str, object]:
-        return await self.searchNbsExplanatoryEntries(query, limit=limit)
-
-    async def fetchNbsExplanatoryEntryDetails(self, code: str) -> dict[str, object]:
-        """Recupera o detalhe NEBS canônico de um código."""
-        return await fetch_nbs_explanatory_entry_details(self, code)
-
-    async def get_nebs_details(self, code: str) -> dict[str, object]:
-        return await self.fetchNbsExplanatoryEntryDetails(code)
-
     async def probeNbsCatalogHealth(self) -> dict[str, object]:
-        """Executa o healthcheck do catálogo NBS/NEBS."""
+        """Executa o healthcheck do catálogo NBS."""
         return await probe_nbs_catalog_health(self)
 
     async def check_connection(self) -> dict[str, object]:

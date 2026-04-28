@@ -6,7 +6,6 @@ import type {
 
 import type {
     NbsCatalogDetailApiResponse,
-    NebsExplanatoryDetailApiResponse,
 } from '../types/api.types';
 import type { OfflineDatabaseMetadata } from '../utils/offlineDatabase';
 import type {
@@ -60,7 +59,4 @@ export interface OfflineDatabaseOperations {
         code: string,
         options?: { page?: number; pageSize?: number },
     ) => Promise<NbsCatalogDetailApiResponse | null>;
-    fetchOfflineNebsEntryDetail: (
-        code: string,
-    ) => Promise<NebsExplanatoryDetailApiResponse | null>;
 }

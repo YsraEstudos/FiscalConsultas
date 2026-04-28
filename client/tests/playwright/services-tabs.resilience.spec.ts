@@ -46,7 +46,6 @@ test('keeps the services entry point available while status is unknown', async (
           nesh: { status: 'online', latency_ms: 1 },
           tipi: { status: 'online' },
           nbs: { status: 'unknown' },
-          nebs: { status: 'unknown' },
         },
       },
     }],
@@ -60,27 +59,6 @@ test('keeps the services entry point available while status is unknown', async (
   await expect(servicesButton).toBeEnabled();
   await servicesButton.click();
   await expect(page.getByRole('heading', { name: 'Pronto para buscar' })).toBeVisible();
-});
-
-test('shows the NEBS empty/error state after a linked NEBS search fails', async ({ page }) => {
-  await installServicesMock(page, {
-    nebsSearchResponses: [{ abort: true }],
-  });
-
-  await openServicesModal(page);
-  await searchServices(page, '1.0101.11.00');
-  const openNebsButton = page.getByRole('button', { name: /Ver NEBS/ });
-  await expect(openNebsButton).toBeVisible();
-
-  const nebsRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/services/nebs/search')
-    && new URL(request.url()).searchParams.get('q') === '1.0101.11.00',
-  );
-
-  await openNebsButton.click();
-  await nebsRequest;
-
-  await expect(page.locator('text=Catálogo de serviços indisponível no momento. Tente novamente em instantes.').first()).toBeVisible();
 });
 
 test('shows an error after a failed NBS search and recovers on retry', async ({ page }) => {
@@ -102,19 +80,12 @@ test('shows an error after a failed NBS search and recovers on retry', async ({ 
   await expect(page.getByRole('button', { name: /Serviços de construção de edificações residenciais/ })).toBeVisible();
 });
 
-test('covers empty states for NBS and NEBS searches', async ({ page }) => {
+test('covers empty states for NBS searches', async ({ page }) => {
   await installServicesMock(page, {
     nbsSearchResponses: [{ body: { success: true, query: 'sem resultado', normalized: 'sem resultado', results: [], total: 0 } }],
-    nebsSearchResponses: [{ body: { success: true, query: 'sem nota', normalized: 'sem nota', results: [], total: 0 } }],
   });
 
   await openServicesModal(page);
   await searchServices(page, 'sem resultado');
   await expect(page.getByText('Nenhum servico encontrado')).toBeVisible();
-
-  await page.getByRole('button', { name: 'NEBS', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Pronto para buscar' })).toBeVisible();
-
-  await searchServices(page, 'sem nota', 'nebs');
-  await expect(page.getByText('Nenhuma nota encontrada')).toBeVisible();
 });

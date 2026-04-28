@@ -57,43 +57,7 @@ test('loads NBS search results and the linked detail panel', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'Resultados NBS' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Serviços de construção de edificações residenciais/ })).toBeVisible();
   await expect(page.getByText('NOTAS EXPLICATIVAS')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Ver NEBS/ })).toBeVisible();
-});
-
-test('switches from an NBS detail to the linked NEBS detail', async ({ page }) => {
-  await openServicesModal(page);
-  await searchServices(page, '1.0101.11.00');
-
-  const nebsRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/services/nebs/search')
-    && new URL(request.url()).searchParams.get('q') === '1.0101.11.00',
-  );
-
-  await page.getByRole('button', { name: /Ver NEBS/ }).click();
-  await nebsRequest;
-
-  await expect(page.getByRole('heading', { name: 'Resultados NEBS' })).toBeVisible();
-  await expect(page.getByText('Origem').first()).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Abrir item NBS relacionado' })).toBeVisible();
-});
-
-test('returns from a NEBS detail to the linked NBS detail', async ({ page }) => {
-  await openServicesModal(page);
-  await searchServices(page, '1.0101.11.00');
-  await page.getByRole('button', { name: /Ver NEBS/ }).click();
-  await expect(page.getByRole('heading', { name: 'Resultados NEBS' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Abrir item NBS relacionado' })).toBeVisible();
-
-  const nbsRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/services/nbs/search')
-    && new URL(request.url()).searchParams.get('q') === '1.0101.11.00',
-  );
-
-  await page.getByRole('button', { name: 'Abrir item NBS relacionado' }).click();
-  await nbsRequest;
-
-  await expect(page.getByRole('heading', { name: 'Resultados NBS' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Ver NEBS/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Ver NEBS/ })).toHaveCount(0);
 });
 
 test('updates NBS detail when clicking an ancestor in the hierarchy', async ({ page }) => {
@@ -122,7 +86,6 @@ test('updates NBS detail when clicking a child node in the hierarchy', async ({ 
       description: 'Serviços complementares residenciais',
       parent_code: '1.0101.11.00',
       level: 4,
-      has_nebs: true,
     },
   ];
 
@@ -165,20 +128,20 @@ test('opens and closes chapter notes from NBS hierarchy panel', async ({ page })
   await expect(chapterDialog).not.toBeVisible();
 });
 
-test('follows smart-link codes from NBS notes to NEBS results', async ({ page }) => {
+test('follows smart-link codes from NBS notes to NBS results', async ({ page }) => {
   const smartLink = await openNbsWithSmartLink(page, '1.0101.12.00');
   await expect(smartLink).toBeVisible();
 
-  const nebsRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/services/nebs/search')
+  const nbsRequest = page.waitForRequest((request) =>
+    request.url().includes('/api/services/nbs/search')
     && new URL(request.url()).searchParams.get('q') === '1.0101.12.00',
   );
 
   await smartLink.click();
-  await nebsRequest;
+  await nbsRequest;
 
-  await expect(page.getByRole('heading', { name: 'Resultados NEBS' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Abrir item NBS relacionado' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Resultados NBS' })).toBeVisible();
+  await expect(page.locator('[data-service-state="active"]')).toContainText('1.0101.12.00');
 });
 
 test('opens smart-link target in a new tab with Ctrl/Cmd click', async ({ page }) => {
@@ -186,16 +149,16 @@ test('opens smart-link target in a new tab with Ctrl/Cmd click', async ({ page }
   await expect(smartLink).toBeVisible();
 
   const initialTabCount = await page.locator('div[draggable="true"][data-document]').count();
-  const nebsRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/services/nebs/search')
+  const nbsRequest = page.waitForRequest((request) =>
+    request.url().includes('/api/services/nbs/search')
     && new URL(request.url()).searchParams.get('q') === '1.0101.12.00',
   );
 
   await smartLink.click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
-  await nebsRequest;
+  await nbsRequest;
 
   await expect(page.locator('div[draggable="true"][data-document]')).toHaveCount(initialTabCount + 1);
-  await expect(page.getByRole('heading', { name: 'Resultados NEBS' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Resultados NBS' })).toBeVisible();
 });
 
 test('opens smart-link target in a new tab with middle-click', async ({ page }) => {
@@ -203,71 +166,12 @@ test('opens smart-link target in a new tab with middle-click', async ({ page }) 
   await expect(smartLink).toBeVisible();
 
   const initialTabCount = await page.locator('div[draggable="true"][data-document]').count();
-  const nebsRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/services/nebs/search')
+  const nbsRequest = page.waitForRequest((request) =>
+    request.url().includes('/api/services/nbs/search')
     && new URL(request.url()).searchParams.get('q') === '1.0101.12.00',
   );
 
   await smartLink.click({ button: 'middle' });
-  await nebsRequest;
-
-  await expect(page.locator('div[draggable="true"][data-document]')).toHaveCount(initialTabCount + 1);
-  await expect(page.getByRole('heading', { name: 'Resultados NEBS' })).toBeVisible();
-});
-
-test('navigates from NEBS breadcrumbs back to NBS detail in the same tab', async ({ page }) => {
-  await openServicesModal(page);
-  await searchServices(page, '1.0101.11.00');
-  await page.getByRole('button', { name: /Ver NEBS/ }).click();
-  await expect(page.getByRole('heading', { name: 'Resultados NEBS' })).toBeVisible();
-
-  const nbsRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/services/nbs/search')
-    && new URL(request.url()).searchParams.get('q') === '1.01',
-  );
-
-  await page.locator('[aria-label="Hierarquia NBS"]').getByRole('button', { name: /^1\.01$/ }).click();
-  await nbsRequest;
-
-  await expect(page.getByRole('heading', { name: 'Resultados NBS' })).toBeVisible();
-});
-
-test('opens NEBS breadcrumb navigation in a new tab when preference is enabled', async ({ page }) => {
-  await openServicesModal(page);
-  await searchServices(page, '1.0101.11.00');
-  await page.getByRole('button', { name: /Ver NEBS/ }).click();
-  await expect(page.getByRole('heading', { name: 'Resultados NEBS' })).toBeVisible();
-
-  const initialTabCount = await page.locator('div[draggable="true"][data-document]').count();
-  await setNavigationBehavior(page, 'new-tab');
-
-  const nbsRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/services/nbs/search')
-    && new URL(request.url()).searchParams.get('q') === '1.01',
-  );
-
-  await page.locator('[aria-label="Hierarquia NBS"]').getByRole('button', { name: /^1\.01$/ }).click();
-  await nbsRequest;
-
-  await expect(page.locator('div[draggable="true"][data-document]')).toHaveCount(initialTabCount + 1);
-  await expect(page.getByRole('heading', { name: 'Resultados NBS' })).toBeVisible();
-});
-
-test('opens linked NBS detail in a new tab when preference is enabled', async ({ page }) => {
-  await openServicesModal(page);
-  await searchServices(page, '1.0101.11.00');
-  await page.getByRole('button', { name: /Ver NEBS/ }).click();
-  await expect(page.getByRole('heading', { name: 'Resultados NEBS' })).toBeVisible();
-
-  const initialTabCount = await page.locator('div[draggable="true"][data-document]').count();
-  await setNavigationBehavior(page, 'new-tab');
-
-  const nbsRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/services/nbs/search')
-    && new URL(request.url()).searchParams.get('q') === '1.0101.11.00',
-  );
-
-  await page.getByRole('button', { name: 'Abrir item NBS relacionado' }).click();
   await nbsRequest;
 
   await expect(page.locator('div[draggable="true"][data-document]')).toHaveCount(initialTabCount + 1);

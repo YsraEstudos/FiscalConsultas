@@ -41,11 +41,9 @@ export interface SystemStatusResponse {
     database: DatabaseStatus;
     tipi: DatabaseStatus;
     nbs?: DatabaseStatus;
-    nebs?: DatabaseStatus;
     catalogs?: {
         nesh: SystemCatalogStatus;
         tipi: SystemCatalogStatus;
         nbs: SystemCatalogStatus;
-        nebs: SystemCatalogStatus;
     };
 }

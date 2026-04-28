@@ -138,10 +138,60 @@ async def test_get_status_uses_app_state_services_when_available():
     assert payload["database"]["status"] == "online"
     assert payload["tipi"]["status"] == "online"
     assert payload["nbs"]["status"] == "online"
-    assert payload["nebs"]["status"] == "online"
     assert payload["catalogs"]["nesh"]["status"] == "online"
+    assert "nebs" not in payload
+    assert "nebs" not in payload["catalogs"]
     assert "version" not in payload
     assert "chapters" not in payload["database"]
+
+
+def test_status_payloads_tolerate_legacy_empty_nebs_snapshot():
+    normalized_db = {"status": "online", "chapters": 5, "positions": 9}
+    normalized_tipi = {"status": "online", "chapters": 3, "positions": 4}
+    normalized_nbs = {"status": "online", "items": 6}
+    normalized_nebs = {}
+
+    public_payload = system_status.build_public_status_payload(
+        normalized_db,
+        normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
+        "online",
+    )
+    detailed_payload = system_status.build_detailed_status_payload(
+        _build_request("/api/status/details"),
+        normalized_db,
+        normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
+        "online",
+    )
+
+    assert public_payload["nbs"]["status"] == "online"
+    assert public_payload["catalogs"]["nbs"]["status"] == "online"
+    assert detailed_payload["nbs"]["status"] == "online"
+    assert detailed_payload["nbs"]["explanatory_entries"] == 0
+    assert detailed_payload["catalogs"]["nbs"]["status"] == "online"
+
+
+def test_nbs_public_status_ignores_empty_explanatory_entries():
+    normalized_nbs = {"status": "online", "items": 6}
+    normalized_nebs = {"status": "error", "entries": 0}
+
+    assert (
+        system_status.resolve_nbs_public_status(normalized_nbs, normalized_nebs)
+        == "online"
+    )
+
+
+def test_nbs_public_status_fails_on_explanatory_service_error():
+    normalized_nbs = {"status": "online", "items": 6}
+    normalized_nebs = {"status": "error", "entries": 0, "error": "db down"}
+
+    assert (
+        system_status.resolve_nbs_public_status(normalized_nbs, normalized_nebs)
+        == "error"
+    )
 
 
 @pytest.mark.asyncio
@@ -185,7 +235,7 @@ async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypat
     assert payload["database"]["status"] == "online"
     assert payload["tipi"]["status"] == "online"
     assert payload["nbs"]["status"] == "online"
-    assert payload["nebs"]["status"] == "online"
+    assert "nebs" not in payload
 
 
 @pytest.mark.asyncio
@@ -214,7 +264,7 @@ async def test_get_status_handles_db_and_tipi_exceptions(monkeypatch):
     assert payload["database"]["status"] == "error"
     assert payload["tipi"]["status"] == "error"
     assert payload["nbs"]["status"] == "error"
-    assert payload["nebs"]["status"] == "error"
+    assert "nebs" not in payload
     assert "error" not in payload["database"]
     assert "error" not in payload["tipi"]
 
@@ -294,6 +344,7 @@ async def test_get_status_deduplicates_concurrent_refresh(monkeypatch):
 @pytest.mark.asyncio
 async def test_refresh_status_snapshot_ignores_redis_write_failures(monkeypatch):
     async def _fake_collect(_request):
+        await asyncio.sleep(0)
         return (
             {"status": "online", "chapters": 5, "positions": 9},
             {"status": "online", "chapters": 3, "positions": 4},
@@ -362,12 +413,10 @@ async def test_get_status_details_returns_sensitive_fields_for_admin(monkeypatch
     assert payload["database"]["positions"] == 9
     assert payload["tipi"]["chapters"] == 3
     assert payload["nbs"]["items"] == 6
-    assert payload["nebs"]["entries"] == 2
+    assert payload["nbs"]["explanatory_entries"] == 2
     assert payload["catalogs"]["nbs"]["status"] == "online"
-    assert (
-        payload["catalogs"]["nebs"]["metadata"]["updated_at"]
-        == "2026-03-25T10:05:00+00:00"
-    )
+    assert "nebs" not in payload
+    assert "nebs" not in payload["catalogs"]
 
 
 @pytest.mark.asyncio

@@ -358,7 +358,6 @@ class TenantMiddleware:
         "/api/nesh/chapter/",
         "/api/search/chapter/",
         "/api/services/nbs/",
-        "/api/services/nebs/",
     )
 
     def __init__(self, app):
