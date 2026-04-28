@@ -1,13 +1,13 @@
-export type SearchHighlighterMatchQuality = 'ALTO' | 'PEQUENO' | 'NENHUM';
-export type SearchHighlighterCoOccurrenceScope = 'subposition' | 'block';
-
 export interface SearchHighlighterMatchInstance {
     node: HTMLElement;
     term: string;
     index: number;
 }
 
-export interface SearchHighlighterQualityInsights {
+export type SearchHighlighterMatchQuality = 'ALTO' | 'PEQUENO' | 'NENHUM';
+export type SearchHighlighterCoOccurrenceScope = 'subposition' | 'block';
+
+export interface SearchHighlighterMatchQualityResult {
     matchQuality: SearchHighlighterMatchQuality;
     coOccurrenceCount: number;
     coOccurrenceScope: SearchHighlighterCoOccurrenceScope;
@@ -29,11 +29,37 @@ const BLOCK_ELEMENTS = new Set([
     'H6',
 ]);
 
-function getNoMatchResult(): SearchHighlighterQualityInsights {
+export function stripDiacritics(text: string): string {
+    return text.normalize('NFD').replaceAll(/[\u0300-\u036f]/g, '');
+}
+
+export function buildAccentInsensitivePattern(term: string): string {
+    const ACCENT_MAP: Record<string, string> = {
+        a: '[aáàâãäå]',
+        e: '[eéèêë]',
+        i: '[iíìîï]',
+        o: '[oóòôõö]',
+        u: '[uúùûü]',
+        c: '[cç]',
+        n: '[nñ]',
+    };
+
+    return term
+        .split('')
+        .map((ch) => {
+            const escaped = ch.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+            return ACCENT_MAP[ch] || escaped;
+        })
+        .join('');
+}
+
+function getNoMatchResult(
+    coOccurrenceScope: SearchHighlighterCoOccurrenceScope = 'block',
+): SearchHighlighterMatchQualityResult {
     return {
         matchQuality: 'NENHUM',
         coOccurrenceCount: 0,
-        coOccurrenceScope: 'subposition',
+        coOccurrenceScope,
         highSubpositionKeys: [],
     };
 }
@@ -49,11 +75,7 @@ function addTermToMap<K>(map: Map<K, Set<string>>, key: K, term: string): void {
 }
 
 function isChapterElement(element: HTMLElement): boolean {
-    return (
-        element.id?.startsWith('cap-')
-        || element.id?.startsWith('chapter-')
-        || element.classList.contains('tipi-chapter')
-    );
+    return element.id?.startsWith('cap-') || element.id?.startsWith('chapter-') || element.classList.contains('tipi-chapter');
 }
 
 function findClosestContext(
@@ -77,42 +99,15 @@ function findClosestContext(
     return { closestBlock, closestChapter };
 }
 
-function resolveSubpositionKey(
-    node: HTMLElement,
-    container: HTMLElement,
-): string | null {
-    const tipiPosition = node.closest<HTMLElement>('article.tipi-position[id]');
-    if (tipiPosition?.id) return tipiPosition.id;
-
-    const directPosAnchor = node.closest<HTMLElement>('[id^="pos-"]');
-    if (directPosAnchor?.id) return directPosAnchor.id;
-
-    const neshAnchors = container.querySelectorAll<HTMLElement>(
-        'h3[id^="pos-"], h4[id^="pos-"], h3.nesh-section[id], h4.nesh-subsection[id]',
-    );
-    let nearestBefore: HTMLElement | null = null;
-
-    for (const anchor of neshAnchors) {
-        if (!anchor.id) continue;
-        if (anchor === node || anchor.contains(node)) return anchor.id;
-
-        const relation = anchor.compareDocumentPosition(node);
-        if (relation & Node.DOCUMENT_POSITION_FOLLOWING) {
-            nearestBefore = anchor;
-            continue;
-        }
-        if (relation & Node.DOCUMENT_POSITION_PRECEDING) {
-            break;
-        }
-    }
-
-    return nearestBefore?.id || null;
-}
+type NeshAnchor = HTMLElement;
+type ResolveSubpositionKeyFn = (node: HTMLElement, container: HTMLElement, neshAnchors: NeshAnchor[]) => string | null;
 
 function buildTermMaps(
     currentMatches: Record<string, SearchHighlighterMatchInstance[]>,
     allTerms: string[],
     container: HTMLElement,
+    neshAnchors: NeshAnchor[],
+    resolveSubpositionKey: ResolveSubpositionKeyFn,
 ): {
     subpositionTermMap: Map<string, Set<string>>;
     blockTermMap: Map<HTMLElement, Set<string>>;
@@ -125,7 +120,7 @@ function buildTermMaps(
     for (const term of allTerms) {
         const matchesForTerm = currentMatches[term] ?? [];
         for (const match of matchesForTerm) {
-            const subpositionKey = resolveSubpositionKey(match.node, container);
+            const subpositionKey = resolveSubpositionKey(match.node, container, neshAnchors);
             if (subpositionKey) {
                 addTermToMap(subpositionTermMap, subpositionKey, term);
             }
@@ -157,6 +152,8 @@ function analyzeBlockCoOccurrence(
     blockTermMap: Map<HTMLElement, Set<string>>,
     requiredTermCount: number,
     container: HTMLElement,
+    neshAnchors: NeshAnchor[],
+    resolveSubpositionKey: ResolveSubpositionKeyFn,
 ): { highBlocksWithoutSubposition: number; hasFallbackHighBlock: boolean } {
     let highBlocksWithoutSubposition = 0;
     let hasFallbackHighBlock = false;
@@ -165,7 +162,7 @@ function analyzeBlockCoOccurrence(
         if (termsInBlock.size !== requiredTermCount) {
             continue;
         }
-        if (resolveSubpositionKey(block, container)) {
+        if (resolveSubpositionKey(block, container, neshAnchors)) {
             continue;
         }
         highBlocksWithoutSubposition += 1;
@@ -185,52 +182,6 @@ function hasChapterLevelCoOccurrence(
         }
     }
     return false;
-}
-
-export function stripDiacritics(text: string): string {
-    return text.normalize('NFD').replaceAll(/[\u0300-\u036f]/g, '');
-}
-
-export function buildAccentInsensitivePattern(term: string): string {
-    const accentMap: Record<string, string> = {
-        a: '[aáàâãäå]',
-        e: '[eéèêë]',
-        i: '[iíìîï]',
-        o: '[oóòôõö]',
-        u: '[uúùûü]',
-        c: '[cç]',
-        n: '[nñ]',
-    };
-
-    return term
-        .split('')
-        .map((character) => {
-            const escaped = character.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-            return accentMap[character] || escaped;
-        })
-        .join('');
-}
-
-export function clearSearchHighlights(container: HTMLElement): void {
-    const marks = container.querySelectorAll('mark[data-sh-term]');
-    marks.forEach((mark) => {
-        const parent = mark.parentNode;
-        if (!parent) return;
-        parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
-        parent.normalize();
-    });
-
-    const wrappers = container.querySelectorAll('span[data-sh-wrapper]');
-    wrappers.forEach((wrapper) => {
-        const parent = wrapper.parentNode;
-        if (!parent) return;
-
-        while (wrapper.firstChild) {
-            parent.insertBefore(wrapper.firstChild, wrapper);
-        }
-        wrapper.remove();
-        parent.normalize();
-    });
 }
 
 export function resolveScrollContainer(contentContainer: HTMLElement): HTMLElement {
@@ -259,7 +210,9 @@ export function notifyAfterScrollSettles(
     let settleTimer: ReturnType<typeof setTimeout> | null = null;
 
     const finish = () => {
-        if (finished) return;
+        if (finished) {
+            return;
+        }
         finished = true;
         scrollContainer.removeEventListener('scroll', handleScroll);
         if (settleTimer !== null) {
@@ -284,34 +237,82 @@ export function notifyAfterScrollSettles(
     return finish;
 }
 
+export function resolveSubpositionKey(
+    node: HTMLElement,
+    container: HTMLElement,
+    neshAnchors?: NeshAnchor[],
+): string | null {
+    const tipiPosition = node.closest<HTMLElement>('article.tipi-position[id]');
+    if (tipiPosition?.id) {
+        return tipiPosition.id;
+    }
+
+    const directPosAnchor = node.closest<HTMLElement>('[id^="pos-"]');
+    if (directPosAnchor?.id) {
+        return directPosAnchor.id;
+    }
+
+    const anchors = neshAnchors ?? getNeshAnchors(container);
+    let nearestBefore: HTMLElement | null = null;
+
+    for (const anchor of anchors) {
+        if (!anchor.id) {
+            continue;
+        }
+        if (anchor === node || anchor.contains(node)) {
+            return anchor.id;
+        }
+
+        const relation = anchor.compareDocumentPosition(node);
+        if (relation & Node.DOCUMENT_POSITION_FOLLOWING) {
+            nearestBefore = anchor;
+            continue;
+        }
+        if (relation & Node.DOCUMENT_POSITION_PRECEDING) {
+            break;
+        }
+    }
+
+    return nearestBefore?.id || null;
+}
+
+function getNeshAnchors(container: HTMLElement): NeshAnchor[] {
+    return Array.from(container.querySelectorAll<HTMLElement>(
+        'h3[id^="pos-"], h4[id^="pos-"], h3.nesh-section[id], h4.nesh-subsection[id]',
+    ));
+}
+
 export function collectSearchHighlighterQuality(
     currentMatches: Record<string, SearchHighlighterMatchInstance[]>,
     allTerms: string[],
     container: HTMLElement,
-): SearchHighlighterQualityInsights {
+): SearchHighlighterMatchQualityResult {
     if (allTerms.length < 2) {
         return getNoMatchResult();
     }
 
-    const {
-        subpositionTermMap,
-        blockTermMap,
-        chapterTermMap,
-    } = buildTermMaps(currentMatches, allTerms, container);
-    const requiredTermCount = allTerms.length;
-    const highSubpositionKeys = getEntriesWithAllTerms(
-        subpositionTermMap,
-        requiredTermCount,
+    const neshAnchors = getNeshAnchors(container);
+    const { subpositionTermMap, blockTermMap, chapterTermMap } = buildTermMaps(
+        currentMatches,
+        allTerms,
+        container,
+        neshAnchors,
+        resolveSubpositionKey,
     );
+
+    const requiredTermCount = allTerms.length;
+    const highSubpositionKeys = getEntriesWithAllTerms(subpositionTermMap, requiredTermCount);
     const highSubpositionsCount = highSubpositionKeys.length;
-    const {
-        highBlocksWithoutSubposition,
-        hasFallbackHighBlock,
-    } = analyzeBlockCoOccurrence(blockTermMap, requiredTermCount, container);
-    const coOccurrenceCount =
-        highSubpositionsCount > 0 ? highSubpositionsCount : highBlocksWithoutSubposition;
-    const coOccurrenceScope: SearchHighlighterCoOccurrenceScope =
-        highSubpositionsCount > 0 ? 'subposition' : 'block';
+    const { highBlocksWithoutSubposition, hasFallbackHighBlock } = analyzeBlockCoOccurrence(
+        blockTermMap,
+        requiredTermCount,
+        container,
+        neshAnchors,
+        resolveSubpositionKey,
+    );
+
+    const coOccurrenceCount = highSubpositionsCount > 0 ? highSubpositionsCount : highBlocksWithoutSubposition;
+    const coOccurrenceScope: SearchHighlighterCoOccurrenceScope = highSubpositionsCount > 0 ? 'subposition' : 'block';
 
     if (highSubpositionsCount > 0 || hasFallbackHighBlock) {
         return {
@@ -331,5 +332,36 @@ export function collectSearchHighlighterQuality(
         };
     }
 
-    return getNoMatchResult();
+    return {
+        matchQuality: 'NENHUM',
+        coOccurrenceCount,
+        coOccurrenceScope,
+        highSubpositionKeys: [],
+    };
+}
+
+export function clearSearchHighlights(container: HTMLElement): void {
+    const marks = container.querySelectorAll('mark[data-sh-term]');
+    marks.forEach((mark) => {
+        const parent = mark.parentNode;
+        if (!parent) {
+            return;
+        }
+        parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
+        parent.normalize();
+    });
+
+    const wrappers = container.querySelectorAll('span[data-sh-wrapper]');
+    wrappers.forEach((wrapper) => {
+        const parent = wrapper.parentNode;
+        if (!parent) {
+            return;
+        }
+
+        while (wrapper.firstChild) {
+            parent.insertBefore(wrapper.firstChild, wrapper);
+        }
+        wrapper.remove();
+        parent.normalize();
+    });
 }

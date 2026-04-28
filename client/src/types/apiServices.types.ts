@@ -8,6 +8,7 @@ export interface NbsCatalogItem {
     description: string;
     parent_code: string | null;
     level: number;
+    has_nebs?: boolean;
 }
 
 /** @deprecated Use `NbsCatalogItem`. */

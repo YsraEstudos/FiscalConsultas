@@ -1,4 +1,5 @@
 import { MAX_ANCESTOR_DEPTH } from "./constants.js";
+import { escapeLikePattern } from "../workerUtils.js";
 import { fetchAll, fetchOne } from "./query.js";
 import { getWorkerDb } from "./state.js";
 
@@ -90,10 +91,6 @@ export function searchNbsByText(query) {
 
 function cleanServiceCode(code) {
   return String(code || "").replace(/[^0-9]/g, "");
-}
-
-function escapeLikePattern(value) {
-  return String(value || "").replace(/[\\%_]/g, "\\$&");
 }
 
 function rowToNbsItem(row) {
@@ -289,4 +286,3 @@ export function getLocalNbsDetail(code, page = 1, pageSize = 50) {
     nebs: rowToNebsEntry(nebsEntry),
   };
 }
-
