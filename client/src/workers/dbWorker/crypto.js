@@ -1,13 +1,25 @@
 import {
-  APP_SEED_BYTES,
   GCM_IV_SIZE,
   GCM_TAG_SIZE,
   HEADER_SIZE,
   MAGIC,
 } from "./constants.js";
 
+/** @type {string | null} */
+let appSeed = null;
+
+/**
+ * @param {string | null} seed
+ */
+export function setAppSeed(seed) {
+  appSeed = seed && seed.trim() ? seed.trim() : null;
+}
+
 function getSeed() {
-  return new TextEncoder().encode(String.fromCharCode(...APP_SEED_BYTES));
+  if (!appSeed) {
+    throw new Error("Offline database key is missing");
+  }
+  return new TextEncoder().encode(appSeed);
 }
 
 /**

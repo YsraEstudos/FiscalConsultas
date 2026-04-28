@@ -143,6 +143,7 @@ async def _fetch_nbs_detail_from_sqlite(
             if include_tree
             else None
         )
+
         payload = {
             "success": True,
             "item": item,

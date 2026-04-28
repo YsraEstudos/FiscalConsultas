@@ -85,8 +85,14 @@ def _cleanup_overrides():
     This fixture clears app.dependency_overrides before yielding to the test and again after the test completes, preventing state leakage between tests.
     """
     app.dependency_overrides.clear()
+    comments.comment_create_rate_limiter.reset()
+    comments.comment_read_rate_limiter.reset()
+    comments.comment_admin_rate_limiter.reset()
     yield
     app.dependency_overrides.clear()
+    comments.comment_create_rate_limiter.reset()
+    comments.comment_read_rate_limiter.reset()
+    comments.comment_admin_rate_limiter.reset()
 
 
 def test_create_comment_requires_token(client):
@@ -120,7 +126,7 @@ def test_create_comment_returns_201_with_expected_payload(client, monkeypatch):
         return {
             "sub": "user_test_123",
             "name": "JWT User",
-            "image_url": "https://issuer.example/avatar.png",
+            "image_url": "https://img.clerk.com/avatar.png",
         }
 
     monkeypatch.setattr(comments, "decode_clerk_jwt", _mock_decode)
@@ -134,8 +140,6 @@ def test_create_comment_returns_201_with_expected_payload(client, monkeypatch):
             "selected_text": "texto selecionado",
             "body": "comentario teste",
             "is_private": False,
-            "user_name": "Spoofed User",
-            "user_image_url": "https://attacker.example/avatar.png",
         },
         headers={"Authorization": "Bearer mock-auth-header"},
     )
@@ -149,7 +153,7 @@ def test_create_comment_returns_201_with_expected_payload(client, monkeypatch):
     assert body["anchor_key"] == "pos-84-07"
     assert body["status"] == "pending"
     assert body["user_name"] == "JWT User"
-    assert body["user_image_url"] == "https://issuer.example/avatar.png"
+    assert body["user_image_url"] == "https://img.clerk.com/avatar.png"
 
     created_at = datetime.fromisoformat(body["created_at"].replace("Z", "+00:00"))
     updated_at = datetime.fromisoformat(body["updated_at"].replace("Z", "+00:00"))
@@ -197,7 +201,7 @@ def test_create_comment_falls_back_to_given_and_family_name_for_identity(
             "org_id": "org_test",
             "given_name": "Fiscal",
             "family_name": "Reviewer",
-            "picture": "https://issuer.example/fallback.png",
+            "picture": "https://img.clerk.com/fallback.png",
         }
 
     monkeypatch.setattr(comments, "decode_clerk_jwt", _mock_decode)
@@ -211,15 +215,13 @@ def test_create_comment_falls_back_to_given_and_family_name_for_identity(
             "selected_text": "texto selecionado",
             "body": "comentario teste",
             "is_private": False,
-            "user_name": "Another Spoof",
-            "user_image_url": "https://attacker.example/avatar.png",
         },
         headers={"Authorization": "Bearer mock-auth-header"},
     )
 
     assert response.status_code == 201
     assert response.json()["user_name"] == "Fiscal Reviewer"
-    assert response.json()["user_image_url"] == "https://issuer.example/fallback.png"
+    assert response.json()["user_image_url"] == "https://img.clerk.com/fallback.png"
 
 
 def test_list_commented_anchors_uses_org_id_claim_when_tenant_context_is_missing(

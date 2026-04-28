@@ -27,7 +27,11 @@ import {
 import type { AuthRefreshMode, AuthRetryRequestConfig } from './authTypes';
 
 const configuredApiInstances = new WeakSet<AxiosInstance>();
-export { registerClerkTokenGetter, unregisterClerkTokenGetter } from './authSession';
+export {
+    getRegisteredClerkToken,
+    registerClerkTokenGetter,
+    unregisterClerkTokenGetter,
+} from './authSession';
 
 export function configureApiAuthTransport(apiInstance: AxiosInstance): void {
     if (configuredApiInstances.has(apiInstance)) {

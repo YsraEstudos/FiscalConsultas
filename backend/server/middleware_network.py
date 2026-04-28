@@ -24,9 +24,11 @@ def is_loopback_host(host: Optional[str]) -> bool:
         normalized = normalized.split("%", 1)[0]
 
     try:
-        return ipaddress.ip_address(normalized).is_loopback
+        ip = ipaddress.ip_address(normalized)
     except ValueError:
         return False
+    mapped_ipv4 = getattr(ip, "ipv4_mapped", None)
+    return ip.is_loopback or bool(mapped_ipv4 and mapped_ipv4.is_loopback)
 
 
 def origin_looks_like_loopback(origin: str) -> bool:
