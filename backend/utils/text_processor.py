@@ -1,4 +1,5 @@
 import re
+import functools
 import unicodedata
 from typing import List
 
@@ -70,14 +71,7 @@ class PortugueseStemmer:
         return word
 
     def stem(self, word: str) -> str:
-        word = word.lower()
-        word = self._remove_accent(word)
-
-        # Ordem de aplicação
-        word = self.step_plural(word)
-        word = self.step_feminine(word)
-
-        return word
+        return _cached_stem_word(word)
 
 
 class NeshTextProcessor:
@@ -138,3 +132,22 @@ class NeshTextProcessor:
             processed.append(stemmed)
 
         return " ".join(processed)
+
+
+_GLOBAL_STEMMER = None
+
+
+@functools.lru_cache(maxsize=1024)
+def _cached_stem_word(word: str) -> str:
+    global _GLOBAL_STEMMER
+    if _GLOBAL_STEMMER is None:
+        _GLOBAL_STEMMER = PortugueseStemmer()
+
+    word = word.lower()
+    word = _GLOBAL_STEMMER._remove_accent(word)
+
+    # Ordem de aplicação
+    word = _GLOBAL_STEMMER.step_plural(word)
+    word = _GLOBAL_STEMMER.step_feminine(word)
+
+    return word
