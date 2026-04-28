@@ -244,7 +244,6 @@ async def create_download_token(request: Request):
     The token expires after 5 minutes and can only be used once.
     """
     _enforce_secure_request(request)
-    await _require_auth_payload(request)
     client_ip = extract_client_ip(request)
     limiter_key = f"db-download:ip:{client_ip}"
 
@@ -295,7 +294,6 @@ async def download_database(
     The token is consumed upon use and cannot be reused.
     """
     _enforce_secure_request(request)
-    await _require_auth_payload(request)
     token = payload.token.strip()
     if not token:
         raise HTTPException(status_code=400, detail="Invalid token format")
