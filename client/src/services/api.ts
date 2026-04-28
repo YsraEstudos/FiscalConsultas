@@ -5,6 +5,7 @@ export {
     SYSTEM_STATUS_TIMEOUT_MS,
 } from './api/httpClient';
 export {
+    getRegisteredClerkToken,
     registerClerkTokenGetter,
     unregisterClerkTokenGetter,
 } from './api/authTransport';

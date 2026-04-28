@@ -137,6 +137,19 @@ export function unregisterClerkTokenGetter(): void {
     clerkGetToken = null;
 }
 
+export async function getRegisteredClerkToken(
+    options: ClerkTokenGetterOptions = {},
+): Promise<string | null> {
+    if (!clerkGetToken) {
+        return null;
+    }
+
+    return clerkGetToken({
+        ...buildTokenGetterOptions(!!options.skipCache),
+        ...options,
+    });
+}
+
 export function isAuthGetterRegistered(): boolean {
     return !!clerkGetToken;
 }

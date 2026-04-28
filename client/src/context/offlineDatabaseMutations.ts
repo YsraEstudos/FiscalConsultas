@@ -4,7 +4,7 @@ import {
     compareOfflineVersions,
     formatOfflineDatabaseErrorMessage,
 } from '../utils/offlineDatabase';
-import { useAuth } from './AuthContext';
+import { getRegisteredClerkToken } from '../services/api';
 import {
     clearOfflineDatabaseInstallLock,
     getOfflineDatabaseInstallLock,
@@ -40,8 +40,6 @@ export function useOfflineDatabaseMutations({
     OfflineDatabaseOperations,
     'installOfflineDatabase' | 'removeOfflineDatabase'
 > {
-    const { getToken } = useAuth();
-
     const installOfflineDatabase = useCallback(async () => {
         if (!isSupported) {
             throw new Error('Offline DB not supported in this browser');
@@ -86,7 +84,7 @@ export function useOfflineDatabaseMutations({
             }
 
             runOfflineDatabaseTaskInBackground(primeOfflineShellCache());
-            const clerkToken = await getToken({ skipCache: true });
+            const clerkToken = await getRegisteredClerkToken({ skipCache: true });
             if (!clerkToken) {
                 throw new Error('Faça login para instalar o banco offline.');
             }
@@ -133,7 +131,6 @@ export function useOfflineDatabaseMutations({
     }, [
         applyInstalledMetadata,
         broadcast,
-        getToken,
         instanceId,
         isSupported,
         localVersion,

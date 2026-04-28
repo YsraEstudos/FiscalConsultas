@@ -7,8 +7,8 @@ import {
     type SetStateAction,
 } from 'react';
 
+import { getRegisteredClerkToken } from '../../services/api';
 import { formatOfflineDatabaseErrorMessage } from '../../utils/offlineDatabase';
-import { useAuth } from '../AuthContext';
 import type {
     OfflineDatabaseStatus,
     OfflineDatabaseWorkerRequest,
@@ -75,15 +75,9 @@ export function useOfflineDatabaseWorkerBridge({
     setLocalVersion,
     setDbSizeBytes,
 }: UseOfflineDatabaseWorkerBridgeArgs): OfflineDatabaseWorkerBridgeValue {
-    const { getToken } = useAuth();
-    const getTokenRef = useRef(getToken);
     const pendingRef = useRef<Map<string, PendingOfflineDatabaseRequest>>(new Map());
     const workerRef = useRef<Worker | null>(null);
     const [isWorkerReady, setIsWorkerReady] = useState(false);
-
-    useEffect(() => {
-        getTokenRef.current = getToken;
-    }, [getToken]);
 
     const sendToWorker = useCallback(
         (
@@ -109,7 +103,7 @@ export function useOfflineDatabaseWorkerBridge({
                     console.warn('[LocalDatabase] REFRESH_TOKEN message missing id');
                     return;
                 }
-                getTokenRef.current({ skipCache: true })
+                getRegisteredClerkToken({ skipCache: true })
                     .then((token) => {
                         workerRef.current?.postMessage({
                             type: 'TOKEN_RESPONSE',
