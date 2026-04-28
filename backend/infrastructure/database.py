@@ -1,34 +1,22 @@
-"""
-Adaptador de banco de dados SQLite para o Nesh (Async).
-Gerencia conexões e queries ao banco nesh.db com connection pooling assíncrono.
-"""
+"""SQLite database adapter for the Nesh backend."""
+
+from __future__ import annotations
 
 import asyncio
 import os
-import time
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
 import aiosqlite
 
-from ..config.constants import SearchConfig
-from ..config.db_schema import CHAPTER_NOTES_SECTION_COLUMNS
 from ..config.exceptions import DatabaseError, DatabaseNotFoundError
 from ..config.logging_config import db_logger as logger
 from ..config.settings import settings
+from .database_search import DatabaseSearchQueries
 
 
 class ConnectionPool:
-    """
-    Pool de conexões SQLite thread-safe e async.
-
-    Mantém conexões reutilizáveis para evitar overhead
-    de criar nova conexão a cada request.
-
-    Attributes:
-        db_path: Caminho para o arquivo SQLite
-        max_size: Tamanho máximo do pool
-    """
+    """Thread-safe async pool for reusable SQLite connections."""
 
     def __init__(self, db_path: str, max_size: int = 5):
         self.db_path = db_path
@@ -39,23 +27,22 @@ class ConnectionPool:
         logger.info(f"ConnectionPool inicializado (max={max_size})")
 
     async def _create_connection(self) -> aiosqlite.Connection:
-        """Cria nova conexão configurada."""
+        """Creates a configured SQLite connection."""
         try:
             conn = await aiosqlite.connect(self.db_path)
             conn.row_factory = aiosqlite.Row
-            # Otimizações de performance
             await conn.execute("PRAGMA journal_mode=WAL")
             await conn.execute("PRAGMA synchronous=NORMAL")
             await conn.execute("PRAGMA cache_size=10000")
             self._created += 1
             logger.debug(f"Nova conexão criada (total: {self._created})")
             return conn
-        except Exception as e:
-            logger.error(f"Falha ao criar conexão: {e}")
-            raise DatabaseError(f"Falha ao conectar ao banco: {e}")
+        except Exception as exc:
+            logger.error(f"Falha ao criar conexão: {exc}")
+            raise DatabaseError(f"Falha ao conectar ao banco: {exc}")
 
     async def get(self) -> aiosqlite.Connection:
-        """Obtém conexão do pool ou cria nova."""
+        """Returns an existing connection or creates a new one."""
         async with self._lock:
             if self._pool:
                 conn = self._pool.pop()
@@ -66,7 +53,7 @@ class ConnectionPool:
         return await self._create_connection()
 
     async def release(self, conn: aiosqlite.Connection) -> None:
-        """Devolve conexão ao pool."""
+        """Returns a connection to the pool or closes it when full."""
         async with self._lock:
             if len(self._pool) < self.max_size:
                 self._pool.append(conn)
@@ -74,72 +61,48 @@ class ConnectionPool:
             else:
                 try:
                     await conn.close()
-                except Exception as e:
-                    logger.warning(f"Erro ao fechar conexão excedente: {e}")
+                except Exception as exc:
+                    logger.warning(f"Erro ao fechar conexão excedente: {exc}")
                 logger.debug("Pool cheio, conexão fechada")
 
     async def close_all(self) -> None:
-        """Fecha todas as conexões do pool."""
+        """Closes all pooled connections."""
         async with self._lock:
             for conn in self._pool:
                 try:
                     await conn.close()
-                except Exception as e:
-                    logger.warning(f"Erro ao fechar conexão do pool: {e}")
+                except Exception as exc:
+                    logger.warning(f"Erro ao fechar conexão do pool: {exc}")
             self._pool.clear()
             logger.info("Pool de conexões fechado")
 
 
 class DatabaseAdapter:
-    """
-    Gerencia conexões e queries com o banco de dados SQLite de forma assíncrona.
+    """Async SQLite adapter with shared pools and query helpers."""
 
-    Attributes:
-        db_path: Caminho absoluto para o arquivo .db
-        pool: Pool de conexões reutilizáveis
-    """
-
-    # Pool compartilhado (singleton por db_path)
     _pools: Dict[str, ConnectionPool] = {}
     _pools_lock: Optional[asyncio.Lock] = None
-    _FTS_RESERVED_OPERATORS = {"AND", "OR", "NOT", "NEAR"}
 
     @classmethod
     def _get_pools_lock(cls) -> asyncio.Lock:
-        """Lazy initialization do lock para evitar criação fora do event loop."""
+        """Lazy initialization of the shared pool lock."""
         if cls._pools_lock is None:
             cls._pools_lock = asyncio.Lock()
         return cls._pools_lock
 
     def __init__(self, db_path: str, pool_size: int = 5):
-        """
-        Inicializa o adapter com pool de conexões.
-        """
         self.db_path = db_path
         self.is_postgres = settings.database.is_postgres
-        self._fts_schema_cache: Optional[Dict[str, Any]] = None
-        self._fts_schema_cache_lock = asyncio.Lock()
-        self._last_check_ts = 0.0
-        self._chapter_notes_schema_cache: Optional[Dict[str, Any]] = None
-        self._chapter_notes_schema_cache_lock = asyncio.Lock()
-        self._chapter_notes_last_check_ts = 0.0
-        self._positions_schema_cache: Optional[Dict[str, Any]] = None
-        self._positions_schema_cache_lock = asyncio.Lock()
-        self._positions_last_check_ts = 0.0
         self.pool_size = pool_size
-        self.pool = None
-        # Cached SQL fragments for get_chapter_raw (rebuilt on schema change)
-        self._chapter_sql_cache: Optional[str] = None
-        self._chapter_sql_has_sections: Optional[bool] = None
-        self._chapter_sql_has_parsed_notes_json: Optional[bool] = None
+        self.pool: ConnectionPool | None = None
+        self._search = DatabaseSearchQueries(self)
         logger.debug(f"DatabaseAdapter inicializado: {db_path}")
 
-    async def _ensure_pool(self):
-        """Garante que o pool existe para este caminho (Async Singleton Pattern)."""
+    async def _ensure_pool(self) -> None:
+        """Ensures the pool exists for this database path."""
         if self.pool:
             return
 
-        # Verifica existência do arquivo antes de inicar pool
         if not os.path.exists(self.db_path):
             raise DatabaseNotFoundError(self.db_path)
 
@@ -148,190 +111,14 @@ class DatabaseAdapter:
                 self._pools[self.db_path] = ConnectionPool(self.db_path, self.pool_size)
             self.pool = self._pools[self.db_path]
 
-    async def close(self):
-        """Fecha conexões do pool."""
+    async def close(self) -> None:
+        """Closes pooled connections."""
         if self.pool:
             await self.pool.close_all()
 
-    def _get_db_signature(self) -> Optional[tuple]:
-        """Assinatura simples do arquivo do DB para invalidar caches em rebuilds."""
-        try:
-            return (os.path.getmtime(self.db_path), os.path.getsize(self.db_path))
-        except OSError:
-            return None
-
-    async def _detect_fts_schema(self, conn: aiosqlite.Connection) -> Dict[str, Any]:
-        """
-        Detecta dinamicamente o schema do índice FTS5.
-        """
-        try:
-            cursor = await conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='search_index' LIMIT 1"
-            )
-            if not await cursor.fetchone():
-                return {
-                    "available": False,
-                    "reason": "Tabela FTS 'search_index' não encontrada",
-                }
-
-            cursor = await conn.execute("PRAGMA table_info(search_index)")
-            rows = await cursor.fetchall()
-            cols = {row["name"] for row in rows}
-
-            if "indexed_content" in cols:
-                content_column = "indexed_content"
-            elif "description" in cols:
-                content_column = "description"
-            else:
-                return {
-                    "available": False,
-                    "reason": "FTS sem coluna de conteúdo (esperado: indexed_content ou description)",
-                }
-
-            supports_rank = True
-            try:
-                await conn.execute(
-                    f"SELECT rank FROM search_index WHERE {content_column} MATCH ? LIMIT 1",  # nosec B608 - coluna validada por whitelist interna
-                    ("probe",),
-                )
-            except Exception:
-                supports_rank = False
-
-            return {
-                "available": True,
-                "content_column": content_column,
-                "supports_rank": supports_rank,
-            }
-        except Exception as e:
-            logger.error(f"Erro ao detectar schema FTS: {e}")
-            return {
-                "available": False,
-                "reason": f"Falha ao inspecionar schema FTS: {e}",
-            }
-
-    async def _get_fts_schema_cached(
-        self, conn: aiosqlite.Connection
-    ) -> Dict[str, Any]:
-        """Retorna schema FTS com cache invalidado por mudança no arquivo do DB (TTL 60s)."""
-        now = time.time()
-
-        async with self._fts_schema_cache_lock:
-            if self._fts_schema_cache and (now - self._last_check_ts < 60):
-                return self._fts_schema_cache["schema"]
-
-            signature = self._get_db_signature()
-            if (
-                self._fts_schema_cache
-                and self._fts_schema_cache.get("db_signature") == signature
-            ):
-                self._last_check_ts = now
-                return self._fts_schema_cache["schema"]
-
-            schema = await self._detect_fts_schema(conn)
-            self._fts_schema_cache = {
-                "db_signature": signature,
-                "schema": schema,
-            }
-            self._last_check_ts = now
-            return schema
-
-    async def _get_chapter_notes_columns(self, conn: aiosqlite.Connection) -> set:
-        """Lê colunas disponíveis na tabela chapter_notes."""
-        try:
-            cursor = await conn.execute("PRAGMA table_info(chapter_notes)")
-            rows = await cursor.fetchall()
-            return {row["name"] for row in rows}
-        except Exception as e:
-            logger.warning(f"Falha ao inspecionar chapter_notes: {e}")
-            return set()
-
-    async def _get_chapter_notes_columns_cached(
-        self, conn: aiosqlite.Connection
-    ) -> set:
-        """Cache simples de colunas de chapter_notes (TTL 60s, invalida por mudança no DB)."""
-        now = time.time()
-
-        async with self._chapter_notes_schema_cache_lock:
-            if self._chapter_notes_schema_cache and (
-                now - self._chapter_notes_last_check_ts < 60
-            ):
-                return self._chapter_notes_schema_cache["columns"]
-
-            signature = self._get_db_signature()
-            if (
-                self._chapter_notes_schema_cache
-                and self._chapter_notes_schema_cache.get("db_signature") == signature
-            ):
-                self._chapter_notes_last_check_ts = now
-                return self._chapter_notes_schema_cache["columns"]
-
-            columns = await self._get_chapter_notes_columns(conn)
-            self._chapter_notes_schema_cache = {
-                "db_signature": signature,
-                "columns": columns,
-            }
-            self._chapter_notes_last_check_ts = now
-            return columns
-
-    async def _get_positions_columns(self, conn: aiosqlite.Connection) -> set:
-        """Lê colunas disponíveis na tabela positions."""
-        try:
-            cursor = await conn.execute("PRAGMA table_info(positions)")
-            rows = await cursor.fetchall()
-            return {row["name"] for row in rows}
-        except Exception as e:
-            logger.warning(f"Falha ao inspecionar positions: {e}")
-            return set()
-
-    async def _get_positions_columns_cached(self, conn: aiosqlite.Connection) -> set:
-        """Cache simples de colunas de positions (TTL 60s, invalida por mudança no DB)."""
-        now = time.time()
-
-        async with self._positions_schema_cache_lock:
-            if self._positions_schema_cache and (
-                now - self._positions_last_check_ts < 60
-            ):
-                return self._positions_schema_cache["columns"]
-
-            signature = self._get_db_signature()
-            if (
-                self._positions_schema_cache
-                and self._positions_schema_cache.get("db_signature") == signature
-            ):
-                self._positions_last_check_ts = now
-                return self._positions_schema_cache["columns"]
-
-            columns = await self._get_positions_columns(conn)
-            self._positions_schema_cache = {
-                "db_signature": signature,
-                "columns": columns,
-            }
-            self._positions_last_check_ts = now
-            return columns
-
-    @staticmethod
-    def _has_section_content(sections: Dict[str, Optional[str]]) -> bool:
-        """Verifica se há conteúdo real em alguma seção (ignora vazios/whitespace)."""
-        for value in sections.values():
-            if isinstance(value, str):
-                if value.strip():
-                    return True
-            elif value:
-                return True
-        return False
-
-    @staticmethod
-    def _fts_rank_sql(schema: Dict[str, Any]) -> Dict[str, str]:
-        """Retorna SQL para selecionar/ordenar por rank de forma portável."""
-        if schema.get("supports_rank"):
-            return {"select": "rank", "order": "rank"}
-        return {"select": "bm25(search_index) AS rank", "order": "bm25(search_index)"}
-
     @asynccontextmanager
     async def get_connection(self):
-        """
-        Async Context manager para conexão do pool.
-        """
+        """Async context manager for a pooled connection."""
         await self._ensure_pool()
         pool = self.pool
         if pool is None:
@@ -339,21 +126,19 @@ class DatabaseAdapter:
         conn = await pool.get()
         try:
             yield conn
-        except aiosqlite.Error as e:
-            logger.error(f"Erro SQLite: {e}")
-            raise DatabaseError(f"Erro na operação de banco: {e}")
-        except Exception as e:
-            if isinstance(e, DatabaseError):
+        except aiosqlite.Error as exc:
+            logger.error(f"Erro SQLite: {exc}")
+            raise DatabaseError(f"Erro na operação de banco: {exc}")
+        except Exception as exc:
+            if isinstance(exc, DatabaseError):
                 raise
-            logger.error(f"Erro inesperado no banco: {e}")
-            raise DatabaseError(f"Erro inesperado: {e}")
+            logger.error(f"Erro inesperado no banco: {exc}")
+            raise DatabaseError(f"Erro inesperado: {exc}")
         finally:
             await pool.release(conn)
 
     async def check_connection(self) -> Optional[Dict[str, int]]:
-        """
-        Verifica integridade e retorna estatísticas do banco.
-        """
+        """Checks the database integrity and returns basic stats."""
         if not os.path.exists(self.db_path):
             logger.warning(f"Banco não encontrado: {self.db_path}")
             return None
@@ -379,159 +164,12 @@ class DatabaseAdapter:
                 }
                 logger.info(f"DB OK: {num_chapters} caps, {num_positions} pos")
                 return stats
-
-        except Exception as e:
-            logger.error(f"Erro ao verificar DB: {e}")
+        except Exception as exc:
+            logger.error(f"Erro ao verificar DB: {exc}")
             return None
 
-    def _build_chapter_sql(
-        self, has_sections: bool, has_parsed_notes_json: bool
-    ) -> str:
-        """
-        Constructs and caches the SQL query used to retrieve a chapter row joined with its chapter_notes, adapting the projection for optional section columns and parsed_notes_json.
-
-        Parameters:
-            has_sections (bool): If True include real section columns from chapter_notes; if False project those columns as NULL.
-            has_parsed_notes_json (bool): If True include the `parsed_notes_json` column from chapter_notes; if False project it as NULL.
-
-        Returns:
-            str: The SQL SELECT statement that queries chapters joined with chapter_notes for a given chapter_num, with section and parsed_notes_json projections adjusted according to the flags.
-        """
-        if (
-            self._chapter_sql_cache is not None
-            and self._chapter_sql_has_sections == has_sections
-            and self._chapter_sql_has_parsed_notes_json == has_parsed_notes_json
-        ):
-            return self._chapter_sql_cache
-        section_select = ", ".join(f"cn.{col}" for col in CHAPTER_NOTES_SECTION_COLUMNS)
-        null_section_select = ", ".join(
-            f"NULL AS {col}" for col in CHAPTER_NOTES_SECTION_COLUMNS
-        )
-        parsed_notes_select = (
-            "cn.parsed_notes_json"
-            if has_parsed_notes_json
-            else "NULL AS parsed_notes_json"
-        )
-        section_projection = section_select if has_sections else null_section_select
-        notes_select = f"cn.notes_content, {parsed_notes_select}, {section_projection}"
-        sql = f"""SELECT
-                    c.chapter_num,
-                    c.content,
-                    {notes_select}
-                FROM chapters c
-                LEFT JOIN chapter_notes cn ON c.chapter_num = cn.chapter_num
-                WHERE c.chapter_num = ?"""  # nosec B608 - projeção gerada com colunas constantes
-        self._chapter_sql_cache = sql
-        self._chapter_sql_has_sections = has_sections
-        self._chapter_sql_has_parsed_notes_json = has_parsed_notes_json
-        return sql
-
-    async def get_chapter_raw(self, chapter_num: str) -> Optional[Dict[str, Any]]:
-        """
-        Retrieve raw data for a chapter identified by its chapter number.
-
-        Returns:
-            dict: A mapping with the following keys when the chapter exists:
-                - `chapter_num` (str): Chapter identifier.
-                - `content` (str | None): Chapter content text.
-                - `positions` (list[dict]): List of position objects, each with `codigo` (str), `descricao` (str), and `anchor_id` (str | None).
-                - `notes` (str | None): Notes content for the chapter.
-                - `parsed_notes_json` (Any | None): Parsed notes JSON if available, otherwise `None`.
-                - `sections` (dict | None): Mapping of section column names to their values, or `None` if all sections are empty.
-            `None` if no chapter with the given `chapter_num` is found.
-        """
-        logger.debug(f"Buscando capítulo: {chapter_num}")
-
-        # get_connection já trata exceções e lança DatabaseError se falhar
-        async with self.get_connection() as conn:
-            notes_cols = await self._get_chapter_notes_columns_cached(conn)
-            expected_sections = set(CHAPTER_NOTES_SECTION_COLUMNS)
-            has_sections = expected_sections.issubset(notes_cols)
-            has_parsed_notes_json = "parsed_notes_json" in notes_cols
-            chapter_sql = self._build_chapter_sql(has_sections, has_parsed_notes_json)
-            cursor = await conn.execute(chapter_sql, (chapter_num,))
-
-            first_row = await cursor.fetchone()
-            if not first_row:
-                logger.debug(f"Capítulo {chapter_num} não encontrado")
-                return None
-
-            position_cols = await self._get_positions_columns_cached(conn)
-            has_anchor_id = "anchor_id" in position_cols
-            anchor_projection = "anchor_id" if has_anchor_id else "NULL AS anchor_id"
-
-            cursor = await conn.execute(
-                f"""
-                SELECT codigo, descricao, {anchor_projection}
-                FROM positions
-                WHERE chapter_num = ?
-                -- Sort code segments numerically (major.minor.subminor)
-                -- so 2-part and 3-part HS/NCM codes keep deterministic order.
-                ORDER BY
-                    CAST(COALESCE(NULLIF(SUBSTR(codigo, 1, INSTR(codigo || '.', '.') - 1), ''), '0') AS INTEGER),
-                    CAST(COALESCE(NULLIF(
-                        SUBSTR(
-                            SUBSTR(codigo, INSTR(codigo || '.', '.') + 1),
-                            1,
-                            INSTR(SUBSTR(codigo, INSTR(codigo || '.', '.') + 1) || '.', '.') - 1
-                        ),
-                        ''
-                    ), '0') AS INTEGER),
-                    CAST(COALESCE(NULLIF(
-                        SUBSTR(
-                            SUBSTR(
-                                SUBSTR(codigo, INSTR(codigo || '.', '.') + 1),
-                                INSTR(SUBSTR(codigo, INSTR(codigo || '.', '.') + 1) || '.', '.') + 1
-                            ),
-                            1,
-                            INSTR(
-                                SUBSTR(
-                                    SUBSTR(codigo, INSTR(codigo || '.', '.') + 1),
-                                    INSTR(SUBSTR(codigo, INSTR(codigo || '.', '.') + 1) || '.', '.') + 1
-                                ) || '.',
-                                '.'
-                            ) - 1
-                        ),
-                        ''
-                    ), '0') AS INTEGER)
-            """,  # nosec B608 - anchor_projection é whitelist interna
-                (chapter_num,),
-            )
-            pos_rows = await cursor.fetchall()
-
-            positions = [
-                {
-                    "codigo": r["codigo"],
-                    "descricao": r["descricao"],
-                    "anchor_id": r["anchor_id"],
-                }
-                for r in pos_rows
-                if r["codigo"] is not None
-            ]
-
-            logger.debug(
-                f"Capítulo {chapter_num}: {len(positions)} posições (2 queries)"
-            )
-            sections_map: Dict[str, Any] = {
-                col: first_row[col] for col in CHAPTER_NOTES_SECTION_COLUMNS
-            }
-            sections: Optional[Dict[str, Any]] = sections_map
-            if not self._has_section_content(sections_map):
-                sections = None
-
-            return {
-                "chapter_num": first_row["chapter_num"],
-                "content": first_row["content"],
-                "positions": positions,
-                "notes": first_row["notes_content"],
-                "parsed_notes_json": first_row["parsed_notes_json"],
-                "sections": sections,
-            }
-
     async def get_all_chapters_list(self) -> List[str]:
-        """
-        Retorna lista ordenada de números de capítulos (Async).
-        """
+        """Returns the ordered list of chapter numbers."""
         async with self.get_connection() as conn:
             cursor = await conn.execute(
                 "SELECT chapter_num FROM chapters ORDER BY chapter_num"
@@ -541,54 +179,13 @@ class DatabaseAdapter:
             logger.debug(f"Listados {len(chapters)} capítulos")
             return chapters
 
+    async def get_chapter_raw(self, chapter_num: str) -> Optional[Dict[str, Any]]:
+        return await self._search.get_chapter_raw(chapter_num)
+
     async def fts_search(
         self, query: str, limit: Optional[int] = None
     ) -> List[Dict[str, Any]]:
-        """
-        Perform a full-text search against the FTS5 search_index and return matching rows.
-
-        Parameters:
-            query (str): The FTS query string passed to the MATCH operator.
-            limit (int, optional): Maximum number of results to return; if omitted, the module default is used.
-
-        Returns:
-            List[Dict[str, Any]]: A list of result rows as dictionaries. Each dictionary contains the columns selected from search_index (including `ncm`, `display_text`, `type`, `description`) and a ranking value produced by the configured ranking expression.
-
-        Raises:
-            DatabaseError: If the FTS index is unavailable or the search cannot be performed.
-        """
-        logger.debug(f"FTS search: '{query}'")
-        result_limit = limit if limit is not None else SearchConfig.MAX_FTS_RESULTS
-
-        async with self.get_connection() as conn:
-            schema = await self._get_fts_schema_cached(conn)
-            if not schema.get("available"):
-                msg = (
-                    f"Busca textual indisponível: {schema.get('reason')}. "
-                    "Recrie o índice FTS executando scripts/rebuild_index.py (recomendado)."
-                )
-                logger.error(msg)
-                raise DatabaseError(msg)
-
-            content_col = schema["content_column"]
-            rank_sql = self._fts_rank_sql(schema)
-
-            cursor = await conn.execute(
-                f"""
-                SELECT ncm, display_text, type, description, {rank_sql["select"]}
-                FROM search_index
-                WHERE {content_col} MATCH ?
-                ORDER BY {rank_sql["order"]}
-                LIMIT ?
-            """,  # nosec B608 - content_col/rank_sql vindos de schema validado
-                (query, result_limit),
-            )
-
-            rows = await cursor.fetchall()
-            results = [dict(row) for row in rows]
-
-            logger.debug(f"FTS retornou {len(results)} resultados")
-            return results
+        return await self._search.fts_search(query, limit)
 
     async def fts_search_scored(
         self,
@@ -598,149 +195,19 @@ class DatabaseAdapter:
         words_matched: int = 0,
         total_words: int = 1,
     ) -> List[Dict[str, Any]]:
-        """
-        Perform a full-text search and return ranked results with a computed score for the given tier.
-
-        Parameters:
-            query (str): FTS query string to match against the content column.
-            tier (int): Search tier used to select a base score influencing final result scores.
-            limit (int): Maximum number of results to return.
-            words_matched (int): Number of query words matched in the result (used to compute coverage bonus).
-            total_words (int): Total number of words in the query (used to compute coverage bonus; must be >0 to avoid zero division).
-
-        Returns:
-            List[Dict[str, Any]]: A list of result dictionaries containing the original row fields from search_index plus:
-                - "score" (float): Final score computed as base + normalized bm25 component + coverage bonus, rounded to one decimal.
-                - "tier" (int): The provided tier value applied to each result.
-        """
-        tier_bases = {
-            1: SearchConfig.TIER1_BASE_SCORE,
-            2: SearchConfig.TIER2_BASE_SCORE,
-            3: SearchConfig.TIER3_BASE_SCORE,
-        }
-        base = tier_bases.get(tier, 0)
-        coverage_bonus = (words_matched / total_words * 100) if total_words > 0 else 0
-
-        logger.debug(f"FTS scored search tier {tier}: '{query}'")
-
-        async with self.get_connection() as conn:
-            schema = await self._get_fts_schema_cached(conn)
-            if not schema.get("available"):
-                msg = (
-                    f"Busca textual indisponível: {schema.get('reason')}. "
-                    "Recrie o índice FTS executando scripts/rebuild_index.py (recomendado)."
-                )
-                logger.error(msg)
-                raise DatabaseError(msg)
-
-            content_col = schema["content_column"]
-            rank_sql = self._fts_rank_sql(schema)
-
-            cursor = await conn.execute(
-                f"""
-                SELECT
-                    ncm, display_text, type, description, {rank_sql["select"]}
-                FROM search_index
-                WHERE {content_col} MATCH ?
-                ORDER BY {rank_sql["order"]}
-                LIMIT ?
-            """,  # nosec B608 - content_col/rank_sql vindos de schema validado
-                (query, limit),
-            )
-
-            rows = await cursor.fetchall()
-            results = []
-            for row in rows:
-                r = dict(row)
-                bm25_normalized = min(100, max(0, -r["rank"] * 10))
-                r["score"] = round(base + bm25_normalized + coverage_bonus, 1)
-                r["tier"] = tier
-                results.append(r)
-
-            logger.debug(f"FTS tier {tier} retornou {len(results)} resultados")
-            return results
+        return await self._search.fts_search_scored(
+            query,
+            tier,
+            limit,
+            words_matched,
+            total_words,
+        )
 
     async def fts_search_near(
         self, words: List[str], distance: int, limit: int
     ) -> List[Dict[str, Any]]:
-        """
-        Perform a proximity FTS5 search using NEAR for the given words.
+        return await self._search.fts_search_near(words, distance, limit)
 
-        Performs a NEAR-based full-text search across the configured FTS index and returns matching rows as dictionaries. If fewer than two words are provided, if the FTS index is unavailable, or if an error occurs during the query, an empty list is returned.
-
-        Parameters:
-            words (List[str]): Terms to search for; NEAR requires at least two words.
-            distance (int): Maximum token distance between the words for the NEAR operator.
-            limit (int): Maximum number of results to return.
-
-        Returns:
-            List[Dict[str, Any]]: A list of result rows from `search_index` represented as dictionaries. Each dict includes the selected columns (e.g., `ncm`, `display_text`, `type`, `description`) and a ranking value provided by the FTS ranking expression.
-        """
-        if len(words) < 2:
-            return []
-
-        sanitized_words = [
-            token for word in words if (token := self._sanitize_fts_token(word))
-        ]
-        if len(sanitized_words) < 2:
-            return []
-
-        near_query = f"NEAR({' '.join(sanitized_words)}, {distance})"
-        logger.debug(f"FTS NEAR search: '{near_query}'")
-
-        # NEAR pode falhar se o índice não suportar ou query for inválida
-        # Neste caso, queremos engolir o erro e retornar vazio, pois é um bônus
-        try:
-            async with self.get_connection() as conn:
-                schema = await self._get_fts_schema_cached(conn)
-                if not schema.get("available"):
-                    return []
-
-                content_col = schema["content_column"]
-                rank_sql = self._fts_rank_sql(schema)
-
-                cursor = await conn.execute(
-                    f"""
-                    SELECT ncm, display_text, type, description, {rank_sql["select"]}
-                    FROM search_index
-                    WHERE {content_col} MATCH ?
-                    ORDER BY {rank_sql["order"]}
-                    LIMIT ?
-                """,  # nosec B608 - content_col/rank_sql vindos de schema validado
-                    (near_query, limit),
-                )
-
-                rows = await cursor.fetchall()
-                results = [dict(row) for row in rows]
-                logger.debug(f"FTS NEAR retornou {len(results)} resultados")
-                return results
-        except Exception as e:
-            logger.debug(f"FTS NEAR falhou (ignorado): {e}")
-            return []
-
-    @classmethod
-    def _sanitize_fts_token(cls, token: str) -> str:
-        """Sanitize token for FTS5 MATCH query, avoiding operators/special chars."""
-        stripped = token.strip()
-        if not stripped:
-            return ""
-
-        cleaned_chars: list[str] = []
-        for char in stripped:
-            if char.isalnum() or char in {"_", "-", "."}:
-                cleaned_chars.append(char)
-            elif char in {'"', "(", ")", ":", "*", "^", "~"}:
-                continue
-            else:
-                cleaned_chars.append(" ")
-
-        normalized = " ".join("".join(cleaned_chars).split())
-        if not normalized:
-            return ""
-
-        primary = normalized.split(" ", 1)[0]
-        if primary.upper() in cls._FTS_RESERVED_OPERATORS:
-            return ""
-
-        escaped = primary.replace('"', '""')
-        return f'"{escaped}"'
+    @staticmethod
+    def _sanitize_fts_token(token: str) -> str:
+        return DatabaseSearchQueries._sanitize_fts_token(token)

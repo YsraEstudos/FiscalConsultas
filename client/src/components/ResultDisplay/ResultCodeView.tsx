@@ -183,7 +183,6 @@ export function ResultCodeView({
                     <Sidebar
                         results={renderableCodeResults}
                         onNavigate={onNavigate}
-                        isOpen={mobileMenuOpen}
                         onClose={onCloseMobileMenu}
                         searchQuery={latestQuery}
                         activeAnchorId={activeAnchorId}

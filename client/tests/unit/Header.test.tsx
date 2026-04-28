@@ -54,7 +54,6 @@ function renderHeader() {
       setDoc={vi.fn()}
       searchKey="search-1"
       onOpenSettings={vi.fn()}
-      onOpenTutorial={vi.fn()}
       onOpenStats={vi.fn()}
       onOpenComparator={vi.fn()}
       onOpenModerate={vi.fn()}
@@ -101,7 +100,6 @@ describe('Header', () => {
         setDoc={setDoc}
         searchKey="search-1"
         onOpenSettings={vi.fn()}
-        onOpenTutorial={vi.fn()}
         onOpenStats={vi.fn()}
         onOpenComparator={vi.fn()}
         onOpenModerate={vi.fn()}
@@ -123,7 +121,7 @@ describe('Header', () => {
     expect(screen.getByText('Notas Explicativas do Sistema Harmonizado')).toBeInTheDocument();
   });
 
-  it('uses NEBS in the selector when the active document is a service tab', () => {
+  it('keeps NBS as the services selector when the active document is NBS', () => {
     const setDoc = vi.fn();
 
     render(
@@ -133,7 +131,6 @@ describe('Header', () => {
         setDoc={setDoc}
         searchKey="search-1"
         onOpenSettings={vi.fn()}
-        onOpenTutorial={vi.fn()}
         onOpenStats={vi.fn()}
         onOpenComparator={vi.fn()}
         onOpenModerate={vi.fn()}
@@ -145,39 +142,15 @@ describe('Header', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'NEBS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'NBS' }));
 
-    expect(setDoc).toHaveBeenCalledWith('nebs');
-    expect(screen.getByText('Classificação Brasileira de Serviços')).toBeInTheDocument();
-  });
-
-  it('shows the service subtitle when the active document is NEBS', () => {
-    render(
-      <Header
-        onSearch={vi.fn()}
-        doc="nebs"
-        setDoc={vi.fn()}
-        searchKey="search-1"
-        onOpenSettings={vi.fn()}
-        onOpenTutorial={vi.fn()}
-        onOpenStats={vi.fn()}
-        onOpenComparator={vi.fn()}
-        onOpenModerate={vi.fn()}
-        onOpenProfile={vi.fn()}
-        history={[]}
-        onClearHistory={vi.fn()}
-        onRemoveHistory={vi.fn()}
-        onMenuOpen={vi.fn()}
-      />,
-    );
-
+    expect(setDoc).toHaveBeenCalledWith('nbs');
     expect(screen.getByText('Classificação Brasileira de Serviços')).toBeInTheDocument();
   });
 
   it('opens menu, calls actions and closes when clicking outside', async () => {
     const setDoc = vi.fn();
     const onOpenSettings = vi.fn();
-    const onOpenTutorial = vi.fn();
     const onOpenStats = vi.fn();
     const onOpenComparator = vi.fn();
 
@@ -188,7 +161,6 @@ describe('Header', () => {
         setDoc={setDoc}
         searchKey="search-1"
         onOpenSettings={onOpenSettings}
-        onOpenTutorial={onOpenTutorial}
         onOpenStats={onOpenStats}
         onOpenComparator={onOpenComparator}
         onOpenModerate={vi.fn()}
@@ -205,18 +177,15 @@ describe('Header', () => {
 
     fireEvent.click(screen.getByText('Comparar NCMs').closest('button') as HTMLButtonElement);
     fireEvent.click(menuButton);
-    fireEvent.click(screen.getByRole('button', { name: /Serviços \(NEBS\)/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Serviços \(NBS\)/ }));
     fireEvent.click(menuButton);
     fireEvent.click(screen.getByText('Configurações').closest('button') as HTMLButtonElement);
-    fireEvent.click(menuButton);
-    fireEvent.click(screen.getByText('Ajuda / Tutorial').closest('button') as HTMLButtonElement);
     fireEvent.click(menuButton);
     fireEvent.click(screen.getByText('Estatísticas').closest('button') as HTMLButtonElement);
 
     expect(onOpenComparator).toHaveBeenCalledTimes(1);
     expect(setDoc).toHaveBeenCalledWith('nbs');
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
-    expect(onOpenTutorial).toHaveBeenCalledTimes(1);
     expect(onOpenStats).toHaveBeenCalledTimes(1);
 
     fireEvent.click(menuButton);
@@ -231,35 +200,34 @@ describe('Header', () => {
     expect(screen.getByText('Tabela de Incidência do IPI')).toBeInTheDocument();
   });
 
-  it('shows menu shortcuts to return to NESH and TIPI from service tabs', { timeout: 15000 }, () => {
-    const setDoc = vi.fn();
+  it('shows menu shortcuts to return to NESH and TIPI from service tabs when doc=nbs', () => {
+      const setDoc = vi.fn();
 
-    render(
-      <Header
-        onSearch={vi.fn()}
-        doc="nebs"
-        setDoc={setDoc}
-        searchKey="search-1"
-        onOpenSettings={vi.fn()}
-        onOpenTutorial={vi.fn()}
-        onOpenStats={vi.fn()}
-        onOpenComparator={vi.fn()}
-        onOpenModerate={vi.fn()}
-        onOpenProfile={vi.fn()}
-        history={[]}
-        onClearHistory={vi.fn()}
-        onRemoveHistory={vi.fn()}
-        onMenuOpen={vi.fn()}
-      />,
-    );
+      render(
+        <Header
+          onSearch={vi.fn()}
+          doc="nbs"
+          setDoc={setDoc}
+          searchKey="search-1"
+          onOpenSettings={vi.fn()}
+          onOpenStats={vi.fn()}
+          onOpenComparator={vi.fn()}
+          onOpenModerate={vi.fn()}
+          onOpenProfile={vi.fn()}
+          history={[]}
+          onClearHistory={vi.fn()}
+          onRemoveHistory={vi.fn()}
+          onMenuOpen={vi.fn()}
+        />,
+      );
 
-    openMenu();
-    fireEvent.click(screen.getByRole('button', { name: /Voltar para NESH/i }));
-    fireEvent.click(getMenuButton());
-    fireEvent.click(screen.getByRole('button', { name: /Ir para TIPI/i }));
+      openMenu();
+      fireEvent.click(screen.getByText('Voltar para NESH').closest('button') as HTMLButtonElement);
+      fireEvent.click(getMenuButton());
+      fireEvent.click(screen.getByText('Ir para TIPI').closest('button') as HTMLButtonElement);
 
-    expect(setDoc).toHaveBeenNthCalledWith(1, 'nesh');
-    expect(setDoc).toHaveBeenNthCalledWith(2, 'tipi');
+      expect(setDoc).toHaveBeenNthCalledWith(1, 'nesh');
+      expect(setDoc).toHaveBeenNthCalledWith(2, 'tipi');
   });
 
   it('renders fallback user labels when auth profile is missing', () => {
@@ -350,12 +318,11 @@ describe('Header', () => {
         setDoc={setDoc}
         searchKey="search-1"
         onOpenSettings={vi.fn()}
-        onOpenTutorial={vi.fn()}
         onOpenStats={vi.fn()}
         onOpenComparator={vi.fn()}
         onOpenModerate={vi.fn()}
         onOpenProfile={vi.fn()}
-        servicesUnavailableReason="Catálogo NBS/NEBS indisponível no momento."
+        servicesUnavailableReason="Catálogo NBS indisponível no momento."
         history={[]}
         onClearHistory={vi.fn()}
         onRemoveHistory={vi.fn()}
@@ -364,9 +331,9 @@ describe('Header', () => {
     );
 
     openMenu();
-    expect(screen.getByText(/Serviços \(NEBS\) indisponível/)).toBeInTheDocument();
+    expect(screen.getByText(/Serviços \(NBS\) indisponível/)).toBeInTheDocument();
 
-    const nbsButton = screen.getByRole('button', { name: /Serviços \(NEBS\) indisponível/i });
+    const nbsButton = screen.getByRole('button', { name: /Serviços \(NBS\) indisponível/i });
 
     expect(nbsButton).toBeDisabled();
 

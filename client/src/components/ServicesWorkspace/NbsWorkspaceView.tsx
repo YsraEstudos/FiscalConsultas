@@ -48,7 +48,7 @@ function NbsHierarchySection({
                         <span className={styles.chapterNotesEyebrow}>Explicações</span>
                         <span>{chapterButtonLabel}</span>
                     </button>
-                    Hierarquia NEBS
+                    Hierarquia NBS
                 </div>
                 <span className={styles.sectionBadge}>
                     {activeChapterNumber ? `Capítulo ${activeChapterNumber} ativo` : 'Capítulo ativo'}
@@ -183,6 +183,7 @@ function NbsDetailSection({
                             <div
                                 ref={nbsNotesContentRef}
                                 className={styles.notesContent}
+                                data-testid="notes-content"
                                 dangerouslySetInnerHTML={{ __html: nbsNoteBodyHtml }}
                             />
                         </section>
@@ -193,9 +194,9 @@ function NbsDetailSection({
                             <button
                                 type="button"
                                 className={styles.secondaryAction}
-                                onClick={() => openCatalogDoc('nebs', nbsState.detail?.item.code)}
+                                onClick={() => openCatalogDoc('nbs', nbsState.detail?.item.code)}
                             >
-                                Ver NEBS
+                                Ver NBS
                             </button>
                         </div>
                     )}

@@ -8,6 +8,8 @@ from fastapi import Request
 
 from backend.config.settings import settings
 
+PRIVILEGED_ROLES = {"admin", "owner", "superadmin"}
+
 
 def extract_bearer_token(request: Request) -> str | None:
     auth_header = request.headers.get("Authorization", "")
@@ -22,24 +24,31 @@ def _iter_roles(payload: Mapping[str, Any]) -> list[str]:
     for key in ("role", "org_role"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
-            candidates.append(value.strip().lower())
+            candidates.append(_normalize_role(value))
 
     roles_value = payload.get("roles")
     if isinstance(roles_value, str) and roles_value.strip():
-        candidates.append(roles_value.strip().lower())
+        candidates.append(_normalize_role(roles_value))
     elif isinstance(roles_value, list):
         for item in roles_value:
             if isinstance(item, str) and item.strip():
-                candidates.append(item.strip().lower())
+                candidates.append(_normalize_role(item))
 
     return candidates
+
+
+def _normalize_role(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized.startswith("org:"):
+        return normalized[4:]
+    return normalized
 
 
 def is_admin_payload(payload: Mapping[str, Any] | None) -> bool:
     if not payload:
         return False
     roles = set(_iter_roles(payload))
-    return bool(roles.intersection({"admin", "owner", "superadmin"}))
+    return bool(roles.intersection(PRIVILEGED_ROLES))
 
 
 def _load_trusted_proxy_networks() -> list[Any]:

@@ -48,10 +48,15 @@ def test_cache_metrics_reports_payload_cache_activity(client, monkeypatch):
     # Warm + hit for TIPI payload cache
     first_tipi = client.get("/api/tipi/search?ncm=8517")
     second_tipi = client.get("/api/tipi/search?ncm=8517")
+    with tipi_route._tipi_code_payload_cache_lock:
+        tipi_route._tipi_code_payload_cache.clear()
+    third_tipi = client.get("/api/tipi/search?ncm=8517")
     assert first_tipi.status_code == 200
     assert second_tipi.status_code == 200
+    assert third_tipi.status_code == 200
     assert first_tipi.headers.get("X-Payload-Cache") == "MISS"
     assert second_tipi.headers.get("X-Payload-Cache") == "HIT"
+    assert third_tipi.headers.get("X-Payload-Cache") == "MISS"
 
     # Force chapter_positions cache activity using distinct code_search keys
     # over the same chapter ("85"): first call warms chapter cache, second should hit it.

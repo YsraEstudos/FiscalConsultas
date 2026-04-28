@@ -8,7 +8,6 @@ import {
 } from '../utils/nbsChapterNotes';
 
 import { NbsWorkspaceView } from './ServicesWorkspace/NbsWorkspaceView';
-import { NebsWorkspaceView } from './ServicesWorkspace/NebsWorkspaceView';
 import { isCodeLikeNbsQuery, renderNoteHtml } from './ServicesWorkspace/noteRendering';
 import type {
     OpenCatalogDoc,
@@ -16,21 +15,17 @@ import type {
 } from './ServicesWorkspace/types';
 
 export type {
-    ServicesWorkspaceNebsState,
     ServicesWorkspaceNbsState,
 } from './ServicesWorkspace/types';
 
 export function ServicesWorkspace({
     doc,
     nbsState,
-    nebsState,
     onSelectNbs,
-    onSelectNebs,
     onSwitchDoc,
     onOpenDocInNewTab,
 }: Readonly<ServicesWorkspaceProps>) {
     const nbsNoteBodyHtml = useMemo(() => renderNoteHtml(nbsState.detail?.nebs), [nbsState.detail]);
-    const nebsNoteBodyHtml = useMemo(() => renderNoteHtml(nebsState.detail?.entry), [nebsState.detail]);
     const { openNewTab, nbsPrefixAutoExpand, nbsChapterNotesNewTab } = useSettings();
     const [isChapterNotesOpen, setIsChapterNotesOpen] = useState(false);
     const chapterNotesDialogRef = useRef<HTMLDialogElement | null>(null);
@@ -81,7 +76,7 @@ export function ServicesWorkspace({
             event.stopPropagation();
 
             const forceNewTab = event.metaKey || event.ctrlKey || event.button === 1;
-            openCatalogDoc('nebs', serviceCode, forceNewTab);
+            openCatalogDoc('nbs', serviceCode, forceNewTab);
         };
 
         container.addEventListener('mousedown', handlePointer);
@@ -115,31 +110,20 @@ export function ServicesWorkspace({
         }
     }, [currentChapterNotesEntry, isChapterNotesOpen]);
 
-    if (doc === 'nbs') {
-        return (
-            <NbsWorkspaceView
-                activeChapterNumber={activeChapterNumber}
-                chapterNotesDialogRef={chapterNotesDialogRef}
-                chapterNotesHtml={chapterNotesHtml}
-                currentChapterNotesEntry={currentChapterNotesEntry}
-                nbsChapterNotesNewTab={nbsChapterNotesNewTab}
-                nbsNoteBodyHtml={nbsNoteBodyHtml}
-                nbsNotesContentRef={nbsNotesContentRef}
-                nbsPrefixAutoExpand={nbsPrefixAutoExpand}
-                nbsState={nbsState}
-                onSelectNbs={onSelectNbs}
-                openCatalogDoc={openCatalogDoc}
-                setIsChapterNotesOpen={setIsChapterNotesOpen}
-            />
-        );
-    }
-
     return (
-        <NebsWorkspaceView
-            nebsNoteBodyHtml={nebsNoteBodyHtml}
-            nebsState={nebsState}
-            onSelectNebs={onSelectNebs}
+        <NbsWorkspaceView
+            activeChapterNumber={activeChapterNumber}
+            chapterNotesDialogRef={chapterNotesDialogRef}
+            chapterNotesHtml={chapterNotesHtml}
+            currentChapterNotesEntry={currentChapterNotesEntry}
+            nbsChapterNotesNewTab={nbsChapterNotesNewTab}
+            nbsNoteBodyHtml={nbsNoteBodyHtml}
+            nbsNotesContentRef={nbsNotesContentRef}
+            nbsPrefixAutoExpand={nbsPrefixAutoExpand}
+            nbsState={nbsState}
+            onSelectNbs={onSelectNbs}
             openCatalogDoc={openCatalogDoc}
+            setIsChapterNotesOpen={setIsChapterNotesOpen}
         />
     );
 }

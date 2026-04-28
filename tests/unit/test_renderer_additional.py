@@ -85,6 +85,17 @@ def test_inject_smart_links_falls_back_when_parser_raises(monkeypatch):
     assert 'class="smart-link"' in out
 
 
+def test_inject_smart_links_fallback_skips_existing_anchor_tags(monkeypatch):
+    def _boom(self, _data):  # pragma: no cover - explicit fallback trigger
+        raise RuntimeError("parser failure")
+
+    monkeypatch.setattr(renderer.HTMLParser, "feed", _boom)
+    out = HtmlRenderer.inject_smart_links('<a href="#">85.17</a> fora 85.17', "85")
+
+    assert out.count('class="smart-link"') == 1
+    assert '<a href="#">85.17</a>' in out
+
+
 def test_inject_unit_highlights_handles_leading_whitespace_in_match(monkeypatch):
     monkeypatch.setattr(HtmlRenderer, "RE_UNIT", re.compile(r"\s+kg"))
     out = HtmlRenderer.inject_unit_highlights("10  kg")
@@ -176,6 +187,23 @@ def test_apply_post_transforms_falls_back_when_parser_raises(monkeypatch):
     assert 'class="smart-link"' in out
 
 
+def test_inject_comment_marks_does_not_corrupt_data_class_attributes():
+    html = '<div data-class="example" id="anchor"></div>'
+    out = renderer.inject_comment_marks(html, ["anchor"])
+
+    assert 'data-class="example"' in out
+    assert 'class="has-comment"' in out
+    assert 'data-class="example" has-comment' not in out
+
+
+def test_inject_comment_marks_requires_exact_id_match():
+    html = '<div id="anchor-extra"></div><div id="anchor"></div>'
+    out = renderer.inject_comment_marks(html, ["anchor"])
+
+    assert 'id="anchor-extra" class="has-comment"' not in out
+    assert 'id="anchor" class="has-comment"' in out
+
+
 def test_render_chapter_returns_error_block_when_content_missing():
     out = HtmlRenderer.render_chapter({"capitulo": "99", "real_content_found": False})
     assert "Capítulo 99" in out
@@ -221,6 +249,23 @@ def test_render_chapter_structures_sections_normalizes_lines_and_trims_other_cha
     assert "<p><br></p>" in out
     assert "Trecho que deve ser removido" not in out
     assert "•" not in out
+
+
+def test_render_chapter_keeps_general_notes_when_only_non_note_sections_exist():
+    data = {
+        "capitulo": "85",
+        "conteudo": "85.17 - Heading principal",
+        "notas_gerais": "Linha 1\nLinha 2",
+        "posicoes": [],
+        "real_content_found": True,
+        "secoes": {"titulo": "Resumo"},
+    }
+
+    out = HtmlRenderer.render_chapter(data)
+
+    assert '<div class="section-titulo" id="chapter-85-titulo">' in out
+    assert '<div class="regras-gerais" id="chapter-85-notas">' in out
+    assert "Linha 1" in out
 
 
 def test_render_chapter_trims_at_section_header():

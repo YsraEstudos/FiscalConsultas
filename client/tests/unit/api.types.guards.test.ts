@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { isApiError, isCodeSearchResponse, isTextSearchResponse } from '../../src/types/api.types';
+import {
+  isApiErrorResponse,
+  isCodeSearchApiResponse,
+  isNbsCatalogSearchApiResponse,
+  isTextSearchApiResponse,
+} from '../../src/services/apiResponseGuards';
 
 describe('api type guards', () => {
   it('detects text responses', () => {
     expect(
-      isTextSearchResponse({
+      isTextSearchApiResponse({
         success: true,
         type: 'text',
         query: 'motor',
@@ -18,7 +23,7 @@ describe('api type guards', () => {
     ).toBe(true);
 
     expect(
-      isTextSearchResponse({
+      isTextSearchApiResponse({
         success: true,
         type: 'code',
       } as any),
@@ -27,7 +32,7 @@ describe('api type guards', () => {
 
   it('detects code responses', () => {
     expect(
-      isCodeSearchResponse({
+      isCodeSearchApiResponse({
         success: true,
         type: 'code',
         query: '8517',
@@ -38,7 +43,7 @@ describe('api type guards', () => {
     ).toBe(true);
 
     expect(
-      isCodeSearchResponse({
+      isCodeSearchApiResponse({
         success: true,
         type: 'text',
       } as any),
@@ -46,18 +51,30 @@ describe('api type guards', () => {
   });
 
   it('validates api error payload shape', () => {
-    expect(isApiError(null)).toBe(false);
-    expect(isApiError('erro')).toBe(false);
-    expect(isApiError(123)).toBe(false);
-    expect(isApiError({ success: false, error: null })).toBe(false);
+    expect(isApiErrorResponse(null)).toBe(false);
+    expect(isApiErrorResponse('erro')).toBe(false);
+    expect(isApiErrorResponse(123)).toBe(false);
+    expect(isApiErrorResponse({ success: false, error: null })).toBe(false);
     expect(
-      isApiError({
+      isApiErrorResponse({
         success: false,
         error: {
           code: 'bad_request',
           message: 'Erro de validação',
           details: { field: 'query' },
         },
+      }),
+    ).toBe(true);
+  });
+
+  it('detects NBS service payloads with explicit guards', () => {
+    expect(
+      isNbsCatalogSearchApiResponse({
+        success: true,
+        query: '1.0101',
+        normalized: '1.0101',
+        total: 1,
+        results: [{ code: '1.0101.11.00', code_clean: '101011100', description: 'Servico', parent_code: null, level: 1 }],
       }),
     ).toBe(true);
   });

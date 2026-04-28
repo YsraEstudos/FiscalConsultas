@@ -15,14 +15,12 @@ const DOC_BADGE_CLASS: Record<string, string> = {
     nesh: styles.tabDocBadgeNesh,
     tipi: styles.tabDocBadgeTipi,
     nbs: styles.tabDocBadgeNbs,
-    nebs: styles.tabDocBadgeNebs,
 };
 
 const DOC_BADGE_LABEL: Record<string, string> = {
     nesh: 'N',
     tipi: 'T',
     nbs: 'B',
-    nebs: 'E',
 };
 
 export const TabsBar = React.memo(function TabsBar({ tabs, activeTabId, onSwitch, onClose, onReorder, onNewTab }: TabsBarProps) {

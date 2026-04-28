@@ -31,11 +31,25 @@ class CommentRepository:
     async def get_by_id(self, comment_id: int) -> Optional[Comment]:
         return await self.session.get(Comment, comment_id)
 
+    async def get_by_id_and_tenant(
+        self, comment_id: int, tenant_id: str
+    ) -> Optional[Comment]:
+        stmt = (
+            select(Comment)
+            .where(Comment.id == comment_id)
+            .where(Comment.tenant_id == tenant_id)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def list_by_anchor(
         self,
         tenant_id: str,
         anchor_key: str,
         user_id: str,
+        *,
+        limit: int = 200,
+        offset: int = 0,
     ) -> list[Comment]:
         """
         Retorna comentários aprovados + comentários privados do próprio usuário
@@ -50,22 +64,30 @@ class CommentRepository:
                 | ((Comment.status == "private") & (Comment.user_id == user_id))
             )
             .order_by(Comment.created_at)
+            .offset(max(0, offset))
+            .limit(min(max(1, limit), 500))
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def list_pending(self, tenant_id: str) -> list[Comment]:
+    async def list_pending(
+        self, tenant_id: str, *, limit: int = 200, offset: int = 0
+    ) -> list[Comment]:
         """Retorna todos os comentários pendentes de moderação para o tenant."""
         stmt = (
             select(Comment)
             .where(Comment.tenant_id == tenant_id)
             .where(Comment.status == "pending")
             .order_by(Comment.created_at)
+            .offset(max(0, offset))
+            .limit(min(max(1, limit), 500))
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def list_anchors_with_comments(self, tenant_id: str) -> list[str]:
+    async def list_anchors_with_comments(
+        self, tenant_id: str, *, limit: int = 500, offset: int = 0
+    ) -> list[str]:
         """
         Retorna lista de anchor_keys que possuem comentários aprovados,
         usada pelo renderer para injetar <mark class='has-comment'>.
@@ -76,6 +98,8 @@ class CommentRepository:
             select(distinct(Comment.anchor_key))
             .where(Comment.tenant_id == tenant_id)
             .where(Comment.status == "approved")
+            .offset(max(0, offset))
+            .limit(min(max(1, limit), 1000))
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

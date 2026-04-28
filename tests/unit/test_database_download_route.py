@@ -5,12 +5,14 @@ import shutil
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
 from backend.presentation.routes import database_download
+from backend.server import app_security
 
 pytestmark = pytest.mark.unit
 
@@ -23,9 +25,10 @@ def _build_request(
     client_host: str = "127.0.0.1",
     scheme: str = "http",
 ) -> Request:
+    headers = {"Authorization": "Bearer test-token", **(headers or {})}
     scope_headers = [
         (key.lower().encode("latin-1"), value.encode("latin-1"))
-        for key, value in (headers or {}).items()
+        for key, value in headers.items()
     ]
     scope = {
         "type": "http",
@@ -66,6 +69,7 @@ def offline_bundle(monkeypatch: pytest.MonkeyPatch):
                 "format_version": 1,
                 "chunk_size": 65536,
                 "pbkdf2_iterations": 600000,
+                "app_seed": "test-offline-seed",
             }
         ),
         encoding="utf-8",
@@ -76,6 +80,11 @@ def offline_bundle(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(database_download, "ENCRYPTED_DB", enc_path)
     monkeypatch.setattr(database_download.settings.server, "env", "development")
     monkeypatch.setattr(database_download.redis_cache, "_client", None)
+    monkeypatch.setattr(
+        database_download,
+        "decode_clerk_jwt",
+        AsyncMock(return_value={"sub": "user_test"}),
+    )
 
     try:
         yield meta_path, enc_path
@@ -89,12 +98,12 @@ async def test_get_database_version_exposes_offline_contract(offline_bundle):
 
     assert payload["version"] == "2026.04.15.001"
     assert payload["size_bytes"] == 128
-    assert payload["sha256"] == "plain-sha"
-    assert payload["encrypted_sha256"] == "enc-sha"
     assert payload["built_at"] == "2026-04-15T12:00:00Z"
     assert payload["format_version"] == 1
-    assert payload["chunk_size"] == 65536
-    assert payload["pbkdf2_iterations"] == 600000
+    assert "sha256" not in payload
+    assert "encrypted_sha256" not in payload
+    assert "chunk_size" not in payload
+    assert "pbkdf2_iterations" not in payload
 
 
 @pytest.mark.asyncio
@@ -109,6 +118,28 @@ async def test_download_accepts_fresh_token(offline_bundle):
 
     assert Path(response.path).read_bytes() == b"encrypted-bundle"
     assert response.headers["Cross-Origin-Resource-Policy"] == "same-origin"
+
+
+@pytest.mark.asyncio
+async def test_download_token_is_bound_to_request_ip(offline_bundle):
+    token_request = _build_request("/api/database/token", client_host="203.0.113.10")
+    token_payload = await database_download.create_download_token(token_request)
+    token = token_payload["token"]
+
+    with pytest.raises(HTTPException) as exc:
+        await database_download.download_database(
+            _build_request("/api/database/download", client_host="203.0.113.20"),
+            database_download.DownloadDatabaseRequest(token=token),
+        )
+
+    assert exc.value.status_code == 403
+
+    response = await database_download.download_database(
+        _build_request("/api/database/download", client_host="203.0.113.10"),
+        database_download.DownloadDatabaseRequest(token=token),
+    )
+
+    assert Path(response.path).read_bytes() == b"encrypted-bundle"
 
 
 @pytest.mark.asyncio
@@ -164,6 +195,17 @@ async def test_local_development_requests_are_not_rate_limited_for_download_toke
 
 
 @pytest.mark.asyncio
+async def test_ipv4_mapped_loopback_is_treated_as_local_for_download_tokens(
+    offline_bundle,
+):
+    request = _build_request("/api/database/token", client_host="::ffff:127.0.0.1")
+
+    for _ in range(database_download._TOKEN_LIMIT_PER_HOUR + 2):
+        payload = await database_download.create_download_token(request)
+        assert payload["token"]
+
+
+@pytest.mark.asyncio
 async def test_nonlocal_development_requests_are_rate_limited_for_download_tokens(
     offline_bundle,
 ):
@@ -200,6 +242,23 @@ async def test_https_is_required_in_production_for_non_local_requests(
 
     assert exc.value.status_code == 400
     assert "HTTPS" in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_spoofed_localhost_host_does_not_bypass_https_requirement(
+    offline_bundle, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(database_download.settings.server, "env", "production")
+    request = _build_request(
+        "/api/database/token",
+        headers={"host": "localhost"},
+        client_host="203.0.113.10",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await database_download.create_download_token(request)
+
+    assert exc.value.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -244,3 +303,26 @@ async def test_trusted_forwarded_proto_is_accepted_in_production(
     payload = await database_download.create_download_token(request)
 
     assert payload["token"]
+
+
+def test_security_headers_ignore_untrusted_forwarded_proto():
+    request = _build_request(
+        "/api/status",
+        method="GET",
+        headers={"x-forwarded-proto": "https"},
+        client_host="203.0.113.10",
+    )
+
+    assert app_security._request_uses_https(request) is False
+
+
+def test_security_headers_trust_forwarded_proto_from_trusted_proxy(monkeypatch):
+    monkeypatch.setattr(app_security, "is_trusted_proxy", lambda _ip: True)
+    request = _build_request(
+        "/api/status",
+        method="GET",
+        headers={"x-forwarded-proto": "https"},
+        client_host="203.0.113.10",
+    )
+
+    assert app_security._request_uses_https(request) is True

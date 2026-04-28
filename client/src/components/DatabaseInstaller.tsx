@@ -147,7 +147,7 @@ export default function DatabaseInstaller() {
         </div>
 
         <p className={styles.cardDescription}>
-          O banco de dados está instalado. Suas buscas de NBS, NEBS, TIPI e NESH
+          O banco de dados está instalado. Suas buscas de NBS, TIPI e NESH
           são executadas localmente em milissegundos.
         </p>
 
@@ -225,7 +225,7 @@ export default function DatabaseInstaller() {
       </div>
 
       <p className={styles.cardDescription}>
-        Instale o banco de dados localmente para buscar NBS, NEBS, TIPI e NESH
+        Instale o banco de dados localmente para buscar NBS, TIPI e NESH
         instantaneamente, sem depender de conexão de internet. O download é feito
         uma única vez (~3-5 MB).
       </p>

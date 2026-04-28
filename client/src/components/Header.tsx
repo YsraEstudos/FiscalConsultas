@@ -9,7 +9,6 @@ import styles from './Header.module.css';
 
 const DOC_SUBTITLES: Record<string, string> = {
     nbs: 'Classificação Brasileira de Serviços',
-    nebs: 'Classificação Brasileira de Serviços',
     nesh: 'Notas Explicativas do Sistema Harmonizado',
     tipi: 'Tabela de Incidência do IPI',
 };
@@ -20,7 +19,6 @@ interface HeaderProps {
     setDoc: (doc: string) => void;
     searchKey: string;
     onOpenSettings: () => void;
-    onOpenTutorial: () => void;
     onOpenStats: () => void;
     onOpenComparator: () => void;
     onOpenModerate: () => void;
@@ -33,13 +31,60 @@ interface HeaderProps {
     isLoading?: boolean;
 }
 
+function getPrimaryDocButtonConfig(doc: string): {
+label: string;
+target: string;
+isActive: boolean;
+} {
+switch (doc) {
+case 'nesh':
+    return { label: 'NESH', target: 'nesh', isActive: true };
+case 'nbs':
+    return { label: 'NBS', target: 'nbs', isActive: true };
+default:
+    return { label: 'NESH', target: 'nesh', isActive: false };
+}
+}
+
+function getConditionalClassName(
+baseClass: string,
+isActive: boolean,
+activeClass: string,
+): string {
+return [baseClass, isActive ? activeClass : ''].filter(Boolean).join(' ');
+}
+
+function getServicesButtonLabel(
+servicesUnavailableReason: string | null | undefined,
+): string {
+return servicesUnavailableReason ? 'Serviços (NBS) indisponível' : 'Serviços (NBS)';
+}
+
+function getAuthButtonLabel(isAuthConfigured: boolean): string {
+return isAuthConfigured ? 'Entrar' : 'Login indisponível';
+}
+
+function getAuthButtonTitle(
+isAuthConfigured: boolean,
+authUnavailableReason: string | null | undefined,
+): string | undefined {
+if (isAuthConfigured) {
+return undefined;
+}
+
+return authUnavailableReason || 'Login indisponível no momento.';
+}
+
+function getLogoutButtonLabel(isSigningOut: boolean): string {
+return isSigningOut ? 'Saindo...' : 'Sair';
+}
+
 export function Header({
-    onSearch,
-    doc,
+onSearch,
+doc,
     setDoc,
     searchKey,
     onOpenSettings,
-    onOpenTutorial,
     onOpenStats,
     onOpenComparator,
     onOpenModerate,
@@ -65,13 +110,46 @@ export function Header({
         logout
     } = useAuth();
     const isAdmin = useIsAdmin();
-    const isServiceDoc = doc === 'nbs' || doc === 'nebs';
-    const serviceSelectorLabel = doc === 'nbs'
-        ? 'NEBS'
-        : doc === 'nebs'
-            ? 'NBS'
-            : 'NESH';
+    const isServiceDoc = doc === 'nbs';
     const titleSubtitle = DOC_SUBTITLES[doc] || DOC_SUBTITLES.tipi;
+const primaryDocButton = getPrimaryDocButtonConfig(doc);
+const primaryDocButtonClassName = getConditionalClassName(
+styles.docButton,
+primaryDocButton.isActive,
+styles.docButtonActive,
+);
+const tipiDocButtonClassName = getConditionalClassName(
+styles.docButton,
+doc === 'tipi',
+styles.docButtonActive,
+);
+const menuTriggerClassName = getConditionalClassName(
+styles.menuTrigger,
+isMenuOpen,
+styles.menuTriggerActive,
+);
+const menuContentClassName = getConditionalClassName(
+styles.menuContent,
+isMenuOpen,
+styles.menuContentOpen,
+);
+const servicesButtonClassName = getConditionalClassName(
+'',
+Boolean(servicesUnavailableReason),
+styles.menuButtonDisabled,
+);
+const loginButtonClassName = getConditionalClassName(
+'',
+!isAuthConfigured,
+styles.menuButtonDisabled,
+);
+const servicesButtonLabel = getServicesButtonLabel(servicesUnavailableReason);
+const authButtonLabel = getAuthButtonLabel(isAuthConfigured);
+const authButtonTitle = getAuthButtonTitle(
+isAuthConfigured,
+authUnavailableReason,
+);
+const logoutButtonLabel = getLogoutButtonLabel(isSigningOut);
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -141,23 +219,13 @@ export function Header({
 
                 <div className={styles.docSelector}>
                     <button
-                        className={`${styles.docButton} ${isServiceDoc ? styles.docButtonActive : ''}`}
-                        onClick={() => {
-                            if (doc === 'nbs') {
-                                setDoc('nebs');
-                                return;
-                            }
-                            if (doc === 'nebs') {
-                                setDoc('nbs');
-                                return;
-                            }
-                            setDoc('nesh');
-                        }}
+className={primaryDocButtonClassName}
+onClick={() => setDoc(primaryDocButton.target)}
                     >
-                        {serviceSelectorLabel}
+{primaryDocButton.label}
                     </button>
                     <button
-                        className={`${styles.docButton} ${doc === 'tipi' ? styles.docButtonActive : ''}`}
+className={tipiDocButtonClassName}
                         onClick={() => setDoc('tipi')}
                     >
                         TIPI
@@ -173,13 +241,13 @@ export function Header({
 
                 <div className={styles.menuDropdown} ref={menuRef}>
                     <button
-                        className={`${styles.menuTrigger} ${isMenuOpen ? styles.menuTriggerActive : ''}`}
+className={menuTriggerClassName}
                         onClick={handleToggleMenu}
                     >
                         <span>☰</span> Menu
                     </button>
 
-                    <div className={`${styles.menuContent} ${isMenuOpen ? styles.menuContentOpen : ''}`}>
+<div className={menuContentClassName}>
                         {isServiceDoc && (
                             <>
                                 <button onClick={() => { setIsMenuOpen(false); setDoc('nesh'); }}>
@@ -198,19 +266,17 @@ export function Header({
                             <button 
                                 onClick={() => { setIsMenuOpen(false); setDoc('nbs'); }}
                                 disabled={Boolean(servicesUnavailableReason)}
-                                className={servicesUnavailableReason ? styles.menuButtonDisabled : ''}
+className={servicesButtonClassName}
                                 title={servicesUnavailableReason ?? undefined}
                             >
-                                <span>🧭</span> {servicesUnavailableReason ? 'Serviços (NEBS) indisponível' : 'Serviços (NEBS)'}
+<span>🧭</span> {servicesButtonLabel}
                             </button>
                         )}
                         <div className={styles.menuDivider}></div>
                         <button onClick={() => { setIsMenuOpen(false); onOpenSettings(); }}>
                             <span>⚙️</span> Configurações
                         </button>
-                        <button onClick={() => { setIsMenuOpen(false); onOpenTutorial(); }}>
-                            <span>❓</span> Ajuda / Tutorial
-                        </button>
+
                         <div className={styles.menuDivider}></div>
                         {isAdmin && (
                             <button onClick={() => { setIsMenuOpen(false); onOpenStats(); }}>
@@ -233,10 +299,10 @@ export function Header({
                                     openLogin();
                                 }}
                                 disabled={!isAuthConfigured}
-                                className={!isAuthConfigured ? styles.menuButtonDisabled : ''}
-                                title={!isAuthConfigured ? (authUnavailableReason || 'Login indisponível no momento.') : undefined}
+className={loginButtonClassName}
+title={authButtonTitle}
                             >
-                                <span>🔐</span> {isAuthConfigured ? 'Entrar' : 'Login indisponível'}
+<span>🔐</span> {authButtonLabel}
                             </button>
                         )}
 
@@ -281,7 +347,7 @@ export function Header({
                             onClick={handleConfirmLogout}
                             disabled={isSigningOut}
                         >
-                            {isSigningOut ? 'Saindo...' : 'Sair'}
+{logoutButtonLabel}
                         </button>
                     </div>
                 </div>

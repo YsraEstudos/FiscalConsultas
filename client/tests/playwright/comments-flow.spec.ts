@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Request, type Route } from '@playwright/test';
 
 import { makeNeshChapterData, installServicesMock } from './fixtures/service-mocks';
 
@@ -117,6 +117,124 @@ function installAuthSessionMock(page: Page, payload: AuthSessionPayload) {
   });
 }
 
+async function fulfillJson(route: Route, status: number, body: unknown) {
+  await route.fulfill({
+    status,
+    contentType: 'application/json',
+    body: JSON.stringify(body),
+  });
+}
+
+async function handlePendingComments(route: Route, state: CommentApiState) {
+  await fulfillJson(
+    route,
+    200,
+    state.comments.filter((comment) => comment.status === 'pending'),
+  );
+}
+
+async function handleAdminModeration(route: Route, request: Request, commentId: number, state: CommentApiState) {
+  const payload = request.postDataJSON() as { action: 'approve' | 'reject'; note?: string };
+  const current = state.comments.find((comment) => comment.id === commentId);
+
+  state.moderatedRequests.push({
+    id: commentId,
+    action: payload.action,
+    note: typeof payload.note === 'string' ? payload.note : null,
+  });
+
+  if (!current) {
+    await fulfillJson(route, 404, {});
+    return;
+  }
+
+  const updated: MockComment = {
+    ...current,
+    status: payload.action === 'approve' ? 'approved' : 'rejected',
+    moderated_by: 'user_e2e',
+    moderated_at: '2026-03-13T12:03:00.000Z',
+    updated_at: '2026-03-13T12:03:00.000Z',
+  };
+  state.comments = state.comments.map((comment) => (comment.id === commentId ? updated : comment));
+
+  await fulfillJson(route, 200, updated);
+}
+
+async function handleCommentAnchors(route: Route, state: CommentApiState) {
+  const anchors = [...new Set(
+    state.comments
+      .filter((comment) => comment.status !== 'rejected')
+      .map((comment) => comment.anchor_key),
+  )];
+
+  await fulfillJson(route, 200, anchors);
+}
+
+async function handleAnchorComments(route: Route, path: string, state: CommentApiState) {
+  const anchorKey = decodeURIComponent(path.split('/anchor/')[1] || '');
+  const comments = state.comments.filter((comment) => comment.anchor_key === anchorKey);
+
+  await fulfillJson(route, 200, comments);
+}
+
+async function handleCreateComment(route: Route, request: Request, state: CommentApiState) {
+  const payload = request.postDataJSON() as {
+    anchor_key: string;
+    selected_text: string;
+    body: string;
+    is_private: boolean;
+  };
+
+  state.createdRequests.push(payload);
+
+  const created = createCommentResponse({
+    id: state.nextId++,
+    anchor_key: payload.anchor_key,
+    selected_text: payload.selected_text,
+    body: payload.body,
+    status: payload.is_private ? 'private' : 'pending',
+    created_at: '2026-03-13T12:01:00.000Z',
+    updated_at: '2026-03-13T12:01:00.000Z',
+    user_id: 'user_e2e',
+    user_name: 'E2E User',
+  });
+
+  state.comments.push(created);
+
+  await fulfillJson(route, 201, created);
+}
+
+async function handleUpdateComment(route: Route, request: Request, commentId: number, state: CommentApiState) {
+  const payload = request.postDataJSON() as { body: string };
+
+  state.updatedRequests.push({
+    id: commentId,
+    body: payload.body,
+  });
+
+  const current = state.comments.find((comment) => comment.id === commentId);
+  if (!current) {
+    await fulfillJson(route, 404, {});
+    return;
+  }
+
+  const updated: MockComment = {
+    ...current,
+    body: payload.body,
+    updated_at: '2026-03-13T12:02:00.000Z',
+  };
+  state.comments = state.comments.map((comment) => (comment.id === commentId ? updated : comment));
+
+  await fulfillJson(route, 200, updated);
+}
+
+async function handleDeleteComment(route: Route, commentId: number, state: CommentApiState) {
+  state.deletedRequests.push(commentId);
+  state.comments = state.comments.filter((comment) => comment.id !== commentId);
+
+  await route.fulfill({ status: 204, body: '' });
+}
+
 function installCommentApiMock(page: Page, state: CommentApiState) {
   return page.context().route('**/api/comments/**', async (route) => {
     const request = route.request();
@@ -125,144 +243,39 @@ function installCommentApiMock(page: Page, state: CommentApiState) {
     const method = request.method();
 
     if (path.endsWith('/comments/admin/pending') && method === 'GET') {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(state.comments.filter((comment) => comment.status === 'pending')),
-      });
+      await handlePendingComments(route, state);
       return;
     }
 
     const adminCommentMatch = /\/comments\/admin\/(\d+)$/.exec(path);
     if (adminCommentMatch && method === 'PATCH') {
-      const commentId = Number(adminCommentMatch[1]);
-      const payload = request.postDataJSON() as { action: 'approve' | 'reject'; note?: string };
-      const current = state.comments.find((comment) => comment.id === commentId);
-
-      state.moderatedRequests.push({
-        id: commentId,
-        action: payload.action,
-        note: typeof payload.note === 'string' ? payload.note : null,
-      });
-
-      if (current) {
-        const updated: MockComment = {
-          ...current,
-          status: payload.action === 'approve' ? 'approved' : 'rejected',
-          moderated_by: 'user_e2e',
-          moderated_at: '2026-03-13T12:03:00.000Z',
-          updated_at: '2026-03-13T12:03:00.000Z',
-        };
-        state.comments = state.comments.map((comment) => (comment.id === commentId ? updated : comment));
-
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify(updated),
-        });
-        return;
-      }
-
-      await route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
+      await handleAdminModeration(route, request, Number(adminCommentMatch[1]), state);
       return;
     }
 
     if (path.endsWith('/comments/anchors') && method === 'GET') {
-      const anchors = [...new Set(
-        state.comments
-          .filter((comment) => comment.status !== 'rejected')
-          .map((comment) => comment.anchor_key),
-      )];
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(anchors),
-      });
+      await handleCommentAnchors(route, state);
       return;
     }
 
     if (path.includes('/comments/anchor/') && method === 'GET') {
-      const anchorKey = decodeURIComponent(path.split('/anchor/')[1] || '');
-      const comments = state.comments.filter((comment) => comment.anchor_key === anchorKey);
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(comments),
-      });
+      await handleAnchorComments(route, path, state);
       return;
     }
 
     if (path.endsWith('/comments/') && method === 'POST') {
-      const payload = request.postDataJSON() as {
-        anchor_key: string;
-        selected_text: string;
-        body: string;
-        is_private: boolean;
-      };
-
-      state.createdRequests.push(payload);
-
-      const created = createCommentResponse({
-        id: state.nextId++,
-        anchor_key: payload.anchor_key,
-        selected_text: payload.selected_text,
-        body: payload.body,
-        status: payload.is_private ? 'private' : 'pending',
-        created_at: '2026-03-13T12:01:00.000Z',
-        updated_at: '2026-03-13T12:01:00.000Z',
-        user_id: 'user_e2e',
-        user_name: 'E2E User',
-      });
-
-      state.comments.push(created);
-
-      await route.fulfill({
-        status: 201,
-        contentType: 'application/json',
-        body: JSON.stringify(created),
-      });
+      await handleCreateComment(route, request, state);
       return;
     }
 
     const commentIdMatch = /\/comments\/(\d+)$/.exec(path);
     if (commentIdMatch && method === 'PATCH') {
-      const commentId = Number(commentIdMatch[1]);
-      const payload = request.postDataJSON() as { body: string };
-
-      state.updatedRequests.push({
-        id: commentId,
-        body: payload.body,
-      });
-
-      const current = state.comments.find((comment) => comment.id === commentId);
-      if (!current) {
-        await route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
-        return;
-      }
-
-      const updated: MockComment = {
-        ...current,
-        body: payload.body,
-        updated_at: '2026-03-13T12:02:00.000Z',
-      };
-      state.comments = state.comments.map((comment) => (comment.id === commentId ? updated : comment));
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(updated),
-      });
+      await handleUpdateComment(route, request, Number(commentIdMatch[1]), state);
       return;
     }
 
     if (commentIdMatch && method === 'DELETE') {
-      const commentId = Number(commentIdMatch[1]);
-      state.deletedRequests.push(commentId);
-      state.comments = state.comments.filter((comment) => comment.id !== commentId);
-
-      await route.fulfill({ status: 204, body: '' });
+      await handleDeleteComment(route, Number(commentIdMatch[1]), state);
       return;
     }
 
