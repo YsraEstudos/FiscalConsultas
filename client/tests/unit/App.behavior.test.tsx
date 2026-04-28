@@ -413,6 +413,17 @@ function buildServiceResults(query = '1.0101.11.00') {
   };
 }
 
+function setActiveNbsTab(query = '1.1706.90.00') {
+  setTabsState([
+    buildTab({
+      id: 'tab-1',
+      document: 'nbs',
+      ncm: query,
+      results: buildServiceResults(query),
+    }),
+  ]);
+}
+
 function setTabsState(tabs: MockTab[], activeTabId = tabs[0]?.id ?? 'tab-1') {
   const tabsById = new Map<string, MockTab>(tabs.map((tab) => [tab.id, tab]));
   mocks.tabsStateRef.value = {
@@ -438,6 +449,12 @@ function appendServiceLink(serviceCode: string) {
   serviceLink.dataset.serviceCode = serviceCode;
   serviceLink.textContent = serviceCode;
   document.body.appendChild(serviceLink);
+  return serviceLink;
+}
+
+function middleMouseDownServiceLink(serviceCode: string) {
+  const serviceLink = appendServiceLink(serviceCode);
+  fireEvent.mouseDown(serviceLink, { bubbles: true, button: 1 });
   return serviceLink;
 }
 
@@ -669,19 +686,11 @@ describe('App behavior', () => {
   });
 
   it('opens service links in NBS background tabs on middle mouse down', async () => {
-    setTabsState([
-      buildTab({
-        id: 'tab-1',
-        document: 'nbs',
-        ncm: '1.1706.90.00',
-        results: buildServiceResults('nbs', '1.1706.90.00'),
-      }),
-    ]);
+    setActiveNbsTab();
 
     render(<App />);
 
-    const serviceLink = appendServiceLink('1.17');
-    fireEvent.mouseDown(serviceLink, { bubbles: true, button: 1 });
+    middleMouseDownServiceLink('1.17');
 
     await waitFor(() => {
       expect(mocks.createTabMock).toHaveBeenCalledWith('nbs', false);
@@ -1228,14 +1237,7 @@ describe('App behavior', () => {
   });
 
   it('routes delegated service link clicks through the document click handler', async () => {
-    setTabsState([
-      buildTab({
-        id: 'tab-1',
-        document: 'nbs',
-        ncm: '1.1706.90.00',
-        results: buildServiceResults('nbs', '1.1706.90.00'),
-      }),
-    ]);
+    setActiveNbsTab();
 
     render(<App />);
 
@@ -1249,14 +1251,7 @@ describe('App behavior', () => {
   });
 
   it('ignores delegated service links that are missing a service code', () => {
-    setTabsState([
-      buildTab({
-        id: 'tab-1',
-        document: 'nbs',
-        ncm: '1.1706.90.00',
-        results: buildServiceResults('nbs', '1.1706.90.00'),
-      }),
-    ]);
+    setActiveNbsTab();
 
     render(<App />);
 
@@ -1267,22 +1262,12 @@ describe('App behavior', () => {
   });
 
   it('opens service links in NBS background tabs on middle mouse down', async () => {
-    setTabsState([
-      buildTab({
-        id: 'tab-1',
-        document: 'nbs',
-        ncm: '1.1706.90.00',
-        results: buildServiceResults('1.1706.90.00'),
-      }),
-    ]);
+    setActiveNbsTab();
 
     render(<App />);
 
-    const leafServiceLink = appendServiceLink('1.1706.90.00');
-    fireEvent.mouseDown(leafServiceLink, { bubbles: true, button: 1 });
-
-    const parentServiceLink = appendServiceLink('1.17');
-    fireEvent.mouseDown(parentServiceLink, { bubbles: true, button: 1 });
+    middleMouseDownServiceLink('1.1706.90.00');
+    middleMouseDownServiceLink('1.17');
 
     await waitFor(() => {
       expect(mocks.createTabMock).toHaveBeenNthCalledWith(1, 'nbs', false);
@@ -1325,19 +1310,11 @@ describe('App behavior', () => {
   });
 
   it('opens service links on middle mouse down to avoid scroll-mode swallowing', async () => {
-    setTabsState([
-      buildTab({
-        id: 'tab-1',
-        document: 'nbs',
-        ncm: '1.1701.1',
-        results: buildServiceResults('1.1701.1'),
-      }),
-    ]);
+    setActiveNbsTab('1.1701.1');
 
     render(<App />);
 
-    const serviceLink = appendServiceLink('1.17');
-    fireEvent.mouseDown(serviceLink, { bubbles: true, button: 1 });
+    middleMouseDownServiceLink('1.17');
 
     await waitFor(() => {
       expect(mocks.createTabMock).toHaveBeenCalledWith('nbs', false);

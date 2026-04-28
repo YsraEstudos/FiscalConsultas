@@ -175,6 +175,44 @@ vi.mock('../../src/components/Sidebar', () => ({
   ),
 }));
 
+function renderDataNcmFallbackCase({
+  query,
+  markdown,
+  chapterKey,
+  positionCode,
+  description,
+  tabId,
+}: {
+  query: string;
+  markdown: string;
+  chapterKey: string;
+  positionCode: string;
+  description: string;
+  tabId: string;
+}) {
+  render(
+    <ResultDisplay
+      data={{
+        type: 'code',
+        query,
+        markdown,
+        resultados: {
+          [chapterKey]: {
+            capitulo: chapterKey,
+            posicoes: [{ codigo: positionCode, descricao: description }],
+          },
+        },
+      }}
+      mobileMenuOpen={false}
+      onCloseMobileMenu={vi.fn()}
+      isActive={true}
+      tabId={tabId}
+      isNewSearch={false}
+      onConsumeNewSearch={vi.fn()}
+    />,
+  );
+}
+
 describe('ResultDisplay advanced behavior', () => {
   let intersectionCallbacks: Array<(entries: any[]) => void>;
   let requestIdleCallbackMock: ReturnType<typeof vi.fn>;
@@ -2158,61 +2196,35 @@ describe('ResultDisplay advanced behavior', () => {
     }
   });
 
-  it('uses the 8-digit data-ncm fallback when assigning anchor ids', async () => {
-    render(
-      <ResultDisplay
-        data={{
-          type: 'code',
-          query: '49089000',
-          markdown: '<h3 data-ncm="4908.90.00">Item 4908</h3>',
-          resultados: {
-            '49': {
-              capitulo: '49',
-              posicoes: [{ codigo: '49.08', descricao: 'Item 4908' }],
-            },
-          },
-        }}
-        mobileMenuOpen={false}
-        onCloseMobileMenu={vi.fn()}
-        isActive={true}
-        tabId="tab-data-ncm-8digits"
-        isNewSearch={false}
-        onConsumeNewSearch={vi.fn()}
-      />,
-    );
+  it.each([
+    {
+      label: '8-digit',
+      query: '49089000',
+      markdown: '<h3 data-ncm="4908.90.00">Item 4908</h3>',
+      chapterKey: '49',
+      positionCode: '49.08',
+      description: 'Item 4908',
+      selector: '[data-ncm="4908.90.00"]',
+      expectedId: 'pos-4908-90-00',
+      tabId: 'tab-data-ncm-8digits',
+    },
+    {
+      label: '4-digit',
+      query: '8517',
+      markdown: '<h3 data-ncm="8517">Item sem id compacto</h3>',
+      chapterKey: '85',
+      positionCode: '85.17',
+      description: 'Item sem id compacto',
+      selector: '[data-ncm="8517"]',
+      expectedId: 'pos-85-17',
+      tabId: 'tab-data-ncm-4digits',
+    },
+  ])('uses the $label data-ncm fallback when assigning anchor ids', async (testCase) => {
+    renderDataNcmFallbackCase(testCase);
 
     await waitFor(() => {
-      const fallbackAnchor = document.querySelector('[data-ncm="4908.90.00"]') as HTMLElement | null;
-      expect(fallbackAnchor?.id).toBe('pos-4908-90-00');
-    });
-  });
-
-  it('uses the 4-digit data-ncm fallback when assigning anchor ids', async () => {
-    render(
-      <ResultDisplay
-        data={{
-          type: 'code',
-          query: '8517',
-          markdown: '<h3 data-ncm="8517">Item sem id compacto</h3>',
-          resultados: {
-            '85': {
-              capitulo: '85',
-              posicoes: [{ codigo: '85.17', descricao: 'Item sem id compacto' }],
-            },
-          },
-        }}
-        mobileMenuOpen={false}
-        onCloseMobileMenu={vi.fn()}
-        isActive={true}
-        tabId="tab-data-ncm-4digits"
-        isNewSearch={false}
-        onConsumeNewSearch={vi.fn()}
-      />,
-    );
-
-    await waitFor(() => {
-      const fallbackAnchor = document.querySelector('[data-ncm="8517"]') as HTMLElement | null;
-      expect(fallbackAnchor?.id).toBe('pos-85-17');
+      const fallbackAnchor = document.querySelector(testCase.selector) as HTMLElement | null;
+      expect(fallbackAnchor?.id).toBe(testCase.expectedId);
     });
   });
 
