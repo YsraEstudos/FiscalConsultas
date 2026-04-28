@@ -22,8 +22,14 @@ from pydantic import BaseModel, Field
 
 from backend.config.settings import settings
 from backend.infrastructure.redis_client import redis_cache
-from backend.server.rate_limit import SlidingWindowRateLimiter
-from backend.utils.auth import extract_client_ip, is_trusted_proxy
+from backend.server.middleware import decode_clerk_jwt, get_last_jwt_failure_reason
+from backend.server.middleware_network import is_loopback_host
+from backend.server.rate_limit import RedisBackedRateLimiter
+from backend.utils.auth import (
+    extract_bearer_token,
+    extract_client_ip,
+    is_trusted_proxy,
+)
 
 logger = logging.getLogger("routes.database_download")
 
@@ -40,7 +46,10 @@ META_FILE = DB_DIR / "fiscal_offline.meta"
 # ---------------------------------------------------------------------------
 # Rate limiting (strict: 3 tokens per hour per IP)
 # ---------------------------------------------------------------------------
-_token_rate_limiter = SlidingWindowRateLimiter(window_seconds=3600)
+_token_rate_limiter = RedisBackedRateLimiter(
+    window_seconds=3600,
+    redis_prefix="rate:db-download-token",
+)
 _TOKEN_LIMIT_PER_HOUR = 3
 
 # ---------------------------------------------------------------------------
@@ -52,6 +61,7 @@ _REDIS_TOKEN_PREFIX = "dbtoken:"
 # In-memory token store (fallback when Redis unavailable)
 _memory_tokens: dict[str, tuple[float, str]] = {}  # jti -> (created_at, client_ip)
 _MEMORY_TOKEN_MAX = 100
+_OFFLINE_UNAVAILABLE_DETAIL = "Offline database not available"
 
 _VERSION_RESPONSES = {503: {"description": "Offline database metadata is unavailable."}}
 _TOKEN_RESPONSES = {
@@ -91,18 +101,7 @@ def _generate_token_jti() -> str:
 
 
 def _is_local_request(request: Request) -> bool:
-    direct_ip = request.client.host if request.client else None
-    forwarded_host = request.headers.get("x-forwarded-host", "").strip()
-    host_header = (
-        forwarded_host if forwarded_host and is_trusted_proxy(direct_ip) else ""
-    ) or request.headers.get("host", "")
-    host = host_header.split(":", maxsplit=1)[0].strip().lower()
-    client_host = (direct_ip or "").strip().lower()
-    return host in {"127.0.0.1", "localhost"} or client_host in {
-        "127.0.0.1",
-        "::1",
-        "localhost",
-    }
+    return is_loopback_host(request.client.host if request.client else None)
 
 
 def _resolve_request_scheme(request: Request) -> str:
@@ -133,11 +132,38 @@ def _enforce_secure_request(request: Request) -> None:
     )
 
 
-async def _store_token(jti: str) -> None:
-    """Store a one-time token (Redis preferred, memory fallback)."""
+async def _require_auth_payload(request: Request) -> dict:
+    token = extract_bearer_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    payload = await decode_clerk_jwt(token)
+    if not payload:
+        reason = get_last_jwt_failure_reason()
+        if settings.server.env.lower() == "development" and reason:
+            raise HTTPException(
+                status_code=401,
+                detail=f"Invalid or expired token ({reason})",
+            )
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return payload
+
+
+def _require_app_seed(meta: dict) -> str:
+    seed = meta.get("app_seed") or os.environ.get("OFFLINE_DB_APP_SEED")
+    if isinstance(seed, str) and seed.strip():
+        return seed.strip()
+    logger.error("Offline DB metadata is missing app_seed; rebuild the offline bundle")
+    raise HTTPException(status_code=503, detail=_OFFLINE_UNAVAILABLE_DETAIL)
+
+
+async def _store_token(jti: str, client_ip: str) -> None:
+    """Store a one-time token bound to the requester's IP."""
     if redis_cache.available:
         key = f"{_REDIS_TOKEN_PREFIX}{jti}"
-        if await redis_cache.set_with_ttl(key, "1", ttl_seconds=_TOKEN_TTL_SECONDS):
+        if await redis_cache.set_with_ttl(
+            key, client_ip, ttl_seconds=_TOKEN_TTL_SECONDS
+        ):
             return
 
     # Memory fallback
@@ -155,25 +181,33 @@ async def _store_token(jti: str) -> None:
         oldest_key = min(_memory_tokens, key=lambda k: _memory_tokens[k][0])
         del _memory_tokens[oldest_key]
 
-    _memory_tokens[jti] = (now, "1")
+    _memory_tokens[jti] = (now, client_ip)
 
 
-async def _consume_token(jti: str) -> bool:
+async def _consume_token(jti: str, client_ip: str) -> bool:
     """Verify and consume a one-time token. Returns True if valid."""
     if redis_cache.available:
         key = f"{_REDIS_TOKEN_PREFIX}{jti}"
         stored_ip = await redis_cache.consume_once(key)
-        return stored_ip is not None
+        if stored_ip is None:
+            return False
+        if isinstance(stored_ip, bytes):
+            stored_ip = stored_ip.decode("utf-8", errors="ignore")
+        return str(stored_ip) == client_ip
 
     # Memory fallback
     now = time.monotonic()
-    entry = _memory_tokens.pop(jti, None)
+    entry = _memory_tokens.get(jti)
     if entry is None:
         return False
     created_at, stored_ip = entry
     if now - created_at > _TOKEN_TTL_SECONDS:
+        _memory_tokens.pop(jti, None)
         return False  # Expired
-    return bool(stored_ip)
+    if stored_ip != client_ip:
+        return False
+    _memory_tokens.pop(jti, None)
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -190,18 +224,14 @@ async def get_database_version():
     """
     meta = _load_metadata()
     if meta is None:
-        raise HTTPException(status_code=503, detail="Offline database not available")
+        raise HTTPException(status_code=503, detail=_OFFLINE_UNAVAILABLE_DETAIL)
 
     return {
         "version": meta.get("version"),
         "size_bytes": meta.get("size_bytes"),
-        "sha256": meta.get("sha256"),
-        "encrypted_sha256": meta.get("encrypted_sha256"),
         "updated_at": meta.get("built_at"),
         "built_at": meta.get("built_at"),
         "format_version": meta.get("format_version", 1),
-        "chunk_size": meta.get("chunk_size", 65536),
-        "pbkdf2_iterations": meta.get("pbkdf2_iterations", 600_000),
     }
 
 
@@ -214,7 +244,9 @@ async def create_download_token(request: Request):
     The token expires after 5 minutes and can only be used once.
     """
     _enforce_secure_request(request)
-    limiter_key = f"db-download:ip:{extract_client_ip(request)}"
+    await _require_auth_payload(request)
+    client_ip = extract_client_ip(request)
+    limiter_key = f"db-download:ip:{client_ip}"
 
     if _should_rate_limit_token_request(request):
         allowed, retry_after = await _token_rate_limiter.consume(
@@ -229,16 +261,18 @@ async def create_download_token(request: Request):
 
     meta = _load_metadata()
     if meta is None:
-        raise HTTPException(status_code=503, detail="Offline database not available")
+        raise HTTPException(status_code=503, detail=_OFFLINE_UNAVAILABLE_DETAIL)
 
     if not ENCRYPTED_DB.exists():
         raise HTTPException(status_code=503, detail="Offline database file missing")
 
+    app_seed = _require_app_seed(meta)
     jti = _generate_token_jti()
-    await _store_token(jti)
+    await _store_token(jti, client_ip)
 
     return {
         "token": jti,
+        "app_seed": app_seed,
         "version": meta.get("version"),
         "sha256": meta.get("sha256"),
         "encrypted_sha256": meta.get("encrypted_sha256"),
@@ -261,11 +295,12 @@ async def download_database(
     The token is consumed upon use and cannot be reused.
     """
     _enforce_secure_request(request)
+    await _require_auth_payload(request)
     token = payload.token.strip()
-    if not token or len(token) < 16:
+    if not token:
         raise HTTPException(status_code=400, detail="Invalid token format")
 
-    is_valid = await _consume_token(token)
+    is_valid = await _consume_token(token, extract_client_ip(request))
     if not is_valid:
         raise HTTPException(
             status_code=403,

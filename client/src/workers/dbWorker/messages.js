@@ -1,16 +1,75 @@
-import { decryptDatabase, sha256Hex } from "./crypto.js";
+import { decryptDatabase, setAppSeed, sha256Hex } from "./crypto.js";
 import { getLocalNbsDetail } from "./catalogSearch.js";
-import { readFromOpfs, readVersion, removeFromOpfs, saveToOpfs, saveVersion } from "./opfs.js";
+import {
+  readFromOpfs,
+  readSeed,
+  readVersion,
+  removeFromOpfs,
+  saveSeed,
+  saveToOpfs,
+  saveVersion,
+} from "./opfs.js";
 import { postWorkerError, postWorkerProgress, postWorkerResult, postWorkerStatus } from "./protocol.js";
 import { getStructuredSearchWithCache } from "./searchRuntime.js";
 import { loadDatabaseFromBytes } from "./sqlite.js";
 import { clearSearchCache, closeWorkerDb, getWorkerDb, getWorkerStatus, getWorkerVersion, setWorkerStatus, setWorkerVersion } from "./state.js";
+import { TOKEN_REFRESH_TIMEOUT_MS } from "./constants.js";
+
+/** @type {Map<string, {resolve: (token: string) => void, reject: (error: Error) => void, timeout: ReturnType<typeof setTimeout>}>} */
+const tokenRefreshRequests = new Map();
+
+function buildAuthHeaders(clerkToken) {
+  if (!clerkToken || typeof clerkToken !== "string") {
+    throw new Error("Faça login para instalar o banco offline.");
+  }
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${clerkToken}`,
+  };
+}
+
+function handleTokenResponse(id, payload) {
+  const pending = tokenRefreshRequests.get(id);
+  if (!pending) return;
+  tokenRefreshRequests.delete(id);
+  clearTimeout(pending.timeout);
+
+  if (payload?.error) {
+    const error = new Error(String(payload.error));
+    if (typeof payload.errorName === "string") {
+      error.name = payload.errorName;
+    }
+    if (typeof payload.errorStack === "string") {
+      error.stack = payload.errorStack;
+    }
+    pending.reject(error);
+    return;
+  }
+  if (!payload?.clerkToken || typeof payload.clerkToken !== "string") {
+    pending.reject(new Error("Faça login para instalar o banco offline."));
+    return;
+  }
+  pending.resolve(payload.clerkToken);
+}
+
+async function requestFreshClerkToken(id, currentToken) {
+  if (!id) return currentToken;
+  self.postMessage({ type: "REFRESH_TOKEN", id, payload: {} });
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      tokenRefreshRequests.delete(id);
+      reject(new Error("Token refresh timed out"));
+    }, TOKEN_REFRESH_TIMEOUT_MS);
+    tokenRefreshRequests.set(id, { resolve, reject, timeout });
+  });
+}
 
 async function handleInitMessage(id, payload) {
   const encData = await readFromOpfs();
   const version = await readVersion();
+  const seed = await readSeed();
 
-  if (!encData || !version) {
+  if (!encData || !version || !seed) {
     setWorkerStatus("not_installed");
     postWorkerStatus(id, { status: "not_installed" });
     return;
@@ -25,6 +84,7 @@ async function handleInitMessage(id, payload) {
   let plaintext = null;
 
   try {
+    setAppSeed(seed);
     plaintext = await decryptDatabase(encData, chunkSize, iterations);
     await loadDatabaseFromBytes(plaintext);
   } catch (error) {
@@ -86,35 +146,51 @@ async function readEncryptedDatabaseBlob(dlResp, id) {
   return encryptedBlob;
 }
 
-async function requestInstallToken(apiBase) {
-  const tokenResp = await fetch(`${apiBase}/database/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-  });
+async function requestInstallToken(apiBase, clerkToken, requestId) {
+  let activeToken = clerkToken;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const tokenResp = await fetch(`${apiBase}/database/token`, {
+      method: "POST",
+      headers: buildAuthHeaders(activeToken),
+    });
 
-  if (!tokenResp.ok) {
+    if (tokenResp.ok) {
+      return tokenResp.json();
+    }
+
     const errText = await tokenResp.text();
+    if (tokenResp.status === 401 && attempt === 0) {
+      activeToken = await requestFreshClerkToken(requestId, activeToken);
+      continue;
+    }
     throw new Error(`Token request failed (${tokenResp.status}): ${errText}`);
   }
-
-  return tokenResp.json();
+  throw new Error("Token request failed");
 }
 
-async function fetchEncryptedDatabase(apiBase, token) {
-  const dlResp = await fetch(`${apiBase}/database/download`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token }),
-  });
+async function fetchEncryptedDatabase(apiBase, token, clerkToken, requestId) {
+  let activeToken = clerkToken;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const dlResp = await fetch(`${apiBase}/database/download`, {
+      method: "POST",
+      headers: buildAuthHeaders(activeToken),
+      body: JSON.stringify({ token }),
+    });
 
-  if (!dlResp.ok) {
+    if (dlResp.ok) {
+      return dlResp;
+    }
+
     const errText = await dlResp.text();
+    if (dlResp.status === 401 && attempt === 0) {
+      activeToken = await requestFreshClerkToken(requestId, activeToken);
+      continue;
+    }
     throw new Error(
       `Offline database retrieval failed (${dlResp.status}): ${errText}`
     );
   }
-
-  return dlResp;
+  throw new Error("Offline database retrieval failed");
 }
 
 async function updateInstalledVersion(apiBase) {
@@ -147,17 +223,25 @@ async function handleInstallMessage(id, payload) {
   let plaintext = null;
 
   try {
-    const tokenData = await requestInstallToken(apiBase);
+    let clerkToken = payload?.clerkToken;
+    clerkToken = await requestFreshClerkToken(id, clerkToken);
+    const tokenData = await requestInstallToken(apiBase, clerkToken, id);
     const {
       token,
+      app_seed: appSeed,
       encrypted_sha256: expectedEncryptedSha256,
       chunk_size: chunkSize = 65536,
       pbkdf2_iterations: iterations = 600000,
     } = tokenData;
+    if (!appSeed || typeof appSeed !== "string") {
+      throw new Error("Offline database key was not provided by the server");
+    }
+    setAppSeed(appSeed);
 
     postWorkerProgress(id, 10, "fetching_database");
 
-    const dlResp = await fetchEncryptedDatabase(apiBase, token);
+    clerkToken = await requestFreshClerkToken(id, clerkToken);
+    const dlResp = await fetchEncryptedDatabase(apiBase, token, clerkToken, id);
     const encryptedBlob = await readEncryptedDatabaseBlob(dlResp, id);
 
     if (expectedEncryptedSha256) {
@@ -175,8 +259,16 @@ async function handleInstallMessage(id, payload) {
     await loadDatabaseFromBytes(plaintext);
 
     postWorkerProgress(id, 90, "saving");
-    await saveToOpfs(encryptedBlob);
-    await updateInstalledVersion(apiBase);
+    await removeFromOpfs();
+    try {
+      setAppSeed(appSeed);
+      await saveToOpfs(encryptedBlob);
+      await saveSeed(appSeed);
+      await updateInstalledVersion(apiBase);
+    } catch (error) {
+      await removeFromOpfs();
+      throw error;
+    }
 
     setWorkerStatus("ready");
     postWorkerProgress(id, 100, "done");
@@ -280,6 +372,11 @@ async function handleRemoveMessage(id) {
 
 export async function dispatchWorkerMessage(type, id, payload) {
   switch (type) {
+    case "TOKEN_RESPONSE":
+      if (id) {
+        handleTokenResponse(id, payload);
+      }
+      return;
     case "INIT":
       await handleInitMessage(id, payload);
       return;
