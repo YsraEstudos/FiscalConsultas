@@ -27,7 +27,6 @@ class _NbsCatalogItemRow(Protocol):
     description: str
     parent_code: str | None
     level: int
-    has_nebs: bool | int
 
 
 class _NbsExplanatoryEntryRow(Protocol):
@@ -54,7 +53,6 @@ def row_to_nbs_catalog_item(row: _NbsCatalogItemRow) -> NbsCatalogItemPayload:
         "description": row.description,
         "parent_code": row.parent_code,
         "level": row.level,
-        "has_nebs": bool(row.has_nebs),
     }
 
 
@@ -162,7 +160,7 @@ async def load_nbs_catalog_item_by_code(
     )
     params.update(build_nbs_tenant_params(repo.tenant_id))
     sql = f"""
-        SELECT code, code_clean, description, parent_code, level, has_nebs
+        SELECT code, code_clean, description, parent_code, level
         FROM nbs_items
         WHERE ({" OR ".join(where_clauses)})
         {build_nbs_tenant_predicate_sql(repo.tenant_id, "nbs_items")}
@@ -189,7 +187,7 @@ async def load_nbs_catalog_item_ancestors(
             break
         params = {"parent_code": parent_code, **build_nbs_tenant_params(repo.tenant_id)}
         sql = f"""
-            SELECT code, code_clean, description, parent_code, level, has_nebs
+            SELECT code, code_clean, description, parent_code, level
             FROM nbs_items
             WHERE code = :parent_code
             {build_nbs_tenant_predicate_sql(repo.tenant_id, "nbs_items")}
@@ -216,7 +214,7 @@ async def load_nbs_catalog_items_by_prefix(
     offset: int = 0,
 ) -> list[NbsCatalogItemPayload]:
     sql = f"""
-        SELECT code, code_clean, description, parent_code, level, has_nebs
+        SELECT code, code_clean, description, parent_code, level
         FROM nbs_items
         WHERE (code = :root_code OR code LIKE :root_prefix)
         {build_nbs_tenant_predicate_sql(repo.tenant_id, "nbs_items")}

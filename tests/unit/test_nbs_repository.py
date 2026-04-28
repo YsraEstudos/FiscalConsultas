@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -38,6 +39,7 @@ class _FakeSession:
         self.calls = []
 
     async def execute(self, stmt, params=None):
+        await asyncio.sleep(0)
         self.calls.append((stmt, params))
         return self._results.pop(0)
 
@@ -134,21 +136,21 @@ async def test_get_item_details_public_scope_filters_to_null_tenant():
 
 
 @pytest.mark.asyncio
-async def test_get_nebs_details_public_scope_filters_to_null_tenant():
+async def test_get_item_details_inline_nebs_public_scope_filters_to_null_tenant():
     session = _FakeSession(
         [
             _FakeRowsResult(
                 [
                     SimpleNamespace(
-                        code="1.0102.61",
-                        code_clean="1010261",
+                        code="1.0102.61.00",
+                        code_clean="101026100",
                         description="Serviços de construção",
                         parent_code=None,
                         level=0,
-                        has_nebs=True,
                     )
                 ]
             ),
+            _FakeRowsResult([]),
             _FakeRowsResult(
                 [
                     SimpleNamespace(
@@ -173,13 +175,22 @@ async def test_get_nebs_details_public_scope_filters_to_null_tenant():
     )
     repo = NbsRepository(session)
 
-    details = await repo.load_nbs_explanatory_entry_details("1.0102.61")
+    details = await repo.load_nbs_catalog_item_details(
+        "1.0102.61.00", include_tree=False
+    )
 
     assert details["success"] is True
-    assert details["item"]["code"] == "1.0102.61"
-    assert details["entry"]["code"] == "1.0102.61"
+    assert details["item"]["code"] == "1.0102.61.00"
+    assert details["nebs"]["code"] == "1.0102.61"
+    assert "parser_status" not in details["nebs"]
 
-    assert len(session.calls) == 2
+    assert len(session.calls) == 3
     for stmt, params in session.calls:
         assert "tenant_id IS NULL" in str(stmt)
         assert "tenant_id" not in params
+    nebs_stmt, nebs_params = session.calls[2]
+    assert "code_clean" in str(nebs_stmt)
+    assert "parser_status = :parser_status" in str(nebs_stmt)
+    assert nebs_params["nebs_code_0"] == "1.0102.61.00"
+    assert nebs_params["nebs_code_1"] == "1.0102.61"
+    assert nebs_params["parser_status"] == "trusted"

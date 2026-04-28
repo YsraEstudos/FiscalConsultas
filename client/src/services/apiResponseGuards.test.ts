@@ -6,8 +6,6 @@ import {
     isCodeSearchApiResponse,
     isNbsCatalogSearchApiResponse,
     isNbsSearchResponse,
-    isNebsExplanatorySearchApiResponse,
-    isNebsSearchResponse,
     isTextSearchApiResponse,
 } from './apiResponseGuards';
 
@@ -59,35 +57,12 @@ describe('apiResponseGuards', () => {
                 description: 'Servico',
                 parent_code: null,
                 level: 1,
-                has_nebs: false,
             }],
             total: 1,
         };
 
         expect(isNbsCatalogSearchApiResponse(nbsPayload)).toBe(true);
         expect(isNbsSearchResponse(nbsPayload)).toBe(true);
-        expect(isNebsExplanatorySearchApiResponse(nbsPayload)).toBe(false);
-    });
-
-    it('detects NEBS explanatory search payloads', () => {
-        const nebsPayload = {
-            success: true,
-            query: 'armazenagem',
-            normalized: 'armazenagem',
-            results: [{
-                code: '1.0101.00.00',
-                title: 'Armazenagem',
-                excerpt: 'Trecho resumido',
-                page_start: 1,
-                page_end: 2,
-                section_title: null,
-            }],
-            total: 1,
-        };
-
-        expect(isNebsExplanatorySearchApiResponse(nebsPayload)).toBe(true);
-        expect(isNebsSearchResponse(nebsPayload)).toBe(true);
-        expect(isNbsCatalogSearchApiResponse(nebsPayload)).toBe(false);
     });
 
     it('detects API error envelopes and keeps deprecated alias working', () => {

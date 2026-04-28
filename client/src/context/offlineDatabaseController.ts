@@ -12,7 +12,6 @@ export function useOfflineDatabaseController(): OfflineDatabaseContextValue {
         searchOfflineCatalog,
         fetchOfflineNeshChapterNotes,
         fetchOfflineNbsCatalogDetail,
-        fetchOfflineNebsEntryDetail,
     } = useOfflineDatabaseOperations(actions);
 
     useEffect(() => {
@@ -35,18 +34,15 @@ export function useOfflineDatabaseController(): OfflineDatabaseContextValue {
             searchOfflineCatalog,
             fetchOfflineNeshChapterNotes,
             fetchOfflineNbsCatalogDetail,
-            fetchOfflineNebsEntryDetail,
             install: installOfflineDatabase,
             remove: removeOfflineDatabase,
             refreshAvailability: actions.refreshOfflineDatabaseAvailability,
             searchLocal: searchOfflineCatalog,
             getNeshChapterNotesLocal: fetchOfflineNeshChapterNotes,
             getNbsDetailLocal: fetchOfflineNbsCatalogDetail,
-            getNebsDetailLocal: fetchOfflineNebsEntryDetail,
         }),
         [
             actions.refreshOfflineDatabaseAvailability,
-            fetchOfflineNebsEntryDetail,
             fetchOfflineNbsCatalogDetail,
             fetchOfflineNeshChapterNotes,
             installOfflineDatabase,

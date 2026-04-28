@@ -1,7 +1,6 @@
 import type { ApiErrorResponse } from '../types/apiCommon.types';
 import type {
     NbsCatalogSearchApiResponse,
-    NebsExplanatorySearchApiResponse,
 } from '../types/apiServices.types';
 import type {
     NeshCodeSearchApiResponse,
@@ -39,19 +38,6 @@ export function isNbsCatalogSearchApiResponse(
     );
 }
 
-export function isNebsExplanatorySearchApiResponse(
-    response: unknown,
-): response is NebsExplanatorySearchApiResponse {
-    if (!isObjectRecord(response) || !Array.isArray(response.results) || typeof response.total !== 'number') {
-        return false;
-    }
-
-    return (
-        response.results.length === 0
-        || isObjectRecord(response.results[0]) && 'excerpt' in response.results[0]
-    );
-}
-
 export function isApiErrorResponse(response: unknown): response is ApiErrorResponse {
     if (!isObjectRecord(response)) return false;
 
@@ -61,9 +47,6 @@ export function isApiErrorResponse(response: unknown): response is ApiErrorRespo
 
 /** @deprecated Use `isNbsCatalogSearchApiResponse`. */
 export const isNbsSearchResponse = isNbsCatalogSearchApiResponse;
-
-/** @deprecated Use `isNebsExplanatorySearchApiResponse`. */
-export const isNebsSearchResponse = isNebsExplanatorySearchApiResponse;
 
 /** @deprecated Use `isApiErrorResponse`. */
 export const isApiError = isApiErrorResponse;

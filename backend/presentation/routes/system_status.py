@@ -246,8 +246,7 @@ async def collect_status_payloads_uncached(
         "online"
         if normalized_db.get("status") == "online"
         and normalized_tipi.get("status") == "online"
-        and normalized_nbs.get("status") == "online"
-        and normalized_nebs.get("status") == "online"
+        and resolve_nbs_public_status(normalized_nbs, normalized_nebs) == "online"
         else "error"
     )
     return (
@@ -283,6 +282,28 @@ def unpack_status_snapshot(snapshot: dict) -> tuple[dict, dict, dict, dict, str]
         dict(snapshot.get("normalized_nebs") or {}),
         str(snapshot.get("overall_status") or "error"),
     )
+
+
+def resolve_nbs_public_status(
+    normalized_nbs: dict,
+    normalized_nebs: dict | None,
+) -> str:
+    nbs_status = normalized_nbs.get("status", "error")
+    if nbs_status != "online":
+        return "error"
+
+    if not normalized_nebs:
+        return "online"
+
+    nebs_status = normalized_nebs.get("status")
+    if nebs_status in (None, "online"):
+        return "online"
+
+    explanatory_entries = coerce_int(normalized_nebs.get("entries"))
+    if explanatory_entries == 0 and not normalized_nebs.get("error"):
+        return "online"
+
+    return "error"
 
 
 def store_status_snapshot(snapshot: dict, *, expires_at: float) -> dict:
@@ -396,9 +417,11 @@ def build_public_status_payload(
         "tipi": {"status": normalized_tipi.get("status", "error")},
     }
     if normalized_nbs is not None:
-        catalogs["nbs"] = {"status": normalized_nbs.get("status", "error")}
-    if normalized_nebs is not None:
-        catalogs["nebs"] = {"status": normalized_nebs.get("status", "error")}
+        nbs_public_status = resolve_nbs_public_status(
+            normalized_nbs,
+            normalized_nebs,
+        )
+        catalogs["nbs"] = {"status": nbs_public_status}
 
     payload = {
         "status": overall_status,
@@ -408,9 +431,7 @@ def build_public_status_payload(
     if not legacy_mode:
         payload["catalogs"] = catalogs
     if normalized_nbs is not None:
-        payload["nbs"] = {"status": normalized_nbs.get("status", "error")}
-    if normalized_nebs is not None:
-        payload["nebs"] = {"status": normalized_nebs.get("status", "error")}
+        payload["nbs"] = {"status": catalogs["nbs"]["status"]}
     return payload
 
 
@@ -422,11 +443,15 @@ def build_detailed_status_payload(
     normalized_nebs: dict,
     overall_status: str,
 ) -> dict:
+    explanatory_entries = int(normalized_nebs.get("entries") or 0)
     catalogs = {
         "nesh": normalized_db,
         "tipi": normalized_tipi,
-        "nbs": normalized_nbs,
-        "nebs": normalized_nebs,
+        "nbs": {
+            **normalized_nbs,
+            "status": resolve_nbs_public_status(normalized_nbs, normalized_nebs),
+            "explanatory_entries": explanatory_entries,
+        },
     }
     return {
         "status": overall_status,
@@ -435,8 +460,9 @@ def build_detailed_status_payload(
         "database": normalized_db,
         "tipi": normalized_tipi,
         "nbs": {
-            "status": normalized_nbs.get("status", "error"),
+            "status": catalogs["nbs"].get("status", "error"),
             "items": int(normalized_nbs.get("items") or 0),
+            "explanatory_entries": explanatory_entries,
             **(
                 {"metadata": normalized_nbs["metadata"]}
                 if isinstance(normalized_nbs.get("metadata"), dict)
@@ -445,20 +471,6 @@ def build_detailed_status_payload(
             **(
                 {"error": normalized_nbs["error"]}
                 if normalized_nbs.get("error")
-                else {}
-            ),
-        },
-        "nebs": {
-            "status": normalized_nebs.get("status", "error"),
-            "entries": int(normalized_nebs.get("entries") or 0),
-            **(
-                {"metadata": normalized_nebs["metadata"]}
-                if isinstance(normalized_nebs.get("metadata"), dict)
-                else {}
-            ),
-            **(
-                {"error": normalized_nebs["error"]}
-                if normalized_nebs.get("error")
                 else {}
             ),
         },

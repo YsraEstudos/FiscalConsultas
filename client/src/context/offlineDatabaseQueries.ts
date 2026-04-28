@@ -2,7 +2,6 @@ import { useCallback } from 'react';
 
 import type {
     NbsCatalogDetailApiResponse,
-    NebsExplanatoryDetailApiResponse,
 } from '../types/api.types';
 import type {
     OfflineCatalogSearchResult,
@@ -23,7 +22,6 @@ export function useOfflineDatabaseQueries({
     | 'searchOfflineCatalog'
     | 'fetchOfflineNeshChapterNotes'
     | 'fetchOfflineNbsCatalogDetail'
-    | 'fetchOfflineNebsEntryDetail'
 > {
     const searchOfflineCatalog = useCallback(
         async (
@@ -103,32 +101,9 @@ export function useOfflineDatabaseQueries({
         [sendToWorker, status],
     );
 
-    const fetchOfflineNebsEntryDetail = useCallback(
-        async (code: string): Promise<NebsExplanatoryDetailApiResponse | null> => {
-            if (status !== 'ready') return null;
-
-            try {
-                const response = await sendToWorker(
-                    {
-                        type: 'GET_NEBS_DETAIL',
-                        id: null,
-                        payload: { code },
-                    },
-                    10_000,
-                );
-
-                return extractOfflineWorkerDetail<NebsExplanatoryDetailApiResponse>(response);
-            } catch {
-                return null;
-            }
-        },
-        [sendToWorker, status],
-    );
-
     return {
         searchOfflineCatalog,
         fetchOfflineNeshChapterNotes,
         fetchOfflineNbsCatalogDetail,
-        fetchOfflineNebsEntryDetail,
     };
 }

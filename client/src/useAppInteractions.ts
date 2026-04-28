@@ -71,7 +71,6 @@ return {
 nesh: [],
 tipi: [],
 nbs: [],
-nebs: [],
 };
 }
 
@@ -395,7 +394,7 @@ if (!content) {
 
     const openTextResultInNewTab = useCallback(async (ncm: string, textQuery?: string, activate: boolean = true) => {
         const activeDoc = (activeTabRef.current?.document || 'nesh') as DocType;
-        const doc: DocType = activeDoc === 'nbs' || activeDoc === 'nebs' ? 'nesh' : activeDoc;
+        const doc: DocType = activeDoc === 'nbs' ? 'nesh' : activeDoc;
         const tabId = createTab(doc, activate);
         const nextTextQuery = (textQuery || '').trim();
 
@@ -411,8 +410,7 @@ if (!content) {
     }, [openTextResultInNewTab]);
 
     const openServiceResultInNewTab = useCallback(async (code: string, _textQuery?: string, activate: boolean = true) => {
-        const activeDoc = (activeTabRef.current?.document || 'nbs') as DocType;
-        const doc: DocType = activeDoc === 'nebs' ? 'nebs' : 'nbs';
+        const doc: DocType = 'nbs';
         const tabId = createTab(doc, activate);
 
         await executeSearchForTab(tabId, doc, code, false);

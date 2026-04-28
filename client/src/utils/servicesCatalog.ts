@@ -2,7 +2,7 @@ import axios from 'axios';
 
 import type { SystemStatusResponse } from '../types/api.types';
 
-export type ServiceCatalogDoc = 'nbs' | 'nebs';
+export type ServiceCatalogDoc = 'nbs';
 export type ServiceCatalogAvailability = 'online' | 'offline' | 'unknown';
 
 export interface ServiceCatalogSnapshot {
@@ -93,18 +93,9 @@ export function getServicesCatalogOfflineMessage(
     status: SystemStatusResponse | null | undefined,
 ): string {
     const nbsStatus = getCatalogStatus(status, 'nbs');
-    const nebsStatus = getCatalogStatus(status, 'nebs');
-
-    if (nbsStatus === 'offline' && nebsStatus === 'offline') {
-        return 'Catálogo NBS/NEBS indisponível no momento.';
-    }
 
     if (nbsStatus === 'offline') {
         return 'Catálogo NBS indisponível no momento.';
-    }
-
-    if (nebsStatus === 'offline') {
-        return 'Catálogo NEBS indisponível no momento.';
     }
 
     return 'Catálogo de serviços indisponível no momento.';
@@ -114,9 +105,8 @@ export function buildServiceCatalogSnapshot(
     status: SystemStatusResponse | null | undefined,
 ): ServiceCatalogSnapshot {
     const nbsStatus = getCatalogStatus(status, 'nbs');
-    const nebsStatus = getCatalogStatus(status, 'nebs');
 
-    if (nbsStatus === 'online' && nebsStatus === 'online') {
+    if (nbsStatus === 'online') {
         return {
             availability: 'online',
             checkedAt: Date.now(),
@@ -124,7 +114,7 @@ export function buildServiceCatalogSnapshot(
         };
     }
 
-    if (nbsStatus === 'offline' || nebsStatus === 'offline') {
+    if (nbsStatus === 'offline') {
         return {
             availability: 'offline',
             checkedAt: Date.now(),
@@ -139,16 +129,16 @@ export function buildServiceCatalogSnapshot(
 }
 
 export function isServiceCatalogDoc(doc: string): doc is ServiceCatalogDoc {
-    return doc === 'nbs' || doc === 'nebs';
+    return doc === 'nbs';
 }
 
+// ServiceCatalogDoc is currently always 'nbs'; keep the parameter to preserve
+// the shared error-helper signature if service catalog variants return later.
 export function getServiceCatalogErrorInfo(
     error: unknown,
-    doc: ServiceCatalogDoc,
+    _doc: ServiceCatalogDoc,
 ): ServiceCatalogErrorInfo {
-    const fallback = doc === 'nbs'
-        ? 'Erro ao carregar o catálogo NBS.'
-        : 'Erro ao carregar o catálogo NEBS.';
+    const fallback = 'Erro ao carregar o catálogo NBS.';
 
     if (axios.isAxiosError(error)) {
         const status = error.response?.status;

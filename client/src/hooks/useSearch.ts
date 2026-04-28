@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
-import { searchNCM, searchNbsServices, searchNebsEntries, searchTipi } from '../services/api';
+import { searchNCM, searchNbsServices, searchTipi } from '../services/api';
 import { useTabs, type DocType } from './useTabs';
 import { useHistory } from './useHistory';
 import { useSettings } from '../context/SettingsContext';
@@ -10,7 +10,6 @@ import { extractChapter, isSameChapter } from '../utils/chapterDetection';
 import type {
     FiscalSearchApiResponse,
     NbsCatalogSearchApiResponse,
-    NebsExplanatorySearchApiResponse,
     NeshTextSearchApiResponse,
     TipiTextSearchApiResponse,
 } from '../types/api.types';
@@ -26,7 +25,6 @@ const buildLoadedChaptersByDoc = (value?: Record<DocType, string[]>): Record<Doc
     nesh: value?.nesh ?? [],
     tipi: value?.tipi ?? [],
     nbs: value?.nbs ?? [],
-    nebs: value?.nebs ?? [],
 });
 
 /**
@@ -47,22 +45,7 @@ function normalizeLocalResults(
                     code: String(r.code || ''), code_clean: String(r.code_clean || ''),
                     description: String(r.description || ''),
                     parent_code: r.parent_code ? String(r.parent_code) : null,
-                    level: Number(r.level || 0), has_nebs: Boolean(r.has_nebs),
-                })),
-                total: safeResults.length,
-            };
-            return response;
-        }
-        case 'nebs': {
-            const response: NebsExplanatorySearchApiResponse = {
-                success: true, query, normalized: query,
-                results: safeResults.map((r) => ({
-                    code: String(r.code || ''),
-                    title: String(r.title || ''),
-                    excerpt: String(r.body_text || '').slice(0, 200),
-                    page_start: Number(r.page_start || 0),
-                    page_end: Number(r.page_end || 0),
-                    section_title: r.section_title ? String(r.section_title) : null,
+                    level: Number(r.level || 0),
                 })),
                 total: safeResults.length,
             };
@@ -178,7 +161,7 @@ export function useSearch(
 
         try {
             let data: FiscalSearchApiResponse | null = null;
-            const isOfflineScopedDoc = doc === 'nesh' || doc === 'tipi' || doc === 'nbs' || doc === 'nebs';
+            const isOfflineScopedDoc = doc === 'nesh' || doc === 'tipi' || doc === 'nbs';
 
             // === HYBRID SEARCH: Local DB first, API fallback ===
             if (dbStatus === 'ready' && isOfflineScopedDoc) {
@@ -219,7 +202,6 @@ export function useSearch(
                     nesh: () => searchNCM(query),
                     tipi: () => searchTipi(query, tipiViewModeRef.current),
                     nbs: () => searchNbsServices(query),
-                    nebs: () => searchNebsEntries(query),
                 };
                 const handler = searchHandlers[doc];
                 if (!handler) {

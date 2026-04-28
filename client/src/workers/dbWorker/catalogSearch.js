@@ -2,7 +2,7 @@ import { MAX_ANCESTOR_DEPTH } from "./constants.js";
 import { fetchAll, fetchOne } from "./query.js";
 import { getWorkerDb } from "./state.js";
 
-const NON_TEXT_SEARCH_COLUMNS = new Set(["level", "has_nebs"]);
+const NON_TEXT_SEARCH_COLUMNS = new Set(["level"]);
 
 /**
  * Execute an FTS5 search query with a LIKE fallback.
@@ -56,10 +56,11 @@ export function ftsSearch(
       );
       if (textColumns.length === 0) return [];
 
+      const textLikeClause = textColumns
+        .map((column) => `${column} LIKE ? ESCAPE '\\'`)
+        .join(" OR ");
       const likeClause = terms
-        .map(() =>
-          `(${textColumns.map((column) => `${column} LIKE ? ESCAPE '\\'`).join(" OR ")})`
-        )
+        .map(() => `(${textLikeClause})`)
         .join(" AND ");
       const likeParams = terms.flatMap((term) =>
         textColumns.map(() => `%${escapeLikePattern(term)}%`)
@@ -82,17 +83,8 @@ export function searchNbsByText(query) {
   return ftsSearch(
     "nbs_fts",
     query,
-    ["code", "code_clean", "description", "parent_code", "level", "has_nebs"],
+    ["code", "code_clean", "description", "parent_code", "level"],
     "nbs_items"
-  );
-}
-
-export function searchNebsByText(query) {
-  return ftsSearch(
-    "nebs_fts",
-    query,
-    ["code", "code_clean", "title", "body_text", "section_title"],
-    "nebs_entries"
   );
 }
 
@@ -111,7 +103,6 @@ function rowToNbsItem(row) {
     description: String(row.description || ""),
     parent_code: row.parent_code ? String(row.parent_code) : null,
     level: Number(row.level || 0),
-    has_nebs: Boolean(row.has_nebs),
   };
 }
 
@@ -145,8 +136,7 @@ export function searchNbsByCode(query, limit = 50) {
         code_clean,
         description,
         parent_code,
-        level,
-        has_nebs
+        level
      FROM nbs_items
      WHERE (? <> '' AND (code = ? OR code LIKE ? ESCAPE '\\'))
         OR (? <> '' AND (code_clean = ? OR code_clean LIKE ? ESCAPE '\\'))
@@ -176,58 +166,13 @@ export function searchNbsByCode(query, limit = 50) {
   ).map(rowToNbsItem);
 }
 
-export function searchNebsByCode(query, limit = 50) {
-  const rawQuery = String(query || "").trim();
-  const cleanQuery = cleanServiceCode(rawQuery);
-  if (!rawQuery && !cleanQuery) return [];
-
-  const rawPrefix = `${escapeLikePattern(rawQuery)}%`;
-  const cleanPrefix = `${escapeLikePattern(cleanQuery)}%`;
-
-  return fetchAll(
-    `SELECT
-        code,
-        code_clean,
-        title,
-        body_text,
-        section_title,
-        page_start,
-        page_end
-     FROM nebs_entries
-     WHERE (? <> '' AND (code = ? OR code LIKE ? ESCAPE '\\'))
-        OR (? <> '' AND (code_clean = ? OR code_clean LIKE ? ESCAPE '\\'))
-     ORDER BY
-        CASE
-          WHEN code = ? OR code_clean = ? THEN 0
-          WHEN code LIKE ? ESCAPE '\\' OR code_clean LIKE ? ESCAPE '\\' THEN 1
-          ELSE 2
-        END,
-        page_start ASC,
-        LENGTH(code_clean) ASC
-     LIMIT ?`,
-    [
-      rawQuery,
-      rawQuery,
-      rawPrefix,
-      cleanQuery,
-      cleanQuery,
-      cleanPrefix,
-      rawQuery,
-      cleanQuery,
-      rawPrefix,
-      cleanPrefix,
-      limit,
-    ]
-  ).map(rowToNebsEntry);
-}
-
 function fetchNbsItemByCode(code) {
   const rawCode = String(code || "").trim();
   const cleanCode = cleanServiceCode(rawCode);
   if (!rawCode && !cleanCode) return null;
 
   const rows = fetchAll(
-    `SELECT code, code_clean, description, parent_code, level, has_nebs
+    `SELECT code, code_clean, description, parent_code, level
      FROM nbs_items
      WHERE (? <> '' AND code = ?)
         OR (? <> '' AND code_clean = ?)
@@ -245,7 +190,7 @@ function fetchAncestors(item) {
 
   while (currentParent && depth < MAX_ANCESTOR_DEPTH) {
     const parent = fetchOne(
-      `SELECT code, code_clean, description, parent_code, level, has_nebs
+      `SELECT code, code_clean, description, parent_code, level
        FROM nbs_items
        WHERE code = ?
        LIMIT 1`,
@@ -280,7 +225,7 @@ function fetchTreePage(rootCode, page = 1, pageSize = 50) {
   );
   const total = Number(countRow?.total || 0);
   const items = fetchAll(
-    `SELECT code, code_clean, description, parent_code, level, has_nebs
+    `SELECT code, code_clean, description, parent_code, level
      FROM nbs_items
      WHERE code = ? OR code LIKE ? ESCAPE '\\'
      ORDER BY source_order ASC
@@ -305,7 +250,7 @@ export function getLocalNbsDetail(code, page = 1, pageSize = 50) {
 
   const ancestors = fetchAncestors(item);
   const children = fetchAll(
-    `SELECT code, code_clean, description, parent_code, level, has_nebs
+    `SELECT code, code_clean, description, parent_code, level
      FROM nbs_items
      WHERE parent_code = ?
      ORDER BY source_order ASC`,
@@ -321,11 +266,13 @@ export function getLocalNbsDetail(code, page = 1, pageSize = 50) {
         code_clean,
         title,
         body_text,
+        body_markdown,
         section_title,
         page_start,
         page_end
      FROM nebs_entries
-     WHERE code = ? OR code_clean = ?
+     WHERE (code = ? OR code_clean = ?)
+       AND parser_status = 'trusted'
      ORDER BY LENGTH(code_clean) DESC
      LIMIT 1`,
     [item.code, item.code_clean]
@@ -343,36 +290,3 @@ export function getLocalNbsDetail(code, page = 1, pageSize = 50) {
   };
 }
 
-export function getLocalNebsDetail(code) {
-  if (!getWorkerDb()) return null;
-
-  const rawCode = String(code || "").trim();
-  const item = fetchNbsItemByCode(rawCode);
-  if (!item) return null;
-
-  const cleanCode = cleanServiceCode(rawCode);
-  const entry = fetchOne(
-    `SELECT
-        code,
-        code_clean,
-        title,
-        body_text,
-        section_title,
-        page_start,
-        page_end
-     FROM nebs_entries
-     WHERE (? <> '' AND code = ?)
-        OR (? <> '' AND code_clean = ?)
-     ORDER BY LENGTH(code_clean) DESC
-     LIMIT 1`,
-    [rawCode, rawCode, cleanCode, cleanCode]
-  );
-  if (!entry) return null;
-
-  return {
-    success: true,
-    item,
-    ancestors: fetchAncestors(item),
-    entry: rowToNebsEntry(entry),
-  };
-}

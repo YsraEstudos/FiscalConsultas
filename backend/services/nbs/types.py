@@ -55,14 +55,6 @@ class NbsRepositoryProtocol(Protocol):
         page_size: int = 50,
     ) -> dict[str, object]: ...
 
-    async def load_nbs_explanatory_entries(
-        self, query: str, limit: int = 50
-    ) -> list[dict[str, object]]: ...
-
-    async def load_nbs_explanatory_entry_details(
-        self, code: str
-    ) -> dict[str, object]: ...
-
     async def snapshot_nbs_catalog_counts(self) -> dict[str, object]: ...
 
     async def snapshot_nbs_catalog_metadata(self) -> dict[str, str]: ...
@@ -106,7 +98,6 @@ class NbsCatalogItemPayload(TypedDict, total=False):
     description: str
     parent_code: str | None
     level: int
-    has_nebs: bool
 
 
 class NbsCatalogDetailPayload(TypedDict, total=False):

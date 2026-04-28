@@ -4,7 +4,6 @@ import {
   isApiErrorResponse,
   isCodeSearchApiResponse,
   isNbsCatalogSearchApiResponse,
-  isNebsExplanatorySearchApiResponse,
   isTextSearchApiResponse,
 } from '../../src/services/apiResponseGuards';
 
@@ -68,24 +67,14 @@ describe('api type guards', () => {
     ).toBe(true);
   });
 
-  it('detects NBS and NEBS service payloads with explicit guards', () => {
+  it('detects NBS service payloads with explicit guards', () => {
     expect(
       isNbsCatalogSearchApiResponse({
         success: true,
         query: '1.0101',
         normalized: '1.0101',
         total: 1,
-        results: [{ code: '1.0101.11.00', code_clean: '101011100', description: 'Servico', parent_code: null, level: 1, has_nebs: true }],
-      }),
-    ).toBe(true);
-
-    expect(
-      isNebsExplanatorySearchApiResponse({
-        success: true,
-        query: 'nota',
-        normalized: 'nota',
-        total: 1,
-        results: [{ code: '1.0101.11.00', title: 'Entrada', excerpt: 'Trecho', page_start: 1, page_end: 2, section_title: null }],
+        results: [{ code: '1.0101.11.00', code_clean: '101011100', description: 'Servico', parent_code: null, level: 1 }],
       }),
     ).toBe(true);
   });

@@ -7,7 +7,7 @@ import { ResultDisplay } from './components/ResultDisplay';
 import { TabsBar } from './components/TabsBar';
 import { ResultSkeleton } from './components/ResultSkeleton';
 import { TabPanel } from './components/Tabs/TabPanel';
-import type { NbsCatalogSearchApiResponse, NebsExplanatorySearchApiResponse } from './types/api.types';
+import type { NbsCatalogSearchApiResponse } from './types/api.types';
 import { NotePanel } from './components/NotePanel';
 import { UserProfilePage } from './components/UserProfilePage';
 import styles from './App.module.css';
@@ -80,7 +80,6 @@ export function AppView({ controller }: { controller: AppControllerState }) {
         onOpenSettings,
         onCloseSettings,
         isTutorialOpen,
-        onOpenTutorial,
         onCloseTutorial,
         isStatsOpen,
         onOpenStats,
@@ -164,7 +163,6 @@ export function AppView({ controller }: { controller: AppControllerState }) {
                 onMenuOpen={onMenuOpen}
                 servicesUnavailableReason={servicesUnavailableReason}
                 onOpenSettings={onOpenSettings}
-                onOpenTutorial={onOpenTutorial}
                 onOpenStats={onOpenStats}
                 onOpenComparator={onOpenComparator}
                 onOpenModerate={onOpenModerate}
@@ -229,8 +227,8 @@ export function AppView({ controller }: { controller: AppControllerState }) {
                                             {renderOfflineStatusAction(localDbStatus, progress, triggerInstall)}
                                         </div>
                                         <h3 className={styles.emptyStateTitle}>Pronto para buscar</h3>
-                                        <p>{tab.document === 'nbs' || tab.document === 'nebs'
-                                            ? (servicesUnavailableReason || 'Digite um código NEBS ou termo textual acima')
+                                        <p>{tab.document === 'nbs'
+                                            ? (servicesUnavailableReason || 'Digite um código NBS ou termo textual acima')
                                             : 'Digite um NCM acima ou use o histórico'}</p>
                                         <p className={styles.emptyStateHint}>
                                             Dica: Pressione <kbd>/</kbd> para buscar
@@ -238,10 +236,10 @@ export function AppView({ controller }: { controller: AppControllerState }) {
                                     </div>
                                 )}
 
-                                {tab.results && (tab.document === 'nbs' || tab.document === 'nebs') && (
+                                {tab.results && tab.document === 'nbs' && (
                                     <ServicesTabContent
                                         doc={tab.document}
-                                        data={tab.results as NbsCatalogSearchApiResponse | NebsExplanatorySearchApiResponse}
+                                        data={tab.results as NbsCatalogSearchApiResponse}
                                         onSwitchDoc={(nextDoc, query) => {
                                             switchTabDocument(tab.id, nextDoc, query);
                                         }}
@@ -252,7 +250,7 @@ export function AppView({ controller }: { controller: AppControllerState }) {
                                     />
                                 )}
 
-                                {tab.results && tab.document !== 'nbs' && tab.document !== 'nebs' && (
+                                {tab.results && tab.document !== 'nbs' && (
                                     <ResultDisplay
                                         data={tab.results}
                                         latestTextQuery={tab.latestTextQuery}

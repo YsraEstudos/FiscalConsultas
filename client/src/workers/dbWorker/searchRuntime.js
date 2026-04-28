@@ -1,7 +1,5 @@
 import { isCodeQuery } from "../workerUtils.js";
 import {
-  searchNebsByCode,
-  searchNebsByText,
   searchNbsByCode,
   searchNbsByText,
 } from "./catalogSearch.js";
@@ -22,8 +20,6 @@ export function runStructuredSearch(docType, query, viewMode) {
     switch (docType) {
       case "nbs":
         return { results: searchNbsByText(query), searchType: "text" };
-      case "nebs":
-        return { results: searchNebsByText(query), searchType: "text" };
       case "tipi":
       case "ncm":
         return { results: searchTipiByText(query), searchType: "text" };
@@ -50,8 +46,6 @@ export function runStructuredSearch(docType, query, viewMode) {
     }
     case "nbs":
       return { results: searchNbsByCode(query), searchType: "text" };
-    case "nebs":
-      return { results: searchNebsByCode(query), searchType: "text" };
     default:
       return { results: [], searchType: "text" };
   }

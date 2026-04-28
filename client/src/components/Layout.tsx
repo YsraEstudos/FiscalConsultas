@@ -11,7 +11,6 @@ interface LayoutProps {
     searchKey: string;
     onMenuOpen: () => void;
     onOpenSettings: () => void;
-    onOpenTutorial: () => void;
     onOpenStats: () => void;
     onOpenComparator: () => void;
     onOpenModerate: () => void;
@@ -31,7 +30,6 @@ export function Layout({
     searchKey,
     onMenuOpen,
     onOpenSettings,
-    onOpenTutorial,
     onOpenStats,
     onOpenComparator,
     onOpenModerate,
@@ -51,7 +49,6 @@ export function Layout({
                 searchKey={searchKey}
                 onMenuOpen={onMenuOpen}
                 onOpenSettings={onOpenSettings}
-                onOpenTutorial={onOpenTutorial}
                 onOpenStats={onOpenStats}
                 onOpenComparator={onOpenComparator}
                 onOpenModerate={onOpenModerate}
