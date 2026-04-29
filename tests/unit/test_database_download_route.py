@@ -105,10 +105,10 @@ async def test_get_database_version_exposes_offline_contract(offline_bundle):
     assert payload["size_bytes"] == 128
     assert payload["built_at"] == "2026-04-15T12:00:00Z"
     assert payload["format_version"] == 1
-    assert "sha256" not in payload
-    assert "encrypted_sha256" not in payload
-    assert "chunk_size" not in payload
-    assert "pbkdf2_iterations" not in payload
+    assert payload["sha256"] == "plain-sha"
+    assert payload["encrypted_sha256"] == "enc-sha"
+    assert payload["chunk_size"] == 65536
+    assert payload["pbkdf2_iterations"] == 600000
 
 
 @pytest.mark.asyncio
