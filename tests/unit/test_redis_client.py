@@ -234,7 +234,6 @@ async def test_services_and_status_helpers_use_expected_keys(monkeypatch):
 
     versions = {
         "meta:catalog-version:nbs:tenant-a": "v7",
-
     }
 
     async def _fake_get_version(key):

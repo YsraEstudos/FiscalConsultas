@@ -566,7 +566,6 @@ async def migrate_nbs_items(csv_path: Path, pg_session: AsyncSession) -> list:
     return items
 
 
-
 async def update_search_vectors(pg_session: AsyncSession) -> None:
     """Refresh PostgreSQL tsvector columns after bulk loads."""
     print("\nAtualizando search_vectors...")
@@ -603,7 +602,6 @@ async def update_search_vectors(pg_session: AsyncSession) -> None:
             """
         )
     )
-
 
     print("  OK search vectors atualizados")
 
