@@ -1493,7 +1493,7 @@ describe('App behavior', () => {
     expect(screen.getByText('Falha no backend')).toBeInTheDocument();
     expect(screen.getByText('Pronto para buscar')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('layout-menu-toggle'));
+    fireEvent.click(screen.getByTestId('result-toggle-mobile-tab-1'));
     expect(screen.getByTestId('result-display-tab-1')).toHaveAttribute('data-mobile-open', 'true');
     fireEvent.click(screen.getByTestId('result-close-mobile-tab-1'));
     expect(screen.getByTestId('result-display-tab-1')).toHaveAttribute('data-mobile-open', 'false');
