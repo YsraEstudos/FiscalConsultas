@@ -189,7 +189,7 @@ const logoutButtonLabel = getLogoutButtonLabel(isSigningOut);
                     <div className={styles.logoIcon}>📦</div>
                     <div className={styles.logoText}>
                         <div className={styles.logoTitleRow}>
-                            <h1>Busca NCM</h1>
+                            <h1>FiscalConsultas</h1>
                             <span className={styles.versionBadge}>0.0.1</span>
                         </div>
                         <span className={styles.logoSubtitle}>{titleSubtitle}</span>
