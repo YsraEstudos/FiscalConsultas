@@ -17,7 +17,9 @@ import { clearSearchCache, closeWorkerDb, getWorkerDb, getWorkerStatus, getWorke
 async function handleInitMessage(id, payload) {
   const encData = await readFromOpfs();
   const version = await readVersion();
-  const seed = await readSeed();
+  const opfsSeed = await readSeed();
+  const seed = opfsSeed || payload?.seed;
+  const usedPayloadSeedFallback = !opfsSeed && Boolean(payload?.seed);
 
   if (!encData || !version || !seed) {
     setWorkerStatus("not_installed");
@@ -44,7 +46,9 @@ async function handleInitMessage(id, payload) {
     closeWorkerDb();
     setWorkerVersion(null);
     setWorkerStatus("error");
-    await removeFromOpfs();
+    if (usedPayloadSeedFallback) {
+      await removeFromOpfs();
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     const recoverableMessage = `${message}. Reinstale o banco offline para continuar.`;
     postWorkerStatus(id, {
@@ -63,6 +67,7 @@ async function handleInitMessage(id, payload) {
     status: "ready",
     version,
     sizeBytes: encData.length,
+    seed,
   });
 }
 
@@ -207,6 +212,7 @@ async function handleInstallMessage(id, payload) {
       status: "ready",
       version: getWorkerVersion(),
       sizeBytes: encryptedBlob.length,
+      seed: appSeed,
     });
   } catch (error) {
     setWorkerStatus("error");

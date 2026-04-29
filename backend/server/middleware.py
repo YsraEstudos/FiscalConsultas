@@ -352,6 +352,8 @@ class TenantMiddleware:
         "/api/tipi/chapters",
         "/api/webhooks",
         "/api/database/version",
+        "/api/database/token",
+        "/api/database/download",
     }
     PUBLIC_PREFIX_PATHS = (
         "/api/webhooks/",
