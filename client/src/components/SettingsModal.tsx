@@ -192,13 +192,17 @@ export function SettingsModal({
                 </div>
                 <div className={styles.toggleGroup}>
                   <button
+                    type="button"
                     className={`${styles.toggleBtn} ${tipiViewMode === VIEW_MODE.FAMILY ? styles.active : ""}`}
+                    aria-pressed={tipiViewMode === VIEW_MODE.FAMILY}
                     onClick={() => updateTipiViewMode(VIEW_MODE.FAMILY)}
                   >
                     📁 Família NCM
                   </button>
                   <button
+                    type="button"
                     className={`${styles.toggleBtn} ${tipiViewMode === VIEW_MODE.CHAPTER ? styles.active : ""}`}
+                    aria-pressed={tipiViewMode === VIEW_MODE.CHAPTER}
                     onClick={() => updateTipiViewMode(VIEW_MODE.CHAPTER)}
                   >
                     📖 Capítulo Completo
