@@ -62,9 +62,26 @@ function parseHistory(storage: Storage, key: string): HistoryItem[] {
     }
 }
 
+function isValidStoredHistory(saved: string | null): boolean {
+    if (!saved) {
+        return false;
+    }
+
+    try {
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) && parsed.some((item) => (
+            item &&
+            typeof item.term === 'string' &&
+            typeof item.timestamp === 'number'
+        ));
+    } catch {
+        return false;
+    }
+}
+
 function migrateLegacyHistory(storage: Storage): void {
     const legacySaved = storage.getItem(LEGACY_STORAGE_KEY);
-    const hasNewNeshHistory = storage.getItem(STORAGE_KEYS.nesh) !== null;
+    const hasNewNeshHistory = isValidStoredHistory(storage.getItem(STORAGE_KEYS.nesh));
 
     if (!legacySaved) {
         return;
@@ -93,13 +110,35 @@ function loadHistoryByDoc(storage: Storage): HistoryByDoc {
 
 export function useHistory() {
     const [historyByDoc, setHistoryByDoc] = useState<HistoryByDoc>(createEmptyHistory);
+    const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
 
     useEffect(() => {
         const storage = getHistoryStorage();
         if (storage) {
             setHistoryByDoc(loadHistoryByDoc(storage));
         }
+        setHasLoadedHistory(true);
     }, []);
+
+    useEffect(() => {
+        if (!hasLoadedHistory) {
+            return;
+        }
+
+        const storage = getHistoryStorage();
+        if (!storage) {
+            return;
+        }
+
+        DOC_TYPES.forEach((doc) => {
+            const history = historyByDoc[doc] ?? [];
+            if (history.length > 0) {
+                storage.setItem(STORAGE_KEYS[doc], JSON.stringify(history));
+            } else {
+                storage.removeItem(STORAGE_KEYS[doc]);
+            }
+        });
+    }, [historyByDoc, hasLoadedHistory]);
 
     const getHistoryForDoc = useCallback((doc: DocType) => historyByDoc[doc] ?? [], [historyByDoc]);
 
@@ -118,7 +157,6 @@ export function useHistory() {
 
             const updated = [newItem, ...filtered].slice(0, MAX_HISTORY);
 
-            getHistoryStorage()?.setItem(STORAGE_KEYS[doc], JSON.stringify(updated));
             return {
                 ...prev,
                 [doc]: updated,
@@ -128,7 +166,6 @@ export function useHistory() {
 
     const clearHistory = useCallback((doc: DocType) => {
         setHistoryByDoc(prev => {
-            getHistoryStorage()?.removeItem(STORAGE_KEYS[doc]);
             return {
                 ...prev,
                 [doc]: [],
@@ -139,7 +176,6 @@ export function useHistory() {
     const removeFromHistory = useCallback((doc: DocType, termToRemove: string) => {
         setHistoryByDoc(prev => {
             const updated = (prev[doc] ?? []).filter(item => item.term !== termToRemove);
-            getHistoryStorage()?.setItem(STORAGE_KEYS[doc], JSON.stringify(updated));
             return {
                 ...prev,
                 [doc]: updated,

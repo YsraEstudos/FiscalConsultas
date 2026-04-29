@@ -127,6 +127,19 @@ describe('useHistory', () => {
         expect(localStorage.getItem(LEGACY_KEY)).toBeNull();
     });
 
+    it('keeps legacy history when the new NESH key is malformed', async () => {
+        localStorage.setItem(NESH_KEY, '{not-json');
+        localStorage.setItem(LEGACY_KEY, JSON.stringify([{ term: 'legacy', timestamp: 123 }]));
+
+        const { result } = renderHook(() => useHistory());
+
+        await waitFor(() => {
+            expect(result.current.getHistoryForDoc('nesh')).toEqual([{ term: 'legacy', timestamp: 123 }]);
+        });
+        expect(JSON.parse(localStorage.getItem(NESH_KEY) || '[]')).toEqual([{ term: 'legacy', timestamp: 123 }]);
+        expect(localStorage.getItem(LEGACY_KEY)).toBeNull();
+    });
+
     it('ignores malformed stored history without crashing', async () => {
         localStorage.setItem(NESH_KEY, '{not-json');
 
