@@ -377,10 +377,19 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
 async def test_lifespan_postgres_tipi_count_failure_falls_back_to_sqlite_mode(
     monkeypatch, core_mocks
 ):
+    class _ScalarResult:
+        def __init__(self, value):
+            self._value = value
+
+        def scalar(self):
+            return self._value
+
     class _BrokenSession:
-        async def execute(self, _query):
+        async def execute(self, query):
             await asyncio.sleep(0)
-            raise RuntimeError("tipi count failed")
+            if "tipi_positions" in str(query):
+                raise RuntimeError("tipi count failed")
+            return _ScalarResult(True)
 
     @asynccontextmanager
     async def _broken_get_session():

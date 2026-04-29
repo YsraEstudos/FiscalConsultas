@@ -231,6 +231,23 @@ async def _postgres_tipi_has_data() -> bool:
         return False
 
 
+async def _postgres_nbs_has_data() -> bool:
+    try:
+        from backend.infrastructure.db_engine import get_session
+        from sqlalchemy import text
+
+        async with get_session() as session:
+            result = await session.execute(
+                text("SELECT EXISTS(SELECT 1 FROM nbs_items)")
+            )
+            has_data = bool(result.scalar())
+        logger.info("NBS PostgreSQL data available: %s", has_data)
+        return has_data
+    except Exception as exc:
+        logger.warning("Could not check nbs_items table: %s", exc)
+        return False
+
+
 async def _init_tipi_service(app: FastAPI) -> None:
     if not settings.database.is_postgres:
         app.state.tipi_service = TipiService()
@@ -252,7 +269,7 @@ async def _init_tipi_service(app: FastAPI) -> None:
 
 
 async def _init_nbs_service(app: FastAPI) -> None:
-    if settings.database.is_postgres:
+    if settings.database.is_postgres and await _postgres_nbs_has_data():
         try:
             app.state.nbs_service = (
                 await NbsService.initializeNbsServiceWithPostgresRepository()

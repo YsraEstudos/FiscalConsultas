@@ -132,11 +132,15 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             const initMetadata =
                 metadata ?? remoteMetaRef.current ?? readStoredOfflineDatabaseMetadata();
             try {
+                const seed = sessionStorage.getItem('offline_db_seed');
                 await sendToWorker(
                     {
                         type: 'INIT',
                         id: null,
-                        payload: buildOfflineDatabaseInitPayload(initMetadata),
+                        payload: {
+                            ...buildOfflineDatabaseInitPayload(initMetadata),
+                            seed: seed || undefined,
+                        },
                     },
                     30_000,
                 );
