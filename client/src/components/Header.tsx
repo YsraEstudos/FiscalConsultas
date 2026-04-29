@@ -190,7 +190,7 @@ const logoutButtonLabel = getLogoutButtonLabel(isSigningOut);
                     <div className={styles.logoText}>
                         <div className={styles.logoTitleRow}>
                             <h1>Busca NCM</h1>
-                            <span className={styles.versionBadge}>1.0.0</span>
+                            <span className={styles.versionBadge}>0.0.1</span>
                         </div>
                         <span className={styles.logoSubtitle}>{titleSubtitle}</span>
                     </div>

@@ -14,7 +14,6 @@ import type {
 } from './types';
 
 interface NbsHierarchySectionProps {
-    readonly activeChapterNumber: string | null;
     readonly chapterButtonHint: string;
     readonly chapterButtonLabel: string;
     readonly currentChapterNotesEntry: ReturnType<typeof lookupNbsChapterNotesEntry>;
@@ -25,7 +24,6 @@ interface NbsHierarchySectionProps {
 }
 
 function NbsHierarchySection({
-    activeChapterNumber,
     chapterButtonHint,
     chapterButtonLabel,
     currentChapterNotesEntry,
@@ -50,9 +48,6 @@ function NbsHierarchySection({
                     </button>
                     Hierarquia NBS
                 </div>
-                <span className={styles.sectionBadge}>
-                    {activeChapterNumber ? `Capítulo ${activeChapterNumber} ativo` : 'Capítulo ativo'}
-                </span>
             </div>
 
             {nbsState.isSearching ? (
@@ -355,7 +350,6 @@ export function NbsWorkspaceView({
     return (
         <div className={styles.body}>
             <NbsHierarchySection
-                activeChapterNumber={activeChapterNumber}
                 chapterButtonHint={chapterButtonHint}
                 chapterButtonLabel={chapterButtonLabel}
                 currentChapterNotesEntry={currentChapterNotesEntry}
