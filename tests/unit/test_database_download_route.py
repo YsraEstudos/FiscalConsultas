@@ -13,6 +13,7 @@ from starlette.requests import Request
 
 from backend.presentation.routes import database_download
 from backend.server import app_security
+from backend.server.middleware import TenantMiddleware
 
 pytestmark = pytest.mark.unit
 
@@ -118,6 +119,34 @@ async def test_download_accepts_fresh_token(offline_bundle):
 
     assert Path(response.path).read_bytes() == b"encrypted-bundle"
     assert response.headers["Cross-Origin-Resource-Policy"] == "same-origin"
+
+
+@pytest.mark.asyncio
+async def test_download_token_flow_does_not_require_authorization_header(
+    offline_bundle,
+):
+    token_request = _build_request(
+        "/api/database/token",
+        headers={"Authorization": ""},
+    )
+    token_payload = await database_download.create_download_token(token_request)
+
+    response = await database_download.download_database(
+        _build_request(
+            "/api/database/download",
+            headers={"Authorization": ""},
+            client_host="127.0.0.1",
+        ),
+        database_download.DownloadDatabaseRequest(token=token_payload["token"]),
+    )
+
+    assert Path(response.path).read_bytes() == b"encrypted-bundle"
+
+
+def test_database_download_token_routes_are_public_middleware_paths():
+    assert TenantMiddleware._is_public_path("/api/database/version") is True
+    assert TenantMiddleware._is_public_path("/api/database/token") is True
+    assert TenantMiddleware._is_public_path("/api/database/download") is True
 
 
 @pytest.mark.asyncio

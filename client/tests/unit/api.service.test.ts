@@ -186,6 +186,13 @@ describe('api service', () => {
     expect(getter).not.toHaveBeenCalled();
     expect(headers.set).not.toHaveBeenCalledWith('Authorization', 'Bearer jwt-token');
 
+    getter.mockClear();
+    headers.set.mockClear();
+
+    await mockAxios.handlers.requestFulfilled?.({ url: '/database/token', headers });
+    expect(getter).not.toHaveBeenCalled();
+    expect(headers.set).not.toHaveBeenCalledWith('Authorization', 'Bearer jwt-token');
+
     apiModule.unregisterClerkTokenGetter();
   });
 

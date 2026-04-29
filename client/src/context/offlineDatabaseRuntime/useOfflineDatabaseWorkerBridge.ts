@@ -158,6 +158,9 @@ export function useOfflineDatabaseWorkerBridge({
                     setProgress(100);
                     setProgressStep('done');
                     setError(null);
+                    if (payload.seed) {
+                        sessionStorage.setItem('offline_db_seed', payload.seed);
+                    }
                 }
                 if (shouldResolveStatusRequest(payload.status)) {
                     resolvePendingWorkerRequest(
