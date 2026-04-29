@@ -73,12 +73,10 @@ export async function installOfflineApiMock(page: Page, counters: OfflineApiCoun
           database: { status: 'online', latency_ms: 1 },
           tipi: { status: 'online' },
           nbs: { status: 'online' },
-          nebs: { status: 'online' },
           catalogs: {
             nesh: { status: 'online', latency_ms: 1 },
             tipi: { status: 'online' },
             nbs: { status: 'online' },
-            nebs: { status: 'online' },
           },
         }),
       });

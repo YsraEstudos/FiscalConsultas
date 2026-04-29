@@ -31,9 +31,26 @@ echo.
 :: [2] Subir Backend Python
 :: -----------------------------------------------------------
 echo [2/3] Iniciando Backend FastAPI (porta 8000)...
-if exist "%~dp0.venv\Scripts\python.exe" (
+:: Verifica se o venv existe e esta funcional
+set "USE_UV=1"
+if exist "%~dp0.venv\pyvenv.cfg" (
+    if exist "%~dp0.venv\Scripts\python.exe" (
+        "%~dp0.venv\Scripts\python.exe" -c "import fastapi" >nul 2>&1
+        if !errorlevel! equ 0 set "USE_UV=0"
+    )
+)
+if "!USE_UV!"=="1" (
+    echo    Ambiente Python incompleto. Recriando venv com uv...
+    uv sync --reinstall >nul 2>&1
+    if exist "%~dp0.venv\Scripts\python.exe" (
+        "%~dp0.venv\Scripts\python.exe" -c "import fastapi" >nul 2>&1
+        if !errorlevel! equ 0 set "USE_UV=0"
+    )
+)
+if "!USE_UV!"=="0" (
     start "Nesh Backend" /D "%~dp0" cmd /k "set CACHE__ENABLE_REDIS=false& .venv\Scripts\python.exe Nesh.py"
 ) else (
+    echo    Usando uv run como fallback...
     start "Nesh Backend" /D "%~dp0" cmd /k "set CACHE__ENABLE_REDIS=false& uv run Nesh.py"
 )
 echo    Backend iniciado. Aguarde alguns segundos para ele subir.

@@ -234,7 +234,7 @@ async def test_services_and_status_helpers_use_expected_keys(monkeypatch):
 
     versions = {
         "meta:catalog-version:nbs:tenant-a": "v7",
-        "meta:catalog-version:nebs:tenant-b": "v3",
+
     }
 
     async def _fake_get_version(key):
@@ -261,17 +261,6 @@ async def test_services_and_status_helpers_use_expected_keys(monkeypatch):
         "services:nbs:search:v7:tenant-a:search-key",
         {"items": 1},
         cache.services_search_ttl,
-    )
-
-    got_detail = await cache.get_services_detail("nebs", "tenant-b", "detail-key")
-    assert got_detail == {"ok": True}
-    assert seen["get"] == "services:nebs:detail:v3:tenant-b:detail-key"
-
-    await cache.set_services_detail("nebs", "tenant-b", "detail-key", {"entry": 1})
-    assert seen["set"] == (
-        "services:nebs:detail:v3:tenant-b:detail-key",
-        {"entry": 1},
-        cache.services_detail_ttl,
     )
 
     got_status = await cache.get_status_snapshot("public")
