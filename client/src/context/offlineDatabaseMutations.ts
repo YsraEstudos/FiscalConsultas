@@ -94,7 +94,7 @@ export function useOfflineDatabaseMutations({
                         clerkToken: '',
                     },
                 },
-                180_000,
+                600_000,
             );
 
             const effectiveMetadata =
