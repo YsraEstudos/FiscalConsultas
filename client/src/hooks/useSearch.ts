@@ -122,7 +122,7 @@ export function useSearch(
     const executeSearchForTab = useCallback(async (tabId: string, doc: DocType, query: string, saveHistory: boolean = true) => {
         if (!query) return;
 
-        if (saveHistory) addToHistory(query);
+        if (saveHistory) addToHistory(doc, query);
 
         // Localiza a aba atual para consultar capítulos carregados
         const currentTab = tabsByIdRef.current.get(tabId);

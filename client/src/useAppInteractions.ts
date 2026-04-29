@@ -116,7 +116,7 @@ export function useAppInteractions({
 }: UseAppInteractionsArgs): AppInteractionsState {
     const { sidebarPosition } = useSettings();
     const { status: localDbStatus, install, progress } = useLocalDatabase();
-    const { history, addToHistory, removeFromHistory, clearHistory } = useHistory();
+    const { getHistoryForDoc, addToHistory, removeFromHistory, clearHistory } = useHistory();
     const { ensureServicesSearchAccess, servicesUnavailableReason } = useServicesAccess();
     const { executeSearchForTab } = useSearch(tabsById, updateTab, addToHistory);
     const { fetchNotes: fetchCrossChapterNotes } = useCrossChapterNotes();
@@ -128,6 +128,16 @@ export function useAppInteractions({
     const openServiceResultInNewTabRef = useRef<(code: string, textQuery?: string, activate?: boolean) => Promise<void> | void>(() => {});
 
     activeTabRef.current = activeTab;
+    const activeHistoryDoc = (activeTab?.document || 'nesh') as DocType;
+    const history = getHistoryForDoc(activeHistoryDoc);
+
+    const clearActiveHistory = useCallback(() => {
+        clearHistory(activeHistoryDoc);
+    }, [activeHistoryDoc, clearHistory]);
+
+    const removeFromActiveHistory = useCallback((term: string) => {
+        removeFromHistory(activeHistoryDoc, term);
+    }, [activeHistoryDoc, removeFromHistory]);
 
     const runNonBlockingTask = useCallback((task: Promise<unknown> | void, context: string) => {
         Promise.resolve(task).catch((error) => {
@@ -545,8 +555,8 @@ if (!content) {
         localDbStatus,
         progress,
         history,
-        clearHistory,
-        removeFromHistory,
+        clearHistory: clearActiveHistory,
+        removeFromHistory: removeFromActiveHistory,
         servicesUnavailableReason,
         triggerInstall,
         handleSearch,
