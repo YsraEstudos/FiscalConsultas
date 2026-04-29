@@ -182,6 +182,33 @@ export function SettingsModal({
                   placeholder="Tamanho da Fonte"
                 />
               </div>
+
+              <div className={`${styles.item} ${styles.navigationBehaviorItem}`}>
+                <div className={styles.label}>
+                  <span>Visualização TIPI</span>
+                  <span className={styles.hint}>
+                    Comportamento de busca por código
+                  </span>
+                </div>
+                <div className={styles.toggleGroup}>
+                  <button
+                    type="button"
+                    className={`${styles.toggleBtn} ${tipiViewMode === VIEW_MODE.FAMILY ? styles.active : ""}`}
+                    aria-pressed={tipiViewMode === VIEW_MODE.FAMILY}
+                    onClick={() => updateTipiViewMode(VIEW_MODE.FAMILY)}
+                  >
+                    📁 Família NCM
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.toggleBtn} ${tipiViewMode === VIEW_MODE.CHAPTER ? styles.active : ""}`}
+                    aria-pressed={tipiViewMode === VIEW_MODE.CHAPTER}
+                    onClick={() => updateTipiViewMode(VIEW_MODE.CHAPTER)}
+                  >
+                    📖 Capítulo Completo
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* CARD 2: FUNCIONALIDADES */}
@@ -343,31 +370,6 @@ export function SettingsModal({
             {/* CARD: BUSCA OFFLINE */}
             <DatabaseInstaller />
 
-            {/* CARD 4: TIPI (Full width) */}
-            <div className={`${styles.card} ${styles.fullWidthCard}`}>
-              <div className={styles.item}>
-                <div className={styles.label}>
-                  <span>Visualização TIPI</span>
-                  <span className={styles.hint}>
-                    Comportamento de busca por código
-                  </span>
-                </div>
-                <div className={styles.toggleGroup}>
-                  <button
-                    className={`${styles.toggleBtn} ${tipiViewMode === VIEW_MODE.FAMILY ? styles.active : ""}`}
-                    onClick={() => updateTipiViewMode(VIEW_MODE.FAMILY)}
-                  >
-                    📁 Família NCM
-                  </button>
-                  <button
-                    className={`${styles.toggleBtn} ${tipiViewMode === VIEW_MODE.CHAPTER ? styles.active : ""}`}
-                    onClick={() => updateTipiViewMode(VIEW_MODE.CHAPTER)}
-                  >
-                    📖 Capítulo Completo
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
 
           <div className={styles.footer}>
