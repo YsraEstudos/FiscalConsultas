@@ -229,46 +229,124 @@
     color: #f44;
 }
 
-/* Mobile Navigation Toggle */
-.mobileNavToggle {
-    display: none;
+.menuDropdown {
+    position: relative;
 }
 
+.menuTrigger {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.menuTrigger:hover {
+    border-color: var(--accent-primary);
+    color: var(--text-primary);
+}
+
+.menuTriggerActive {
+    border-color: var(--accent-primary);
+    color: var(--text-primary);
+}
+
+.menuContent {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    min-width: 200px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 10px 40px rgb(0 0 0 / 40%);
+    backdrop-filter: blur(10px);
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.25s ease;
+}
+
+.menuContentOpen {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.menuContent button {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.menuContent button:hover {
+    background: rgb(99 102 241 / 15%);
+    color: var(--text-primary);
+}
+
+.menuContent .menuButtonDisabled,
+.menuContent .menuButtonDisabled:hover {
+    opacity: 0.55;
+    cursor: not-allowed;
+    background: transparent;
+    color: var(--text-muted);
+}
+
+.menuDivider {
+    border: none;
+    height: 1px;
+    background: var(--border-color);
+    margin: 8px 0;
+}
+
+.adminBadge {
+    background: rgb(0 255 0 / 10%);
+    color: #4caf50;
+    cursor: default;
+}
+
+.logoutButton {
+    color: #f44;
+}
+
+
+
 @media (width <= 1024px) {
-    .mobileNavToggle {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 40px;
-        height: 40px;
-        min-width: 40px;
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-color);
-        border-radius: 10px;
-        font-size: 1.2rem;
-        color: var(--text-secondary);
-        cursor: pointer;
-        transition: all 0.2s ease;
-        margin-right: 0.5rem;
-        padding: 0;
-    }
-
-    .mobileNavToggle:hover {
-        border-color: var(--accent-primary);
-        background: rgb(99 102 241 / 10%);
-        color: var(--accent-primary);
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
-    }
-
-    .mobileNavToggle:active {
-        transform: scale(0.95);
-        box-shadow: none;
+    .header {
+        padding: 1rem 1.5rem;
     }
 
     .headerContent {
         gap: 0.75rem;
         padding: 0;
+        flex-wrap: wrap;
+    }
+
+    .searchContainer {
+        order: 3;
+        flex: 1 1 100%;
+        max-width: 100%;
+        margin-top: 0.25rem;
     }
 
     .logoSubtitle {
@@ -378,7 +456,21 @@
 }
 
 @media (width <= 768px) {
+    .header {
+        padding: 0.75rem 1rem;
+    }
     .orgSwitcher {
         display: none;
+    }
+    .docSelector {
+        order: 4;
+        flex: 1 1 100%;
+        justify-content: center;
+        margin-top: 0.25rem;
+    }
+    .docButton {
+        flex: 1;
+        text-align: center;
+        padding: 0.5rem 0.5rem;
     }
 }
