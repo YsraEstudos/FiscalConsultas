@@ -17,7 +17,7 @@ import { clearSearchCache, closeWorkerDb, getWorkerDb, getWorkerStatus, getWorke
 async function handleInitMessage(id, payload) {
   const encData = await readFromOpfs();
   const version = await readVersion();
-  const seed = await readSeed();
+  const seed = payload?.seed || (await readSeed());
 
   if (!encData || !version || !seed) {
     setWorkerStatus("not_installed");
@@ -63,6 +63,7 @@ async function handleInitMessage(id, payload) {
     status: "ready",
     version,
     sizeBytes: encData.length,
+    seed,
   });
 }
 
@@ -207,6 +208,7 @@ async function handleInstallMessage(id, payload) {
       status: "ready",
       version: getWorkerVersion(),
       sizeBytes: encryptedBlob.length,
+      seed: appSeed,
     });
   } catch (error) {
     setWorkerStatus("error");

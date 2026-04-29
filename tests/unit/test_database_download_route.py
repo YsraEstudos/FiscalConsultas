@@ -23,10 +23,14 @@ def _build_request(
     *,
     method: str = "POST",
     headers: dict[str, str] | None = None,
+    auth_header: str | None = "Bearer test-token",
     client_host: str = "127.0.0.1",
     scheme: str = "http",
 ) -> Request:
-    headers = {"Authorization": "Bearer test-token", **(headers or {})}
+    headers = {
+        **({"Authorization": auth_header} if auth_header else {}),
+        **(headers or {}),
+    }
     scope_headers = [
         (key.lower().encode("latin-1"), value.encode("latin-1"))
         for key, value in headers.items()
@@ -127,14 +131,14 @@ async def test_download_token_flow_does_not_require_authorization_header(
 ):
     token_request = _build_request(
         "/api/database/token",
-        headers={"Authorization": ""},
+        auth_header=None,
     )
     token_payload = await database_download.create_download_token(token_request)
 
     response = await database_download.download_database(
         _build_request(
             "/api/database/download",
-            headers={"Authorization": ""},
+            auth_header=None,
             client_host="127.0.0.1",
         ),
         database_download.DownloadDatabaseRequest(token=token_payload["token"]),

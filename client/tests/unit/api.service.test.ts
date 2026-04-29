@@ -119,6 +119,20 @@ function swapLocation(url: string) {
   };
 }
 
+async function expectRequestToSkipAuth(
+  url: string,
+  getter: ReturnType<typeof vi.fn>,
+  headers: { set: ReturnType<typeof vi.fn> },
+) {
+  getter.mockClear();
+  headers.set.mockClear();
+
+  await mockAxios.handlers.requestFulfilled?.({ url, headers });
+
+  expect(getter).not.toHaveBeenCalled();
+  expect(headers.set).not.toHaveBeenCalledWith('Authorization', 'Bearer jwt-token');
+}
+
 describe('api service', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -172,26 +186,9 @@ describe('api service', () => {
     expect(getter).toHaveBeenCalledTimes(1);
     expect(headers.set).toHaveBeenCalledWith('Authorization', 'Bearer jwt-token');
 
-    getter.mockClear();
-    headers.set.mockClear();
-
-    await mockAxios.handlers.requestFulfilled?.({ url: 'https://example.com/status', headers });
-    expect(getter).not.toHaveBeenCalled();
-    expect(headers.set).not.toHaveBeenCalledWith('Authorization', 'Bearer jwt-token');
-
-    getter.mockClear();
-    headers.set.mockClear();
-
-    await mockAxios.handlers.requestFulfilled?.({ url: '/services/nbs/search?q=construcao', headers });
-    expect(getter).not.toHaveBeenCalled();
-    expect(headers.set).not.toHaveBeenCalledWith('Authorization', 'Bearer jwt-token');
-
-    getter.mockClear();
-    headers.set.mockClear();
-
-    await mockAxios.handlers.requestFulfilled?.({ url: '/database/token', headers });
-    expect(getter).not.toHaveBeenCalled();
-    expect(headers.set).not.toHaveBeenCalledWith('Authorization', 'Bearer jwt-token');
+    await expectRequestToSkipAuth('https://example.com/status', getter, headers);
+    await expectRequestToSkipAuth('/services/nbs/search?q=construcao', getter, headers);
+    await expectRequestToSkipAuth('/database/token', getter, headers);
 
     apiModule.unregisterClerkTokenGetter();
   });
