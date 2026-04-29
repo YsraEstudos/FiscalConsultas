@@ -283,8 +283,8 @@ def _consolidate_databases(output_path: Path) -> None:
 
     # === Populate from source databases ===
 
-    # NBS + NEBS from services.db
-    _log(f"Reading NBS/NEBS from {SERVICES_DB}...")
+    # NBS from services.db
+    _log(f"Reading NBS from {SERVICES_DB}...")
     cursor.execute("ATTACH DATABASE ? AS svc", (str(SERVICES_DB),))  # nosec B608
 
     cursor.execute("""
@@ -297,7 +297,6 @@ def _consolidate_databases(output_path: Path) -> None:
     nbs_count = cursor.rowcount
     _log(f"  Inserted {nbs_count} NBS items")
 
-    # Check if nebs_entries table exists in services.db
     cursor.execute(
         "SELECT 1 FROM svc.sqlite_master WHERE type='table' AND name='nebs_entries' LIMIT 1"
     )

@@ -73,12 +73,10 @@ export async function installOfflineApiMock(page: Page, counters: OfflineApiCoun
           database: { status: 'online', latency_ms: 1 },
           tipi: { status: 'online' },
           nbs: { status: 'online' },
-          nebs: { status: 'online' },
           catalogs: {
             nesh: { status: 'online', latency_ms: 1 },
             tipi: { status: 'online' },
             nbs: { status: 'online' },
-            nebs: { status: 'online' },
           },
         }),
       });
@@ -138,6 +136,33 @@ export async function installOfflineWorkerMock(page: Page) {
       worker.listeners.forEach((listener) => listener(event));
     }
 
+    function getInstalledStatusPayload() {
+      const installedMeta = readInstalledMeta();
+      if (!installedMeta?.version) {
+        return { status: 'not_installed' };
+      }
+
+      return {
+        status: 'ready',
+        version: installedMeta.version,
+        sizeBytes: installedMeta.size_bytes || 0,
+      };
+    }
+
+    function emitInstalledStatus(
+      worker: {
+        onmessage: ((event: MessageEvent<WorkerMessage>) => void) | null;
+        listeners: Set<(event: MessageEvent<WorkerMessage>) => void>;
+      },
+      id: string | null,
+    ) {
+      emitToWorker(worker, {
+        type: 'STATUS',
+        id,
+        payload: getInstalledStatusPayload(),
+      });
+    }
+
     class MockOfflineWorker {
       public onmessage: ((event: MessageEvent<WorkerMessage>) => void) | null = null;
 
@@ -172,24 +197,7 @@ export async function installOfflineWorkerMock(page: Page) {
 
         try {
           if (type === 'INIT') {
-            const installedMeta = readInstalledMeta();
-            if (installedMeta?.version) {
-              emitToWorker(this, {
-                type: 'STATUS',
-                id,
-                payload: {
-                  status: 'ready',
-                  version: installedMeta.version,
-                  sizeBytes: installedMeta.size_bytes || 0,
-                },
-              });
-            } else {
-              emitToWorker(this, {
-                type: 'STATUS',
-                id,
-                payload: { status: 'not_installed' },
-              });
-            }
+            emitInstalledStatus(this, id);
             return;
           }
 
@@ -259,18 +267,7 @@ export async function installOfflineWorkerMock(page: Page) {
           }
 
           if (type === 'GET_STATUS') {
-            const installedMeta = readInstalledMeta();
-            emitToWorker(this, {
-              type: 'STATUS',
-              id,
-              payload: installedMeta?.version
-                ? {
-                  status: 'ready',
-                  version: installedMeta.version,
-                  sizeBytes: installedMeta.size_bytes || 0,
-                }
-                : { status: 'not_installed' },
-            });
+            emitInstalledStatus(this, id);
             return;
           }
 

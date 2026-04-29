@@ -122,7 +122,6 @@ export function ServicesWorkspace({
             nbsPrefixAutoExpand={nbsPrefixAutoExpand}
             nbsState={nbsState}
             onSelectNbs={onSelectNbs}
-            openCatalogDoc={openCatalogDoc}
             setIsChapterNotesOpen={setIsChapterNotesOpen}
         />
     );

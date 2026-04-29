@@ -11,7 +11,7 @@ from alembic import op
 
 logger = logging.getLogger(__name__)
 
-revision = "013_search_resource_optimizations"
+revision = "013_search_resource_opts"
 down_revision = "012_services_catalog_postgres"
 branch_labels = None
 depends_on = None
