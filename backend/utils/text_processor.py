@@ -85,6 +85,7 @@ class PortugueseStemmer:
 # Stemming is CPU intensive and the total vocabulary of NCM codes is bounded.
 _SHARED_STEMMER = PortugueseStemmer()
 
+
 @lru_cache(maxsize=10000)
 def _cached_stem(word: str) -> str:
     return _SHARED_STEMMER.stem(word)
