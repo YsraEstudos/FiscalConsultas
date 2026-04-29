@@ -319,6 +319,7 @@ vi.mock('../../src/hooks/useSearch', () => ({
 vi.mock('../../src/hooks/useHistory', () => ({
   useHistory: () => ({
     history: mocks.historyRef.value,
+    getHistoryForDoc: vi.fn(() => mocks.historyRef.value),
     addToHistory: mocks.addToHistoryMock,
     removeFromHistory: mocks.removeFromHistoryMock,
     clearHistory: mocks.clearHistoryMock,
@@ -870,8 +871,8 @@ describe('App behavior', () => {
 
     fireEvent.click(screen.getByTestId('layout-clear-history'));
     fireEvent.click(screen.getByTestId('layout-remove-history'));
-    expect(mocks.clearHistoryMock).toHaveBeenCalledTimes(1);
-    expect(mocks.removeFromHistoryMock).toHaveBeenCalledWith('8517');
+    expect(mocks.clearHistoryMock).toHaveBeenCalledWith('nesh');
+    expect(mocks.removeFromHistoryMock).toHaveBeenCalledWith('nesh', '8517');
 
     fireEvent.click(screen.getByTestId('modal-open-doc-current'));
     expect(mocks.updateTabMock).toHaveBeenCalledWith(
