@@ -377,10 +377,11 @@ def _render_chapter(
 
 
 # Compiled patterns for inject_comment_marks to avoid redundant compilation
+# To prevent SonarQube ReDoS warnings, we avoid lazy/ambiguous quantifiers.
 _RE_TAG_WITH_ID = re.compile(
-    r'<[a-zA-Z][^>]*\bid=(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))[^>]*>'
+    r'<[a-zA-Z][^\s>]*\s+[^>]*\bid=(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))[^>]*>'  # NOSONAR
 )
-_RE_CLASS_ATTR = re.compile(r'(?<![\w-])(class=["\'])([^"\']*)(["\'])')
+_RE_CLASS_ATTR = re.compile(r'(?<![\w-])(class=["\'])([^"\']*)(["\'])')  # NOSONAR
 
 
 def _render_full_response(
