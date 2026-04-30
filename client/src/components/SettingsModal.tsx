@@ -1,5 +1,6 @@
 import { useSettings } from "../context/SettingsContext";
-import { ChangeEvent, useEffect } from "react";
+import { useLocalDatabase } from "../context/LocalDatabaseContext";
+import { ChangeEvent, useCallback, useEffect } from "react";
 import {
   VIEW_MODE,
   SIDEBAR_POSITION,
@@ -7,6 +8,7 @@ import {
   type AccentColor,
 } from "../constants";
 import { useIsAdmin } from "../hooks/useIsAdmin";
+import DatabaseInstaller from "./DatabaseInstaller";
 import styles from "./SettingsModal.module.css";
 
 interface SettingsModalProps {
@@ -38,6 +40,9 @@ export function SettingsModal({
     adminMode,
     tipiViewMode,
     sidebarPosition,
+    openNewTab,
+    nbsPrefixAutoExpand,
+    nbsChapterNotesNewTab,
     updateTheme,
     updateAccentColor,
     updateFontSize,
@@ -45,18 +50,31 @@ export function SettingsModal({
     toggleAdminMode,
     updateTipiViewMode,
     updateSidebarPosition,
+    toggleOpenNewTab,
+    toggleNbsPrefixAutoExpand,
+    toggleNbsChapterNotesNewTab,
     restoreDefaults,
   } = useSettings();
   const isAdmin = useIsAdmin();
+  const { status: offlineDbStatus, isRemoving } = useLocalDatabase();
+  const isOfflineMutationInProgress =
+    offlineDbStatus === "installing" ||
+    offlineDbStatus === "updating" ||
+    isRemoving;
+
+  const handleRequestClose = useCallback(() => {
+    if (isOfflineMutationInProgress) return;
+    onClose();
+  }, [isOfflineMutationInProgress, onClose]);
 
   // Close on ESC
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") handleRequestClose();
     };
     if (isOpen) globalThis.addEventListener("keydown", handleEsc);
     return () => globalThis.removeEventListener("keydown", handleEsc);
-  }, [isOpen, onClose]);
+  }, [handleRequestClose, isOpen]);
 
   if (!isOpen) return null;
 
@@ -72,7 +90,8 @@ export function SettingsModal({
       <button
         type="button"
         className={styles.backdrop}
-        onClick={onClose}
+        onClick={handleRequestClose}
+        disabled={isOfflineMutationInProgress}
         aria-label="Fechar configurações"
       />
       <dialog
@@ -87,7 +106,8 @@ export function SettingsModal({
           <h2 id="settings-modal-title">Configurações</h2>
           <button
             className={styles.closeBtn}
-            onClick={onClose}
+            onClick={handleRequestClose}
+            disabled={isOfflineMutationInProgress}
             aria-label="Fechar"
           >
             ×
@@ -162,6 +182,33 @@ export function SettingsModal({
                   placeholder="Tamanho da Fonte"
                 />
               </div>
+
+              <div className={`${styles.item} ${styles.navigationBehaviorItem}`}>
+                <div className={styles.label}>
+                  <span>Visualização TIPI</span>
+                  <span className={styles.hint}>
+                    Comportamento de busca por código
+                  </span>
+                </div>
+                <div className={styles.toggleGroup}>
+                  <button
+                    type="button"
+                    className={`${styles.toggleBtn} ${tipiViewMode === VIEW_MODE.FAMILY ? styles.active : ""}`}
+                    aria-pressed={tipiViewMode === VIEW_MODE.FAMILY}
+                    onClick={() => updateTipiViewMode(VIEW_MODE.FAMILY)}
+                  >
+                    📁 Família NCM
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.toggleBtn} ${tipiViewMode === VIEW_MODE.CHAPTER ? styles.active : ""}`}
+                    aria-pressed={tipiViewMode === VIEW_MODE.CHAPTER}
+                    onClick={() => updateTipiViewMode(VIEW_MODE.CHAPTER)}
+                  >
+                    📖 Capítulo Completo
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* CARD 2: FUNCIONALIDADES */}
@@ -175,8 +222,6 @@ export function SettingsModal({
                 </div>
                 <label
                   className={styles.switch}
-                  aria-label="Realçar Resultados"
-                  title="Realçar Resultados"
                 >
                   <input
                     type="checkbox"
@@ -191,6 +236,85 @@ export function SettingsModal({
                 </label>
               </div>
 
+              <div
+                className={`${styles.item} ${styles.navigationBehaviorItem}`}
+                data-testid="navigation-behavior-item"
+              >
+                <div className={styles.label}>
+                  <span>Comportamento de Navegação</span>
+                  <span className={styles.hint}>
+                    Abrir serviço NBS relacionado
+                  </span>
+                </div>
+                <div
+                  className={styles.toggleGroup}
+                  data-testid="navigation-behavior-toggle-group"
+                >
+                  <button
+                    className={`${styles.toggleBtn} ${openNewTab ? "" : styles.active}`}
+                    onClick={() => openNewTab && toggleOpenNewTab()}
+                    aria-pressed={!openNewTab}
+                  >
+                    Na mesma aba
+                  </button>
+                  <button
+                    className={`${styles.toggleBtn} ${openNewTab ? styles.active : ""}`}
+                    onClick={() => !openNewTab && toggleOpenNewTab()}
+                    aria-pressed={openNewTab}
+                  >
+                    Em nova aba
+                  </button>
+                </div>
+              </div>
+
+              <div className={styles.item}>
+                <div className={styles.label}>
+                  <span>Expandir prefixos NBS</span>
+                  <span className={styles.hint}>
+                    Mostrar descendentes automaticamente ao buscar códigos como 1.0601
+                  </span>
+                </div>
+                <label
+                  className={styles.switch}
+                >
+                  <input
+                    type="checkbox"
+                    checked={nbsPrefixAutoExpand}
+                    onChange={toggleNbsPrefixAutoExpand}
+                    data-testid="nbs-prefix-auto-expand-toggle"
+                    aria-label="Expandir prefixos NBS"
+                    title="Expandir prefixos NBS"
+                    placeholder="Expandir prefixos NBS"
+                  />
+                  <span className={styles.sliderRound}></span>
+                </label>
+              </div>
+
+              <div className={styles.item}>
+                <div className={styles.label}>
+                  <span>Explicações de capítulo NBS</span>
+                  <span className={styles.hint}>
+                    Abrir na tela atual por padrão ou em nova aba
+                  </span>
+                </div>
+                <div className={styles.toggleGroup}>
+                  <button
+                    className={`${styles.toggleBtn} ${nbsChapterNotesNewTab ? "" : styles.active}`}
+                    onClick={() => nbsChapterNotesNewTab && toggleNbsChapterNotesNewTab()}
+                    aria-pressed={!nbsChapterNotesNewTab}
+                  >
+                    Na tela
+                  </button>
+                  <button
+                    className={`${styles.toggleBtn} ${nbsChapterNotesNewTab ? styles.active : ""}`}
+                    onClick={() => !nbsChapterNotesNewTab && toggleNbsChapterNotesNewTab()}
+                    aria-pressed={nbsChapterNotesNewTab}
+                  >
+                    Nova aba
+                  </button>
+                </div>
+              </div>
+
               {isAdmin && (
                 <div className={styles.item}>
                   <div className={styles.label}>
@@ -199,8 +323,6 @@ export function SettingsModal({
                   </div>
                   <label
                     className={styles.switch}
-                    aria-label="Modo Desenvolvedor"
-                    title="Modo Desenvolvedor"
                   >
                     <input
                       type="checkbox"
@@ -245,31 +367,9 @@ export function SettingsModal({
               </div>
             </div>
 
-            {/* CARD 4: TIPI (Full width) */}
-            <div className={`${styles.card} ${styles.fullWidthCard}`}>
-              <div className={styles.item}>
-                <div className={styles.label}>
-                  <span>Visualização TIPI</span>
-                  <span className={styles.hint}>
-                    Comportamento de busca por código
-                  </span>
-                </div>
-                <div className={styles.toggleGroup}>
-                  <button
-                    className={`${styles.toggleBtn} ${tipiViewMode === VIEW_MODE.FAMILY ? styles.active : ""}`}
-                    onClick={() => updateTipiViewMode(VIEW_MODE.FAMILY)}
-                  >
-                    📁 Família NCM
-                  </button>
-                  <button
-                    className={`${styles.toggleBtn} ${tipiViewMode === VIEW_MODE.CHAPTER ? styles.active : ""}`}
-                    onClick={() => updateTipiViewMode(VIEW_MODE.CHAPTER)}
-                  >
-                    📖 Capítulo Completo
-                  </button>
-                </div>
-              </div>
-            </div>
+            {/* CARD: BUSCA OFFLINE */}
+            <DatabaseInstaller />
+
           </div>
 
           <div className={styles.footer}>

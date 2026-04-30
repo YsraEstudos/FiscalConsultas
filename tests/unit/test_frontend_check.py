@@ -4,13 +4,17 @@ from backend.utils import frontend_check
 pytestmark = pytest.mark.unit
 
 
-def test_verify_frontend_build_logs_error_when_build_missing(monkeypatch):
-    errors = []
+def test_verify_frontend_build_logs_warning_when_build_missing(monkeypatch):
+    warnings = []
     monkeypatch.setattr(frontend_check.os.path, "exists", lambda _p: False)
-    monkeypatch.setattr(frontend_check.logger, "error", lambda msg: errors.append(msg))
+    monkeypatch.setattr(
+        frontend_check.logger,
+        "warning",
+        lambda msg, *args: warnings.append(msg % args if args else msg),
+    )
 
     frontend_check.verify_frontend_build("C:/proj")
-    assert any("FRONTEND BUILD NOT FOUND" in msg for msg in errors)
+    assert any("Frontend build not found" in msg for msg in warnings)
 
 
 def test_verify_frontend_build_warns_when_package_is_newer(monkeypatch):

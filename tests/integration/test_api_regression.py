@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-pytestmark = pytest.mark.snapshot
+pytestmark = [pytest.mark.integration, pytest.mark.snapshot]
 
 # List of test cases to verify against snapshot
 # Ideally, we could extract these keys from the snapshot itself if we want full coverage,  # noqa: E501
@@ -61,42 +61,64 @@ def test_search_regression(client, snapshot_data, query):
     # If hash differs (maybe due to dynamic timestamp or slight order change),
     # we verify critical fields to ensure it's not a logic regression.
 
-    # Validate 'type' (e.g. 'code' vs 'text')
-    # assert result_99['erro'] is not None
-    # assert result_99['real_content_found'] is False
-    pass
+    assert data.get("success") is True, (  # nosec B101
+        f"Expected success=true for '{query}'"
+    )
 
-    # Validate count
-    # Handle both 'results' list length and 'total_capitulos' depending on response structure  # noqa: E501
+    expected_type = expected.get("type")
+    actual_type = data.get("type")
+    assert actual_type == expected_type, (  # nosec B101
+        f"Type mismatch for '{query}'. Expected {expected_type}, got {actual_type}"
+    )
+
+    # Validate count with strict expectations from the baseline snapshot.
     expected_count = expected.get("count")
 
     # Note: original script logic had a specific check:
     # len(data.get("results", [])) != expected.get("count") and data.get("total_capitulos") != expected.get("count")  # noqa: E501
     # We replicate strict check here:
 
-    if data.get("type") == "code":
+    if actual_type == "code":
         # For NCM code lookup, we look at total_capitulos
         # (Though sometimes results count matches too, total_capitulos is the source of truth for chapters found)  # noqa: E501
+        assert isinstance(data.get("results"), dict), (  # nosec B101
+            f"Expected dict results for '{query}' code lookup"
+        )
         assert (  # nosec B101
             data.get("total_capitulos") == expected_count
         ), (
             f"Count mismatch for '{query}' (code). Expected {expected_count}, got {data.get('total_capitulos')}"  # noqa: E501
         )  # noqa: E501
     else:
-        # For FTS (text), we count the items in 'results' list
-        # Note: 'total_capitulos' is 0 for FTS queries in nesh_service.py, so we must ignore it.  # noqa: E501
-        # We also tolerate if count is slightly off (e.g. 20 vs 22) if it's within margin,  # noqa: E501
-        # but for regression strictness we'll assert exact match/greater.
-        # Actually, let's just assert it is NOT zero if expected > 0.
-        current_len = len(data.get("results", []))
-        # If snapshot had 22 and we have 20 (limit), that's acceptable.
-        if expected_count > 0:
+        # For FTS (text), tolerate small count drift across dataset revisions,
+        # while still failing on clear regressions.
+        text_results = data.get("results")
+        assert isinstance(text_results, list), (  # nosec B101
+            f"Expected list results for '{query}' text lookup"
+        )
+        current_len = len(text_results)
+
+        # If the baseline expected matches, keep strictness.
+        if current_len == expected_count:
+            return
+
+        if expected_count == 0:
+            # For text queries that previously returned empty, we allow only a small
+            # amount of drift (ranking/index updates), but prevent large explosions.
+            assert current_len <= 1, (  # nosec B101
+                f"Count mismatch for '{query}' (text empty baseline). "
+                f"Expected near 0 with at most 1 result, got {current_len}"
+            )
+        else:
+            # For non-empty baselines, require non-empty output and cap growth.
+            max_allowed = max(expected_count * 3, expected_count + 5)
             assert current_len > 0, (  # nosec B101
                 f"Expected results for '{query}' but got 0"
             )
-
-        # If we want strict count check (assuming snapshot was same limit):
-        # assert current_len == expected_count
+            assert current_len <= max_allowed, (  # nosec B101
+                f"Count mismatch for '{query}' (text). "
+                f"Expected around {expected_count}, got {current_len}"
+            )
 
     # If we reached here, semantic checks passed, but hash failed.
     # We can issue a warning so the dev knows the snapshot might need updating.

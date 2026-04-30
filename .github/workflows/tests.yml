@@ -31,12 +31,41 @@ jobs:
           python-version: "3.14"
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           enable-cache: true
 
       - name: Install backend dependencies
         run: uv sync --group dev
+
+      - name: Validate offline bundle contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          enc = Path("database/fiscal_offline.enc")
+          meta = Path("database/fiscal_offline.meta")
+          source_dbs = [
+              Path("database/nesh.db"),
+              Path("database/tipi.db"),
+              Path("database/services.db"),
+          ]
+          existing_source_dbs = [path for path in source_dbs if path.exists()]
+
+          if enc.exists() != meta.exists():
+              raise SystemExit(
+                  "Offline bundle contract broken: fiscal_offline.enc and fiscal_offline.meta must exist together."
+              )
+
+          if existing_source_dbs and len(existing_source_dbs) != len(source_dbs):
+              raise SystemExit(
+                  "Offline bundle sources are partially present. Either provide all source databases or none."
+              )
+
+          if len(existing_source_dbs) == len(source_dbs):
+              print("Source databases detected. Validating offline bundle build script...")
+          else:
+              print("Source databases not present in CI checkout. Skipping bundle generation, keeping contract check only.")
+          PY
 
       - name: Lint with Ruff
         run: |
@@ -58,7 +87,7 @@ jobs:
         run: uv run pytest -q --cov=backend --cov-report=xml --cov-report=term-missing --cov-fail-under=70
 
       - name: Upload backend coverage
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: backend-coverage
           path: coverage.xml
@@ -73,7 +102,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup Node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: "24"
           cache: "npm"
@@ -96,7 +125,58 @@ jobs:
         run: npm run test:coverage
 
       - name: Upload frontend coverage
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: frontend-coverage
           path: client/coverage
+
+  frontend-e2e-p0:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Install Playwright browser dependencies
+        working-directory: client
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright P0 offline/service/scroll/auth specs
+        working-directory: client
+        env:
+          PLAYWRIGHT_LIVE_BASE_URL: http://localhost:4173
+          ALLOW_TEST_CLERK_KEY: "true"
+        run: >
+          npx playwright test
+          tests/playwright/services-tabs.spec.ts
+          tests/playwright/services-tabs.resilience.spec.ts
+          tests/playwright/nesh-ordering.spec.ts
+          tests/playwright/auth-capabilities.spec.ts
+          tests/playwright/tabs-scroll-persistence.spec.ts
+          tests/playwright/offline-install-reopen.spec.ts
+          tests/playwright/offline-reopen.sw.live.spec.ts
+          --project=mocked-chromium
+          --project=live-chromium
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: frontend-e2e-p0-artifacts
+          path: |
+            client/test-results
+            client/playwright-report

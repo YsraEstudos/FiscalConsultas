@@ -1,8 +1,8 @@
 import { useState, useCallback, useMemo, useRef } from "react";
-import type { SearchResponse } from "../types/api.types";
+import type { FiscalSearchApiResponse } from "../types/api.types";
 
 /** Tipo de documento suportado */
-export type DocType = "nesh" | "tipi" | "nbs" | "nebs";
+export type DocType = "nesh" | "tipi" | "nbs";
 
 /** Representa uma aba no sistema */
 export interface Tab {
@@ -14,7 +14,7 @@ export interface Tab {
   error: string | null;
   ncm?: string;
   latestTextQuery?: string;
-  results?: SearchResponse | null;
+  results?: FiscalSearchApiResponse | null;
   /**
    * Flag para indicar que há resultados novos de busca.
    * Quando true, o ResultDisplay prioriza auto-scroll e NÃO restaura scroll salvo.
@@ -43,7 +43,6 @@ const createLoadedChaptersByDoc = (): Record<DocType, string[]> => ({
   nesh: [],
   tipi: [],
   nbs: [],
-  nebs: [],
 });
 
 let fallbackTabIdCounter = 0;
@@ -83,6 +82,10 @@ const isTabIndexWithinBounds = (tabs: Tab[], tabIndex: number): boolean =>
 const hasTabUpdates = (current: Tab, updates: Partial<Tab>): boolean =>
   Object.entries(updates).some(([key, value]) => current[key as keyof Tab] !== value);
 
+type TabUpdateInput =
+  | Partial<Tab>
+  | ((currentTab: Tab | undefined) => Partial<Tab> | undefined);
+
 export function useTabs() {
   const [tabs, setTabs] = useState<Tab[]>([
     {
@@ -98,7 +101,7 @@ export function useTabs() {
   const [activeTabId, setActiveTabId] = useState<string>("tab-1");
   const nextActiveIdRef = useRef<string | null>(null);
 
-  const createTab = useCallback((document: DocType = "nesh") => {
+  const createTab = useCallback((document: DocType = "nesh", activate: boolean = true) => {
     const newTabId = generateTabId();
     const newTab: Tab = {
       id: newTabId,
@@ -110,7 +113,9 @@ export function useTabs() {
       loadedChaptersByDoc: createLoadedChaptersByDoc(),
     };
     setTabs((prev) => [...prev, newTab]);
-    setActiveTabId(newTabId);
+    if (activate) {
+      setActiveTabId(newTabId);
+    }
     return newTabId;
   }, []);
 
@@ -140,12 +145,19 @@ export function useTabs() {
     setActiveTabId((current) => (current === tabId ? current : tabId));
   }, []);
 
-  const updateTab = useCallback((tabId: string, updates: Partial<Tab>) => {
+  const updateTab = useCallback((tabId: string, updatesOrUpdater: TabUpdateInput) => {
     setTabs((prev) => {
       const targetIndex = prev.findIndex((tab) => tab.id === tabId);
       if (targetIndex < 0) return prev;
 
       const current = prev[targetIndex];
+      const updates =
+        typeof updatesOrUpdater === "function"
+          ? updatesOrUpdater(current)
+          : updatesOrUpdater;
+
+      if (!updates) return prev;
+
       if (!hasTabUpdates(current, updates)) return prev;
 
       const next = [...prev];

@@ -1,0 +1,119 @@
+.fallback {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    color: var(--text-primary);
+}
+
+.fullScreen {
+    min-height: 100vh;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+    background:
+        radial-gradient(circle at top, rgb(37 99 235 / 12%), transparent 40%),
+        linear-gradient(180deg, var(--bg-primary), var(--bg-secondary));
+}
+
+.panel {
+    min-height: 100%;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    background:
+        linear-gradient(180deg, rgb(255 255 255 / 0.02), rgb(255 255 255 / 0.01)),
+        var(--bg-secondary);
+    box-shadow: 0 18px 45px rgb(15 23 42 / 0.08);
+}
+
+.icon {
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgb(239 68 68 / 0.12);
+    color: var(--error-color, #ef4444);
+}
+
+.title {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.description {
+    margin: 0;
+    max-width: 42rem;
+    text-align: center;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.meta {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-tertiary, var(--text-secondary));
+    text-align: center;
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+}
+
+.primaryAction,
+.secondaryAction {
+    border-radius: 999px;
+    padding: 0.8rem 1.2rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.primaryAction {
+    border: none;
+    color: #fff;
+    background: linear-gradient(135deg, var(--accent-primary, #2563eb), #1d4ed8);
+    box-shadow: 0 12px 30px rgb(37 99 235 / 0.24);
+}
+
+.secondaryAction {
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    background: var(--bg-primary);
+}
+
+.primaryAction:hover,
+.secondaryAction:hover {
+    transform: translateY(-1px);
+}
+
+.primaryAction:focus-visible,
+.secondaryAction:focus-visible {
+    outline: 2px solid var(--accent-primary, #2563eb);
+    outline-offset: 2px;
+}
+
+@media (width <= 720px) {
+    .fullScreen,
+    .panel {
+        padding: 1.5rem;
+    }
+
+    .actions {
+        width: 100%;
+        flex-direction: column;
+    }
+
+    .primaryAction,
+    .secondaryAction {
+        width: 100%;
+    }
+}

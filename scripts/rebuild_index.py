@@ -32,7 +32,7 @@ if not logging.getLogger().handlers:
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 NESH_FILE = os.path.join(SCRIPT_DIR, "..", "data", "debug_nesh", "Nesh.txt")
 DB_FILE = os.path.join(SCRIPT_DIR, "..", "database", "nesh.db")
-CONFIG_FILE = os.path.join(SCRIPT_DIR, "..", "config", "settings.json")
+CONFIG_FILE = os.path.join(SCRIPT_DIR, "..", "backend", "config", "settings.json")
 logger = logging.getLogger(__name__)
 
 # Carrega Stopwords
@@ -89,6 +89,33 @@ def extract_chapter_notes(chapter_content: str) -> str:
         sections["definicoes"],
     ]
     return "\n\n".join(p for p in parts if p)
+
+
+def _parse_notes_for_precompute(notes_content: str) -> dict[str, str]:
+    """Parse notes at ingestion time to avoid runtime regex."""
+    if not notes_content:
+        return {}
+
+    pattern = re.compile(r"^(\d+)\s*[\-–—.):]\s*")
+    notes: dict[str, str] = {}
+    current_num = None
+    buffer: list[str] = []
+
+    for line in notes_content.split("\n"):
+        cleaned = line.strip()
+        match = pattern.match(cleaned)
+        if match:
+            if current_num:
+                notes[current_num] = "\n".join(buffer).strip()
+            current_num = match.group(1)
+            buffer = [cleaned]
+        elif current_num:
+            buffer.append(cleaned)
+
+    if current_num:
+        notes[current_num] = "\n".join(buffer).strip()
+
+    return notes
 
 
 def parse_nesh_file():
@@ -181,6 +208,7 @@ def create_database(chapters: dict):
         notes = extract_chapter_notes(content)  # Legacy: tudo junto
 
         if notes or any(sections.values()):
+            parsed_notes = _parse_notes_for_precompute(notes)
             values_map = {
                 "chapter_num": chapter_num,
                 "notes_content": notes,
@@ -188,6 +216,11 @@ def create_database(chapters: dict):
                 "notas": sections.get("notas"),
                 "consideracoes": sections.get("consideracoes"),
                 "definicoes": sections.get("definicoes"),
+                "parsed_notes_json": (
+                    json.dumps(parsed_notes, ensure_ascii=False)
+                    if parsed_notes
+                    else None
+                ),
             }
             cursor.execute(
                 CHAPTER_NOTES_INSERT_SQL,

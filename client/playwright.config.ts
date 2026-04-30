@@ -1,6 +1,20 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const liveBaseUrl = process.env.PLAYWRIGHT_LIVE_BASE_URL || 'http://127.0.0.1:4173';
+const defaultBaseUrl = 'http://localhost:4173';
+
+function resolveLiveBaseUrl(): string {
+  const rawBaseUrl = process.env.PLAYWRIGHT_LIVE_BASE_URL || defaultBaseUrl;
+
+  try {
+    return new URL(rawBaseUrl).toString().replace(/\/$/, '');
+  } catch {
+    throw new Error(
+      `Invalid PLAYWRIGHT_LIVE_BASE_URL: ${rawBaseUrl}. Expected a full URL such as ${defaultBaseUrl}.`,
+    );
+  }
+}
+
+const liveBaseUrl = resolveLiveBaseUrl();
 
 export default defineConfig({
   testDir: './tests/playwright',
@@ -12,14 +26,14 @@ export default defineConfig({
     timeout: 7_000,
   },
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: defaultBaseUrl,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
   webServer: {
-    command: 'npm run build && npx vite preview --host 127.0.0.1 --port 4173 --strictPort',
-    url: 'http://127.0.0.1:4173',
+    command: 'npm run build && npx vite preview --host localhost --port 4173 --strictPort',
+    url: defaultBaseUrl,
     reuseExistingServer: !process.env.CI,
     env: {
       ...process.env,

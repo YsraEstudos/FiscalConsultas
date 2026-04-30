@@ -23,9 +23,11 @@ class _FakeDbAdapter:
         self.closed = False
 
     async def _ensure_pool(self):
+        await asyncio.sleep(0)
         self.pool_ready = True
 
     async def close(self):
+        await asyncio.sleep(0)
         self.closed = True
 
 
@@ -46,11 +48,13 @@ class _FakeNeshService:
     def __init__(self, db=None):
         self.db = db
 
-    async def prewarm_cache(self):
+    async def prewarmNeshChapterCache(self):
+        await asyncio.sleep(0)
         return 0
 
     @classmethod
-    async def create_with_repository(cls):
+    async def initializeNeshServiceWithRepositoryFactory(cls):
+        await asyncio.sleep(0)
         return cls()
 
 
@@ -60,7 +64,7 @@ class _FakeTipiService:
         self.created_repo = False
 
     @classmethod
-    async def create_with_repository(cls):
+    def initializeTipiServiceWithRepositoryFactory(cls):
         obj = cls()
         obj.created_repo = True
         obj.mode = "repo"
@@ -70,9 +74,23 @@ class _FakeTipiService:
 class _FakeNbsService:
     def __init__(self):
         self.closed = False
+        self.mode = "sqlite"
+        self.created_repo = False
+
+    async def shutdownNbsServiceResources(self):
+        await asyncio.sleep(0)
+        self.closed = True
 
     async def close(self):
-        self.closed = True
+        await self.shutdownNbsServiceResources()
+
+    @classmethod
+    async def initializeNbsServiceWithPostgresRepository(cls):
+        await asyncio.sleep(0)
+        obj = cls()
+        obj.mode = "repo"
+        obj.created_repo = True
+        return obj
 
 
 class _FakeAiService:
@@ -89,10 +107,12 @@ def core_mocks(monkeypatch):
     }
 
     async def _redis_close():
+        await asyncio.sleep(0)
         fake_calls["redis_closed"] = True
         app_module.redis_cache._client = None
 
     async def _redis_connect():
+        await asyncio.sleep(0)
         fake_calls["redis_connected"] = True
         app_module.redis_cache._client = object()
 
@@ -124,6 +144,7 @@ def core_mocks(monkeypatch):
 @pytest.mark.asyncio
 async def test_no_cache_html_sets_headers_for_html_paths_only():
     async def _next(_request):
+        await asyncio.sleep(0)
         return Response("ok")
 
     html_response = await app_module.no_cache_html(
@@ -168,6 +189,23 @@ async def test_no_cache_html_hides_api_docs_without_debug_mode(monkeypatch):
     assert response.headers["X-Frame-Options"] == "DENY"
 
 
+def test_configure_routes_keeps_fallback_when_frontend_index_missing(tmp_path):
+    app = FastAPI()
+    static_root = tmp_path / "client" / "dist"
+    static_root.mkdir(parents=True)
+
+    app_module._configure_routes(app, str(tmp_path), app_module.logger)
+
+    assert not any(
+        getattr(route, "name", None) == "static" for route in app.router.routes
+    )
+    assert any(
+        getattr(route, "path", None) == "/"
+        and getattr(route, "name", None) == "_read_root"
+        for route in app.router.routes
+    )
+
+
 @pytest.mark.asyncio
 async def test_lifespan_sqlite_init_db_failure_keeps_startup_and_shutdown(
     monkeypatch, core_mocks
@@ -175,6 +213,7 @@ async def test_lifespan_sqlite_init_db_failure_keeps_startup_and_shutdown(
     fake_db = _FakeDbAdapter("db.sqlite")
 
     async def _init_db_fail():
+        await asyncio.sleep(0)
         raise RuntimeError("unsupported sqlite extension")
 
     monkeypatch.setattr(app_module.settings.database, "engine", "sqlite")
@@ -229,6 +268,31 @@ async def test_lifespan_sqlite_handles_import_error_for_db_engine(
 
 
 @pytest.mark.asyncio
+async def test_lifespan_records_release_metadata(monkeypatch, core_mocks):
+    fake_db = _FakeDbAdapter("db.sqlite")
+
+    monkeypatch.setattr(app_module.settings.database, "engine", "sqlite")
+    monkeypatch.setattr(app_module.settings.cache, "enable_redis", False)
+    monkeypatch.setattr(app_module, "DatabaseAdapter", lambda _path: fake_db)
+    monkeypatch.setattr(nesh_service_module, "NeshService", _FakeNeshService)
+    monkeypatch.setenv("RENDER_SERVICE_ID", "srv-test")
+    monkeypatch.setenv("RENDER_GIT_COMMIT", "commit-test")
+    monkeypatch.setenv("RENDER_GIT_BRANCH", "main")
+
+    app = _make_fake_fastapi()
+    async with app_module.lifespan(app):
+        assert app.state.release_metadata["render_service_id"] == "srv-test"
+        assert app.state.release_metadata["git_commit"] == "commit-test"
+        assert app.state.release_metadata["git_branch"] == "main"
+        assert (
+            app.state.release_metadata["server_env"] == app_module.settings.server.env
+        )
+
+    assert fake_db.closed is True
+    assert app.state.nbs_service.closed is True
+
+
+@pytest.mark.asyncio
 async def test_lifespan_sqlite_init_db_success_closes_sqlmodel_engine(
     monkeypatch, core_mocks
 ):
@@ -236,9 +300,11 @@ async def test_lifespan_sqlite_init_db_success_closes_sqlmodel_engine(
     close_db_called = {"value": False}
 
     async def _init_db_ok():
+        await asyncio.sleep(0)
         return None
 
     async def _close_db_ok():
+        await asyncio.sleep(0)
         close_db_called["value"] = True
 
     monkeypatch.setattr(app_module.settings.database, "engine", "sqlite")
@@ -262,7 +328,8 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
     monkeypatch, core_mocks
 ):
     class _FailingPrewarmNeshService(_FakeNeshService):
-        async def prewarm_cache(self):
+        async def prewarmNeshChapterCache(self):
+            await asyncio.sleep(0)
             raise RuntimeError("prewarm failed")
 
     class _ScalarResult:
@@ -274,6 +341,7 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
 
     class _Session:
         async def execute(self, _query):
+            await asyncio.sleep(0)
             return _ScalarResult(123)
 
     @asynccontextmanager
@@ -281,6 +349,7 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
         yield _Session()
 
     async def _close_db_fail():
+        await asyncio.sleep(0)
         raise RuntimeError("close failed")
 
     monkeypatch.setattr(app_module.settings.database, "engine", "postgresql")
@@ -295,6 +364,8 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
         assert app.state.sqlmodel_enabled is True
         assert isinstance(app.state.service, _FailingPrewarmNeshService)
         assert app.state.tipi_service.mode == "repo"
+        assert app.state.nbs_service.mode == "repo"
+        assert app.state.nbs_service.created_repo is True
         assert isinstance(app.state.nbs_service, _FakeNbsService)
         assert core_mocks["redis_connected"] is True
 
@@ -306,15 +377,26 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
 async def test_lifespan_postgres_tipi_count_failure_falls_back_to_sqlite_mode(
     monkeypatch, core_mocks
 ):
+    class _ScalarResult:
+        def __init__(self, value):
+            self._value = value
+
+        def scalar(self):
+            return self._value
+
     class _BrokenSession:
-        async def execute(self, _query):
-            raise RuntimeError("tipi count failed")
+        async def execute(self, query):
+            await asyncio.sleep(0)
+            if "tipi_positions" in str(query):
+                raise RuntimeError("tipi count failed")
+            return _ScalarResult(True)
 
     @asynccontextmanager
     async def _broken_get_session():
         yield _BrokenSession()
 
     async def _close_db_ok():
+        await asyncio.sleep(0)
         return None
 
     monkeypatch.setattr(app_module.settings.database, "engine", "postgresql")
@@ -328,6 +410,7 @@ async def test_lifespan_postgres_tipi_count_failure_falls_back_to_sqlite_mode(
         assert app.state.sqlmodel_enabled is True
         assert app.state.tipi_service.mode == "sqlite"
         assert app.state.tipi_service.created_repo is False
+        assert app.state.nbs_service.mode == "repo"
 
 
 @pytest.mark.asyncio
@@ -335,6 +418,7 @@ async def test_init_cache_warmup_handles_redis_connect_exception(monkeypatch):
     warnings = []
 
     async def _connect_fail():
+        await asyncio.sleep(0)
         raise RuntimeError("redis unavailable")
 
     def _capture_warning(msg, *args):
@@ -393,6 +477,7 @@ async def test_lifespan_postgres_import_error_still_enables_sqlmodel(
 
     class _Session:
         async def execute(self, _query):
+            await asyncio.sleep(0)
             return _ScalarResult(True)
 
     @asynccontextmanager
@@ -400,6 +485,7 @@ async def test_lifespan_postgres_import_error_still_enables_sqlmodel(
         yield _Session()
 
     async def _close_db_ok():
+        await asyncio.sleep(0)
         return None
 
     monkeypatch.setattr(app_module.settings.database, "engine", "postgresql")
@@ -421,6 +507,102 @@ def test_validate_dev_tenant_override_safety_allows_localhost(monkeypatch):
     monkeypatch.setattr(app_module.settings.server, "host", "127.0.0.1", raising=False)
 
     app_module._validate_dev_tenant_override_safety()
+
+
+def test_build_content_security_policy_drops_local_origins_in_production(monkeypatch):
+    monkeypatch.setattr(app_module.settings.server, "env", "production", raising=False)
+
+    csp = app_module._build_content_security_policy()
+
+    assert "connect-src 'self' https: wss:" in csp
+    assert "localhost" not in csp
+    assert "127.0.0.1" not in csp
+    assert (
+        "frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com"
+        in csp
+    )
+
+
+def test_build_content_security_policy_keeps_local_origins_in_development(monkeypatch):
+    monkeypatch.setattr(app_module.settings.server, "env", "development", raising=False)
+
+    csp = app_module._build_content_security_policy()
+
+    assert "http://localhost:8000" in csp
+    assert "http://127.0.0.1:8000" in csp
+    assert "ws://localhost:*" in csp
+    assert "ws://127.0.0.1:*" in csp
+    assert "https://cdn.jsdelivr.net" in csp
+
+
+def test_build_cors_configuration_defaults_to_localhost_only_in_development(
+    monkeypatch,
+):
+    monkeypatch.setattr(app_module.settings.server, "env", "development", raising=False)
+    monkeypatch.setattr(
+        app_module.settings.server, "cors_allowed_origins", None, raising=False
+    )
+    monkeypatch.setattr(
+        app_module.settings.server, "cors_allowed_origin_regex", None, raising=False
+    )
+
+    origins, cors_regex = app_module._build_cors_configuration()
+
+    assert origins == ["http://localhost:5173", "http://127.0.0.1:5173"]
+    assert cors_regex is not None
+    assert "localhost" in cors_regex
+
+
+def test_build_cors_configuration_fails_closed_in_production(monkeypatch):
+    monkeypatch.setattr(app_module.settings.server, "env", "production", raising=False)
+    monkeypatch.setattr(
+        app_module.settings.server, "cors_allowed_origins", [], raising=False
+    )
+    monkeypatch.setattr(
+        app_module.settings.server, "cors_allowed_origin_regex", None, raising=False
+    )
+
+    origins, cors_regex = app_module._build_cors_configuration()
+
+    assert origins == []
+    assert cors_regex is None
+
+
+def test_log_runtime_security_warnings_for_production_misconfiguration(monkeypatch):
+    warnings = []
+
+    monkeypatch.setattr(app_module.settings.server, "env", "production", raising=False)
+    monkeypatch.setattr(app_module.settings.features, "debug_mode", True, raising=False)
+    monkeypatch.setattr(
+        app_module.settings.server,
+        "cors_allowed_origins",
+        ["http://localhost:5173"],
+        raising=False,
+    )
+    monkeypatch.setattr(app_module.settings.cache, "enable_redis", True, raising=False)
+    monkeypatch.setattr(
+        app_module.settings.cache,
+        "redis_url",
+        "redis://localhost:6379/0",
+        raising=False,
+    )
+    monkeypatch.setattr(app_module.settings.database, "engine", "sqlite", raising=False)
+    monkeypatch.setattr(
+        app_module.logger,
+        "warning",
+        lambda message, *args: warnings.append(message % args),
+    )
+
+    app_module._log_runtime_security_warnings()
+
+    assert any("FEATURES__DEBUG_MODE=true" in warning for warning in warnings)
+    assert any("localhost/loopback" in warning for warning in warnings)
+    assert any(
+        "CACHE__REDIS_URL apontando para localhost" in warning for warning in warnings
+    )
+    assert any(
+        "DATABASE__ENGINE não está em postgresql" in warning for warning in warnings
+    )
 
 
 @pytest.mark.asyncio
@@ -461,12 +643,15 @@ async def test_shutdown_resources_continues_after_db_close_failure(monkeypatch):
 
     class _BrokenDb:
         async def close(self):
+            await asyncio.sleep(0)
             raise RuntimeError("db close failed")
 
     async def _redis_close():
+        await asyncio.sleep(0)
         return None
 
     async def _close_db():
+        await asyncio.sleep(0)
         close_db_called["value"] = True
 
     def _capture_warning(msg, *args):
@@ -492,9 +677,11 @@ async def test_shutdown_resources_continues_after_redis_close_failure(monkeypatc
     close_db_called = {"value": False}
 
     async def _redis_close():
+        await asyncio.sleep(0)
         raise RuntimeError("redis close failed")
 
     async def _close_db():
+        await asyncio.sleep(0)
         close_db_called["value"] = True
 
     def _capture_warning(msg, *args):

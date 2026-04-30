@@ -1,0 +1,9 @@
+node_modules
+dist
+coverage
+.venv
+build
+*.db
+.eslintcache
+package-lock.json
+uv.lock

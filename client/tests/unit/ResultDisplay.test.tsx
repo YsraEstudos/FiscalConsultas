@@ -10,7 +10,7 @@ const authState = {
     isSignedIn: true,
     isLoading: false,
     userId: 'user_test',
-    userEmail: 'blocked@example.com',
+    canUseRestrictedUi: false,
 };
 
 vi.mock('../../src/context/AuthContext', () => ({
@@ -49,8 +49,7 @@ vi.mock('../../src/components/SearchHighlighter', () => ({
 describe('ResultDisplay Component', () => {
     beforeEach(() => {
         Element.prototype.scrollIntoView = vi.fn();
-        vi.stubEnv('VITE_RESTRICTED_UI_EMAILS', 'israelseja2@gmail.com');
-        authState.userEmail = 'blocked@example.com';
+        authState.canUseRestrictedUi = false;
         authState.isSignedIn = true;
         authState.isLoading = false;
 
@@ -389,7 +388,7 @@ describe('ResultDisplay Component', () => {
             resultados: {}
         };
 
-        authState.userEmail = 'x@nonpriv.com';
+        authState.canUseRestrictedUi = false;
 
         render(
             <SettingsProvider>

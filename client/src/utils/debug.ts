@@ -1,14 +1,16 @@
 /**
- * Debug utility to prevent console noise and serialization overhead in production.
- * Only logs when import.meta.env.DEV is true.
+ * Debug utility — delegates to the global console.
+ *
+ * In test mode all calls are suppressed to avoid noise in unit-test output.
  */
-const IS_DEV = import.meta.env.DEV && import.meta.env.MODE !== 'test';
+const IS_TEST = import.meta.env.MODE === 'test';
+const noop = () => { };
 
 export const debug = {
-    log: IS_DEV ? console.debug.bind(console) : () => { },
-    error: IS_DEV ? console.error.bind(console) : () => { },
-    warn: IS_DEV ? console.warn.bind(console) : () => { },
-    info: IS_DEV ? console.info.bind(console) : () => { },
+    log: IS_TEST ? noop : console.debug.bind(console),
+    error: IS_TEST ? noop : console.error.bind(console),
+    warn: IS_TEST ? noop : console.warn.bind(console),
+    info: IS_TEST ? noop : console.info.bind(console),
 };
 
 export default debug;

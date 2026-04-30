@@ -11,6 +11,7 @@ vi.mock('../../src/services/api');
 vi.mock('../../src/hooks/useHistory', () => ({
     useHistory: () => ({
         history: [],
+        getHistoryForDoc: vi.fn(() => []),
         addToHistory: vi.fn(),
         removeFromHistory: vi.fn(),
         clearHistory: vi.fn(),
@@ -35,6 +36,15 @@ const SLOW_SEARCH_FLOW_TIMEOUT_MS = 15000;
 describe('App Search Integration', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        api.getSystemStatus.mockResolvedValue({
+            nbs: { status: 'online' },
+            nebs: { status: 'online' },
+        });
+        api.getAuthSession.mockResolvedValue({
+            authenticated: true,
+            can_use_ai_chat: false,
+            can_use_restricted_ui: false,
+        });
     });
 
     it('displays loading spinner and then results when searching', async () => {

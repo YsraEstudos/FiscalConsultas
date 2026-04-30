@@ -224,6 +224,70 @@ class TipiPosition(SQLModel, table=True):
 
 
 # ============================================================
+# Services Catalog Models (NBS / NEBS)
+# ============================================================
+
+
+class CatalogMetadata(SQLModel, table=True):
+    """Metadados de carga dos catálogos públicos."""
+
+    __tablename__: ClassVar[str] = "catalog_metadata"  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    key: str = Field(primary_key=True, max_length=255)
+    value: str = Field(sa_column=Column(Text))
+    tenant_id: Optional[str] = Field(
+        default=None, foreign_key=TENANT_ID_FOREIGN_KEY, index=True
+    )
+
+
+class NbsItem(SQLModel, table=True):
+    """Catálogo NBS consolidado no PostgreSQL."""
+
+    __tablename__: ClassVar[str] = "nbs_items"  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    code: str = Field(primary_key=True, max_length=64)
+    code_clean: str = Field(index=True, max_length=64)
+    description: str = Field(sa_column=Column(Text))
+    description_normalized: str = Field(sa_column=Column(Text))
+    parent_code: Optional[str] = Field(default=None, foreign_key="nbs_items.code")
+    level: int = Field(default=0)
+    source_order: int = Field(default=0, index=True)
+    sort_path: str = Field(max_length=255, index=True)
+    has_nebs: bool = Field(default=False)
+    tenant_id: Optional[str] = Field(
+        default=None, foreign_key=TENANT_ID_FOREIGN_KEY, index=True
+    )
+    search_vector: Optional[str] = Field(
+        default=None, sa_column=Column(TSVECTOR, nullable=True)
+    )
+
+
+class NebsEntry(SQLModel, table=True):
+    """Notas Explicativas da NBS confiáveis para runtime."""
+
+    __tablename__: ClassVar[str] = "nebs_entries"  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    code: str = Field(primary_key=True, foreign_key="nbs_items.code", max_length=64)
+    code_clean: str = Field(index=True, max_length=64)
+    title: str = Field(sa_column=Column(Text))
+    title_normalized: str = Field(sa_column=Column(Text))
+    body_text: str = Field(sa_column=Column(Text))
+    body_markdown: Optional[str] = Field(default=None, sa_column=Column(Text))
+    body_normalized: str = Field(sa_column=Column(Text))
+    section_title: Optional[str] = Field(default=None, sa_column=Column(Text))
+    page_start: int = Field(default=0)
+    page_end: int = Field(default=0)
+    source_hash: str = Field(max_length=128)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    tenant_id: Optional[str] = Field(
+        default=None, foreign_key=TENANT_ID_FOREIGN_KEY, index=True
+    )
+    search_vector: Optional[str] = Field(
+        default=None, sa_column=Column(TSVECTOR, nullable=True)
+    )
+
+
+# ============================================================
 # Response Models (para API - sem table=True)
 # ============================================================
 

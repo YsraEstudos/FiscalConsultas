@@ -8,6 +8,8 @@ from fastapi import Request
 
 from backend.config.settings import settings
 
+PRIVILEGED_ROLES = {"admin", "owner", "superadmin"}
+
 
 def extract_bearer_token(request: Request) -> str | None:
     auth_header = request.headers.get("Authorization", "")
@@ -22,24 +24,31 @@ def _iter_roles(payload: Mapping[str, Any]) -> list[str]:
     for key in ("role", "org_role"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
-            candidates.append(value.strip().lower())
+            candidates.append(_normalize_role(value))
 
     roles_value = payload.get("roles")
     if isinstance(roles_value, str) and roles_value.strip():
-        candidates.append(roles_value.strip().lower())
+        candidates.append(_normalize_role(roles_value))
     elif isinstance(roles_value, list):
         for item in roles_value:
             if isinstance(item, str) and item.strip():
-                candidates.append(item.strip().lower())
+                candidates.append(_normalize_role(item))
 
     return candidates
+
+
+def _normalize_role(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized.startswith("org:"):
+        return normalized[4:]
+    return normalized
 
 
 def is_admin_payload(payload: Mapping[str, Any] | None) -> bool:
     if not payload:
         return False
     roles = set(_iter_roles(payload))
-    return bool(roles.intersection({"admin", "owner", "superadmin"}))
+    return bool(roles.intersection(PRIVILEGED_ROLES))
 
 
 def _load_trusted_proxy_networks() -> list[Any]:
@@ -66,7 +75,7 @@ def _load_trusted_proxy_networks() -> list[Any]:
     return networks
 
 
-def _is_trusted_proxy(ip_text: str | None) -> bool:
+def is_trusted_proxy(ip_text: str | None) -> bool:
     if not ip_text:
         return False
     try:
@@ -79,12 +88,16 @@ def _is_trusted_proxy(ip_text: str | None) -> bool:
     return False
 
 
+# Backward-compatible alias for older imports while callers migrate.
+_is_trusted_proxy = is_trusted_proxy
+
+
 def extract_client_ip(request: Request) -> str:
     direct_ip = request.client.host if request.client and request.client.host else None
     forwarded_for = request.headers.get("X-Forwarded-For", "").strip()
 
     # We only trust X-Forwarded-For when the immediate peer is a trusted proxy.
-    if forwarded_for and _is_trusted_proxy(direct_ip):
+    if forwarded_for and is_trusted_proxy(direct_ip):
         first_hop = forwarded_for.split(",", 1)[0].strip()
         try:
             ipaddress.ip_address(first_hop)

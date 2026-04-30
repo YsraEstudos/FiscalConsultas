@@ -20,9 +20,9 @@ function SettingsProbe() {
       <div data-testid="accent">{settings.accentColor}</div>
       <div data-testid="font">{settings.fontSize}</div>
       <div data-testid="highlight">{String(settings.highlightEnabled)}</div>
-      <div data-testid="admin">{String(settings.adminMode)}</div>
       <div data-testid="tipi">{settings.tipiViewMode}</div>
       <div data-testid="sidebar">{settings.sidebarPosition}</div>
+      <div data-testid="open-new-tab">{String(settings.openNewTab)}</div>
 
       <button onClick={() => settings.updateTheme("light")}>theme-light</button>
       <button onClick={() => settings.updateAccentColor(ACCENT_COLOR.PINK)}>
@@ -32,7 +32,6 @@ function SettingsProbe() {
       <button onClick={() => settings.toggleHighlight()}>
         toggle-highlight
       </button>
-      <button onClick={() => settings.toggleAdminMode()}>toggle-admin</button>
       <button onClick={() => settings.updateTipiViewMode(VIEW_MODE.FAMILY)}>
         tipi-family
       </button>
@@ -40,6 +39,9 @@ function SettingsProbe() {
         onClick={() => settings.updateSidebarPosition(SIDEBAR_POSITION.RIGHT)}
       >
         sidebar-right
+      </button>
+      <button onClick={() => settings.toggleOpenNewTab()}>
+        toggle-open-new-tab
       </button>
       <button onClick={() => settings.restoreDefaults()}>
         restore-defaults
@@ -72,9 +74,9 @@ describe("SettingsContext", () => {
     localStorage.setItem(STORAGE_KEYS.ACCENT_COLOR, ACCENT_COLOR.GREEN);
     localStorage.setItem(STORAGE_KEYS.FONT_SIZE, "18");
     localStorage.setItem(STORAGE_KEYS.HIGHLIGHT, "false");
-    localStorage.setItem(STORAGE_KEYS.ADMIN_MODE, "false");
     localStorage.setItem(STORAGE_KEYS.TIPI_VIEW_MODE, VIEW_MODE.FAMILY);
     localStorage.setItem(STORAGE_KEYS.SIDEBAR_POSITION, SIDEBAR_POSITION.RIGHT);
+    localStorage.setItem(STORAGE_KEYS.OPEN_NEW_TAB, "true");
 
     render(
       <SettingsProvider>
@@ -88,11 +90,11 @@ describe("SettingsContext", () => {
     expect(screen.getByTestId("accent")).toHaveTextContent(ACCENT_COLOR.GREEN);
     expect(screen.getByTestId("font")).toHaveTextContent("18");
     expect(screen.getByTestId("highlight")).toHaveTextContent("false");
-    expect(screen.getByTestId("admin")).toHaveTextContent("false");
     expect(screen.getByTestId("tipi")).toHaveTextContent(VIEW_MODE.FAMILY);
     expect(screen.getByTestId("sidebar")).toHaveTextContent(
       SIDEBAR_POSITION.RIGHT,
     );
+    expect(screen.getByTestId("open-new-tab")).toHaveTextContent("true");
 
     expect(document.documentElement.dataset.theme).toBe("light");
     expect(document.documentElement.style.fontSize).toBe("18px");
@@ -117,7 +119,7 @@ describe("SettingsContext", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByTestId("admin")).toHaveTextContent("true"),
+      expect(screen.getByTestId("theme")).toHaveTextContent(DEFAULTS.THEME),
     );
     expect(screen.getByTestId("tipi")).toHaveTextContent(
       DEFAULTS.TIPI_VIEW_MODE,
@@ -127,6 +129,9 @@ describe("SettingsContext", () => {
     );
     expect(screen.getByTestId("accent")).toHaveTextContent(
       DEFAULTS.ACCENT_COLOR,
+    );
+    expect(screen.getByTestId("open-new-tab")).toHaveTextContent(
+      String(DEFAULTS.OPEN_NEW_TAB),
     );
   });
 
@@ -141,9 +146,9 @@ describe("SettingsContext", () => {
     fireEvent.click(screen.getByText("accent-pink"));
     fireEvent.click(screen.getByText("font-20"));
     fireEvent.click(screen.getByText("toggle-highlight"));
-    fireEvent.click(screen.getByText("toggle-admin"));
     fireEvent.click(screen.getByText("tipi-family"));
     fireEvent.click(screen.getByText("sidebar-right"));
+    fireEvent.click(screen.getByText("toggle-open-new-tab"));
 
     await waitFor(() =>
       expect(screen.getByTestId("theme")).toHaveTextContent("light"),
@@ -151,11 +156,11 @@ describe("SettingsContext", () => {
     expect(screen.getByTestId("accent")).toHaveTextContent(ACCENT_COLOR.PINK);
     expect(screen.getByTestId("font")).toHaveTextContent("20");
     expect(screen.getByTestId("highlight")).toHaveTextContent("false");
-    expect(screen.getByTestId("admin")).toHaveTextContent("false");
     expect(screen.getByTestId("tipi")).toHaveTextContent(VIEW_MODE.FAMILY);
     expect(screen.getByTestId("sidebar")).toHaveTextContent(
       SIDEBAR_POSITION.RIGHT,
     );
+    expect(screen.getByTestId("open-new-tab")).toHaveTextContent("true");
     expect(document.body.classList.contains("disable-unit-highlights")).toBe(
       true,
     );
@@ -174,14 +179,14 @@ describe("SettingsContext", () => {
     expect(screen.getByTestId("highlight")).toHaveTextContent(
       String(DEFAULTS.HIGHLIGHT),
     );
-    expect(screen.getByTestId("admin")).toHaveTextContent(
-      String(DEFAULTS.ADMIN_MODE),
-    );
     expect(screen.getByTestId("tipi")).toHaveTextContent(
       DEFAULTS.TIPI_VIEW_MODE,
     );
     expect(screen.getByTestId("sidebar")).toHaveTextContent(
       DEFAULTS.SIDEBAR_POSITION,
+    );
+    expect(screen.getByTestId("open-new-tab")).toHaveTextContent(
+      String(DEFAULTS.OPEN_NEW_TAB),
     );
     expect(document.body.classList.contains("disable-unit-highlights")).toBe(
       false,

@@ -1,288 +1,89 @@
-"""
-Multi-Tenant Middleware para extração de org_id do Clerk JWT.
+"""Multi-tenant middleware for Clerk JWT validation and request scoping."""
 
-Este middleware:
-1. Processa apenas rotas da API (/api/*)
-2. Valida e decodifica o token Clerk (RS256/JWKS)
-3. Extrai o org_id para contexto multi-tenant
-4. Define tenant no contextvar para RLS do PostgreSQL
-"""
+from __future__ import annotations
 
 import asyncio
-import base64
 import hashlib
-import ipaddress
 import json
 import logging
+import re
 import time
-from contextvars import ContextVar
-from typing import Any, Coroutine, Dict, Optional
-from urllib.parse import urlparse
+import uuid
+from typing import Any, Optional, Pattern
 
 import jwt
-from backend.config.settings import settings
-from backend.infrastructure.db_engine import tenant_context
 from jwt import PyJWKClient
 from starlette.responses import JSONResponse
 
-logger = logging.getLogger("middleware.tenant")
+from backend.config.settings import settings
+from backend.infrastructure.db_engine import tenant_context
+from backend.server.middleware_context import (
+    _jwt_failure_reason_ctx,
+    _request_id_ctx,
+    _schedule_background_task,
+    get_current_request_id,  # noqa: F401 - re-exported for callers
+    get_current_tenant,  # noqa: F401 - re-exported for callers
+    get_last_jwt_failure_reason,
+)
+from backend.server.middleware_jwt_support import (
+    _build_jwt_decode_kwargs,  # noqa: F401 - re-exported for callers
+    _build_temporal_claims_extra,  # noqa: F401 - re-exported for callers
+    _build_jwks_url,
+    _configured_clock_skew_seconds,  # noqa: F401 - re-exported for callers
+    _decode_jwt_with_signature,
+    _derive_issuer_hint_from_domain,  # noqa: F401 - re-exported for callers
+    _effective_clock_skew_seconds,
+    _get_payload_exp,  # noqa: F401 - re-exported for callers
+    _is_payload_expired,
+    _jwt_error_reason,  # noqa: F401 - re-exported for callers
+    _log_jwt_failure,
+    _log_jwt_validation_error,
+    _log_jwt_validation_success,
+    _normalize_clerk_domain,  # noqa: F401 - re-exported for callers
+    _normalize_issuer,  # noqa: F401 - re-exported for callers
+    _normalize_token_audience,  # noqa: F401 - re-exported for callers
+    _parse_clock_skew_seconds,  # noqa: F401 - re-exported for callers
+    _resolve_expected_audience,
+    _resolve_expected_azp,
+    _resolve_expected_issuer,
+    _resolve_full_name,  # noqa: F401 - re-exported for callers
+    _resolve_identity_fields,
+    _resolve_user_id,
+    _safe_float_claim,  # noqa: F401 - re-exported for callers
+    _safe_get_unverified_claims,  # noqa: F401 - re-exported for callers
+    _safe_get_unverified_header,  # noqa: F401 - re-exported for callers
+    _token_observability_snapshot,
+    _upsert_clerk_entities,
+    _validate_expected_audience_claim,
+    _validate_expected_azp,
+    _validate_expected_issuer,
+    _validate_not_before_like_claim,  # noqa: F401 - re-exported for callers
+    _validate_temporal_claims,
+    _is_recently_provisioned,
+    _mark_entities_as_provisioned,
+)
+from backend.server.middleware_network import (
+    is_loopback_host,
+    origin_looks_like_loopback,  # noqa: F401 - re-exported for callers
+)
+
+logger = logging.getLogger("nesh.middleware.tenant")
 
 # Cache do JWKS client (Clerk public keys)
 _jwks_client: Optional[PyJWKClient] = None
 
 # JWT decode cache
 _jwt_decode_cache: dict[str, tuple[dict, float, Optional[float]]] = {}
-_JWT_CACHE_TTL = 60.0
+_JWT_CACHE_TTL = 30.0
 _JWT_CACHE_MAX_SIZE = 1000
 
 # Provisioning cache
 _provisioned_entities_cache: dict[tuple[str, str], float] = {}
 _PROVISION_CACHE_TTL = 300.0
 _PROVISION_CACHE_MAX_SIZE = 5000
-
-# Strong refs para tarefas fire-and-forget. Sem isso, o loop mantém apenas weak refs.
-_background_tasks: set[asyncio.Future[Any]] = set()
-
-_JWT_DEBUG_HEADER_FIELDS = ("alg", "kid", "typ")
-_JWT_DEBUG_CLAIM_FIELDS = (
-    "iss",
-    "sub",
-    "sid",
-    "azp",
-    "aud",
-    "org_id",
-    "exp",
-    "iat",
-    "nbf",
-)
-_jwt_failure_reason_ctx: ContextVar[Optional[str]] = ContextVar(
-    "jwt_failure_reason", default=None
-)
-_DEV_MIN_CLOCK_SKEW_SECONDS = 120
-_LOCALHOST_HOSTS = {"localhost"}
-
-
-def _normalize_clerk_domain(raw_domain: Optional[str]) -> Optional[str]:
-    if not raw_domain:
-        return None
-
-    raw = raw_domain.strip()
-    if not raw:
-        return None
-
-    if raw.startswith("http://") or raw.startswith("https://"):
-        parsed = urlparse(raw)
-        normalized = parsed.netloc or parsed.path
-    else:
-        normalized = raw
-
-    normalized = normalized.strip().strip("/")
-    return normalized or None
-
-
-def is_loopback_host(host: Optional[str]) -> bool:
-    if not host:
-        return False
-
-    normalized = str(host).strip().lower()
-    if not normalized:
-        return False
-
-    if normalized in _LOCALHOST_HOSTS:
-        return True
-
-    if "%" in normalized:
-        normalized = normalized.split("%", 1)[0]
-
-    try:
-        return ipaddress.ip_address(normalized).is_loopback
-    except ValueError:
-        return False
-
-
-def _build_jwks_url(raw_domain: Optional[str]) -> Optional[str]:
-    normalized_domain = _normalize_clerk_domain(raw_domain)
-    if not normalized_domain:
-        return None
-    return f"https://{normalized_domain}/.well-known/jwks.json"
-
-
-def _decode_jwt_json_segment(segment: str) -> dict[str, Any]:
-    try:
-        padded_segment = segment + ("=" * (-len(segment) % 4))
-        decoded_bytes = base64.urlsafe_b64decode(padded_segment.encode("ascii"))
-        decoded_json = json.loads(decoded_bytes.decode("utf-8"))
-        if isinstance(decoded_json, dict):
-            return decoded_json
-    except Exception:
-        pass
-    return {}
-
-
-def _safe_get_unverified_header(token: str) -> dict[str, Any]:
-    # Header sem verificação é usado somente em logs diagnósticos (nunca para auth).
-    parts = token.split(".")
-    if len(parts) < 1:
-        return {}
-    return _decode_jwt_json_segment(parts[0])
-
-
-def _safe_get_unverified_claims(token: str) -> dict[str, Any]:
-    # Claims sem verificação são usados somente para observabilidade.
-    parts = token.split(".")
-    if len(parts) < 2:
-        return {}
-    return _decode_jwt_json_segment(parts[1])
-
-
-def _token_observability_snapshot(token: str) -> dict[str, Any]:
-    header = _safe_get_unverified_header(token)
-    claims = _safe_get_unverified_claims(token)
-    return {
-        "header": {k: header.get(k) for k in _JWT_DEBUG_HEADER_FIELDS},
-        "claims": {k: claims.get(k) for k in _JWT_DEBUG_CLAIM_FIELDS},
-    }
-
-
-def _normalize_issuer(issuer: str) -> str:
-    return issuer.strip().rstrip("/")
-
-
-def _resolve_expected_issuer() -> Optional[str]:
-    explicit_issuer = (settings.auth.clerk_issuer or "").strip()
-    if explicit_issuer:
-        return _normalize_issuer(explicit_issuer)
-    return None
-
-
-def _derive_issuer_hint_from_domain() -> Optional[str]:
-    normalized_domain = _normalize_clerk_domain(settings.auth.clerk_domain)
-    if not normalized_domain:
-        return None
-    return _normalize_issuer(f"https://{normalized_domain}")
-
-
-def _resolve_expected_audience() -> Optional[list[str]]:
-    raw = (settings.auth.clerk_audience or "").strip()
-    if not raw:
-        return None
-
-    audiences = [item.strip() for item in raw.split(",") if item.strip()]
-    return audiences or None
-
-
-def _resolve_expected_azp() -> set[str]:
-    expected: set[str] = set()
-    for item in settings.auth.clerk_authorized_parties or []:
-        value = str(item).strip()
-        if value:
-            expected.add(value)
-    return expected
-
-
-def _parse_clock_skew_seconds(raw_value: Any) -> int:
-    try:
-        parsed = int(raw_value)
-    except (TypeError, ValueError):
-        return 0
-    return max(0, parsed)
-
-
-def _configured_clock_skew_seconds() -> int:
-    return _parse_clock_skew_seconds(settings.auth.clerk_clock_skew_seconds)
-
-
-def _effective_clock_skew_seconds() -> int:
-    configured = _configured_clock_skew_seconds()
-    if settings.server.env == "development":
-        return max(configured, _DEV_MIN_CLOCK_SKEW_SECONDS)
-    return configured
-
-
-def _safe_float_claim(claim_value: Any) -> Optional[float]:
-    try:
-        return float(claim_value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _build_temporal_claims_extra(
-    token_snapshot: dict[str, Any], leeway_seconds: int
-) -> dict[str, Any]:
-    claims = token_snapshot.get("claims") if isinstance(token_snapshot, dict) else {}
-    if not isinstance(claims, dict):
-        claims = {}
-
-    now_epoch = time.time()
-    nbf_epoch = _safe_float_claim(claims.get("nbf"))
-    iat_epoch = _safe_float_claim(claims.get("iat"))
-
-    return {
-        "now": now_epoch,
-        "leeway_seconds": leeway_seconds,
-        "nbf": nbf_epoch,
-        "iat": iat_epoch,
-        "nbf_minus_now": None if nbf_epoch is None else nbf_epoch - now_epoch,
-        "iat_minus_now": None if iat_epoch is None else iat_epoch - now_epoch,
-    }
-
-
-def _validate_expected_issuer(
-    payload: dict[str, Any], expected_issuer: Optional[str]
-) -> None:
-    if not expected_issuer:
-        return
-
-    token_issuer_raw = payload.get("iss")
-    if not isinstance(token_issuer_raw, str) or not token_issuer_raw.strip():
-        raise jwt.InvalidIssuerError("Missing 'iss' claim")
-
-    token_issuer = _normalize_issuer(token_issuer_raw)
-    if token_issuer != expected_issuer:
-        raise jwt.InvalidIssuerError(
-            f"Unexpected issuer. expected={expected_issuer!r}, received={token_issuer!r}"
-        )
-
-
-def _validate_expected_azp(payload: dict[str, Any], expected_azp: set[str]) -> None:
-    if not expected_azp:
-        return
-
-    token_azp = payload.get("azp")
-    if not isinstance(token_azp, str) or not token_azp.strip():
-        raise jwt.InvalidTokenError("Missing 'azp' claim")
-
-    if token_azp not in expected_azp:
-        raise jwt.InvalidTokenError(
-            f"Invalid azp. expected one of {sorted(expected_azp)!r}, received={token_azp!r}"
-        )
-
-
-def _log_jwt_failure(
-    reason: str,
-    token_snapshot: dict[str, Any],
-    error: Exception | str,
-    extra: Optional[dict[str, Any]] = None,
-) -> None:
-    _jwt_failure_reason_ctx.set(reason)
-    payload = {
-        "event": "jwt_validation_failed",
-        "reason": reason,
-        "error": str(error),
-        "token": token_snapshot,
-        "expected": {
-            "issuer": _resolve_expected_issuer(),
-            "issuer_hint_from_clerk_domain": _derive_issuer_hint_from_domain(),
-            "audience": _resolve_expected_audience(),
-            "azp": sorted(_resolve_expected_azp()),
-            "clock_skew_seconds_configured": _configured_clock_skew_seconds(),
-            "clock_skew_seconds_effective": _effective_clock_skew_seconds(),
-        },
-        "timestamp_epoch": int(time.time()),
-    }
-    if extra:
-        payload["extra"] = extra
-    logger.warning(json.dumps(payload, ensure_ascii=False, default=str))
+_cached_expected_azp_regex_raw: Optional[str] = None
+_cached_expected_azp_regex: Optional[Pattern[str]] = None
+_dev_fallback_logged = False
 
 
 def get_jwks_client() -> Optional[PyJWKClient]:
@@ -300,24 +101,41 @@ def get_jwks_client() -> Optional[PyJWKClient]:
     return _jwks_client
 
 
-def _get_payload_exp(payload: dict) -> Optional[float]:
-    exp = payload.get("exp")
-    if exp is None:
+_JWT_DEBUG_CLAIM_FIELDS = (
+    "iss",
+    "sub",
+    "sid",
+    "azp",
+    "aud",
+    "org_id",
+    "exp",
+    "iat",
+    "nbf",
+)
+_NEVER_MATCH_REGEX = re.compile(r"$^")
+
+
+def _resolve_expected_azp_regex() -> Optional[Pattern[str]]:
+    global _cached_expected_azp_regex_raw, _cached_expected_azp_regex
+
+    raw = (settings.auth.clerk_authorized_parties_regex or "").strip()
+    if raw == _cached_expected_azp_regex_raw:
+        return _cached_expected_azp_regex
+
+    _cached_expected_azp_regex_raw = raw
+    if not raw:
+        _cached_expected_azp_regex = None
         return None
+
     try:
-        return float(exp)
-    except (TypeError, ValueError):
-        return None
+        _cached_expected_azp_regex = re.compile(raw)
+    except re.error as error:
+        logger.error(
+            "AUTH__CLERK_AUTHORIZED_PARTIES_REGEX inválido: %r (%s)", raw, error
+        )
+        _cached_expected_azp_regex = _NEVER_MATCH_REGEX
 
-
-def _is_payload_expired(payload: dict, leeway_seconds: int) -> bool:
-    exp = payload.get("exp")
-    if exp is None:
-        return False
-    exp_value = _get_payload_exp(payload)
-    if exp_value is None:
-        return True
-    return time.time() >= (exp_value + max(0, leeway_seconds))
+    return _cached_expected_azp_regex
 
 
 def _token_cache_key(token: str) -> str:
@@ -351,173 +169,6 @@ def _get_cached_jwt_payload(
     return True, payload.copy()
 
 
-def _build_jwt_decode_kwargs(
-    expected_audience: Optional[list[str]], leeway_seconds: int
-) -> dict[str, Any]:
-    decode_kwargs: dict[str, Any] = {
-        "algorithms": ["RS256"],
-        "leeway": leeway_seconds,
-        "options": {
-            "verify_aud": bool(expected_audience),
-            # nbf/iat são validados manualmente para gerar logs mais úteis.
-            "verify_nbf": False,
-            "verify_iat": False,
-        },
-    }
-    if expected_audience:
-        decode_kwargs["audience"] = expected_audience
-    return decode_kwargs
-
-
-def _decode_jwt_with_signature(
-    token: str,
-    signing_key: Any,
-    expected_audience: Optional[list[str]],
-    leeway_seconds: int,
-) -> dict:
-    return jwt.decode(
-        token,
-        signing_key.key,
-        **_build_jwt_decode_kwargs(expected_audience, leeway_seconds),
-    )
-
-
-def _normalize_token_audience(token_aud: Any) -> set[str]:
-    normalized_token_aud: set[str] = set()
-    if isinstance(token_aud, str):
-        normalized_token_aud.add(token_aud)
-    elif isinstance(token_aud, list):
-        normalized_token_aud.update(str(item) for item in token_aud if item)
-    return normalized_token_aud
-
-
-def _validate_expected_audience_claim(
-    payload: dict[str, Any],
-    expected_audience: Optional[list[str]],
-    token_snapshot: dict[str, Any],
-) -> bool:
-    if not expected_audience:
-        return True
-
-    token_aud = payload.get("aud")
-    if token_aud is None:
-        _log_jwt_failure(
-            reason="missing_aud",
-            token_snapshot=token_snapshot,
-            error="Claim 'aud' ausente, mas AUTH__CLERK_AUDIENCE está configurado",
-        )
-        return False
-
-    normalized_token_aud = _normalize_token_audience(token_aud)
-    if normalized_token_aud.intersection(set(expected_audience)):
-        return True
-
-    _log_jwt_failure(
-        reason="audience_mismatch",
-        token_snapshot=token_snapshot,
-        error="Claim 'aud' não contém valor esperado",
-        extra={"token_aud": sorted(normalized_token_aud)},
-    )
-    return False
-
-
-def _validate_not_before_like_claim(
-    payload: dict[str, Any],
-    claim_name: str,
-    leeway_seconds: int,
-    token_snapshot: dict[str, Any],
-    invalid_reason: str,
-    future_reason: str,
-    future_error: str,
-) -> bool:
-    claim_value = payload.get(claim_name)
-    if claim_value is None:
-        return True
-
-    try:
-        claim_epoch = float(claim_value)
-    except (TypeError, ValueError):
-        _log_jwt_failure(
-            reason=invalid_reason,
-            token_snapshot=token_snapshot,
-            error=f"{claim_name} inválido: {claim_value!r}",
-        )
-        return False
-
-    now_epoch = time.time()
-    if now_epoch + leeway_seconds >= claim_epoch:
-        return True
-
-    _log_jwt_failure(
-        reason=future_reason,
-        token_snapshot=token_snapshot,
-        error=future_error,
-        extra={
-            claim_name: claim_epoch,
-            "now": now_epoch,
-            f"{claim_name}_minus_now": claim_epoch - now_epoch,
-            "leeway_seconds": leeway_seconds,
-        },
-    )
-    return False
-
-
-def _validate_temporal_claims(
-    payload: dict[str, Any], leeway_seconds: int, token_snapshot: dict[str, Any]
-) -> Optional[float]:
-    if not _validate_not_before_like_claim(
-        payload=payload,
-        claim_name="nbf",
-        leeway_seconds=leeway_seconds,
-        token_snapshot=token_snapshot,
-        invalid_reason="invalid_nbf",
-        future_reason="nbf_in_future",
-        future_error="Token ainda não é válido (nbf no futuro)",
-    ):
-        return None
-
-    if not _validate_not_before_like_claim(
-        payload=payload,
-        claim_name="iat",
-        leeway_seconds=leeway_seconds,
-        token_snapshot=token_snapshot,
-        invalid_reason="invalid_iat",
-        future_reason="iat_in_future",
-        future_error="iat no futuro além do leeway",
-    ):
-        return None
-
-    exp_value = _get_payload_exp(payload)
-    if exp_value is not None:
-        return exp_value
-
-    _log_jwt_failure(
-        reason="missing_or_invalid_exp",
-        token_snapshot=token_snapshot,
-        error="Claim 'exp' ausente ou inválido",
-    )
-    return None
-
-
-def _log_jwt_validation_success(
-    token_snapshot: dict[str, Any], payload: dict[str, Any]
-) -> None:
-    if not settings.features.debug_mode:
-        return
-
-    logger.debug(
-        "jwt_validation_ok %s",
-        json.dumps(
-            {
-                "header": token_snapshot.get("header", {}),
-                "claims": {k: payload.get(k) for k in _JWT_DEBUG_CLAIM_FIELDS},
-            },
-            ensure_ascii=False,
-            default=str,
-        ),
-    )
-
-
 def _cache_decoded_jwt(
     token_hash: str, payload: dict[str, Any], now_monotonic: float, exp_value: float
 ) -> None:
@@ -531,35 +182,10 @@ def _cache_decoded_jwt(
     _jwt_decode_cache[token_hash] = (payload.copy(), now_monotonic, exp_value)
 
 
-def _jwt_error_reason(error: jwt.PyJWTError) -> str:
-    if isinstance(error, jwt.ImmatureSignatureError):
-        return "immature_signature"
-    if isinstance(error, jwt.ExpiredSignatureError):
-        return "expired_signature"
-    if isinstance(error, jwt.InvalidIssuedAtError):
-        return "invalid_iat"
-    if isinstance(error, jwt.InvalidIssuerError):
-        return "invalid_issuer"
-    if isinstance(error, jwt.InvalidAudienceError):
-        return "invalid_audience"
-    if isinstance(error, jwt.InvalidSignatureError):
-        return "invalid_signature"
-    return "invalid_token"
-
-
-def _log_jwt_validation_error(
-    error: jwt.PyJWTError, token_snapshot: dict[str, Any], leeway_seconds: int
-) -> None:
-    extra = None
-    if isinstance(error, jwt.ImmatureSignatureError):
-        extra = _build_temporal_claims_extra(token_snapshot, leeway_seconds)
-    _log_jwt_failure(_jwt_error_reason(error), token_snapshot, error, extra=extra)
-
-
 async def decode_clerk_jwt(token: str) -> Optional[dict]:
     """
     Valida e decodifica JWT do Clerk.
-    Performance: Cacheia resultado por hash do token (TTL 60s).
+    Performance: Cacheia resultado por hash do token (_JWT_CACHE_TTL).
 
     Returns:
         Payload decodificado ou None se inválido/expirado.
@@ -579,6 +205,7 @@ async def decode_clerk_jwt(token: str) -> Optional[dict]:
     expected_issuer = _resolve_expected_issuer()
     expected_audience = _resolve_expected_audience()
     expected_azp = _resolve_expected_azp()
+    expected_azp_regex = _resolve_expected_azp_regex()
 
     try:
         jwks_client = get_jwks_client()
@@ -620,7 +247,7 @@ async def decode_clerk_jwt(token: str) -> Optional[dict]:
             return None
 
         _validate_expected_issuer(payload, expected_issuer)
-        _validate_expected_azp(payload, expected_azp)
+        _validate_expected_azp(payload, expected_azp, expected_azp_regex)
 
         if not _validate_expected_audience_claim(
             payload, expected_audience, token_snapshot
@@ -644,89 +271,12 @@ async def decode_clerk_jwt(token: str) -> Optional[dict]:
         return None
 
 
-def get_last_jwt_failure_reason() -> Optional[str]:
-    """Retorna o último motivo de falha de validação JWT no contexto da request."""
-    return _jwt_failure_reason_ctx.get()
-
-
 async def is_clerk_token_valid(token: str) -> bool:
     """Retorna True se o JWT do Clerk for válido."""
     return (await decode_clerk_jwt(token)) is not None
 
 
-def _resolve_user_id(payload: Dict[str, Any]) -> Optional[str]:
-    user_id = payload.get("sub")
-    if not isinstance(user_id, str) or not user_id:
-        return None
-    return user_id
-
-
-def _is_recently_provisioned(cache_key: tuple[str, str], now: float) -> bool:
-    cached_at = _provisioned_entities_cache.get(cache_key)
-    return bool(cached_at and (now - cached_at) < _PROVISION_CACHE_TTL)
-
-
-def _resolve_full_name(payload: Dict[str, Any]) -> Optional[str]:
-    if isinstance(payload.get("name"), str) and payload.get("name"):
-        return payload.get("name")
-    given = str(payload.get("given_name") or "")
-    family = str(payload.get("family_name") or "")
-    return f"{given} {family}".strip() or None
-
-
-def _resolve_identity_fields(
-    payload: Dict[str, Any], user_id: str, org_id: str
-) -> tuple[str, str, Optional[str]]:
-    org_name = str(
-        payload.get("org_name") or payload.get("organization_name") or org_id
-    )
-    email = str(
-        payload.get("email") or payload.get("email_address") or f"{user_id}@clerk.local"
-    )
-    full_name = _resolve_full_name(payload)
-    return org_name, email, full_name
-
-
-async def _upsert_clerk_entities(
-    org_id: str, user_id: str, org_name: str, email: str, full_name: Optional[str]
-) -> None:
-    from backend.domain.sqlmodels import Tenant, User
-    from backend.infrastructure.db_engine import get_session
-
-    async with get_session() as session:
-        tenant = await session.get(Tenant, org_id)
-        if tenant is None:
-            session.add(Tenant(id=org_id, name=org_name))
-        elif org_name and tenant.name != org_name:
-            tenant.name = org_name
-
-        user = await session.get(User, user_id)
-        if user is None:
-            session.add(
-                User(id=user_id, email=email, full_name=full_name, tenant_id=org_id)
-            )
-            return
-
-        # Atualizações parciais evitam writes desnecessários e preservam performance.
-        if user.tenant_id != org_id:
-            user.tenant_id = org_id
-        if email and user.email != email:
-            user.email = email
-        if full_name and user.full_name != full_name:
-            user.full_name = full_name
-
-
-def _mark_entities_as_provisioned(cache_key: tuple[str, str], now: float) -> None:
-    if len(_provisioned_entities_cache) >= _PROVISION_CACHE_MAX_SIZE:
-        oldest = sorted(_provisioned_entities_cache.items(), key=lambda item: item[1])[
-            :100
-        ]
-        for key, _ in oldest:
-            del _provisioned_entities_cache[key]
-    _provisioned_entities_cache[cache_key] = now
-
-
-async def ensure_clerk_entities(payload: Dict[str, Any], org_id: str) -> None:
+async def ensure_clerk_entities(payload: dict[str, Any], org_id: str) -> None:
     """
     Provisiona Tenant/User localmente a partir do JWT do Clerk.
 
@@ -743,14 +293,18 @@ async def ensure_clerk_entities(payload: Dict[str, Any], org_id: str) -> None:
     # Evita round-trip no banco para o mesmo par org/user em janelas curtas.
     cache_key = (org_id, user_id)
     now = time.monotonic()
-    if _is_recently_provisioned(cache_key, now):
+    if _is_recently_provisioned(
+        cache_key, now, _provisioned_entities_cache, _PROVISION_CACHE_TTL
+    ):
         return
 
     org_name, email, full_name = _resolve_identity_fields(payload, user_id, org_id)
 
     try:
         await _upsert_clerk_entities(org_id, user_id, org_name, email, full_name)
-        _mark_entities_as_provisioned(cache_key, now)
+        _mark_entities_as_provisioned(
+            cache_key, now, _provisioned_entities_cache, _PROVISION_CACHE_MAX_SIZE
+        )
     except Exception as e:
         logger.warning(f"Provisioning Clerk entities falhou (org={org_id}): {e}")
 
@@ -772,27 +326,6 @@ async def extract_org_from_jwt(token: str) -> Optional[str]:
     return org_id
 
 
-def _schedule_background_task(task_coro: Coroutine[Any, Any, Any]) -> None:
-    # Mantemos ensure_future por compatibilidade com testes e,
-    # principalmente, guardamos referência forte para evitar GC prematuro.
-    task = asyncio.ensure_future(task_coro)
-    if not isinstance(task, asyncio.Future):
-        return
-
-    _background_tasks.add(task)
-
-    def _on_done(done_task: asyncio.Future[Any]) -> None:
-        _background_tasks.discard(done_task)
-        try:
-            done_task.result()
-        except asyncio.CancelledError:
-            logger.debug("Background task cancelled")
-        except Exception as exc:
-            logger.warning("Background task failed: %s", exc)
-
-    task.add_done_callback(_on_done)
-
-
 class TenantMiddleware:
     """
     Middleware ASGI puro para extrair tenant_id (org_id) do token Clerk.
@@ -808,9 +341,26 @@ class TenantMiddleware:
         "/api/auth/me",
         "/api/status",
         "/api/status/details",
+        "/api/cache-metrics",
+        "/api/metrics",
+        "/api/admin/reload-secrets",
+        "/api/debug/anchors",
+        "/api/search",
+        "/api/chapters",
+        "/api/glossary",
+        "/api/tipi/search",
+        "/api/tipi/chapters",
         "/api/webhooks",
+        "/api/database/version",
+        "/api/database/token",
+        "/api/database/download",
     }
-    PUBLIC_PREFIX_PATHS = ("/api/webhooks/",)
+    PUBLIC_PREFIX_PATHS = (
+        "/api/webhooks/",
+        "/api/nesh/chapter/",
+        "/api/search/chapter/",
+        "/api/services/nbs/",
+    )
 
     def __init__(self, app):
         self.app = app
@@ -841,6 +391,12 @@ class TenantMiddleware:
                 return host
         return None
 
+    @staticmethod
+    def _extract_request_id(scope: dict[str, Any]) -> str:
+        headers = dict(scope.get("headers", []))
+        request_id = headers.get(b"x-request-id", b"").decode("latin-1").strip()
+        return request_id or uuid.uuid4().hex
+
     @classmethod
     def _allow_dev_tenant_override(cls, scope: dict[str, Any]) -> bool:
         if settings.server.env != "development" or not settings.features.debug_mode:
@@ -862,9 +418,15 @@ class TenantMiddleware:
     def _resolve_dev_fallback_tenant(
         org_id: Optional[str], *, allow_dev_fallback: bool
     ) -> Optional[str]:
+        global _dev_fallback_logged
         if org_id:
             return org_id
         if allow_dev_fallback:
+            if not _dev_fallback_logged:
+                logger.warning(
+                    "Using development fallback tenant org_default for a loopback request"
+                )
+                _dev_fallback_logged = True
             return "org_default"
         return None
 
@@ -878,13 +440,31 @@ class TenantMiddleware:
 
     @staticmethod
     def _log_tenant_resolution(
-        scope: dict[str, Any], path: str, org_id: Optional[str]
+        scope: dict[str, Any],
+        path: str,
+        request_id: str,
+        org_id: Optional[str],
+        jwt_payload: Optional[dict[str, Any]],
     ) -> None:
-        method = scope.get("method", "?")
-        if org_id:
-            logger.debug("Request %s %s - Tenant: %s", method, path, org_id)
+        if not settings.features.debug_mode:
             return
-        logger.debug("Request %s %s - No tenant (public)", method, path)
+
+        method = scope.get("method", "?")
+        logger.info(
+            "request_tenant_resolution %s",
+            json.dumps(
+                {
+                    "request_id": request_id,
+                    "method": method,
+                    "path": path,
+                    "tenant": org_id,
+                    "token_present": jwt_payload is not None,
+                    "jwt_failure_reason": get_last_jwt_failure_reason(),
+                },
+                ensure_ascii=False,
+                default=str,
+            ),
+        )
 
     async def _resolve_request_tenant(
         self, scope: dict[str, Any]
@@ -914,29 +494,75 @@ class TenantMiddleware:
     async def _call_with_optional_tenant_context(
         self,
         org_id: Optional[str],
+        request_id: str,
         scope: dict[str, Any],
         receive: Any,
         send: Any,
     ) -> None:
+        send_wrapper = self._wrap_send_with_request_id(send, request_id, scope, org_id)
         if not org_id:
-            await self.app(scope, receive, send)
+            await self.app(scope, receive, send_wrapper)
             return
 
         token_var = tenant_context.set(org_id)
         try:
-            await self.app(scope, receive, send)
+            await self.app(scope, receive, send_wrapper)
         finally:
             tenant_context.reset(token_var)
 
     @staticmethod
     async def _send_missing_tenant_response(
-        scope: dict[str, Any], receive: Any, send: Any
+        scope: dict[str, Any], receive: Any, send: Any, request_id: str
     ) -> None:
         response = JSONResponse(
             status_code=401,
             content={"success": False, "detail": "Tenant não identificado"},
         )
-        await response(scope, receive, send)
+        send_wrapper = TenantMiddleware._wrap_send_with_request_id(
+            send, request_id, scope, None
+        )
+        await response(scope, receive, send_wrapper)
+
+    @staticmethod
+    def _wrap_send_with_request_id(
+        send: Any, request_id: str, scope: dict[str, Any], org_id: Optional[str]
+    ) -> Any:
+        async def send_wrapper(message: dict[str, Any]) -> None:
+            if message.get("type") == "http.response.start":
+                headers = list(message.get("headers", []))
+                header_key = b"x-request-id"
+                header_value = request_id.encode("latin-1", "ignore")
+                replaced = False
+                for idx, (name, _) in enumerate(headers):
+                    if isinstance(name, bytes) and name.lower() == header_key:
+                        headers[idx] = (name, header_value)
+                        replaced = True
+                        break
+                if not replaced:
+                    headers.append((header_key, header_value))
+
+                if settings.features.debug_mode:
+                    status = message.get("status")
+                    method = scope.get("method", "?")
+                    path = scope.get("path", "?")
+                    logger.info(
+                        "request_response %s",
+                        json.dumps(
+                            {
+                                "request_id": request_id,
+                                "method": method,
+                                "path": path,
+                                "status": status,
+                                "tenant": org_id,
+                            },
+                            ensure_ascii=False,
+                            default=str,
+                        ),
+                    )
+                message = {**message, "headers": headers}
+            await send(message)
+
+        return send_wrapper
 
     @staticmethod
     def _schedule_provisioning_if_needed(
@@ -951,34 +577,64 @@ class TenantMiddleware:
             await self.app(scope, receive, send)
             return
 
+        request_id = self._extract_request_id(scope)
+        request_token = _request_id_ctx.set(request_id)
         path = scope.get("path", "")
 
-        # 0. Só processa APIs; arquivos estáticos/frontend não exigem tenant
-        if not path.startswith("/api"):
-            await self.app(scope, receive, send)
-            return
+        try:
+            # 0. Só processa APIs; arquivos estáticos/frontend não exigem tenant
+            if not path.startswith("/api"):
+                await self.app(scope, receive, send)
+                return
 
-        # 1. Ignorar rotas púbalicas
-        if self._is_public_path(path):
-            await self.app(scope, receive, send)
-            return
+            if settings.features.debug_mode:
+                logger.info(
+                    "request_received %s",
+                    json.dumps(
+                        {
+                            "request_id": request_id,
+                            "method": scope.get("method", "?"),
+                            "path": path,
+                            "auth_header_present": self._extract_bearer_token(scope)
+                            is not None,
+                        },
+                        ensure_ascii=False,
+                        default=str,
+                    ),
+                )
 
-        org_id, jwt_payload = await self._resolve_request_tenant(scope)
-        if self._requires_tenant_rejection(org_id):
-            await self._send_missing_tenant_response(scope, receive, send)
-            return
+            # 1. Ignorar rotas públicas
+            if self._is_public_path(path):
+                await self._call_with_optional_tenant_context(
+                    None, request_id, scope, receive, send
+                )
+                return
 
-        self._log_tenant_resolution(scope, path, org_id)
-        await self._call_with_optional_tenant_context(org_id, scope, receive, send)
-        self._schedule_provisioning_if_needed(jwt_payload, org_id)
+            org_id, jwt_payload = await self._resolve_request_tenant(scope)
+            if self._requires_tenant_rejection(org_id):
+                if settings.features.debug_mode:
+                    logger.warning(
+                        "request_missing_tenant %s",
+                        json.dumps(
+                            {
+                                "request_id": request_id,
+                                "method": scope.get("method", "?"),
+                                "path": path,
+                                "jwt_failure_reason": get_last_jwt_failure_reason(),
+                            },
+                            ensure_ascii=False,
+                            default=str,
+                        ),
+                    )
+                await self._send_missing_tenant_response(
+                    scope, receive, send, request_id
+                )
+                return
 
-
-def get_current_tenant() -> Optional[str]:
-    """
-    Utility function para obter tenant atual em qualquer lugar do código.
-
-    Uso:
-        from backend.server.middleware import get_current_tenant
-        tenant_id = get_current_tenant()
-    """
-    return tenant_context.get() or None
+            self._log_tenant_resolution(scope, path, request_id, org_id, jwt_payload)
+            await self._call_with_optional_tenant_context(
+                org_id, request_id, scope, receive, send
+            )
+            self._schedule_provisioning_if_needed(jwt_payload, org_id)
+        finally:
+            _request_id_ctx.reset(request_token)

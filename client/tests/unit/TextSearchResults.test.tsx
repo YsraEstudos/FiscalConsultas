@@ -15,7 +15,7 @@ vi.mock('react-virtuoso', () => ({
                 <div data-testid="virtuoso-use-window">{String(props.useWindowScroll)}</div>
                 <div data-testid="virtuoso-has-parent">{String(Boolean(props.customScrollParent))}</div>
                 {props.data.map((item: any, index: number) => (
-                    <div key={index}>{props.itemContent(index, item)}</div>
+                    <div key={item?.ncm || `item-${index}`}>{props.itemContent(index, item)}</div>
                 ))}
             </div>
         );
@@ -36,6 +36,7 @@ describe('TextSearchResults', () => {
         renderWithSettings(<TextSearchResults results={null} query="" onResultClick={vi.fn()} />);
 
         expect(screen.getByText('Nenhum resultado encontrado')).toBeTruthy();
+          expect(screen.getByText('Tente outro codigo ou um termo mais amplo')).toBeInTheDocument();
     });
 
     it('highlights matching query text', () => {

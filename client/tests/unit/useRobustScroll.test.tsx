@@ -4,17 +4,24 @@ import { useRobustScroll } from '../../src/hooks/useRobustScroll';
 
 describe('useRobustScroll Hook', () => {
     let container: HTMLElement;
+    let originalCss: typeof globalThis.CSS | undefined;
 
     beforeEach(() => {
         container = document.createElement('div');
         document.body.appendChild(container);
         // Mock scrollIntoView
         Element.prototype.scrollIntoView = vi.fn();
+        originalCss = globalThis.CSS;
     });
 
     afterEach(() => {
         container.remove();
         vi.restoreAllMocks();
+        if (originalCss === undefined) {
+            delete (globalThis as typeof globalThis & { CSS?: typeof globalThis.CSS }).CSS;
+        } else {
+            globalThis.CSS = originalCss;
+        }
     });
 
     it('should scroll immediately if target exists', () => {
@@ -111,5 +118,24 @@ describe('useRobustScroll Hook', () => {
         );
 
         expect(target.scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    it('should fall back when CSS.escape is unavailable', () => {
+        const target = document.createElement('div');
+        target.id = 'pos-84.17/alpha';
+        container.appendChild(target);
+
+        delete (globalThis as typeof globalThis & { CSS?: typeof globalThis.CSS }).CSS;
+
+        renderHook(() =>
+            useRobustScroll({
+                targetId: 'pos-84.17/alpha',
+                shouldScroll: true,
+                containerRef: { current: container },
+                onComplete: vi.fn(),
+            })
+        );
+
+        expect(target.scrollIntoView).toHaveBeenCalled();
     });
 });

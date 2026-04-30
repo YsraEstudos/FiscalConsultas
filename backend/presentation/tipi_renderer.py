@@ -55,10 +55,10 @@ class TipiRenderer:
 
     # Tooltip labels for aliquota types
     ALIQUOT_TOOLTIPS = {
-        "0": "Isento de IPI",
-        "NT": "Não Tributável",
+        "zero": "Isento de IPI",
+        "nt": "Não Tributável",
         "low": "Alíquota Reduzida (1-5%)",
-        "medium": "Alíquota Média (6-10%)",
+        "med": "Alíquota Média (6-10%)",
         "high": "Alíquota Elevada (>10%)",
     }
 

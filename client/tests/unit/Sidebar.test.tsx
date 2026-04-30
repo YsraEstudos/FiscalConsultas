@@ -105,6 +105,58 @@ describe('Sidebar Component', () => {
         expect(positionCodes).toEqual(['84.02', '84.10', '84.70']);
     });
 
+    it('keeps TIPI chapter ordering when codes mix dotted and undotted formats', () => {
+        const mixedTipiPositions = {
+            "11": {
+                capitulo: "11",
+                posicoes: [
+                    { codigo: "11.02", descricao: "Farinhas de cereais" },
+                    { codigo: "11.07", descricao: "Malte" },
+                    { codigo: "1101", descricao: "Farinhas de trigo" },
+                    { codigo: "1101.00.10", descricao: "De trigo" },
+                ]
+            }
+        };
+
+        render(
+            <Sidebar results={mixedTipiPositions} {...defaultProps} />
+        );
+
+        const codes = screen
+            .getAllByRole('button')
+            .map((button) => button.querySelector('span')?.textContent)
+            .filter(Boolean);
+
+        expect(codes).toEqual(['1101', '1101.00.10', '11.02', '11.07']);
+    });
+
+    it('keeps NESH chapter ordering when codes mix dotted and compact formats', () => {
+        const mixedNeshPositions = {
+            "84": {
+                capitulo: "84",
+                posicoes: [
+                    { codigo: "84.05", descricao: "Geradores de gás pobre" },
+                    { codigo: "8404.10.10", descricao: "Parte específica" },
+                    { codigo: "8404", descricao: "Aparelhos auxiliares para caldeiras" },
+                    { codigo: "84.03", descricao: "Caldeiras para aquecimento central" },
+                ]
+            }
+        };
+
+        render(
+            <Sidebar results={mixedNeshPositions} {...defaultProps} />
+        );
+
+        const targetCodes = new Set(['84.03', '8404', '8404.10.10', '84.05']);
+        const codes = screen
+            .getAllByRole('button')
+            .map((button) => button.querySelector('span')?.textContent || '')
+            .map((value) => value.trim())
+            .filter((value) => targetCodes.has(value));
+
+        expect(codes).toEqual(['84.03', '8404', '8404.10.10', '84.05']);
+    });
+
     it('renders structured section items when secoes are present', () => {
         const resultsWithSections = {
             "84": {

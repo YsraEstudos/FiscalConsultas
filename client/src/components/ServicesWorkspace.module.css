@@ -1,0 +1,720 @@
+/* Refactored ServicesWorkspace.module.css */
+
+/* Layout Container */
+.body {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+@media (min-width: 1024px) {
+  .body {
+    flex-direction: row;
+    gap: 2rem;
+    padding: 2rem;
+    align-items: stretch;
+    height: 100%;
+    overflow: hidden;
+  }
+}
+
+/* Left Panel - Hierarquia (Formerly sidebar) */
+.sidebar, .leftPanel {
+  flex: 0 0 48%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  overflow-y: auto;
+  padding-right: 1rem;
+  border-right: none;
+  background: var(--bg-primary);
+}
+
+.sidebarHeader, .leftPanelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.leftPanelTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.breadcrumbs {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.chapterNotesButton {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  width: fit-content;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  color: var(--text-primary);
+  border-radius: 12px;
+  padding: 0.65rem 0.9rem;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.chapterNotesButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent-primary) 70%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
+}
+
+.chapterNotesButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.chapterNotesEyebrow {
+  font-size: 0.68rem;
+  color: var(--accent-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+}
+
+.chapterNotesDialog {
+  width: min(960px, calc(100vw - 3rem));
+  max-height: min(88vh, 920px);
+  padding: 0;
+  border: none;
+  background: transparent;
+  overflow: visible;
+  margin: auto;
+}
+
+.chapterNotesDialog::backdrop {
+  background: rgb(0 0 0 / 72%);
+  backdrop-filter: blur(8px);
+}
+
+.chapterNotesSheet {
+  width: 100%;
+  max-height: min(88vh, 920px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid var(--border-color);
+  background: var(--dark-card-bg, #14141e);
+  box-shadow: 0 30px 80px rgb(0 0 0 / 35%);
+}
+
+.chapterNotesSheetHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.6rem 1.8rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-primary) 18%, transparent),
+    color-mix(in srgb, var(--accent-secondary) 12%, transparent)
+  );
+}
+
+.chapterNotesSheetCopy {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.chapterNotesSheetEyebrow {
+  font-size: 0.72rem;
+  color: var(--accent-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+}
+
+.chapterNotesSheetCopy h3 {
+  margin: 0;
+  font-size: clamp(1.35rem, 2vw, 2rem);
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.chapterNotesSheetCopy p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.chapterNotesClose {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 999px;
+  font-size: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.chapterNotesClose:hover {
+  background: rgb(255 255 255 / 8%);
+  color: var(--text-primary);
+}
+
+.chapterNotesSheetBody {
+  overflow-y: auto;
+  padding: 1.5rem 1.8rem 1.8rem;
+}
+
+/* stylelint-disable selector-pseudo-class-no-unknown -- CSS Modules :global(...) */
+.chapterNotesContent :global(.chapter-note-list),
+.chapterNotesContent :global(.chapter-note-sublist) {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0;
+  padding-left: 1.4rem;
+}
+
+.chapterNotesContent :global(.chapter-note-sublist) {
+  margin-top: 0.6rem;
+}
+/* stylelint-enable selector-pseudo-class-no-unknown */
+
+/* Hierarchy Tree View (When an item is selected) */
+.hierarchyList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem 0;
+  position: relative;
+}
+
+.hierarchyNode {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.nodeCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 1rem;
+  text-align: left;
+  font: inherit;
+  appearance: none;
+  outline: none;
+  border-radius: 12px;
+  background: var(--dark-card-bg, #14141e);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.nodeCard:hover {
+  border-color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.nodeCard.active {
+  border-color: var(--neon-green-border, rgba(74, 222, 128, 0.3));
+  background: var(--neon-green-bg, rgba(74, 222, 128, 0.05));
+  box-shadow: 0 0 15px rgba(74, 222, 128, 0.05);
+}
+
+.nodeIcon {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 0.1rem;
+}
+
+.nodeCard.active .nodeIcon {
+  color: var(--success, #4ade80);
+}
+
+.nodeContent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.nodeLabel {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+.nodeTitle {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.interactiveCode {
+  cursor: pointer;
+}
+
+.interactiveCode:hover {
+  color: var(--accent-secondary);
+}
+
+.nodeCard.active .nodeTitle {
+  color: var(--success, #4ade80);
+  font-weight: 600;
+}
+
+.peerList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.peerCard {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  text-align: left;
+  font: inherit;
+  appearance: none;
+  outline: none;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.peerCard:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.peerCard:hover .nodeTitle {
+  color: var(--text-primary);
+}
+
+.peerIcon {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+/* Original List Result */
+.resultList {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem 0;
+  position: relative;
+}
+
+/* Tree Line connecting nodes */
+.resultList::before {
+  content: "";
+  position: absolute;
+  top: 1rem;
+  bottom: 2rem;
+  left: 1.2rem;
+  width: 1px;
+  background: var(--border-color);
+  z-index: 0;
+}
+
+.resultCard {
+  position: relative;
+  z-index: 1;
+  background: var(--dark-card-bg, #14141e);
+  border: 1px solid var(--dark-card-border, #1e1e2d);
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: calc(var(--level-indent, 0) * 2rem);
+}
+
+.resultCard:hover {
+  border-color: var(--text-muted);
+}
+
+.resultCardActive {
+  background: var(--neon-green-bg, rgba(74, 222, 128, 0.05));
+  border: 1px solid var(--neon-green-border, rgba(74, 222, 128, 0.3));
+  box-shadow: 0 0 15px rgba(74, 222, 128, 0.05);
+}
+
+.resultCardActive strong {
+  color: var(--success, #4ade80);
+}
+
+.resultMeta {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+.resultCardActive .resultMeta {
+  color: var(--success, #4ade80);
+}
+
+/* Base level styling */
+.resultCard[data-level="1"] { --level-indent: 0; }
+.resultCard[data-level="2"] { --level-indent: 1; }
+.resultCard[data-level="3"] { --level-indent: 2; }
+.resultCard[data-level="4"] { --level-indent: 3; }
+.resultCard[data-level="5"] { --level-indent: 4; }
+
+.codeBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  border: 1px solid transparent;
+}
+
+.resultCardActive .codeBadge {
+  background: var(--success, #4ade80);
+  color: #000;
+}
+
+.levelHint {
+  display: none; /* Hide default level hint text to clean UI */
+}
+
+/* Right Panel - Detalhamento Tecnico */
+.rightPanel {
+  flex: 1;
+  background: var(--dark-card-bg, #14141e);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  overflow-y: auto;
+}
+
+.rightPanelTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.codeComposition {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.codeLabel {
+  font-size: 0.75rem;
+  color: var(--app-purple, #a855f7);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+.codeBoxes {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.codeBox {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: monospace;
+}
+
+.codeSeparator {
+  color: var(--text-muted);
+  font-size: 1.25rem;
+}
+
+.notesCard {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.notesHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+.notesIcon {
+  color: var(--app-purple, #a855f7);
+}
+
+.notesContent {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  display: grid;
+  gap: 0.75rem;
+}
+
+/* stylelint-disable selector-pseudo-class-no-unknown -- CSS Modules :global(...) */
+.notesContent :global(p) {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.75;
+}
+
+.notesContent :global(ul),
+.notesContent :global(ol) {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding-left: 1.5rem;
+}
+
+.notesContent :global(li) {
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.notesContent :global(li::marker) {
+  color: var(--accent-secondary);
+}
+
+.notesContent :global(strong) {
+  color: var(--accent-secondary);
+  font-weight: 700;
+}
+
+.notesContent :global(a) {
+  color: var(--accent-primary);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  transition: color 0.2s ease;
+}
+
+.notesContent :global(a:hover) {
+  color: var(--accent-secondary);
+  text-decoration-style: solid;
+}
+
+.notesContent :global(.service-smart-link) {
+  color: var(--accent-primary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  transition: color 0.2s ease;
+}
+
+.notesContent :global(.service-smart-link:hover) {
+  color: var(--accent-secondary);
+  text-decoration-style: solid;
+}
+
+.notesContent :global(em) {
+  color: var(--accent-secondary);
+}
+
+.notesContent :global(mark) {
+  background: color-mix(in srgb, var(--accent-primary) 22%, transparent);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 0 0.25rem;
+}
+
+.notesContent :global(.highlight-exclusion) {
+  color: var(--accent-secondary);
+  font-weight: 700;
+}
+
+.notesContent :global(.highlight-unit) {
+  background: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 0 0.25rem;
+  font-weight: 600;
+}
+/* stylelint-enable selector-pseudo-class-no-unknown */
+
+.metadataTags {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+.tag {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.primaryAction {
+  margin-top: auto;
+  width: 100%;
+  background: var(--app-purple, #a855f7);
+  background: var(--accent-gradient);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 1.25rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 20px rgba(168, 85, 247, 0.4);
+}
+
+.primaryAction:hover {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+}
+
+.emptyDetail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 6rem 2rem;
+  color: var(--text-muted);
+  height: 100%;
+}
+
+.emptyDetail strong {
+  font-size: 1.1rem;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--text-muted);
+  width: 100%;
+}
+
+@media (width <= 980px) {
+  .body {
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  .sidebar, .leftPanel {
+    flex: none;
+    max-height: 400px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
+    padding-right: 0;
+  }
+}
+
+.headerActions {
+    width: 100%;
+    justify-content: space-between;
+}
+
+.heading {
+    font-size: 1.55rem;
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.card p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.cardLabel {
+  font-size: 0.75rem;
+  color: var(--app-purple, #a855f7);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}

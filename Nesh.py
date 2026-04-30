@@ -40,13 +40,14 @@ def main():
     Para reativar o reload, defina NESH_RELOAD com um valor truthy
     como "1", "true" ou "yes".
     """
-    # Adiciona diretório atual ao path para garantir imports corretos
-    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    if project_root not in sys.path:
+        # Garante imports absolutos tanto no processo principal quanto em subprocessos.
+        sys.path.insert(0, project_root)
 
     # Configurações do servidor (pode vir do config.py se necessário)
-    HOST = "127.0.0.1"
-    PORT = 8000
-    project_root = os.path.dirname(os.path.abspath(__file__))
+    HOST = os.getenv("SERVER__HOST", "127.0.0.1")
+    PORT = int(os.getenv("PORT", os.getenv("SERVER__PORT", 8000)))
     backend_dir = os.path.join(project_root, "backend")
 
     # Hot reload controlado:
@@ -56,24 +57,36 @@ def main():
 
     print(f"Starting Nesh Server on http://{HOST}:{PORT}")
 
-    # Executa Uvicorn
+    reload_excludes = [
+        "client/node_modules/*",
+        "client/dist/*",
+        ".venv/*",
+        ".git/*",
+        "data/*",
+        "raw_data/*",
+        "database/*",
+        "snapshots/*",
+        "__pycache__/*",
+    ]
+
+    if reload_enabled:
+        uvicorn.run(
+            "backend.server.app:app",
+            host=HOST,
+            port=PORT,
+            reload=True,
+            reload_dirs=[backend_dir],
+            reload_excludes=reload_excludes,
+        )
+        return
+
+    from backend.server.app import app
+
     uvicorn.run(
-        "backend.server.app:app",
+        app,
         host=HOST,
         port=PORT,
-        reload=reload_enabled,
-        reload_dirs=[backend_dir],
-        reload_excludes=[
-            "client/node_modules/*",
-            "client/dist/*",
-            ".venv/*",
-            ".git/*",
-            "data/*",
-            "raw_data/*",
-            "database/*",
-            "snapshots/*",
-            "__pycache__/*",
-        ],
+        reload=False,
     )
 
 

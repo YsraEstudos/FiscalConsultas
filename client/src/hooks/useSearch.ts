@@ -1,20 +1,92 @@
 import { useCallback, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
-import { searchNCM, searchNbsServices, searchNebsEntries, searchTipi } from '../services/api';
+import { searchNCM, searchNbsServices, searchTipi } from '../services/api';
 import { useTabs, type DocType } from './useTabs';
 import { useHistory } from './useHistory';
 import { useSettings } from '../context/SettingsContext';
+import { useLocalDatabase } from '../context/LocalDatabaseContext';
 import { extractChapter, isSameChapter } from '../utils/chapterDetection';
-import type { SearchResponse } from '../types/api.types';
-import { isCodeSearchResponse } from '../types/api.types';
+import type {
+    FiscalSearchApiResponse,
+    NbsCatalogSearchApiResponse,
+    NeshTextSearchApiResponse,
+    TipiTextSearchApiResponse,
+} from '../types/api.types';
+import { isCodeSearchApiResponse } from '../services/apiResponseGuards';
+import { buildLocalCodeSearchResponse } from '../utils/searchResultMarkup';
+import {
+    getServiceCatalogErrorInfo,
+    isServiceCatalogDoc,
+    reportServiceCatalogError,
+} from '../utils/servicesCatalog';
 
 const buildLoadedChaptersByDoc = (value?: Record<DocType, string[]>): Record<DocType, string[]> => ({
     nesh: value?.nesh ?? [],
     tipi: value?.tipi ?? [],
     nbs: value?.nbs ?? [],
-    nebs: value?.nebs ?? [],
 });
+
+/**
+ * Normalize local Worker search results into the fiscal API response format.
+ */
+function normalizeLocalResults(
+    doc: DocType,
+    query: string,
+    results: Record<string, unknown>[]
+): FiscalSearchApiResponse | null {
+    const safeResults = Array.isArray(results) ? results : [];
+
+    switch (doc) {
+        case 'nbs': {
+            const response: NbsCatalogSearchApiResponse = {
+                success: true, query, normalized: query,
+                results: safeResults.map((r) => ({
+                    code: String(r.code || ''), code_clean: String(r.code_clean || ''),
+                    description: String(r.description || ''),
+                    parent_code: r.parent_code ? String(r.parent_code) : null,
+                    level: Number(r.level || 0),
+                })),
+                total: safeResults.length,
+            };
+            return response;
+        }
+        case 'tipi': {
+            const response: TipiTextSearchApiResponse = {
+                success: true, type: 'text', query: query,
+                normalized: query, match_type: 'fts',
+                warning: null, total: safeResults.length,
+                results: safeResults.map((r) => ({
+                    ncm: String(r.ncm || ''),
+                    capitulo: String(r.capitulo || ''),
+                    descricao: String(r.descricao || ''),
+                    aliquota: String(r.aliquota || ''),
+                })),
+            };
+            return response;
+        }
+        case 'nesh': {
+            // NESH local FTS returns flat items → build the canonical text-search DTO
+            const response: NeshTextSearchApiResponse = {
+                success: true, type: 'text', query,
+                normalized: query, match_type: 'all_words',
+                warning: null, total_capitulos: safeResults.length,
+                results: safeResults.map((r) => ({
+                    ncm: String(r.codigo || ''),
+                    descricao: String(r.descricao || ''),
+                    tipo: 'position' as const,
+                    relevancia: 1,
+                    score: 1,
+                    tier: 1 as const,
+                    tier_label: 'Exato' as const,
+                })),
+            };
+            return response;
+        }
+        default:
+            return null;
+    }
+}
 
 export function useSearch(
     tabsById: ReturnType<typeof useTabs>['tabsById'],
@@ -22,6 +94,7 @@ export function useSearch(
     addToHistory: ReturnType<typeof useHistory>['addToHistory']
 ) {
     const { tipiViewMode } = useSettings();
+    const { status: dbStatus, searchLocal } = useLocalDatabase();
     const tabsByIdRef = useRef(tabsById);
     const tipiViewModeRef = useRef(tipiViewMode);
 
@@ -33,13 +106,13 @@ export function useSearch(
         tipiViewModeRef.current = tipiViewMode;
     }, [tipiViewMode]);
 
-    const updateResultsQuery = useCallback((results: SearchResponse, query: string): SearchResponse => {
+    const updateResultsQuery = useCallback((results: FiscalSearchApiResponse, query: string): FiscalSearchApiResponse => {
         if (results.query === query) return results;
 
-        const nextResults = { ...results, query } as SearchResponse;
+        const nextResults = { ...results, query } as FiscalSearchApiResponse;
 
         // Preserve legacy alias when source came from non-enumerable getter.
-        if (isCodeSearchResponse(nextResults) && !(nextResults as any).resultados) {
+        if (isCodeSearchApiResponse(nextResults) && !(nextResults as any).resultados) {
             (nextResults as any).resultados = (results as any).resultados ?? (results as any).results;
         }
 
@@ -49,7 +122,8 @@ export function useSearch(
     const executeSearchForTab = useCallback(async (tabId: string, doc: DocType, query: string, saveHistory: boolean = true) => {
         if (!query) return;
 
-        if (saveHistory) addToHistory(query);
+        const trimmedQuery = query.trim();
+        if (saveHistory && trimmedQuery) addToHistory(doc, trimmedQuery);
 
         // Localiza a aba atual para consultar capítulos carregados
         const currentTab = tabsByIdRef.current.get(tabId);
@@ -83,27 +157,62 @@ export function useSearch(
             loading: true,
             error: null,
             ncm: query,
-            title: query,
-            isContentReady: false
+            title: query
         });
 
         try {
-            const searchHandlers: Record<DocType, () => Promise<SearchResponse>> = {
-                nesh: () => searchNCM(query),
-                tipi: () => searchTipi(query, tipiViewModeRef.current),
-                nbs: () => searchNbsServices(query),
-                nebs: () => searchNebsEntries(query),
-            };
-            const handler = searchHandlers[doc];
+            let data: FiscalSearchApiResponse | null = null;
+            const isOfflineScopedDoc = doc === 'nesh' || doc === 'tipi' || doc === 'nbs';
 
-            if (!handler) {
-                throw new Error(`Unknown document type: ${doc}`);
+            // === HYBRID SEARCH: Local DB first, API fallback ===
+            if (dbStatus === 'ready' && isOfflineScopedDoc) {
+                try {
+                    const searchStart = performance.now();
+                    const localResponse = await searchLocal(doc as any, query, tipiViewModeRef.current);
+                    const searchEnd = performance.now();
+                    if (localResponse) {
+                        if (import.meta.env.DEV) {
+                            const e2e = (searchEnd - searchStart).toFixed(1);
+                            const wt = localResponse.timing;
+                            const sql = wt?.sqlDurationMs?.toFixed(1) ?? '?';
+                            const total = wt?.totalDurationMs?.toFixed(1) ?? '?';
+                            const cache = wt?.cacheHit ? '✓ HIT' : '✗ miss';
+                            console.log(
+                                `[search] ${doc}:${query} e2e=${e2e}ms worker=${total}ms sql=${sql}ms cache=${cache}`
+                            );
+                        }
+                        if (localResponse.searchType === 'code') {
+                            data = doc === 'nesh' || doc === 'tipi'
+                                ? buildLocalCodeSearchResponse(
+                                    doc,
+                                    query,
+                                    localResponse.results as Record<string, any>,
+                                    localResponse.markdown,
+                                )
+                                : null;
+                        } else if (Array.isArray(localResponse.results)) {
+                            data = normalizeLocalResults(doc, query, localResponse.results as Record<string, unknown>[]);
+                        }
+                    }
+                } catch { /* silent fallback to API */ }
             }
 
-            const data = await handler();
+            // Fallback to API if local returned nothing
+            if (!data) {
+                const searchHandlers: Record<DocType, () => Promise<FiscalSearchApiResponse>> = {
+                    nesh: () => searchNCM(query),
+                    tipi: () => searchTipi(query, tipiViewModeRef.current),
+                    nbs: () => searchNbsServices(query),
+                };
+                const handler = searchHandlers[doc];
+                if (!handler) {
+                    throw new Error(`Unknown document type: ${doc}`);
+                }
+                data = await handler();
+            }
 
             // Extrai capitulos apenas para respostas do tipo code
-            const codeResults = isCodeSearchResponse(data)
+            const codeResults = isCodeSearchApiResponse(data)
                 ? (data.resultados || data.results)
                 : null;
             const chaptersInResponse = codeResults
@@ -115,7 +224,7 @@ export function useSearch(
 
             updateTab(tabId, {
                 results: updateResultsQuery(data, query),
-                content: isCodeSearchResponse(data) ? data.markdown || '' : '',
+                content: isCodeSearchApiResponse(data) ? data.markdown || '' : '',
                 loading: false,
                 isNewSearch: true,
                 isContentReady: false,
@@ -126,19 +235,19 @@ export function useSearch(
                 }
             });
         } catch (err: any) {
-            console.error(err);
-            let message = 'Erro ao buscar dados. Verifique a API.';
+            if (import.meta.env.DEV) {
+                console.error(err);
+            }
+            let message = 'Não foi possível carregar os dados agora. Tente novamente em instantes.';
 
-            if (axios.isAxiosError(err)) {
+            if (isServiceCatalogDoc(doc)) {
+                const serviceError = getServiceCatalogErrorInfo(err, doc);
+                reportServiceCatalogError(err, doc, serviceError);
+                message = serviceError.message;
+            } else if (axios.isAxiosError(err)) {
                 const status = err.response?.status;
                 if (status === 404) {
-                    message = 'Endpoint não encontrado (404). Verifique se o backend está rodando e se a base URL está correta.';
-                } else if (status) {
-                    message = `Erro ${status} ao buscar dados. Verifique a API.`;
-                } else if (err.code === 'ECONNABORTED') {
-                    message = 'Tempo limite na requisição. Verifique a conexão com o backend.';
-                } else if (err.code === 'ERR_NETWORK') {
-                    message = 'Não foi possível conectar à API. Verifique se o backend está em execução.';
+                    message = 'Conteúdo indisponível no momento.';
                 }
             }
 
@@ -148,7 +257,7 @@ export function useSearch(
                 loading: false
             });
         }
-    }, [addToHistory, updateResultsQuery, updateTab]);
+    }, [addToHistory, updateResultsQuery, updateTab, dbStatus, searchLocal]);
 
     return { executeSearchForTab };
 }

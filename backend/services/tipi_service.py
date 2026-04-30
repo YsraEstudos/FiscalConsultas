@@ -1,39 +1,58 @@
-"""src.services.tipi_service
-
-Serviço de busca na TIPI (Tabela de Incidência do IPI).
-Similar ao NeshService, mas usando o banco tipi.db.
-
-Observações de contrato (importante para o frontend):
-- Respostas de busca por código sempre incluem: query, results/resultados, total, total_capitulos.
-- Estrutura de capítulos/posições é compatível com a navegação do app (posicoes[].codigo).
-"""
+"""Serviço de busca na TIPI (Tabela de Incidência do IPI)."""
 
 import asyncio
-import time
 from collections import OrderedDict
 from contextlib import asynccontextmanager
-from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Tuple, cast
+import threading
+from typing import TYPE_CHECKING, AsyncIterator, Optional, cast
 
 import aiosqlite
 
-from ..config.constants import CacheConfig
 from ..config.exceptions import DatabaseError
+from ..config.constants import CacheConfig  # noqa: F401
 from ..config.logging_config import service_logger as logger
 from ..config.settings import settings
-from ..utils import ncm_utils
-from ..utils.id_utils import generate_anchor_id
+from ..utils import ncm_utils  # noqa: F401
 from ..utils.payload_cache_metrics import PayloadCacheMetrics
+from .tipi.health import (
+    probe_tipi_repository_catalog_health,
+    probe_tipi_sqlite_catalog_health,
+)
+from .tipi.search import (
+    build_empty_tipi_code_search_response,
+    build_tipi_code_result_map,
+    clone_tipi_code_search_result,
+    fetch_tipi_chapter_catalog,
+    get_chapter_positions,
+    get_family_positions,
+    load_tipi_rows_for_code,
+    merge_tipi_multi_code_part_payloads,
+    normalize_tipi_multi_code_parts,
+    prefer_more_specific_tipi_posicao_alvo,
+    read_tipi_code_search_cache,
+    resolve_tipi_chapter_target_position,
+    resolve_tipi_target_position,
+    search_tipi_by_ncm_code,
+    search_tipi_by_text_query,
+    search_tipi_multi_code_parts,
+    snapshot_tipi_internal_cache_metrics,
+    write_tipi_code_search_cache,
+)
+from .tipi.types import (
+    TipiChapterCatalogItem,
+    TipiCodeCacheKey,
+    TipiCodeSearchPayload,
+    TipiHealthPayload,
+    TipiRowBatch,
+    TipiTextSearchPayload,
+)
 
-# Caminho do banco de dados TIPI
-TIPI_DB_PATH = Path(__file__).parent.parent.parent / "database" / "tipi.db"
 TIPI_SORT_WITH_NCM = "ncm_sort, ncm"
 TIPI_SORT_FALLBACK = "ncm"
 TIPI_ALLOWED_TABLES = {"tipi_positions", "tipi_chapters", "tipi_fts"}
 TIPI_MULTI_CODE_MAX_PARTS = 25
 
-# SQLModel Repository imports (optional - for new code paths)
 get_session = None
 try:
     from ..infrastructure.db_engine import get_session
@@ -58,14 +77,13 @@ class TipiService:
     - Busca por código NCM
     - Busca textual (FTS5)
     - Cache em memória
-    - Destaque de alíquotas
     - Connection pooling
     """
 
-    # Pool compartilhado por caminho resolvido do banco.
-    _pool: Dict[Path, List[aiosqlite.Connection]] = {}
-    _pool_lock: Optional[asyncio.Lock] = None
-    _pool_max_size: int = 3
+    _tipi_connection_pools: dict[tuple[Path, int], list[aiosqlite.Connection]] = {}
+    _tipi_connection_pool_locks: dict[int, asyncio.Lock] = {}
+    _tipi_connection_pool_locks_guard = threading.Lock()
+    _tipi_connection_pool_max_size: int = 3
 
     def __init__(
         self,
@@ -74,47 +92,35 @@ class TipiService:
         repository: "_TipiRepo | None" = None,
         repository_factory=None,
     ):
-        """
-        Inicializa o serviço com pool aiosqlite ou repository.
-
-        Args:
-            db_path: Caminho do banco SQLite (legado)
-            repository: TipiRepository para novo padrão SQLModel
-            repository_factory: Factory async context manager para criar repos sob demanda
-        """
         self.db_path = (db_path or Path(settings.database.tipi_path)).resolve()
-        self._schema_columns_cache: Dict[str, set[str]] = {}
+        self._schema_columns_cache: dict[str, set[str]] = {}
         self._repository = repository
         self._repository_factory = repository_factory
         self._use_repository = repository is not None or repository_factory is not None
 
-        # Performance: LRU caches for search results
-        self._code_search_cache: OrderedDict = (
-            OrderedDict()
-        )  # key: (ncm_query, view_mode) -> result
-        self._chapter_positions_cache: OrderedDict = (
-            OrderedDict()
-        )  # key: chapter_num -> positions
+        self._code_search_cache: OrderedDict[
+            TipiCodeCacheKey, TipiCodeSearchPayload
+        ] = OrderedDict()
+        self._chapter_positions_cache: OrderedDict[str, TipiRowBatch] = OrderedDict()
         self._code_search_cache_metrics = PayloadCacheMetrics("tipi_code_search_cache")
         self._chapter_positions_cache_metrics = PayloadCacheMetrics(
             "tipi_chapter_positions_cache"
         )
-        self._cache_lock: Optional[asyncio.Lock] = None  # Lazy init
-        self._stats_cache: Optional[Dict[str, Any]] = None
-        self._stats_last_check_ts = 0.0
+        self._cache_lock: Optional[asyncio.Lock] = None
 
-        self.mode = "Repository" if self._use_repository else "aiosqlite"
-        logger.info(f"TipiService inicializado (modo: {self.mode})")
+        logger.info(
+            "TipiService inicializado (modo: %s)",
+            "Repository" if self._use_repository else "aiosqlite",
+        )
 
     @classmethod
-    async def create_with_repository(cls) -> "TipiService":
+    def initializeTipiServiceWithRepositoryFactory(cls) -> "TipiService":
         """
-        Factory assíncrono para criar TipiService com TipiRepository.
-        Usa factory pattern para criar repos sob demanda (cada chamada tem sua session).
+        Factory para criar TipiService com TipiRepository.
 
         Uso:
-            service = await TipiService.create_with_repository()
-            results = await service.search_text("bomba")
+            service = TipiService.initializeTipiServiceWithRepositoryFactory()
+            results = await service.searchTipiByTextQuery("bomba")
         """
         if not _REPO_AVAILABLE:
             raise RuntimeError("Repository não disponível. Instale sqlmodel.")
@@ -130,15 +136,17 @@ class TipiService:
 
         return cls(repository_factory=repo_factory)
 
+    @classmethod
+    def create_with_repository(cls) -> "TipiService":
+        return cls.initializeTipiServiceWithRepositoryFactory()
+
     def _get_cache_lock(self) -> asyncio.Lock:
-        """Lazy initialization do lock para evitar criação fora do event loop."""
         if self._cache_lock is None:
             self._cache_lock = asyncio.Lock()
         return self._cache_lock
 
     @asynccontextmanager
-    async def _get_repo(self) -> AsyncIterator["_TipiRepo | None"]:
-        """Get repository via direct instance or factory."""
+    async def _acquire_tipi_repository(self) -> AsyncIterator["_TipiRepo | None"]:
         if self._repository is not None:
             yield self._repository
             return
@@ -149,44 +157,48 @@ class TipiService:
         yield None
 
     @classmethod
-    def _get_pool_lock(cls) -> asyncio.Lock:
-        """Lazy initialization do lock."""
-        if cls._pool_lock is None:
-            cls._pool_lock = asyncio.Lock()
-        return cls._pool_lock
+    def _get_tipi_connection_pool_lock(cls) -> asyncio.Lock:
+        loop_id = id(asyncio.get_running_loop())
+        with cls._tipi_connection_pool_locks_guard:
+            lock = cls._tipi_connection_pool_locks.get(loop_id)
+            if lock is None:
+                lock = asyncio.Lock()
+                cls._tipi_connection_pool_locks[loop_id] = lock
+            return lock
 
-    async def _get_connection(self) -> aiosqlite.Connection:
-        """Obtém conexão do pool ou cria nova."""
-        async with self._get_pool_lock():
-            pool = self._pool.setdefault(self.db_path, [])
+    def _get_tipi_connection_pool_key(self) -> tuple[Path, int]:
+        return self.db_path, id(asyncio.get_running_loop())
+
+    async def _acquire_tipi_connection(self) -> aiosqlite.Connection:
+        pool_key = self._get_tipi_connection_pool_key()
+        async with self._get_tipi_connection_pool_lock():
+            pool = self._tipi_connection_pools.setdefault(pool_key, [])
             if pool:
-                conn = pool.pop()
-                return conn
+                return pool.pop()
 
         try:
             conn = await aiosqlite.connect(self.db_path)
             conn.row_factory = aiosqlite.Row
             return conn
-        except Exception as e:
-            logger.error(f"Failed to connect to TIPI DB: {e}")
-            raise DatabaseError(f"TIPI DB connection failed: {e}")
+        except Exception as exc:
+            logger.error("Failed to connect to TIPI DB: %s", exc)
+            raise DatabaseError(f"TIPI DB connection failed: {exc}") from exc
 
-    async def _release_connection(self, conn: aiosqlite.Connection) -> None:
-        """Devolve conexão ao pool."""
-        async with self._get_pool_lock():
-            pool = self._pool.setdefault(self.db_path, [])
-            if len(pool) < self._pool_max_size:
+    async def _release_tipi_connection(self, conn: aiosqlite.Connection) -> None:
+        pool_key = self._get_tipi_connection_pool_key()
+        async with self._get_tipi_connection_pool_lock():
+            pool = self._tipi_connection_pools.setdefault(pool_key, [])
+            if len(pool) < self._tipi_connection_pool_max_size:
                 pool.append(conn)
-            else:
-                try:
-                    await conn.close()
-                except Exception as e:
-                    logger.warning(f"Error closing TIPI connection: {e}")
+                return
+        try:
+            await conn.close()
+        except Exception as exc:
+            logger.warning("Error closing TIPI connection: %s", exc)
 
-    async def _get_table_columns(
+    async def _load_tipi_table_columns(
         self, conn: aiosqlite.Connection, table: str
     ) -> set[str]:
-        """Return a cached set of column names for a table."""
         if table not in TIPI_ALLOWED_TABLES:
             raise ValueError(f"Tabela não permitida para inspeção de schema: {table}")
         if table in self._schema_columns_cache:
@@ -198,562 +210,175 @@ class TipiService:
         self._schema_columns_cache[table] = cols
         return cols
 
-    def _get_order_by(self, cols: set[str]) -> str:
-        """Resolve ORDER BY com base no schema disponível."""
+    def _resolve_tipi_order_by_clause(self, cols: set[str]) -> str:
         return TIPI_SORT_WITH_NCM if "ncm_sort" in cols else TIPI_SORT_FALLBACK
 
     @staticmethod
-    async def _close_pool_connections(connections: List[aiosqlite.Connection]) -> None:
+    async def _close_tipi_pool_connections(
+        connections: list[aiosqlite.Connection],
+    ) -> None:
         for conn in connections:
             try:
                 await conn.close()
-            except Exception as e:
-                logger.warning(f"Error closing TIPI pool connection: {e}")
+            except Exception as exc:
+                logger.warning("Error closing TIPI pool connection: %s", exc)
 
     @staticmethod
-    def _enforce_cache_limit(
-        cache: OrderedDict[Any, Any],
+    def _trim_tipi_lru_cache_to_limit(
+        cache: OrderedDict,
         max_size: int,
         metrics: PayloadCacheMetrics,
     ) -> None:
-        """Evict oldest entries until cache reaches max_size."""
         limit = max(max_size, 0)
         while len(cache) > limit:
             cache.popitem(last=False)
             metrics.record_eviction()
 
+    async def closeTipiConnectionPool(self) -> None:
+        pool_key = self._get_tipi_connection_pool_key()
+        async with self._get_tipi_connection_pool_lock():
+            pool = self._tipi_connection_pools.pop(pool_key, [])
+        await self._close_tipi_pool_connections(pool)
+
+    @classmethod
+    async def closeAllTipiConnectionPools(cls) -> None:
+        current_loop_id = id(asyncio.get_running_loop())
+        async with cls._get_tipi_connection_pool_lock():
+            leftover_counts = {
+                pool_key[1]: len(pool)
+                for pool_key, pool in cls._tipi_connection_pools.items()
+                if pool_key[1] != current_loop_id
+            }
+            pools = [
+                pool
+                for pool_key, pool in cls._tipi_connection_pools.items()
+                if pool_key[1] == current_loop_id
+            ]
+            cls._tipi_connection_pools = {
+                pool_key: pool
+                for pool_key, pool in cls._tipi_connection_pools.items()
+                if pool_key[1] != current_loop_id
+            }
+        with cls._tipi_connection_pool_locks_guard:
+            cls._tipi_connection_pool_locks.pop(current_loop_id, None)
+        if leftover_counts:
+            logger.warning(
+                "TIPI connection pools for other event loops were left open: %s",
+                leftover_counts,
+            )
+        for pool in pools:
+            await cls._close_tipi_pool_connections(pool)
+
     async def close(self):
-        """Fecha todas as conexões do pool."""
-        async with self._get_pool_lock():
-            pool = self._pool.pop(self.db_path, [])
-        await self._close_pool_connections(pool)
+        return await self.closeTipiConnectionPool()
 
     @classmethod
     async def close_all_pools(cls):
-        """Fecha todas as conexões em todos os pools TIPI conhecidos."""
-        async with cls._get_pool_lock():
-            pools = list(cls._pool.values())
-            cls._pool = {}
+        return await cls.closeAllTipiConnectionPools()
 
-        for pool in pools:
-            await cls._close_pool_connections(pool)
-
-    async def check_connection(self) -> Dict[str, Any]:
-        """Verifica status do banco TIPI."""
-        if not self.db_path.exists():
-            # We return a status dict here because often this is used for diagnostic
-            # but raising DatabaseError is also fine if caught by the status endpoint.
-            # However, status endpoint usually wants to show "error" rather than 503.
-            # Let's keep returning dict but logging errors.
-            return {"ok": False, "error": f"Banco TIPI não encontrado: {self.db_path}"}
-
-        try:
-            conn = await self._get_connection()
-            try:
-                await conn.execute("SELECT 1")
-
-                now = time.time()
-                if not self._stats_cache or (now - self._stats_last_check_ts) > 60:
-                    cursor = await conn.execute("SELECT COUNT(*) FROM tipi_chapters")
-                    chapters_row = await cursor.fetchone()
-                    chapters = chapters_row[0] if chapters_row else 0
-
-                    cursor = await conn.execute("SELECT COUNT(*) FROM tipi_positions")
-                    positions_row = await cursor.fetchone()
-                    positions = positions_row[0] if positions_row else 0
-
-                    self._stats_cache = {
-                        "ok": True,
-                        "chapters": chapters,
-                        "positions": positions,
-                    }
-                    self._stats_last_check_ts = now
-
-                return self._stats_cache
-            finally:
-                await self._release_connection(conn)
-        except Exception as e:
-            logger.error(f"TIPI Check Connection failed: {e}")
-            return {"ok": False, "error": str(e)}
-
-    def _empty_code_response(self, query: str) -> Dict[str, Any]:
-        return {
-            "success": True,
-            "type": "code",
-            "query": query,
-            "results": {},
-            "resultados": {},
-            "total": 0,
-            "total_capitulos": 0,
-        }
-
-    def is_code_query(self, query: str) -> bool:
-        """Helper to detect if query is NCM code."""
-        return ncm_utils.is_code_query(query)
-
-    async def _get_chapter_positions(self, cap_num: str) -> Tuple[Dict[str, Any], ...]:
-        """
-        Fetch positions for a chapter.
-        Performance: Uses LRU cache for full chapter positions.
-        """
-        # Performance: Check chapter cache
-        async with self._get_cache_lock():
-            if cap_num in self._chapter_positions_cache:
-                self._chapter_positions_cache.move_to_end(cap_num)
-                self._chapter_positions_cache_metrics.record_hit()
-                return self._chapter_positions_cache[cap_num]
-        self._chapter_positions_cache_metrics.record_miss()
-
+    async def probeTipiCatalogHealth(self) -> TipiHealthPayload:
         if self._use_repository:
-            async with self._get_repo() as repo:
-                if repo:
-                    rows_list = await repo.get_by_chapter(cap_num)
-                    # Normalize keys to match legacy format
-                    rows = tuple(
-                        {
-                            **r,
-                            "capitulo": r.get("capitulo", cap_num),
-                            "nivel": r.get("nivel", 0),
-                        }
-                        for r in rows_list
-                    )
-                    # Cache result
-                    async with self._get_cache_lock():
-                        self._chapter_positions_cache[cap_num] = rows
-                        self._chapter_positions_cache_metrics.record_set()
-                        self._enforce_cache_limit(
-                            self._chapter_positions_cache,
-                            CacheConfig.TIPI_CHAPTER_CACHE_SIZE,
-                            self._chapter_positions_cache_metrics,
-                        )
-                    return rows
+            return await self._probe_tipi_repository_catalog_health()
+        return await self._probe_tipi_sqlite_catalog_health()
 
-        conn = await self._get_connection()
-        try:
-            cols = await self._get_table_columns(conn, "tipi_positions")
-            order_by = self._get_order_by(cols)
-            sql = f"""
-                SELECT ncm, capitulo, descricao, aliquota, nivel
-                FROM tipi_positions
-                WHERE capitulo = ?
-                ORDER BY {order_by}
-                """  # nosec B608
-            cursor = await conn.execute(sql, (cap_num,))
-            rows = await cursor.fetchall()
-            result = tuple(dict(row) for row in rows)
+    async def check_connection(self) -> TipiHealthPayload:
+        return await self.probeTipiCatalogHealth()
 
-            # Cache result
-            async with self._get_cache_lock():
-                self._chapter_positions_cache[cap_num] = result
-                self._chapter_positions_cache_metrics.record_set()
-                self._enforce_cache_limit(
-                    self._chapter_positions_cache,
-                    CacheConfig.TIPI_CHAPTER_CACHE_SIZE,
-                    self._chapter_positions_cache_metrics,
-                )
-            return result
-        finally:
-            await self._release_connection(conn)
+    async def _probe_tipi_repository_catalog_health(self) -> TipiHealthPayload:
+        return await probe_tipi_repository_catalog_health(self)
+
+    async def _probe_tipi_sqlite_catalog_health(self) -> TipiHealthPayload:
+        return await probe_tipi_sqlite_catalog_health(self)
+
+    def _build_empty_tipi_code_search_response(
+        self, query: str
+    ) -> TipiCodeSearchPayload:
+        return build_empty_tipi_code_search_response(query)
+
+    async def _get_chapter_positions(self, cap_num: str) -> TipiRowBatch:
+        return await get_chapter_positions(self, cap_num)
 
     async def _get_family_positions(
-        self, cap_num: str, prefix: str, ancestor_prefixes: set
-    ) -> Tuple[Dict[str, Any], ...]:
-        """
-        Fetch positions filtradas por família NCM (otimizado em SQL).
+        self, cap_num: str, prefix: str, ancestor_prefixes: set[str]
+    ) -> TipiRowBatch:
+        return await get_family_positions(self, cap_num, prefix, ancestor_prefixes)
 
-        Args:
-            cap_num: Número do capítulo (2 dígitos)
-            prefix: Prefixo NCM para filtrar descendentes (ex: "8413")
-            ancestor_prefixes: Set de prefixos ancestrais (ex: {"8413", "841391"})
-        """
-        if self._use_repository:
-            async with self._get_repo() as repo:
-                if repo:
-                    rows_list = await repo.get_family_positions(
-                        cap_num, prefix, ancestor_prefixes
-                    )
-                    return tuple(
-                        {
-                            **r,
-                            "capitulo": r.get("capitulo", cap_num),
-                            "nivel": r.get("nivel", 0),
-                        }
-                        for r in rows_list
-                    )
-
-        conn = await self._get_connection()
-        try:
-            cols = await self._get_table_columns(conn, "tipi_positions")
-            order_by = self._get_order_by(cols)
-
-            conditions = ["REPLACE(ncm, '.', '') LIKE ? || '%'"]
-            params = [prefix]
-
-            for ancestor in ancestor_prefixes:
-                conditions.append("REPLACE(ncm, '.', '') = ?")
-                params.append(ancestor)
-
-            where_clause = " OR ".join(conditions)
-            sql = f"""
-                SELECT ncm, capitulo, descricao, aliquota, nivel
-                FROM tipi_positions
-                WHERE capitulo = ? AND ({where_clause})
-                ORDER BY {order_by}
-                """  # nosec B608
-            cursor = await conn.execute(sql, (cap_num, *params))
-            rows = await cursor.fetchall()
-            return tuple(dict(row) for row in rows)
-        finally:
-            await self._release_connection(conn)
-
-    async def _get_cached_code_result(
-        self, cache_key: Tuple[str, str]
-    ) -> Optional[Dict[str, Any]]:
-        cached: Optional[Dict[str, Any]]
-        async with self._get_cache_lock():
-            cached = self._code_search_cache.get(cache_key)
-            if not cached:
-                return None
-            self._code_search_cache.move_to_end(cache_key)
-            self._code_search_cache_metrics.record_hit()
-        return self._clone_code_search_result(cached)
+    async def _read_tipi_code_search_cache(
+        self, cache_key: TipiCodeCacheKey
+    ) -> TipiCodeSearchPayload | None:
+        return await read_tipi_code_search_cache(self, cache_key)
 
     @staticmethod
-    def _clone_code_search_result(result: Dict[str, Any]) -> Dict[str, Any]:
-        return deepcopy(result)
+    def _clone_tipi_code_search_result(
+        result: TipiCodeSearchPayload,
+    ) -> TipiCodeSearchPayload:
+        return clone_tipi_code_search_result(result)
 
-    async def _store_cached_code_result(
-        self, cache_key: Tuple[str, str], result: Dict[str, Any]
+    async def _write_tipi_code_search_cache(
+        self, cache_key: TipiCodeCacheKey, result: TipiCodeSearchPayload
     ) -> None:
-        cloned_result = self._clone_code_search_result(result)
-        async with self._get_cache_lock():
-            self._code_search_cache[cache_key] = cloned_result
-            self._code_search_cache_metrics.record_set()
-            self._enforce_cache_limit(
-                self._code_search_cache,
-                CacheConfig.TIPI_RESULT_CACHE_SIZE,
-                self._code_search_cache_metrics,
-            )
+        await write_tipi_code_search_cache(self, cache_key, result)
 
     @staticmethod
-    def _normalize_multi_code_parts(ncm_query: str) -> List[str]:
-        normalized_parts: List[str] = []
-        seen_parts: set[str] = set()
-        for raw_part in ncm_utils.split_ncm_query(ncm_query):
-            normalized_part = ncm_utils.clean_ncm(raw_part)
-            if not normalized_part or normalized_part in seen_parts:
-                continue
-            normalized_parts.append(normalized_part)
-            seen_parts.add(normalized_part)
-            if len(normalized_parts) >= TIPI_MULTI_CODE_MAX_PARTS:
-                break
-        return normalized_parts
+    def _normalize_tipi_multi_code_parts(ncm_query: str) -> list[str]:
+        return normalize_tipi_multi_code_parts(
+            ncm_query, max_parts=TIPI_MULTI_CODE_MAX_PARTS
+        )
 
     @staticmethod
-    def _prefer_more_specific_posicao_alvo(
-        current: Optional[str], incoming: Optional[str]
-    ) -> Optional[str]:
-        if not incoming:
-            return current
-        if not current:
-            return incoming
-
-        current_clean = ncm_utils.clean_ncm(current)
-        incoming_clean = ncm_utils.clean_ncm(incoming)
-        if len(incoming_clean) > len(current_clean):
-            return incoming
-        return current
+    def _prefer_more_specific_tipi_posicao_alvo(
+        current: str | None, incoming: str | None
+    ) -> str | None:
+        return prefer_more_specific_tipi_posicao_alvo(current, incoming)
 
     @staticmethod
-    def _merge_part_payload_into_chapters(
-        merged: Dict[str, Any], part_resp: Dict[str, Any]
+    def _merge_tipi_multi_code_part_payloads(
+        merged, part_resp: TipiCodeSearchPayload
     ) -> None:
-        source = part_resp.get("resultados") or part_resp.get("results") or {}
-        for cap, cap_data in source.items():
-            if cap not in merged:
-                merged[cap] = {**cap_data, "posicoes": []}
-            merged[cap]["posicao_alvo"] = (
-                TipiService._prefer_more_specific_posicao_alvo(
-                    merged[cap].get("posicao_alvo"),
-                    cap_data.get("posicao_alvo"),
-                )
-            )
-            merged[cap].setdefault("posicoes", [])
-            seen_ncms = {pos.get("ncm") for pos in merged[cap]["posicoes"]}
-            for posicao in cap_data.get("posicoes", []) or []:
-                ncm = posicao.get("ncm")
-                if ncm in seen_ncms:
-                    continue
-                merged[cap]["posicoes"].append(posicao)
-                seen_ncms.add(ncm)
+        merge_tipi_multi_code_part_payloads(merged, part_resp)
 
-    async def _search_multiple_codes(
-        self, ncm_query: str, view_mode: str, parts: List[str]
-    ) -> Dict[str, Any]:
-        merged: Dict[str, Any] = {}
-        for part in parts:
-            part_resp = await self.search_by_code(part, view_mode=view_mode)
-            self._merge_part_payload_into_chapters(merged, part_resp)
-        total_rows = sum(len((cap.get("posicoes") or [])) for cap in merged.values())
-        return {
-            "success": True,
-            "type": "code",
-            "query": ncm_query,
-            "results": merged,
-            "resultados": merged,
-            "total": total_rows,
-            "total_capitulos": len(merged),
-        }
+    async def _search_tipi_multi_code_parts(
+        self, ncm_query: str, view_mode: str, parts: list[str]
+    ) -> TipiCodeSearchPayload:
+        return await search_tipi_multi_code_parts(self, ncm_query, view_mode, parts)
 
-    @staticmethod
-    def _build_ancestor_prefixes(prefix: str) -> set[str]:
-        ancestor_prefixes = set()
-        if len(prefix) >= 4:
-            ancestor_prefixes.add(prefix[:4])
-        if len(prefix) >= 6:
-            ancestor_prefixes.add(prefix[:6])
-        return ancestor_prefixes
-
-    async def _load_rows_for_code(
+    async def _load_tipi_rows_for_code(
         self, cap_num: str, clean_query: str, view_mode: str
-    ) -> Tuple[Dict[str, Any], ...]:
-        if view_mode != "family" or len(clean_query) <= 2:
-            return await self._get_chapter_positions(cap_num)
-        return await self._get_family_positions(
-            cap_num,
-            clean_query,
-            self._build_ancestor_prefixes(clean_query),
-        )
+    ) -> TipiRowBatch:
+        return await load_tipi_rows_for_code(self, cap_num, clean_query, view_mode)
 
     @staticmethod
-    def _resolve_posicao_alvo(
+    def _resolve_tipi_target_position(
         clean_query: str, normalized_query: str, query_part: str
-    ) -> Optional[str]:
-        if len(clean_query) <= 2:
-            return None
-        return (normalized_query or "").strip() or query_part.strip()
+    ) -> str | None:
+        return resolve_tipi_target_position(clean_query, normalized_query, query_part)
 
     @staticmethod
-    def _resolve_cap_posicao_alvo(
-        capitulo: str, posicao_alvo: Optional[str]
-    ) -> Optional[str]:
-        if not posicao_alvo:
-            return None
-        clean_alvo = ncm_utils.clean_ncm(posicao_alvo)
-        return posicao_alvo if clean_alvo.startswith(capitulo) else None
+    def _resolve_tipi_chapter_target_position(
+        capitulo: str, posicao_alvo: str | None
+    ) -> str | None:
+        return resolve_tipi_chapter_target_position(capitulo, posicao_alvo)
 
-    def _build_code_resultados(
-        self, rows: Tuple[Dict[str, Any], ...], posicao_alvo: Optional[str]
-    ) -> Dict[str, Any]:
-        resultados: Dict[str, Any] = {}
-        for row in rows:
-            cap = row["capitulo"]
-            if cap not in resultados:
-                resultados[cap] = {
-                    "capitulo": cap,
-                    "titulo": f"Capítulo {cap}",
-                    "notas_gerais": None,
-                    "posicao_alvo": self._resolve_cap_posicao_alvo(cap, posicao_alvo),
-                    "posicoes": [],
-                }
+    def _build_tipi_code_result_map(self, rows: TipiRowBatch, posicao_alvo: str | None):
+        return build_tipi_code_result_map(rows, posicao_alvo)
 
-            codigo = row["ncm"]
-            resultados[cap]["posicoes"].append(
-                {
-                    "ncm": codigo,
-                    "codigo": codigo,
-                    "descricao": row["descricao"],
-                    "aliquota": row["aliquota"] or "0",
-                    "nivel": row["nivel"],
-                    "anchor_id": generate_anchor_id(codigo),
-                }
-            )
-        return resultados
-
-    async def search_by_code(
+    async def searchTipiByNcmCode(
         self, ncm_query: str, view_mode: str = "family"
-    ) -> Dict[str, Any]:
-        """
-        Busca por código NCM na TIPI (Async).
-        Performance: Cacheia resultados por (query, view_mode) com LRU.
+    ) -> TipiCodeSearchPayload:
+        return await search_tipi_by_ncm_code(self, ncm_query, view_mode=view_mode)
 
-        Args:
-            ncm_query: Código NCM (ex: "85.17" ou "8517")
-            view_mode: 'family' (retorna apenas família NCM) ou 'chapter' (capítulo completo)
-        """
-        cache_key = (ncm_query, view_mode)
-        cached = await self._get_cached_code_result(cache_key)
-        if cached:
-            return cached
-        self._code_search_cache_metrics.record_miss()
+    async def searchTipiByTextQuery(
+        self, query: str, limit: int = 50
+    ) -> TipiTextSearchPayload:
+        return await search_tipi_by_text_query(self, query, limit=limit)
 
-        parts = self._normalize_multi_code_parts(ncm_query)
-        if len(parts) > 1:
-            result = await self._search_multiple_codes(ncm_query, view_mode, parts)
-            await self._store_cached_code_result(cache_key, result)
-            return result
+    async def fetchTipiChapterCatalog(self) -> list[TipiChapterCatalogItem]:
+        return await fetch_tipi_chapter_catalog(self)
 
-        query_part = parts[0] if parts else ""
-        normalized_query = ncm_utils.format_ncm_tipi(query_part)
-        clean_query = ncm_utils.clean_ncm(normalized_query)
-        if not clean_query:
-            return self._empty_code_response(ncm_query)
-
-        cap_num = clean_query[:2].zfill(2)
-        posicao_alvo = self._resolve_posicao_alvo(
-            clean_query, normalized_query, query_part
-        )
-        rows = await self._load_rows_for_code(cap_num, clean_query, view_mode)
-        if not rows:
-            return self._empty_code_response(ncm_query)
-
-        resultados = self._build_code_resultados(rows, posicao_alvo)
-        result = {
-            "success": True,
-            "type": "code",
-            "query": ncm_query,
-            "results": resultados,
-            "resultados": resultados,
-            "total": len(rows),
-            "total_capitulos": len(resultados),
-        }
-        await self._store_cached_code_result(cache_key, result)
-        return result
-
-    async def search_text(self, query: str, limit: int = 50) -> Dict[str, Any]:
-        """
-        Busca textual via FTS5/tsvector (Async).
-        """
-        if self._use_repository:
-            async with self._get_repo() as repo:
-                if repo:
-                    results = await repo.search_fulltext(query, limit)
-                    return {
-                        "success": True,
-                        "type": "text",
-                        "query": query,
-                        "normalized": query,
-                        "match_type": "fts",
-                        "warning": None,
-                        "total": len(results),
-                        "results": results,
-                    }
-
-        conn = await self._get_connection()
-        try:
-            # Busca FTS
-            escaped_query = query.replace('"', '""')
-            fts_query = f'"{escaped_query}"'  # Busca exata primeiro
-            cursor = await conn.execute(
-                """
-                SELECT ncm, capitulo, descricao, aliquota
-                FROM tipi_fts
-                WHERE tipi_fts MATCH ?
-                LIMIT ?
-            """,
-                (fts_query, limit),
-            )
-
-            rows = await cursor.fetchall()
-            results = [dict(row) for row in rows]
-
-            # Se poucos resultados, tentar busca mais flexível
-            if len(results) < 5:
-                words = query.split()
-                if len(words) > 1:
-                    quoted_tokens = [
-                        '"' + word.replace('"', '""') + '"' for word in words
-                    ]
-                    and_query = " AND ".join(quoted_tokens)
-                    cursor = await conn.execute(
-                        """
-                        SELECT ncm, capitulo, descricao, aliquota
-                        FROM tipi_fts
-                        WHERE tipi_fts MATCH ?
-                        LIMIT ?
-                    """,
-                        (and_query, limit),
-                    )
-                    rows = await cursor.fetchall()
-                    results = [dict(row) for row in rows]
-        finally:
-            await self._release_connection(conn)
-
-        return {
-            "success": True,
-            "type": "text",
-            "query": query,
-            "normalized": query,
-            "match_type": "fts",
-            "warning": None,
-            "total": len(results),
-            "results": [
-                {
-                    "ncm": r["ncm"],
-                    "capitulo": r["capitulo"],
-                    "descricao": r["descricao"],
-                    "aliquota": r["aliquota"] or "0",
-                }
-                for r in results
-            ],
-        }
-
-    async def get_all_chapters(self) -> List[Dict[str, str]]:
-        """Retorna lista de todos os capítulos (Async)."""
-        if self._use_repository:
-            async with self._get_repo() as repo:
-                if repo:
-                    return await repo.get_all_chapters()
-
-        conn = await self._get_connection()
-        try:
-            cursor = await conn.execute("""
-                SELECT codigo, titulo, secao
-                FROM tipi_chapters
-                ORDER BY codigo
-            """)
-            rows = await cursor.fetchall()
-            return [dict(row) for row in rows]
-        finally:
-            await self._release_connection(conn)
-
-    async def get_internal_cache_metrics(self) -> Dict[str, Any]:
-        """
-        Snapshot dos caches internos (L1) do serviço TIPI.
-        """
+    async def snapshotTipiInternalCacheMetrics(self):
         async with self._get_cache_lock():
-            code_snapshot = self._code_search_cache_metrics.snapshot(
-                current_size=len(self._code_search_cache),
-                max_size=CacheConfig.TIPI_RESULT_CACHE_SIZE,
-            )
-            chapter_snapshot = self._chapter_positions_cache_metrics.snapshot(
-                current_size=len(self._chapter_positions_cache),
-                max_size=CacheConfig.TIPI_CHAPTER_CACHE_SIZE,
-            )
+            return snapshot_tipi_internal_cache_metrics(self)
 
-        return {
-            "code_search_cache": {
-                "name": self._code_search_cache_metrics.name,
-                "hits": code_snapshot.hits,
-                "misses": code_snapshot.misses,
-                "sets": code_snapshot.sets,
-                "evictions": code_snapshot.evictions,
-                "served_gzip": code_snapshot.served_gzip,
-                "served_identity": code_snapshot.served_identity,
-                "current_size": code_snapshot.current_size,
-                "max_size": code_snapshot.max_size,
-                "hit_rate": code_snapshot.hit_rate,
-            },
-            "chapter_positions_cache": {
-                "name": self._chapter_positions_cache_metrics.name,
-                "hits": chapter_snapshot.hits,
-                "misses": chapter_snapshot.misses,
-                "sets": chapter_snapshot.sets,
-                "evictions": chapter_snapshot.evictions,
-                "served_gzip": chapter_snapshot.served_gzip,
-                "served_identity": chapter_snapshot.served_identity,
-                "current_size": chapter_snapshot.current_size,
-                "max_size": chapter_snapshot.max_size,
-                "hit_rate": chapter_snapshot.hit_rate,
-            },
-        }
+    async def get_internal_cache_metrics(self):
+        """Alias compatível com a API anterior do serviço."""
+        return await self.snapshotTipiInternalCacheMetrics()

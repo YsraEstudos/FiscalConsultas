@@ -8,6 +8,24 @@ import { useIsAdmin } from "../../src/hooks/useIsAdmin";
 // Mock the context hook
 vi.mock("../../src/context/SettingsContext");
 vi.mock("../../src/hooks/useIsAdmin");
+vi.mock("../../src/context/LocalDatabaseContext", () => ({
+  useLocalDatabase: () => ({
+    status: "not_installed",
+    searchLocal: vi.fn().mockResolvedValue(null),
+    getNbsDetailLocal: vi.fn().mockResolvedValue(null),
+    progress: 0,
+    progressStep: "",
+    localVersion: null,
+    remoteVersion: null,
+    updateAvailable: false,
+    error: null,
+    dbSizeBytes: null,
+    isSupported: false,
+    install: vi.fn(),
+    remove: vi.fn(),
+    refreshAvailability: vi.fn().mockResolvedValue(null),
+  }),
+}));
 
 describe("SettingsModal Component", () => {
   const mockSettings = {
@@ -18,6 +36,9 @@ describe("SettingsModal Component", () => {
     adminMode: false,
     tipiViewMode: VIEW_MODE.CHAPTER,
     sidebarPosition: SIDEBAR_POSITION.RIGHT,
+    openNewTab: false,
+    nbsPrefixAutoExpand: false,
+    nbsChapterNotesNewTab: false,
     updateTheme: vi.fn(),
     updateAccentColor: vi.fn(),
     updateFontSize: vi.fn(),
@@ -25,6 +46,9 @@ describe("SettingsModal Component", () => {
     toggleAdminMode: vi.fn(),
     updateTipiViewMode: vi.fn(),
     updateSidebarPosition: vi.fn(),
+    toggleOpenNewTab: vi.fn(),
+    toggleNbsPrefixAutoExpand: vi.fn(),
+    toggleNbsChapterNotesNewTab: vi.fn(),
     restoreDefaults: vi.fn(),
   };
 
@@ -45,8 +69,16 @@ describe("SettingsModal Component", () => {
     expect(screen.getByText("Tema")).toBeInTheDocument();
     expect(screen.getByText("Tamanho da Fonte")).toBeInTheDocument();
     expect(screen.getByText("Realçar Resultados")).toBeInTheDocument();
+    expect(screen.getByText("Comportamento de Navegação")).toBeInTheDocument();
     expect(screen.getByText("Modo Desenvolvedor")).toBeInTheDocument();
     expect(screen.getByText("Visualização TIPI")).toBeInTheDocument();
+  });
+
+  it("toggles navigation behavior", () => {
+    render(<SettingsModal isOpen={true} onClose={vi.fn()} />);
+    const newTabBtn = screen.getByText("Em nova aba");
+    fireEvent.click(newTabBtn);
+    expect(mockSettings.toggleOpenNewTab).toHaveBeenCalled();
   });
 
   it("switches theme", () => {

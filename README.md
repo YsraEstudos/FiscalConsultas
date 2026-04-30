@@ -1,19 +1,21 @@
 # Nesh / Fiscal
 
-Sistema híbrido de consulta fiscal (NESH + TIPI) com backend FastAPI e frontend React/Vite.
+Sistema de consulta fiscal com backend FastAPI, frontend React/Vite e modo offline total no navegador para `NESH`, `TIPI`, `NBS` e `NEBS`.
 
 ## O que é
 
 - Busca por código e texto nas Notas Explicativas do Sistema Harmonizado (NESH).
 - Busca na TIPI com visualização por família (`family`) ou capítulo (`chapter`).
+- Busca em `NBS` e `NEBS`, com detalhe de catálogo e navegação por prefixo; a consulta pública dessas bases nao exige login.
 - Frontend com navegação por abas, smart-links e recursos de produtividade (glossário, notas, chat IA).
+- Instalação offline em um botão: o app shell é cacheado e o banco local fica disponível no navegador após a instalação.
 
 ## Requisitos
 
 - Python 3.13+ (alinhado com `pyproject.toml`)
 - Node.js 22.12+ para o frontend (validado localmente com Node 22.17.0; CI usa Node 24)
 - npm (validado localmente com npm 10.9.2)
-- Opcional para modo PostgreSQL: Docker + Docker Compose
+- Opcional para modo PostgreSQL local: Docker + Docker Compose
 
 ## Quickstart
 
@@ -78,14 +80,61 @@ pip install pytest pytest-cov pytest-benchmark httpx
 Copy-Item .env.example .env
 ```
 
-Configuração mínima para desenvolvimento local com SQLite:
+Configuração recomendada (cloud-first: API no Render + PostgreSQL no Neon):
+
+Observação: quando o backend estiver no Render, configure esses valores no painel de Environment do provedor. O `.env` local é usado apenas quando você roda backend no seu computador.
+
+- em `.env` (backend), ajuste pelo menos:
+
+```env
+SERVER__ENV=production
+DATABASE__ENGINE=postgresql
+DATABASE__POSTGRES_URL=postgresql+asyncpg://<user>:<password_urlencoded>@<host>/<db>?sslmode=require
+
+AUTH__CLERK_DOMAIN=your-instance.clerk.accounts.dev
+AUTH__CLERK_ISSUER=https://your-instance.clerk.accounts.dev
+AUTH__CLERK_AUDIENCE=fiscal-api
+AUTH__CLERK_AUTHORIZED_PARTIES=["http://localhost:5173","http://127.0.0.1:5173","https://seu-frontend.com"]
+AUTH__CLERK_AUTHORIZED_PARTIES_REGEX=^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$
+AUTH__CLERK_CLOCK_SKEW_SECONDS=120
+
+# Trave CORS para os domínios oficiais do frontend
+SERVER__CORS_ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","https://seu-frontend.com"]
+# Opcional: libere previews do mesmo projeto Cloudflare Pages
+SERVER__CORS_ALLOWED_ORIGIN_REGEX=^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$
+
+# Redis opcional (Upstash/Render Key Value)
+# Se este ambiente não tiver Redis provisionado, defina false explicitamente
+CACHE__ENABLE_REDIS=false
+# Preencha apenas quando CACHE__ENABLE_REDIS=true
+# Para Upstash, use a Redis URL TLS (rediss://), nao a REST URL/token
+CACHE__REDIS_URL=rediss://default:<password>@<host>:6379
+
+# IA opcional (Gemini)
+# Sem GOOGLE_API_KEY, o backend sobe normal e o chat IA fica desativado
+GOOGLE_API_KEY=
+SECURITY__AI_CHAT_ALLOWED_EMAILS=["voce@empresa.com","admin@empresa.com"]
+# Opcional: se omitida, a UI restrita reutiliza a allowlist do chat IA
+SECURITY__RESTRICTED_UI_ALLOWED_EMAILS=["voce@empresa.com","admin@empresa.com"]
+```
+
+- em `client/.env.local`, defina:
+
+```env
+VITE_API_URL=https://seu-backend.onrender.com
+VITE_CLERK_PUBLISHABLE_KEY=pk_live_sua_chave
+VITE_CLERK_TOKEN_TEMPLATE=backend_api
+```
+
+Se voce estiver apenas desenvolvendo localmente, pode usar `pk_test_...`. Em site publicado, use `pk_live_...`.
+
+Configuração alternativa (local-first com SQLite):
 
 - em `.env`, ajuste `DATABASE__ENGINE=sqlite`
 - em `client/.env.local`, defina:
 
 ```env
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_sua_chave
-VITE_RESTRICTED_UI_EMAILS=voce@empresa.com,admin@empresa.com
 ```
 
 Sem `VITE_CLERK_PUBLISHABLE_KEY`, o frontend exibe apenas a tela de erro de configuração.
@@ -101,6 +150,8 @@ AUTH__CLERK_ISSUER=https://your-instance.clerk.accounts.dev
 AUTH__CLERK_AUDIENCE=fiscal-api
 AUTH__CLERK_AUTHORIZED_PARTIES=["http://localhost:5173","http://127.0.0.1:5173"]
 AUTH__CLERK_CLOCK_SKEW_SECONDS=120
+SECURITY__AI_CHAT_ALLOWED_EMAILS=["voce@empresa.com","admin@empresa.com"]
+SECURITY__RESTRICTED_UI_ALLOWED_EMAILS=["voce@empresa.com","admin@empresa.com"]
 ```
 
 - em `client/.env.local`:
@@ -108,7 +159,6 @@ AUTH__CLERK_CLOCK_SKEW_SECONDS=120
 ```env
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_sua_chave
 VITE_CLERK_TOKEN_TEMPLATE=backend_api
-VITE_RESTRICTED_UI_EMAILS=voce@empresa.com,admin@empresa.com
 ```
 
 Checklist rápido Clerk (dev local):
@@ -116,22 +166,46 @@ Checklist rápido Clerk (dev local):
 - `AUTH__CLERK_DOMAIN` e `AUTH__CLERK_ISSUER` devem apontar para o mesmo tenant Clerk.
 - `AUTH__CLERK_AUDIENCE` deve ser exatamente o `aud` emitido no template JWT (`backend_api`).
 - `VITE_CLERK_TOKEN_TEMPLATE` deve ter o mesmo nome do template configurado no Clerk.
+- O template JWT do Clerk precisa incluir `email` ou `email_address` no payload para permitir a allowlist server-side do chat IA/UI restrita.
 - `AUTH__CLERK_AUTHORIZED_PARTIES` deve incluir `http://localhost:5173` e `http://127.0.0.1:5173`.
-- `VITE_RESTRICTED_UI_EMAILS` é opcional e controla apenas superfícies de UI restritas no frontend (chat IA, comentários e aba de contribuições). Não substitui autorização backend.
+- `SECURITY__AI_CHAT_ALLOWED_EMAILS` controla a allowlist real do backend para `/api/ai/chat`.
+- `SECURITY__RESTRICTED_UI_ALLOWED_EMAILS` é opcional; se omitido, a UI restrita usa a mesma allowlist do chat IA.
+- `VITE_RESTRICTED_UI_EMAILS` e opcional e afeta apenas superficies restritas no frontend; nao substitui autorizacao no backend.
+- NBS/NEBS sao publicos para busca e detalhe; login continua necessario apenas para areas autenticadas como comentarios, chat IA e gestao/admin.
 
 ### 3) Preparar dados locais (SQLite)
 
 ```powershell
 python scripts/setup_tipi_database.py
 uv run scripts/rebuild_index.py
+python scripts/setup_nbs_database.py
+python scripts/setup_nebs_database.py
 ```
 
 Observações:
 
 - `rebuild_index.py` (Fase 5) é o script consolidado: cria `database/nesh.db`, extrai seções e reconstrói o índice FTS com Stemming.
+- `setup_nbs_database.py` e `setup_nebs_database.py` alimentam `database/services.db`, usado por `NBS` e `NEBS`.
 - Em Windows com encoding CP1252, scripts com emoji podem falhar; usar `PYTHONUTF8=1` (o `uv run` geralmente lida bem com isso, mas o script `.bat` já automatiza essa configuração).
 
 ### 4) Subir aplicação
+
+Fluxo recomendado para teste local completo: backend + frontend com API local.
+
+Comando único (Windows):
+
+```powershell
+.\testar_tudo_local.bat
+```
+
+Esse script:
+
+- sobe o backend FastAPI na porta `8000`
+- sobe o frontend Vite na porta `5173`
+- cria `client/.env.development.local` apontando o frontend para a API local
+- abre o navegador quando os dois serviços estão prontos
+
+Se você precisar rodar backend localmente (modo de desenvolvimento de API):
 
 Terminal 1 (backend):
 
@@ -148,20 +222,6 @@ npm run dev
 
 Acesse `http://127.0.0.1:5173`.
 
-Alternativa com script único (Windows):
-
-```powershell
-.\start_nesh_dev.bat
-```
-
-Para diagnóstico de autenticação Clerk no frontend:
-
-```powershell
-.\start_nesh_dev.bat --auth-debug
-```
-
-O script faz preflight, executa `docker compose up -d` automaticamente (essencial para Redis e infraestrutura mesmo em modo SQLite), espera os serviços (`db`, `redis`, `pgadmin`) e bloqueia startup se faltarem variáveis obrigatórias de auth em `.env` ou em `client/.env.local`. Em caso de falha, exibe checklist com ações manuais.
-
 Healthcheck backend:
 
 ```powershell
@@ -169,6 +229,233 @@ Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/status"
 ```
 
 Resposta esperada: JSON com `status`, `database` e `tipi`.
+
+### 5) Gerar o pacote offline do navegador
+
+Depois de preparar os bancos locais (`nesh.db`, `tipi.db` e `services.db`), gere o pacote distribuível do modo offline:
+
+```powershell
+python scripts/build_offline_db.py
+```
+
+Arquivos gerados:
+
+- `database/fiscal_offline.enc`
+- `database/fiscal_offline.meta`
+
+Esses dois arquivos sao o pacote offline usado pelo botao de instalacao no navegador.
+
+Contrato publico do banco offline:
+
+- O pacote offline (`fiscal_offline.enc` + `fiscal_offline.meta`) e considerado publico. Ele pode ser baixado sem login por meio das rotas `/api/database/version`, `/api/database/token` e `/api/database/download`; o token efemero existe para limitar reuso/abuso do download, nao para transformar o pacote em dado privado.
+- A criptografia do pacote offline protege integridade/formato de distribuicao, mas nao deve ser tratada como controle de acesso a dados sigilosos. Nao incluir informacao privada, segredos, dados de usuarios ou conteudo restrito dentro do bundle offline.
+- O conteudo NEBS associado a NBS faz parte do contrato do catalogo offline e online. A descricao/entrada explicativa NEBS vinculada ao item NBS deve permanecer no banco, no bundle offline e no detalhe da NBS; nao remover `has_nebs`, `nebs_entries` nem o payload `detail.nebs` sem substituir o fluxo por equivalente compativel.
+
+Comportamento esperado do fluxo:
+
+- o frontend consulta `GET /api/database/version`
+- solicita um token efemero em `POST /api/database/token`
+- baixa o artefato em `POST /api/database/download`
+- grava o pacote em OPFS
+- inicializa o worker local
+- aquece o cache do app shell via `client/public/coi-serviceworker.js`
+
+Depois da instalacao concluida, as buscas e detalhes de `NESH`, `TIPI`, `NBS` e `NEBS` passam a funcionar localmente no navegador, inclusive apos recarregar a pagina sem rede, desde que o navegador suporte `SharedArrayBuffer` e OPFS.
+
+O que continua online por natureza, como autenticacao, comentarios e chat IA, entra em modo degradado quando nao ha rede, sem quebrar a navegacao base.
+
+### 6) Validar o modo offline no localhost
+
+O modo offline tambem deve funcionar em `http://127.0.0.1:5173/` durante o desenvolvimento local.
+
+Fluxo recomendado:
+
+1. gere ou atualize `database/fiscal_offline.enc` e `database/fiscal_offline.meta`
+2. rode `.\testar_tudo_local.bat`
+3. abra o frontend em `http://127.0.0.1:5173/`
+4. clique em `Baixar` no instalador offline
+5. espere o estado mudar para `Pronto`
+6. desligue a rede, recarregue e valide as buscas locais
+
+Importante:
+
+- o frontend local usa proxy para `http://127.0.0.1:8000`
+- se o backend nao subir, o Vite responde `502` nas rotas `/api/database/*`
+- o script `testar_tudo_local.bat` ja cria `client/.env.development.local` apontando para a API local
+- o script tambem sobe o backend com `CACHE__ENABLE_REDIS=false`, entao um warning de Redis nao deve bloquear o teste local
+
+### 7) Diagnostico rapido do instalador offline
+
+Se o botao de instalacao mostrar erro:
+
+- `502` em `/api/database/version` ou `/api/database/token`: o frontend subiu, mas o backend local nao respondeu na porta `8000`
+- `Offline database not available`: faltam `database/fiscal_offline.enc` e/ou `database/fiscal_offline.meta`
+- navegador sem suporte: o instalador entra em `unsupported` quando faltar `SharedArrayBuffer`, `Worker`, `crypto.subtle` ou OPFS
+- detalhe de `NBS`/`NEBS` sem rede: confirme que a instalacao terminou em `ready`; sem isso o frontend ainda pode precisar da API
+
+## Deploy no Cloudflare
+
+O caminho mais simples para este repositório é:
+
+1. publicar o frontend em **Cloudflare Pages**
+2. manter o backend FastAPI em um host compatível com Python, como Render, Fly.io ou Railway
+
+Motivo: o Cloudflare Pages hospeda bem o `client` estático, mas não executa este backend FastAPI diretamente sem uma reestruturação maior.
+
+### Frontend no Pages
+
+- `Framework preset`: `Vite`
+- `Build command`: `npm run build`
+- `Build output directory`: `dist`
+- `Root directory`: `client`
+
+Depois do deploy, ajuste `client/.env.local` ou as variáveis do projeto no Pages com:
+
+```env
+VITE_API_URL=https://seu-backend.com
+VITE_CLERK_PUBLISHABLE_KEY=pk_live_sua_chave
+VITE_CLERK_TOKEN_TEMPLATE=backend_api
+```
+
+Se você quiser usar uma API própria em outro domínio, ela precisa permitir CORS para o domínio do Pages e aceitar o token do Clerk.
+Depois de trocar variáveis no Cloudflare Pages, faça um novo deploy e recarregue o site com `Ctrl + F5`.
+
+Para previews do Cloudflare Pages, o backend também precisa aceitar subdomínios como
+`https://<preview>.fiscalconsultas.pages.dev`. Como essas URLs mudam a cada deploy,
+o caminho mais estável é configurar um regex controlado no backend, além do domínio
+principal em `SERVER__CORS_ALLOWED_ORIGINS` e `AUTH__CLERK_AUTHORIZED_PARTIES`.
+
+### Rotas do React
+
+O arquivo `client/public/_redirects` já garante fallback para SPA no Cloudflare Pages, então rotas internas como `/`, `/perfil` ou abas profundas não quebram ao atualizar a página.
+
+## Deploy no GitHub Pages
+
+Também é possível publicar o frontend estático no GitHub Pages em:
+
+- `https://ysraestudos.github.io/FiscalConsultas/`
+
+Requisitos e checklist:
+
+1. Em `Settings > Pages`, deixe `Source = GitHub Actions`.
+2. Cadastre `Settings > Secrets and variables > Actions > Variables > VITE_CLERK_PUBLISHABLE_KEY` com uma chave `pk_live_...` (ou `pk_test_...` para desenvolvimento). Sem isso, o workflow falhará.
+3. Certifique-se de que o backend permite a origem `https://ysraestudos.github.io` em `SERVER__CORS_ALLOWED_ORIGINS` e `AUTH__CLERK_AUTHORIZED_PARTIES`.
+4. Execute o workflow `Deploy GitHub Pages` na aba `Actions`.
+
+Observações operacionais:
+
+- O deploy usa o path-base `/FiscalConsultas/` por ser um **project site**.
+- O workflow gera fallback SPA (`404.html`) para recarregamentos em rotas internas.
+- O build do frontend aponta por padrão para `VITE_API_URL=https://fiscal-api-5eok.onrender.com`.
+
+### Ajuste no Backend (CORS/Auth)
+
+Se o frontend estiver no GitHub Pages, o backend (ex: Render) deve autorizar o host:
+
+```env
+AUTH__CLERK_AUTHORIZED_PARTIES=["http://localhost:5173","http://127.0.0.1:5173","https://ysraestudos.github.io"]
+SERVER__CORS_ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","https://ysraestudos.github.io"]
+```
+
+## Deploy no Render
+
+Se você quer deixar o projeto funcionando com `Render + Neon + Upstash`, o caminho mais simples é:
+
+1. colocar o backend FastAPI no Render
+2. colocar o banco Postgres no Neon
+3. colocar o cache Redis no Upstash
+4. manter o frontend estático em um host separado, como Cloudflare Pages ou GitHub Pages
+
+### 1) Banco no Neon
+
+No Neon, crie um banco e copie a URL de conexão do Postgres.
+
+Use essa URL no Render em:
+
+```env
+DATABASE__ENGINE=postgresql
+DATABASE__POSTGRES_URL=postgresql+asyncpg://<user>:<password>@<host>/<db>?sslmode=require
+```
+
+### 2) Cache no Upstash
+
+No Upstash, crie um Redis e copie a URL de conexão.
+
+Use essa URL no Render em:
+
+```env
+CACHE__ENABLE_REDIS=true
+CACHE__REDIS_URL=rediss://default:<password>@<host>:6379
+```
+
+Se você ainda não provisionou Redis nesse ambiente, defina `CACHE__ENABLE_REDIS=false`
+no Render. Sem esse override, o backend pode cair no fallback local
+`redis://localhost:6379/0` e registrar warning no startup.
+Se estiver usando Upstash, copie a Redis URL do painel e nao a REST URL/token.
+
+### 3) Backend no Render
+
+No Render, crie um `Web Service` apontando para este repositório.
+
+Configuração recomendada:
+
+- `Runtime`: `Docker`
+- `Health Check Path`: `/api/status`
+- `Auto Deploy`: ligado, se você quiser deploy automático
+
+O backend já tem um `Dockerfile`, então o Render não precisa de build customizado.
+
+No painel de variáveis de ambiente do Render, use:
+
+```env
+SERVER__ENV=production
+SERVER__HOST=0.0.0.0
+AUTH__CLERK_DOMAIN=your-instance.clerk.accounts.dev
+AUTH__CLERK_ISSUER=https://your-instance.clerk.accounts.dev
+AUTH__CLERK_AUDIENCE=fiscal-api
+AUTH__CLERK_AUTHORIZED_PARTIES=["http://localhost:5173","http://127.0.0.1:5173","https://fiscalconsultas.pages.dev"]
+AUTH__CLERK_AUTHORIZED_PARTIES_REGEX=^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$
+AUTH__CLERK_CLOCK_SKEW_SECONDS=120
+SERVER__CORS_ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","https://fiscalconsultas.pages.dev"]
+SERVER__CORS_ALLOWED_ORIGIN_REGEX=^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$
+GOOGLE_API_KEY=
+LOGGING__LEVEL=INFO
+LOGGING__REDACT_SENSITIVE_DATA=true
+OBSERVABILITY__METRICS_TOKEN=troque-por-um-token-forte
+OBSERVABILITY__SENTRY_DSN=
+OBSERVABILITY__SENTRY_ENVIRONMENT=production
+OBSERVABILITY__SENTRY_TRACES_SAMPLE_RATE=0.0
+```
+
+Se você usar previews do Cloudflare Pages, essas duas variáveis com regex evitam dor de cabeça com subdomínios temporários.
+Se não quiser habilitar IA nesse ambiente, pode deixar `GOOGLE_API_KEY` ausente; o backend
+sobe normalmente e apenas os recursos de chat IA ficam desativados.
+Se o frontend estiver no GitHub Pages, inclua `https://ysraestudos.github.io` em
+`AUTH__CLERK_AUTHORIZED_PARTIES` e `SERVER__CORS_ALLOWED_ORIGINS`.
+
+### 4) Frontend
+
+Se o frontend continuar no Cloudflare Pages, a URL da API no Pages deve apontar para o Render:
+
+```env
+VITE_API_URL=https://fiscal-api-5eok.onrender.com
+VITE_CLERK_PUBLISHABLE_KEY=pk_live_sua_chave
+VITE_CLERK_TOKEN_TEMPLATE=backend_api
+```
+
+Se você ainda estiver usando a chave de desenvolvimento do Clerk no site publicado, o Clerk vai mostrar aviso no console. Para produção, troque pela chave live.
+
+Se o frontend estiver no GitHub Pages, a URL final do project site deste repositorio e:
+
+- `https://ysraestudos.github.io/FiscalConsultas/`
+
+### Diagnóstico rápido no Render
+
+- `Frontend build not found at /app/client/dist`: esperado quando o frontend está hospedado separadamente (por exemplo, no Cloudflare Pages ou GitHub Pages).
+- `GOOGLE_API_KEY not found. AI features disabled.`: esperado quando IA não está habilitada nesse ambiente.
+- `Redis connect failed ... localhost:6379`: indica `CACHE__ENABLE_REDIS=true` sem Redis externo configurado. Corrija `CACHE__REDIS_URL` ou desligue Redis explicitamente.
+- `Redis connect failed: invalid username-password pair`: a app chegou ao Redis, mas a `CACHE__REDIS_URL` está no formato errado ou com credencial incorreta. Em Upstash, use a Redis URL TLS (`rediss://default:<password>@<host>:6379`), não a REST URL/token.
+- `OPTIONS /api/search ... 400 Bad Request`: normalmente indica falha de preflight/CORS. Revise `SERVER__CORS_ALLOWED_ORIGINS`, `SERVER__CORS_ALLOWED_ORIGIN_REGEX` e `AUTH__CLERK_AUTHORIZED_PARTIES` para incluir o domínio real do frontend e, se necessário, os previews.
 
 ## Workflow de desenvolvimento
 
@@ -279,7 +566,7 @@ Mudanças de segurança documentadas no estado atual:
 - O shell SPA em `client/index.html` publica `Content-Security-Policy`, `referrer` policy e `Permissions-Policy` via meta tags.
 - O client axios opera com `withCredentials: false`; a autenticação do Clerk segue apenas pelo header `Authorization`.
 - `isAdmin` no frontend não usa mais fallback por email hardcoded; agora deriva de `membership.role` do Clerk e aceita `admin`, `owner` e `superadmin` (inclusive em formatos como `org:admin`).
-- `VITE_RESTRICTED_UI_EMAILS` controla apenas exposição de UI opcional no client. Qualquer autorização sensível continua devendo existir no backend.
+- A UI opcional restrita agora consome capacidades vindas de `/api/auth/me`; a allowlist fica no backend, não mais no bundle público.
 
 Guia curto de estratégia, marcadores e escopo de testes: `docs/TESTING.md`.
 Observação: suites legadas/diagnóstico fora do contrato oficial ficam excluídas do fluxo padrão.
@@ -397,17 +684,23 @@ Mudanças principais já aplicadas:
 | `DATABASE__ENGINE` | Seleciona engine (`sqlite` ou `postgresql`) |
 | `DATABASE__POSTGRES_URL` | URL asyncpg usada quando engine = `postgresql` |
 | `SERVER__ENV` | Comportamento de middleware/auth (`development` habilita fallbacks) |
+| `SERVER__CORS_ALLOWED_ORIGINS` | Lista JSON de origens permitidas para CORS (produção deve conter apenas domínios oficiais) |
+| `SERVER__CORS_ALLOWED_ORIGIN_REGEX` | Regex opcional para liberar previews controlados (ex.: subdomínios do Cloudflare Pages) |
+| `CACHE__ENABLE_REDIS` | Liga/desliga Redis para cache/rate-limit distribuído |
+| `CACHE__REDIS_URL` | URL do Redis (ex: Upstash) |
 | `AUTH__CLERK_DOMAIN` | Validação JWT via JWKS do Clerk |
 | `AUTH__CLERK_ISSUER` | Valida `iss` explicitamente (`https://<seu-dominio-clerk>`) |
 | `AUTH__CLERK_AUDIENCE` | Valida `aud` no backend (ex: `fiscal-api`) |
 | `AUTH__CLERK_AUTHORIZED_PARTIES` | Valida `azp` (lista JSON; ex: `localhost` e `127.0.0.1`) |
+| `AUTH__CLERK_AUTHORIZED_PARTIES_REGEX` | Regex opcional para aceitar `azp` de previews controlados |
 | `AUTH__CLERK_CLOCK_SKEW_SECONDS` | Tolerância de clock para `exp/iat/nbf` (recomendado `120` em dev local) |
 | `BILLING__ASAAS_WEBHOOK_TOKEN` | Validação de token no webhook `/api/webhooks/asaas` |
 | `SECURITY__AI_CHAT_REQUESTS_PER_MINUTE` | Rate limit do endpoint `/api/ai/chat` |
+| `SECURITY__AI_CHAT_ALLOWED_EMAILS` | Allowlist real do backend para habilitar `/api/ai/chat` |
+| `SECURITY__RESTRICTED_UI_ALLOWED_EMAILS` | Allowlist opcional para UI restrita; se omitida, herda a do chat IA |
 | `GOOGLE_API_KEY` | Habilita integração Gemini no serviço de IA |
 | `VITE_CLERK_PUBLISHABLE_KEY` | Obrigatório para o frontend montar com Clerk |
 | `VITE_CLERK_TOKEN_TEMPLATE` | Template usado no `getToken()` do Clerk (recomendado: `backend_api`) |
-| `VITE_RESTRICTED_UI_EMAILS` | Lista CSV opcional para liberar UI restrita no frontend (chat IA, comentários, contribuições); não é controle de auth backend |
 | `VITE_AUTH_DEBUG` | (Opcional) habilita logs de diagnóstico JWT no navegador |
 | `VITE_API_URL` / `VITE_API_FILTER_URL` | Base URL de API no frontend (normalizada em runtime) |
 
@@ -417,7 +710,7 @@ Mudanças principais já aplicadas:
 backend/         API FastAPI, serviços, repositórios e config
 client/          React + Vite + TypeScript
 scripts/         Setup de dados, migração e utilitários
-database/        SQLite local (nesh.db, tipi.db)
+database/        SQLite local + artefatos offline (nesh.db, tipi.db, services.db, fiscal_offline.*)
 migrations/      Alembic migrations (PostgreSQL)
 tests/           Suite principal do backend
 docs/            Documentação funcional/técnica
@@ -425,12 +718,40 @@ docs/            Documentação funcional/técnica
 
 ## Deploy/produção
 
-Suporte confirmado no repositório:
+Fluxo operacional atual (cloud-first):
+
+- Banco de dados: PostgreSQL gerenciado (Neon)
+- API: FastAPI em provedor cloud (Render)
+- Frontend: local em desenvolvimento (`npm run dev`) ou hospedado separadamente
+
+Suporte técnico confirmado no repositório:
 
 - Build de frontend: `cd client && npm run build`
 - Backend serve `client/dist` automaticamente quando a pasta existe.
 
-Não há script dedicado de deploy/orquestração além de `docker-compose.yml` para banco local de desenvolvimento.
+Checklist mínimo para produção:
+
+1. Configurar `DATABASE__POSTGRES_URL` com SSL (`sslmode=require`).
+2. Configurar Clerk (`AUTH__CLERK_*`) com `AUTHORIZED_PARTIES` incluindo o domínio real do frontend.
+3. Configurar `SERVER__CORS_ALLOWED_ORIGINS` com domínios oficiais (sem curingas em produção).
+4. Configurar Redis (opcional, recomendado): `CACHE__ENABLE_REDIS=true` e `CACHE__REDIS_URL`.
+5. Validar `GET /api/status` após deploy.
+6. Rodar `python scripts/validate_production_env.py` antes do go-live para detectar configuração de produção incoerente.
+7. Configurar `OBSERVABILITY__METRICS_TOKEN` para proteger `GET /api/metrics`.
+8. Se quiser APM externo, configurar `OBSERVABILITY__SENTRY_DSN` e instalar `sentry-sdk` no ambiente.
+
+Hardening operacional já aplicado no backend:
+
+- `Content-Security-Policy` agora é dinâmica por ambiente: em produção ela não anuncia origens locais (`localhost`, `127.0.0.1`, `ws://` locais).
+- O logger do backend agora evita duplicação de handlers e redige dados sensíveis comuns (`Authorization`, tokens, segredos, senhas, chaves).
+- O startup em produção passa a registrar warnings explícitos quando encontra sinais de configuração fraca, como `debug_mode` ligado, `CORS` com loopback, Redis em `localhost` ou banco ainda em SQLite.
+- O backend já expõe `GET /api/metrics` em formato Prometheus, mas só responde quando `OBSERVABILITY__METRICS_TOKEN` estiver configurado e enviado no header.
+- A inicialização de Sentry é opcional e segura por fallback: se `OBSERVABILITY__SENTRY_DSN` existir sem `sentry-sdk`, o backend apenas registra warning e segue operando.
+
+Exemplos de origem real do frontend:
+
+- Cloudflare Pages: `https://fiscalconsultas.pages.dev`
+- GitHub Pages (project site): `https://ysraestudos.github.io`
 
 ## Documentação para IA e manutenção
 

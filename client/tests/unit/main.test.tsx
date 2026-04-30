@@ -1,11 +1,12 @@
 import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const refs = vi.hoisted(() => ({
   capturedNode: { current: null as React.ReactNode },
   renderMock: vi.fn<(node: React.ReactNode) => void>(),
   createRootMock: vi.fn(),
+  shouldThrowAppRef: { value: false },
 }));
 
 vi.mock('react-dom/client', () => ({
@@ -13,7 +14,13 @@ vi.mock('react-dom/client', () => ({
 }));
 
 vi.mock('../../src/App', () => ({
-  default: () => <div data-testid="app">App</div>,
+  default: () => {
+    if (refs.shouldThrowAppRef.value) {
+      throw new Error('App render failed');
+    }
+
+    return <div data-testid="app">App</div>;
+  },
 }));
 
 vi.mock('@clerk/react', () => ({
@@ -33,6 +40,17 @@ vi.mock('@clerk/react', () => ({
 vi.mock('../../src/context/AuthContext', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="auth-provider">{children}</div>
+  ),
+  AnonymousAuthProvider: ({
+    children,
+    reason,
+  }: {
+    children: React.ReactNode;
+    reason: string | null;
+  }) => (
+    <div data-testid="anonymous-auth-provider" data-reason={reason ?? ''}>
+      {children}
+    </div>
   ),
 }));
 
@@ -76,6 +94,7 @@ describe('main.tsx bootstrap', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     vi.unstubAllEnvs();
+    refs.shouldThrowAppRef.value = false;
   });
 
   afterEach(() => {
@@ -127,6 +146,53 @@ describe('main.tsx bootstrap', () => {
       expect(screen.getByText('Configuration Required')).toBeInTheDocument();
       expect(screen.getAllByText(/VITE_CLERK_PUBLISHABLE_KEY/)).toHaveLength(2);
       expect(screen.getByText(/npm run dev/)).toBeInTheDocument();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  it('falls back to anonymous mode when Clerk startup is blocked', async () => {
+    vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', 'pk_test_123');
+    document.body.innerHTML = '<div id="root"></div>';
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      await loadMainModule();
+      render(<>{refs.capturedNode.current}</>);
+
+      act(() => {
+        globalThis.dispatchEvent(
+          new ErrorEvent('error', {
+            message: 'Clerk: Failed to load Clerk JS',
+          }),
+        );
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('anonymous-auth-provider')).toBeInTheDocument();
+      });
+      expect(screen.getByTestId('anonymous-auth-provider').dataset.reason).toContain('autenticacao');
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[AuthBootstrap] Clerk error intercepted during startup. Falling back to signed-out mode.',
+      );
+    } finally {
+      consoleWarnSpy.mockRestore();
+    }
+  });
+
+  it('shows the global error boundary fallback when the app crashes during render', async () => {
+    vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', 'pk_test_123');
+    document.body.innerHTML = '<div id="root"></div>';
+    refs.shouldThrowAppRef.value = true;
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      await loadMainModule();
+      render(<>{refs.capturedNode.current}</>);
+
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+      expect(screen.getByText('Não foi possível iniciar o aplicativo.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Recarregar página' })).toBeInTheDocument();
     } finally {
       consoleErrorSpy.mockRestore();
     }

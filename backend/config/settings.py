@@ -1,10 +1,16 @@
 import json
+import logging
 import os
 import secrets
 from typing import List, Literal, Optional, Set
 
-from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BaseModel, Field, field_validator
+from pydantic_settings import (
+    BaseSettings,
+    JsonConfigSettingsSource,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 # Root path resolving
 PROJECT_ROOT = os.path.dirname(
@@ -17,6 +23,7 @@ class ServerSettings(BaseModel):
     host: str = "127.0.0.1"
     env: str = "development"
     cors_allowed_origins: List[str] = Field(default_factory=list)
+    cors_allowed_origin_regex: Optional[str] = None
 
 
 class DatabaseSettings(BaseModel):
@@ -85,8 +92,12 @@ class FeatureSettings(BaseModel):
 class CacheSettings(BaseModel):
     enable_redis: bool = False
     redis_url: str = "redis://localhost:6379/0"
+    max_payload_bytes: int = Field(default=32_768, ge=0)
     chapter_cache_ttl: int = 3600
     fts_cache_ttl: int = 600
+    services_search_ttl: int = 600
+    services_detail_ttl: int = 1800
+    status_cache_ttl: int = 20
 
 
 class AuthSettings(BaseModel):
@@ -100,7 +111,9 @@ class AuthSettings(BaseModel):
     clerk_issuer: Optional[str] = None  # ex: https://your-app.clerk.accounts.dev
     clerk_audience: Optional[str] = None  # opcional; exige match em "aud"
     clerk_authorized_parties: List[str] = Field(default_factory=list)  # valida "azp"
-    clerk_clock_skew_seconds: int = 120  # tolerancia para exp/nbf/iat
+    clerk_authorized_parties_regex: Optional[str] = None  # regex opcional para previews
+    # Tolerancia para exp/nbf/iat; use 5-30s em prod e mantenha hosts com NTP.
+    clerk_clock_skew_seconds: int = 30
 
 
 class BillingSettings(BaseModel):
@@ -120,7 +133,78 @@ class SecuritySettings(BaseModel):
     services_search_requests_per_minute: int = 30
     services_detail_requests_per_minute: int = 120
     ai_chat_max_message_chars: int = 4000
+    ai_chat_allowed_emails: List[str] = Field(default_factory=list)
+    restricted_ui_allowed_emails: Optional[List[str]] = None
     trusted_proxy_ips: List[str] = Field(default_factory=list)
+
+    @field_validator(
+        "ai_chat_allowed_emails",
+        "restricted_ui_allowed_emails",
+        mode="before",
+    )
+    @classmethod
+    def _coerce_email_list(cls, value):
+        if value is None:
+            return None
+        if value == "":
+            return []
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return []
+            if stripped.startswith("["):
+                try:
+                    parsed = json.loads(stripped)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, list):
+                    return parsed
+            return [part.strip() for part in stripped.split(",") if part.strip()]
+        return value
+
+    @staticmethod
+    def _normalize_email_set(values: List[str] | None) -> Set[str]:
+        if not values:
+            return set()
+        return {str(email).strip().lower() for email in values if str(email).strip()}
+
+    @property
+    def ai_chat_allowed_email_set(self) -> Set[str]:
+        return self._normalize_email_set(self.ai_chat_allowed_emails)
+
+    @property
+    def restricted_ui_allowed_email_set(self) -> Set[str]:
+        if self.restricted_ui_allowed_emails is not None:
+            return self._normalize_email_set(self.restricted_ui_allowed_emails)
+        return self.ai_chat_allowed_email_set
+
+
+class LoggingSettings(BaseModel):
+    level: str = "INFO"
+    redact_sensitive_data: bool = True
+
+    @property
+    def normalized_level(self) -> str:
+        return str(self.level or "INFO").strip().upper() or "INFO"
+
+    @property
+    def python_level(self) -> int:
+        return getattr(logging, self.normalized_level, logging.INFO)
+
+
+class ObservabilitySettings(BaseModel):
+    metrics_token: str = ""
+    sentry_dsn: str = ""
+    sentry_environment: str = ""
+    sentry_traces_sample_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    @property
+    def sentry_enabled(self) -> bool:
+        return bool(self.sentry_dsn.strip())
+
+    @property
+    def metrics_enabled(self) -> bool:
+        return bool(self.metrics_token.strip())
 
 
 class AppSettings(BaseSettings):
@@ -137,6 +221,8 @@ class AppSettings(BaseSettings):
     auth: AuthSettings = Field(default_factory=AuthSettings)
     billing: BillingSettings = Field(default_factory=BillingSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
 
     # Legacy compatibility property
     @property
@@ -153,10 +239,28 @@ class AppSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=".env",
+        json_file=os.path.join(PROJECT_ROOT, "backend", "config", "settings.json"),
         env_nested_delimiter="__",
         case_sensitive=False,
         extra="ignore",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            JsonConfigSettingsSource(settings_cls),
+            file_secret_settings,
+        )
 
     @classmethod
     def load(cls) -> "AppSettings":
@@ -166,20 +270,7 @@ class AppSettings(BaseSettings):
         2. settings.json
         3. Defaults
         """
-        # Try loading from JSON first to populate defaults, then override with Env
-        config_path = os.path.join(PROJECT_ROOT, "backend", "config", "settings.json")
-        json_data = {}
-
-        if os.path.exists(config_path):
-            try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    json_data = json.load(f)
-            except Exception as e:
-                print(f"⚠️ Failed to load settings.json: {e}")
-
-        # Pydantic handles merging: passed kwargs > env vars > defaults
-        # We pass json_data as kwargs
-        return cls(**json_data)
+        return cls()
 
 
 # Singleton instance

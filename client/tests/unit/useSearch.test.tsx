@@ -6,9 +6,32 @@ import type { CodeSearchResponse, ChapterData } from '../../src/types/api.types'
 import type { Tab } from '../../src/hooks/useTabs';
 import { searchNCM, searchTipi } from '../../src/services/api';
 
+const localDatabaseState = vi.hoisted(() => ({
+    status: 'not_installed',
+    searchLocal: vi.fn().mockResolvedValue(null),
+    getNbsDetailLocal: vi.fn().mockResolvedValue(null),
+    getNeshChapterNotesLocal: vi.fn().mockResolvedValue(null),
+    progress: 0,
+    progressStep: '',
+    localVersion: null,
+    remoteVersion: null,
+    updateAvailable: false,
+    error: null,
+    dbSizeBytes: null,
+    isSupported: false,
+    install: vi.fn(),
+    remove: vi.fn(),
+    refreshAvailability: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('../../src/services/api', () => ({
     searchNCM: vi.fn(),
-    searchTipi: vi.fn()
+    searchTipi: vi.fn(),
+    searchNbsServices: vi.fn(),
+}));
+
+vi.mock('../../src/context/LocalDatabaseContext', () => ({
+    useLocalDatabase: () => localDatabaseState,
 }));
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -66,6 +89,11 @@ describe('useSearch Hook', () => {
 
     beforeEach(() => {
         localStorage.clear();
+        localDatabaseState.status = 'not_installed';
+        localDatabaseState.searchLocal.mockReset();
+        localDatabaseState.searchLocal.mockResolvedValue(null);
+        localDatabaseState.getNeshChapterNotesLocal.mockReset();
+        localDatabaseState.getNeshChapterNotesLocal.mockResolvedValue(null);
     });
 
     afterEach(() => {
@@ -164,7 +192,6 @@ describe('useSearch Hook', () => {
                     nesh: expect.arrayContaining(['84', '73']),
                     tipi: [],
                     nbs: [],
-                    nebs: []
                 }
             })
         ]);
@@ -202,5 +229,156 @@ describe('useSearch Hook', () => {
         expect(payload.results.query).toBe('8422');
         expect(payload.results.resultados).toEqual(payload.results.results);
         expect(Object.prototype.propertyIsEnumerable.call(payload.results, 'resultados')).toBe(true);
+    });
+
+    it('prefers offline NESH code results and preserves offline markdown', async () => {
+        localDatabaseState.status = 'ready';
+        localDatabaseState.searchLocal.mockResolvedValue({
+            searchType: 'code',
+            results: { '84': createChapterData('84') },
+            markdown: '<div class="offline-html"><ol class="nesh-list"><li>Item multilinha inteiro</li></ol></div>',
+        });
+
+        const updateTab = vi.fn();
+        const addToHistory = vi.fn();
+        const tabs: Tab[] = [
+            {
+                id: 'tab-1',
+                title: '8401',
+                document: 'nesh',
+                content: null,
+                loading: false,
+                error: null,
+                ncm: '',
+                results: null,
+                loadedChaptersByDoc: { nesh: [], tipi: [], nbs: [] }
+            }
+        ];
+        const tabsById = new Map(tabs.map(tab => [tab.id, tab]));
+
+        const { result } = renderHook(
+            () => useSearch(tabsById, updateTab, addToHistory),
+            { wrapper }
+        );
+
+        await act(async () => {
+            await result.current.executeSearchForTab('tab-1', 'nesh', '8401', true);
+        });
+
+        expect(localDatabaseState.searchLocal).toHaveBeenCalledWith('nesh', '8401', expect.any(String));
+        expect(searchNCMMock).not.toHaveBeenCalled();
+        expect(updateTab).toHaveBeenLastCalledWith('tab-1', expect.objectContaining({
+            content: '<div class="offline-html"><ol class="nesh-list"><li>Item multilinha inteiro</li></ol></div>',
+            loading: false,
+            results: expect.objectContaining({
+                query: '8401',
+                markdown: '<div class="offline-html"><ol class="nesh-list"><li>Item multilinha inteiro</li></ol></div>',
+            }),
+        }));
+    });
+
+    it('propagates timing info from local search and logs in DEV mode', async () => {
+        localDatabaseState.status = 'ready';
+        localDatabaseState.searchLocal.mockResolvedValue({
+            searchType: 'code',
+            results: { '84': createChapterData('84') },
+            markdown: '<h1>Capítulo 84</h1>',
+            timing: { sqlDurationMs: 5.2, totalDurationMs: 6.1, cacheHit: false },
+        });
+
+        const updateTab = vi.fn();
+        const addToHistory = vi.fn();
+        const tabs: Tab[] = [
+            {
+                id: 'tab-1',
+                title: '8401',
+                document: 'nesh',
+                content: null,
+                loading: false,
+                error: null,
+                ncm: '',
+                results: null,
+                loadedChaptersByDoc: { nesh: [], tipi: [], nbs: [] }
+            }
+        ];
+        const tabsById = new Map(tabs.map(tab => [tab.id, tab]));
+
+        const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+        const { result } = renderHook(
+            () => useSearch(tabsById, updateTab, addToHistory),
+            { wrapper }
+        );
+
+        await act(async () => {
+            await result.current.executeSearchForTab('tab-1', 'nesh', '8401', true);
+        });
+
+        expect(localDatabaseState.searchLocal).toHaveBeenCalledWith('nesh', '8401', expect.any(String));
+        expect(searchNCMMock).not.toHaveBeenCalled();
+
+        // DEV mode should log timing info
+        expect(consoleSpy).toHaveBeenCalledWith(
+            expect.stringContaining('[search] nesh:8401')
+        );
+
+        consoleSpy.mockRestore();
+    });
+
+    it('handles cached local search results (cacheHit=true) without errors', async () => {
+        localDatabaseState.status = 'ready';
+        localDatabaseState.searchLocal.mockResolvedValue({
+            searchType: 'text',
+            results: [
+                { codigo: '84.13', descricao: 'Bombas', chapter_num: '84' },
+            ],
+            timing: { sqlDurationMs: 0, totalDurationMs: 0.1, cacheHit: true },
+        });
+
+        const updateTab = vi.fn();
+        const addToHistory = vi.fn();
+        const tabs: Tab[] = [
+            {
+                id: 'tab-1',
+                title: 'bombas',
+                document: 'nesh',
+                content: null,
+                loading: false,
+                error: null,
+                ncm: '',
+                results: null,
+                loadedChaptersByDoc: { nesh: [], tipi: [], nbs: [] }
+            }
+        ];
+        const tabsById = new Map(tabs.map(tab => [tab.id, tab]));
+
+        const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+        const { result } = renderHook(
+            () => useSearch(tabsById, updateTab, addToHistory),
+            { wrapper }
+        );
+
+        await act(async () => {
+            await result.current.executeSearchForTab('tab-1', 'nesh', 'bombas', true);
+        });
+
+        expect(searchNCMMock).not.toHaveBeenCalled();
+
+        // Verify cache hit is logged
+        expect(consoleSpy).toHaveBeenCalledWith(
+            expect.stringContaining('HIT')
+        );
+
+        // Verify results are still correctly set on the tab
+        expect(updateTab).toHaveBeenLastCalledWith('tab-1', expect.objectContaining({
+            loading: false,
+            results: expect.objectContaining({
+                query: 'bombas',
+                success: true,
+            }),
+        }));
+
+        consoleSpy.mockRestore();
     });
 });

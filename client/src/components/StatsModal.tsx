@@ -38,8 +38,8 @@ export function StatsModal({ isOpen, onClose }: StatsModalProps) {
                     <div className={styles.statsGrid}>
                         <div className={styles.statCard}>
                             <div className={styles.statLabel}>Versão</div>
-                            <div className={styles.statValue}>{stats.version}</div>
-                            <div className={styles.statSub}>{stats.backend}</div>
+                            <div className={styles.statValue}>{stats.version || 'Runtime'}</div>
+                            <div className={styles.statSub}>{stats.backend || 'FastAPI'}</div>
                         </div>
 
                         <div className={styles.statCard}>

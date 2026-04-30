@@ -101,6 +101,26 @@ def test_safe_get_unverified_claims_parses_payload_and_handles_malformed():
     assert middleware._safe_get_unverified_claims("a.b") == {}
 
 
+def test_safe_get_unverified_header_parses_payload_and_rejects_malformed():
+    header = (
+        base64.urlsafe_b64encode(
+            json.dumps({"alg": "none", "typ": "JWT"}, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        )
+        .decode("ascii")
+        .rstrip("=")
+    )
+    token = f"{header}.payload.sig"
+
+    assert middleware._safe_get_unverified_header(token) == {
+        "alg": "none",
+        "typ": "JWT",
+    }
+    assert middleware._safe_get_unverified_header("not-a-jwt") == {}
+    assert middleware._safe_get_unverified_header(".payload.sig") == {}
+
+
 def test_jwt_observability_logs_do_not_include_token_fingerprint(monkeypatch):
     warning_messages: list[str] = []
     debug_calls: list[tuple[str, str]] = []
@@ -161,6 +181,25 @@ def test_get_jwks_client_caches_instance(monkeypatch):
     second = middleware.get_jwks_client()
     assert first is second
     assert "demo.clerk.accounts.dev" in first.url
+
+
+def test_resolve_expected_azp_regex_compiles_and_caches(monkeypatch):
+    monkeypatch.setattr(
+        middleware.settings.auth,
+        "clerk_authorized_parties_regex",
+        r"^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$",
+        raising=False,
+    )
+    middleware._cached_expected_azp_regex_raw = None
+    middleware._cached_expected_azp_regex = None
+
+    first = middleware._resolve_expected_azp_regex()
+    second = middleware._resolve_expected_azp_regex()
+
+    assert first is not None
+    assert first is second
+    assert first.fullmatch("https://fiscalconsultas.pages.dev")
+    assert first.fullmatch("https://preview123.fiscalconsultas.pages.dev")
 
 
 @pytest.mark.asyncio
@@ -235,10 +274,62 @@ async def test_decode_clerk_jwt_validates_issuer_audience_and_azp(monkeypatch):
         ["http://localhost:5173"],
         raising=False,
     )
+    monkeypatch.setattr(
+        middleware.settings.auth, "clerk_authorized_parties_regex", "", raising=False
+    )
 
     payload = await middleware.decode_clerk_jwt("token-claims-ok")
     assert payload is not None
     assert payload["sub"] == "user_ok"
+
+
+@pytest.mark.asyncio
+async def test_decode_clerk_jwt_accepts_azp_regex(monkeypatch):
+    class _SigningKey:
+        key = "pub-key"
+
+    class _FakeJWKS:
+        def get_signing_key_from_jwt(self, _token):
+            return _SigningKey()
+
+    middleware._jwt_decode_cache.clear()
+    middleware._cached_expected_azp_regex_raw = None
+    middleware._cached_expected_azp_regex = None
+    monkeypatch.setattr(middleware, "get_jwks_client", lambda: _FakeJWKS())
+    monkeypatch.setattr(
+        middleware.jwt,
+        "decode",
+        lambda *_args, **_kwargs: {
+            "sub": "user_preview",
+            "org_id": "org_preview",
+            "iss": "https://demo.clerk.accounts.dev",
+            "aud": "fiscal-api",
+            "azp": "https://967b1af1.fiscalconsultas.pages.dev",
+            "exp": 9999999999,
+        },
+    )
+    monkeypatch.setattr(
+        middleware.settings.auth,
+        "clerk_issuer",
+        "https://demo.clerk.accounts.dev",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        middleware.settings.auth, "clerk_audience", "fiscal-api", raising=False
+    )
+    monkeypatch.setattr(
+        middleware.settings.auth, "clerk_authorized_parties", [], raising=False
+    )
+    monkeypatch.setattr(
+        middleware.settings.auth,
+        "clerk_authorized_parties_regex",
+        r"^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$",
+        raising=False,
+    )
+
+    payload = await middleware.decode_clerk_jwt("token-preview-azp")
+    assert payload is not None
+    assert payload["sub"] == "user_preview"
 
 
 @pytest.mark.asyncio
@@ -278,6 +369,9 @@ async def test_decode_clerk_jwt_rejects_audience_mismatch(monkeypatch):
         "clerk_authorized_parties",
         ["http://localhost:5173"],
         raising=False,
+    )
+    monkeypatch.setattr(
+        middleware.settings.auth, "clerk_authorized_parties_regex", "", raising=False
     )
 
     warned: list[str] = []
@@ -324,6 +418,9 @@ async def test_decode_clerk_jwt_rejects_issuer_and_azp_mismatch(monkeypatch):
         "clerk_authorized_parties",
         ["http://localhost:5173"],
         raising=False,
+    )
+    monkeypatch.setattr(
+        middleware.settings.auth, "clerk_authorized_parties_regex", "", raising=False
     )
 
     warned: list[str] = []
@@ -575,18 +672,52 @@ async def test_dispatch_skips_non_api_and_public_paths(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_dispatch_returns_401_in_prod_postgres_without_tenant(monkeypatch):
+async def test_dispatch_allows_public_catalog_routes_in_prod_postgres_without_tenant(
+    monkeypatch,
+):
     monkeypatch.setattr(middleware.settings.server, "env", "production", raising=False)
     monkeypatch.setattr(
         middleware.settings.database, "engine", "postgresql", raising=False
     )
-    called = []
+    called: list[str] = []
+
+    async def app(scope, receive, send):  # NOSONAR
+        called.append(scope["path"])
+        response = JSONResponse({"ok": True})
+        await response(scope, receive, send)
+
+    mw = middleware.TenantMiddleware(app=app)
+    public_paths = [
+        "/api/search",
+        "/api/chapters",
+        "/api/glossary",
+        "/api/tipi/search",
+        "/api/tipi/chapters",
+        "/api/nesh/chapter/84/notes",
+    ]
+
+    for path in public_paths:
+        status, _ = await _invoke_middleware(mw, _build_scope(path))
+        assert status == 200
+
+    assert called == public_paths
+
+
+@pytest.mark.asyncio
+async def test_dispatch_returns_401_for_protected_route_in_prod_postgres_without_tenant(
+    monkeypatch,
+):
+    monkeypatch.setattr(middleware.settings.server, "env", "production", raising=False)
+    monkeypatch.setattr(
+        middleware.settings.database, "engine", "postgresql", raising=False
+    )
+    called: list[str] = []
 
     async def app(_scope, _receive, _send):  # NOSONAR
         called.append("called")
 
     mw = middleware.TenantMiddleware(app=app)
-    status, _ = await _invoke_middleware(mw, _build_scope("/api/search"))
+    status, _ = await _invoke_middleware(mw, _build_scope("/api/profile/me"))
     assert status == 401
     assert called == []
 
@@ -607,7 +738,7 @@ async def test_dispatch_sets_tenant_from_debug_fallback_and_resets(monkeypatch):
         await response(scope, receive, send)
 
     mw = middleware.TenantMiddleware(app=app)
-    status, _ = await _invoke_middleware(mw, _build_scope("/api/search"))
+    status, _ = await _invoke_middleware(mw, _build_scope("/api/profile/me"))
     assert status == 200
     assert seen == ["org_default"]
     assert tenant_context.get() == ""
@@ -631,7 +762,7 @@ async def test_dispatch_does_not_apply_dev_tenant_fallback_for_remote_client(
         await response(scope, receive, send)
 
     mw = middleware.TenantMiddleware(app=app)
-    remote_scope = _build_scope("/api/search")
+    remote_scope = _build_scope("/api/profile/me")
     remote_scope["client"] = ("203.0.113.40", 12345)
 
     status, _ = await _invoke_middleware(mw, remote_scope)
@@ -676,7 +807,7 @@ async def test_dispatch_sets_tenant_from_bearer_and_schedules_provision(monkeypa
     mw = middleware.TenantMiddleware(app=app)
     status, _ = await _invoke_middleware(
         mw,
-        _build_scope("/api/search", headers={"Authorization": "Bearer tkn"}),
+        _build_scope("/api/profile/me", headers={"Authorization": "Bearer tkn"}),
     )
     assert status == 200
     assert seen == ["org_bearer"]
@@ -786,6 +917,14 @@ async def test_ensure_clerk_entities_skips_when_recently_cached(monkeypatch):
     await middleware.ensure_clerk_entities({"sub": "u1"}, "org1")
 
 
+def test_is_recently_provisioned_treats_zero_timestamp_as_valid():
+    cache_key = ("org1", "u1")
+    cache = {cache_key: 0.0}
+
+    assert middleware._is_recently_provisioned(cache_key, 10.0, cache, 30.0) is True
+    assert middleware._is_recently_provisioned(cache_key, 10.0, {}, 30.0) is False
+
+
 @pytest.mark.asyncio
 async def test_ensure_clerk_entities_creates_tenant_and_user(monkeypatch):
     monkeypatch.setattr(
@@ -810,6 +949,28 @@ async def test_ensure_clerk_entities_creates_tenant_and_user(monkeypatch):
     assert middleware._provisioned_entities_cache[("org_1", "user_1")] == pytest.approx(
         123.0
     )
+
+
+@pytest.mark.asyncio
+async def test_ensure_clerk_entities_uses_placeholder_email_when_missing(monkeypatch):
+    monkeypatch.setattr(
+        middleware.settings.database, "engine", "postgresql", raising=False
+    )
+    monkeypatch.setattr(middleware.time, "monotonic", lambda: 124.0)
+    middleware._provisioned_entities_cache.clear()
+
+    session = _FakeProvisionSession(tenant=None, user=None)
+    _install_fake_get_session(monkeypatch, session)
+
+    payload = {
+        "sub": "user_missing_email",
+        "org_name": "Org Name",
+        "name": "User Name",
+    }
+    await middleware.ensure_clerk_entities(payload, "org_missing")
+
+    user = next(obj for obj in session.added if obj.__class__.__name__ == "User")
+    assert user.email == "user_missing_email@clerk.invalid"
 
 
 @pytest.mark.asyncio

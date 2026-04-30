@@ -17,6 +17,7 @@ const {
         isSignedIn: true,
         getToken: vi.fn().mockResolvedValue('test_token'),
         signOut: vi.fn(),
+        openSignIn: vi.fn(),
     };
 
     const mockUser = {
@@ -42,6 +43,7 @@ const {
 
     const mockUseClerk = () => ({
         signOut: sharedAuthState.signOut,
+        openSignIn: sharedAuthState.openSignIn,
     });
 
     const getMockSignedInState = () => {
@@ -65,6 +67,7 @@ const {
         sharedAuthState.getToken.mockReset();
         sharedAuthState.getToken.mockResolvedValue('test_token');
         sharedAuthState.signOut.mockReset();
+        sharedAuthState.openSignIn.mockReset();
     };
 
     return {

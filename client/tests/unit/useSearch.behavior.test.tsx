@@ -9,20 +9,39 @@ import type { Tab } from '../../src/hooks/useTabs';
 const refs = vi.hoisted(() => ({
   searchNCMMock: vi.fn(),
   searchTipiMock: vi.fn(),
+  searchNbsServicesMock: vi.fn(),
   toastErrorMock: vi.fn(),
 }));
 
 vi.mock('../../src/services/api', () => ({
   searchNCM: refs.searchNCMMock,
   searchTipi: refs.searchTipiMock,
-  searchNbsServices: vi.fn(),
-  searchNebsEntries: vi.fn(),
+  searchNbsServices: refs.searchNbsServicesMock,
 }));
 
 vi.mock('react-hot-toast', () => ({
   toast: {
     error: refs.toastErrorMock,
   },
+}));
+
+vi.mock('../../src/context/LocalDatabaseContext', () => ({
+  useLocalDatabase: () => ({
+    status: 'not_installed',
+    searchLocal: vi.fn().mockResolvedValue(null),
+    getNbsDetailLocal: vi.fn().mockResolvedValue(null),
+    progress: 0,
+    progressStep: '',
+    localVersion: null,
+    remoteVersion: null,
+    updateAvailable: false,
+    error: null,
+    dbSizeBytes: null,
+    isSupported: false,
+    install: vi.fn(),
+    remove: vi.fn(),
+    refreshAvailability: vi.fn().mockResolvedValue(null),
+  }),
 }));
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -39,7 +58,7 @@ function createTab(overrides: Partial<Tab> = {}): Tab {
     error: null,
     ncm: '',
     results: null,
-    loadedChaptersByDoc: { nesh: [], tipi: [], nbs: [], nebs: [] },
+    loadedChaptersByDoc: { nesh: [], tipi: [], nbs: [] },
     ...overrides,
   };
 }
@@ -56,6 +75,7 @@ describe('useSearch behavior', () => {
   beforeEach(() => {
     refs.searchNCMMock.mockReset();
     refs.searchTipiMock.mockReset();
+    refs.searchNbsServicesMock.mockReset();
     refs.toastErrorMock.mockReset();
     localStorage.clear();
   });
@@ -87,7 +107,7 @@ describe('useSearch behavior', () => {
     const updateTab = vi.fn();
     const addToHistory = vi.fn();
     const tabsById = new Map([
-      ['tab-1', createTab({ document: 'tipi', loadedChaptersByDoc: { nesh: [], tipi: ['84'], nbs: [], nebs: [] } })],
+      ['tab-1', createTab({ document: 'tipi', loadedChaptersByDoc: { nesh: [], tipi: ['84'], nbs: [] } })],
     ]);
 
     refs.searchTipiMock.mockResolvedValue({
@@ -127,8 +147,7 @@ describe('useSearch behavior', () => {
         nesh: [],
         tipi: ['84', '01'],
         nbs: [],
-        nebs: [],
-      },
+        },
     }));
   });
 
@@ -136,7 +155,7 @@ describe('useSearch behavior', () => {
     const updateTab = vi.fn();
     const addToHistory = vi.fn();
     const tabsById = new Map([
-      ['tab-1', createTab({ loadedChaptersByDoc: { nesh: ['84'], tipi: [], nbs: [], nebs: [] } })],
+      ['tab-1', createTab({ loadedChaptersByDoc: { nesh: ['84'], tipi: [], nbs: [] } })],
     ]);
 
     refs.searchNCMMock.mockResolvedValue({
@@ -163,16 +182,15 @@ describe('useSearch behavior', () => {
         nesh: [],
         tipi: [],
         nbs: [],
-        nebs: [],
-      },
+        },
     }));
   });
 
   it.each([
-    ['404 responses', makeAxiosError(404), 'Endpoint não encontrado (404). Verifique se o backend está rodando e se a base URL está correta.'],
-    ['generic status responses', makeAxiosError(503), 'Erro 503 ao buscar dados. Verifique a API.'],
-    ['timeouts', makeAxiosError(undefined, 'ECONNABORTED'), 'Tempo limite na requisição. Verifique a conexão com o backend.'],
-    ['network failures', makeAxiosError(undefined, 'ERR_NETWORK'), 'Não foi possível conectar à API. Verifique se o backend está em execução.'],
+    ['404 responses', makeAxiosError(404), 'Conteúdo indisponível no momento.'],
+    ['generic status responses', makeAxiosError(503), 'Não foi possível carregar os dados agora. Tente novamente em instantes.'],
+    ['timeouts', makeAxiosError(undefined, 'ECONNABORTED'), 'Não foi possível carregar os dados agora. Tente novamente em instantes.'],
+    ['network failures', makeAxiosError(undefined, 'ERR_NETWORK'), 'Não foi possível carregar os dados agora. Tente novamente em instantes.'],
   ])('maps %s into toast and tab error state', async (_label, error, message) => {
     const updateTab = vi.fn();
     const addToHistory = vi.fn();
@@ -186,6 +204,41 @@ describe('useSearch behavior', () => {
 
       await act(async () => {
         await result.current.executeSearchForTab('tab-1', 'nesh', '8517', true);
+      });
+
+      expect(refs.toastErrorMock).toHaveBeenCalledWith(message);
+      expect(updateTab).toHaveBeenNthCalledWith(2, 'tab-1', {
+        error: message,
+        loading: false,
+      });
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  it.each([
+    [429, 'Muitas tentativas no catálogo de serviços. Aguarde um instante e tente novamente.'],
+    [503, 'Catálogo de serviços indisponível no momento. Tente novamente em instantes.'],
+  ])('uses the shared catalog error mapper for NBS %s responses', async (status, message) => {
+    const updateTab = vi.fn();
+    const addToHistory = vi.fn();
+    const tabsById = new Map([[
+      'tab-1',
+      createTab({ document: 'nbs' }),
+    ]]);
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = {
+      isAxiosError: true,
+      response: { status },
+    };
+
+    refs.searchNbsServicesMock.mockRejectedValue(error);
+
+    try {
+      const { result } = renderHook(() => useSearch(tabsById, updateTab, addToHistory), { wrapper });
+
+      await act(async () => {
+        await result.current.executeSearchForTab('tab-1', 'nbs', '1.0101.11.00', true);
       });
 
       expect(refs.toastErrorMock).toHaveBeenCalledWith(message);

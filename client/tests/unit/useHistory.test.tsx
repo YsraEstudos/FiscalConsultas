@@ -3,13 +3,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useHistory } from '../../src/hooks/useHistory';
 
+const NESH_KEY = 'fiscal_search_history_v1_nesh';
+const TIPI_KEY = 'fiscal_search_history_v1_tipi';
+const LEGACY_KEY = 'nesh_search_history';
+
 describe('useHistory', () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
   });
 
-  it('loads persisted history from localStorage on mount', async () => {
-    localStorage.setItem('nesh_search_history', JSON.stringify([
+  it('loads persisted NESH history from localStorage on mount', async () => {
+    localStorage.setItem(NESH_KEY, JSON.stringify([
       { term: '8517', timestamp: 1 },
       { term: '8471', timestamp: 2 },
     ]));
@@ -21,11 +26,15 @@ describe('useHistory', () => {
         { term: '8517', timestamp: 1 },
         { term: '8471', timestamp: 2 },
       ]);
+      expect(result.current.getHistoryForDoc('nesh')).toEqual([
+        { term: '8517', timestamp: 1 },
+        { term: '8471', timestamp: 2 },
+      ]);
     });
   });
 
   it('logs parse failures and keeps an empty history when persisted data is invalid', async () => {
-    localStorage.setItem('nesh_search_history', '{invalid-json');
+    localStorage.setItem(NESH_KEY, '{invalid-json');
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     try {
@@ -35,6 +44,7 @@ describe('useHistory', () => {
         expect(consoleErrorSpy).toHaveBeenCalled();
       });
       expect(result.current.history).toEqual([]);
+      expect(localStorage.getItem(NESH_KEY)).toBeNull();
     } finally {
       consoleErrorSpy.mockRestore();
     }
@@ -44,37 +54,61 @@ describe('useHistory', () => {
     const { result } = renderHook(() => useHistory());
 
     act(() => {
-      result.current.addToHistory('');
+      result.current.addToHistory('nesh', '');
       for (let index = 0; index < 11; index += 1) {
-        result.current.addToHistory(`84${index}`);
+        result.current.addToHistory('nesh', `84${index}`);
       }
-      result.current.addToHistory('840');
+      result.current.addToHistory('nesh', '840');
     });
 
     expect(result.current.history).toHaveLength(10);
     expect(result.current.history[0].term).toBe('840');
     expect(result.current.history.map((item) => item.term)).not.toContain('8400');
-    expect(JSON.parse(localStorage.getItem('nesh_search_history') || '[]')).toHaveLength(10);
+    expect(JSON.parse(localStorage.getItem(NESH_KEY) || '[]')).toHaveLength(10);
   });
 
   it('removes individual terms and clears the full history', () => {
     const { result } = renderHook(() => useHistory());
 
     act(() => {
-      result.current.addToHistory('8517');
-      result.current.addToHistory('8471');
-      result.current.removeFromHistory('8517');
+      result.current.addToHistory('nesh', '8517');
+      result.current.addToHistory('nesh', '8471');
+      result.current.addToHistory('tipi', '8517');
+      result.current.removeFromHistory('nesh', '8517');
     });
 
     expect(result.current.history).toEqual([
       expect.objectContaining({ term: '8471' }),
     ]);
+    expect(result.current.getHistoryForDoc('tipi')).toEqual([
+      expect.objectContaining({ term: '8517' }),
+    ]);
 
     act(() => {
-      result.current.clearHistory();
+      result.current.clearHistory('nesh');
     });
 
     expect(result.current.history).toEqual([]);
-    expect(localStorage.getItem('nesh_search_history')).toBeNull();
+    expect(result.current.getHistoryForDoc('tipi')).toEqual([
+      expect.objectContaining({ term: '8517' }),
+    ]);
+    expect(localStorage.getItem(NESH_KEY)).toBeNull();
+    expect(localStorage.getItem(TIPI_KEY)).not.toBeNull();
+  });
+
+  it('migrates legacy localStorage history only to NESH', async () => {
+    localStorage.setItem(LEGACY_KEY, JSON.stringify([
+      { term: 'legacy', timestamp: 1 },
+    ]));
+
+    const { result } = renderHook(() => useHistory());
+
+    await waitFor(() => {
+      expect(result.current.getHistoryForDoc('nesh')).toEqual([
+        { term: 'legacy', timestamp: 1 },
+      ]);
+    });
+    expect(result.current.getHistoryForDoc('tipi')).toEqual([]);
+    expect(localStorage.getItem(LEGACY_KEY)).toBeNull();
   });
 });

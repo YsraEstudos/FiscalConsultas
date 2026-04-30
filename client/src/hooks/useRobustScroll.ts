@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { debug } from "../utils/debug";
 
 interface UseRobustScrollProps {
   targetId: string | string[] | null;
@@ -7,6 +6,21 @@ interface UseRobustScrollProps {
   shouldScroll?: boolean;
   onComplete?: (success: boolean) => void;
   expectedTags?: string[];
+}
+
+function queryElementsById(root: ParentNode, id: string): HTMLElement[] {
+  if (
+    typeof globalThis.CSS !== "undefined" &&
+    typeof globalThis.CSS.escape === "function"
+  ) {
+    return Array.from(
+      root.querySelectorAll<HTMLElement>(`#${globalThis.CSS.escape(id)}`),
+    );
+  }
+
+  return Array.from(root.querySelectorAll<HTMLElement>("[id]")).filter(
+    (element) => element.id === id,
+  );
 }
 
 /**
@@ -79,19 +93,17 @@ export function useRobustScroll({
     const targets = Array.isArray(targetId) ? targetId : [targetId];
     const root = containerRef?.current || document.body;
 
-    debug.log("[RobustScroll] INITIALIZING for targets:", targets);
+
 
     const findTarget = (): HTMLElement | null => {
       let bestMatch: HTMLElement | null = null;
       let bestScore = -1;
 
       for (const id of targets) {
-        const elements = root.querySelectorAll<HTMLElement>(
-          `#${CSS.escape(id)}`,
-        );
-        debug.log(
-          `[RobustScroll] ID "${id}": ${elements.length} elements found`,
-        );
+        const elements = queryElementsById(root, id);
+
+
+
 
         for (let i = 0; i < elements.length; i++) {
           const el = elements[i];
@@ -102,14 +114,14 @@ export function useRobustScroll({
             expectedTags.length > 0 &&
             !expectedTags.includes(tagName)
           ) {
-            debug.log(`[RobustScroll] SKIP #${i}: tag=${tagName}`);
+
             continue;
           }
 
           const score = TAG_PRIORITY[tagName] || 1;
-          debug.log(
-            `[RobustScroll] CANDIDATE #${i}: tag=${tagName}, score=${score}`,
-          );
+
+
+
 
           if (score > bestScore) {
             bestScore = score;
@@ -119,11 +131,11 @@ export function useRobustScroll({
       }
 
       if (bestMatch) {
-        debug.log(
-          `[RobustScroll] WINNER: ${bestMatch.tagName}#${bestMatch.id}`,
-        );
+
+
+
       } else {
-        debug.warn(`[RobustScroll] NO TARGET for: ${targets.join(", ")}`);
+
       }
       return bestMatch;
     };
@@ -131,7 +143,7 @@ export function useRobustScroll({
     const doScroll = (element: HTMLElement) => {
       if (!element) return;
 
-      debug.log(`[RobustScroll] SCROLLING to:`, element);
+
 
       // 1. Native scrollIntoView
       try {
@@ -183,7 +195,7 @@ export function useRobustScroll({
     if (attemptScroll()) return;
 
     // 2. If not found, Observe DOM changes
-    debug.log("[RobustScroll] Target not found, starting MutationObserver...");
+
 
     const observerCallback = (
       mutations: MutationRecord[],
@@ -195,7 +207,7 @@ export function useRobustScroll({
       if (!hasAddedNodes) return;
 
       if (attemptScroll()) {
-        debug.log("[RobustScroll] Found via MutationObserver!");
+
         obs.disconnect();
       }
     };
@@ -206,14 +218,12 @@ export function useRobustScroll({
     observer.observe(root, {
       childList: true,
       subtree: true,
-      attributes: true,
-      attributeFilter: ["id", "class"],
     });
 
     // 3. Fallback timeout to stop observing
     timeoutRef.current = setTimeout(() => {
       if (!hasScrolledRef.current) {
-        debug.warn("[RobustScroll] Timed out waiting for target.");
+
         observer.disconnect();
         if (onComplete) onComplete(false);
       }

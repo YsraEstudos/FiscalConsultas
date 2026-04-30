@@ -6,24 +6,21 @@ import styles from '../../src/components/Header.module.css';
 
 
 const {
-  signOutMock,
+  logoutMock,
+  openLoginMock,
   isSignedInRef,
   userNameRef,
   userEmailRef,
   isAdminRef,
+  isAuthConfiguredRef,
 } = vi.hoisted(() => ({
-  signOutMock: vi.fn(),
+  logoutMock: vi.fn(),
+  openLoginMock: vi.fn(),
   isSignedInRef: { value: true },
   userNameRef: { value: 'Usuário Teste' as string | null },
   userEmailRef: { value: 'teste@demo.com' as string | null },
   isAdminRef: { value: true },
-}));
-
-vi.mock('@clerk/react', () => ({
-  UserButton: () => <div data-testid="user-button" />,
-  OrganizationSwitcher: () => <div data-testid="org-switcher" />,
-  SignInButton: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  useClerk: () => ({ signOut: signOutMock }),
+  isAuthConfiguredRef: { value: true },
 }));
 
 vi.mock('../../src/components/SearchBar', () => ({
@@ -39,6 +36,9 @@ vi.mock('../../src/context/AuthContext', () => ({
     isSignedIn: isSignedInRef.value,
     userName: userNameRef.value,
     userEmail: userEmailRef.value,
+    isAuthConfigured: isAuthConfiguredRef.value,
+    openLogin: openLoginMock,
+    logout: logoutMock,
   }),
 }));
 
@@ -54,10 +54,8 @@ function renderHeader() {
       setDoc={vi.fn()}
       searchKey="search-1"
       onOpenSettings={vi.fn()}
-      onOpenTutorial={vi.fn()}
       onOpenStats={vi.fn()}
       onOpenComparator={vi.fn()}
-      onOpenServices={vi.fn()}
       onOpenModerate={vi.fn()}
       onOpenProfile={vi.fn()}
       history={[]}
@@ -82,11 +80,13 @@ describe('Header', () => {
   const SLOW_MENU_FLOW_TIMEOUT_MS = 7000;
 
   beforeEach(() => {
-    signOutMock.mockReset();
+    logoutMock.mockReset();
+    openLoginMock.mockReset();
     isSignedInRef.value = true;
     userNameRef.value = 'Usuário Teste';
     userEmailRef.value = 'teste@demo.com';
     isAdminRef.value = true;
+    isAuthConfiguredRef.value = true;
   });
 
   it('switches document type and triggers mobile menu action', () => {
@@ -100,10 +100,8 @@ describe('Header', () => {
         setDoc={setDoc}
         searchKey="search-1"
         onOpenSettings={vi.fn()}
-        onOpenTutorial={vi.fn()}
         onOpenStats={vi.fn()}
         onOpenComparator={vi.fn()}
-        onOpenServices={vi.fn()}
         onOpenModerate={vi.fn()}
         onOpenProfile={vi.fn()}
         history={[]}
@@ -115,15 +113,13 @@ describe('Header', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'TIPI' }));
     fireEvent.click(screen.getByRole('button', { name: 'NESH' }));
-    fireEvent.click(screen.getByLabelText('Abrir Navegação'));
 
     expect(setDoc).toHaveBeenCalledWith('tipi');
     expect(setDoc).toHaveBeenCalledWith('nesh');
-    expect(onMenuOpen).toHaveBeenCalledTimes(1);
     expect(screen.getByText('Notas Explicativas do Sistema Harmonizado')).toBeInTheDocument();
   });
 
-  it('uses NBS and NEBS in the selector when the active document is a service tab', () => {
+  it('keeps NBS as the services selector when the active document is NBS', () => {
     const setDoc = vi.fn();
 
     render(
@@ -133,10 +129,8 @@ describe('Header', () => {
         setDoc={setDoc}
         searchKey="search-1"
         onOpenSettings={vi.fn()}
-        onOpenTutorial={vi.fn()}
         onOpenStats={vi.fn()}
         onOpenComparator={vi.fn()}
-        onOpenServices={vi.fn()}
         onOpenModerate={vi.fn()}
         onOpenProfile={vi.fn()}
         history={[]}
@@ -146,30 +140,27 @@ describe('Header', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'NEBS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'NBS' }));
 
-    expect(setDoc).toHaveBeenCalledWith('nebs');
+    expect(setDoc).toHaveBeenCalledWith('nbs');
     expect(screen.getByText('Classificação Brasileira de Serviços')).toBeInTheDocument();
   });
 
   it('opens menu, calls actions and closes when clicking outside', async () => {
+    const setDoc = vi.fn();
     const onOpenSettings = vi.fn();
-    const onOpenTutorial = vi.fn();
     const onOpenStats = vi.fn();
     const onOpenComparator = vi.fn();
-    const onOpenServices = vi.fn();
 
     render(
       <Header
         onSearch={vi.fn()}
         doc="tipi"
-        setDoc={vi.fn()}
+        setDoc={setDoc}
         searchKey="search-1"
         onOpenSettings={onOpenSettings}
-        onOpenTutorial={onOpenTutorial}
         onOpenStats={onOpenStats}
         onOpenComparator={onOpenComparator}
-        onOpenServices={onOpenServices}
         onOpenModerate={vi.fn()}
         onOpenProfile={vi.fn()}
         history={[]}
@@ -184,18 +175,15 @@ describe('Header', () => {
 
     fireEvent.click(screen.getByText('Comparar NCMs').closest('button') as HTMLButtonElement);
     fireEvent.click(menuButton);
-    fireEvent.click(screen.getByText('Serviços (NBS)').closest('button') as HTMLButtonElement);
+    fireEvent.click(screen.getByRole('button', { name: /Serviços \(NBS\)/ }));
     fireEvent.click(menuButton);
     fireEvent.click(screen.getByText('Configurações').closest('button') as HTMLButtonElement);
-    fireEvent.click(menuButton);
-    fireEvent.click(screen.getByText('Ajuda / Tutorial').closest('button') as HTMLButtonElement);
     fireEvent.click(menuButton);
     fireEvent.click(screen.getByText('Estatísticas').closest('button') as HTMLButtonElement);
 
     expect(onOpenComparator).toHaveBeenCalledTimes(1);
-    expect(onOpenServices).toHaveBeenCalledTimes(1);
+    expect(setDoc).toHaveBeenCalledWith('nbs');
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
-    expect(onOpenTutorial).toHaveBeenCalledTimes(1);
     expect(onOpenStats).toHaveBeenCalledTimes(1);
 
     fireEvent.click(menuButton);
@@ -210,36 +198,34 @@ describe('Header', () => {
     expect(screen.getByText('Tabela de Incidência do IPI')).toBeInTheDocument();
   });
 
-  it('shows menu shortcuts to return to NESH and TIPI from service tabs', () => {
-    const setDoc = vi.fn();
+  it('shows menu shortcuts to return to NESH and TIPI from service tabs when doc=nbs', () => {
+      const setDoc = vi.fn();
 
-    render(
-      <Header
-        onSearch={vi.fn()}
-        doc="nebs"
-        setDoc={setDoc}
-        searchKey="search-1"
-        onOpenSettings={vi.fn()}
-        onOpenTutorial={vi.fn()}
-        onOpenStats={vi.fn()}
-        onOpenComparator={vi.fn()}
-        onOpenServices={vi.fn()}
-        onOpenModerate={vi.fn()}
-        onOpenProfile={vi.fn()}
-        history={[]}
-        onClearHistory={vi.fn()}
-        onRemoveHistory={vi.fn()}
-        onMenuOpen={vi.fn()}
-      />,
-    );
+      render(
+        <Header
+          onSearch={vi.fn()}
+          doc="nbs"
+          setDoc={setDoc}
+          searchKey="search-1"
+          onOpenSettings={vi.fn()}
+          onOpenStats={vi.fn()}
+          onOpenComparator={vi.fn()}
+          onOpenModerate={vi.fn()}
+          onOpenProfile={vi.fn()}
+          history={[]}
+          onClearHistory={vi.fn()}
+          onRemoveHistory={vi.fn()}
+          onMenuOpen={vi.fn()}
+        />,
+      );
 
-    openMenu();
-    fireEvent.click(screen.getByText('Voltar para NESH').closest('button') as HTMLButtonElement);
-    fireEvent.click(getMenuButton());
-    fireEvent.click(screen.getByText('Ir para TIPI').closest('button') as HTMLButtonElement);
+      openMenu();
+      fireEvent.click(screen.getByText('Voltar para NESH').closest('button') as HTMLButtonElement);
+      fireEvent.click(getMenuButton());
+      fireEvent.click(screen.getByText('Ir para TIPI').closest('button') as HTMLButtonElement);
 
-    expect(setDoc).toHaveBeenNthCalledWith(1, 'nesh');
-    expect(setDoc).toHaveBeenNthCalledWith(2, 'tipi');
+      expect(setDoc).toHaveBeenNthCalledWith(1, 'nesh');
+      expect(setDoc).toHaveBeenNthCalledWith(2, 'tipi');
   });
 
   it('renders fallback user labels when auth profile is missing', () => {
@@ -262,9 +248,19 @@ describe('Header', () => {
     expect(screen.queryByRole('button', { name: /sair da conta/i })).not.toBeInTheDocument();
   });
 
+  it('opens the lazy auth flow when the signed-out user clicks Entrar', () => {
+    isSignedInRef.value = false;
+    renderHeader();
+
+    fireEvent.click(screen.getByRole('button', { name: /menu/i }));
+    fireEvent.click(screen.getByRole('button', { name: /entrar/i }));
+
+    expect(openLoginMock).toHaveBeenCalledTimes(1);
+  });
+
   it('confirms logout, blocks duplicate requests and closes modal on completion', { timeout: 15000 }, async () => {
     let resolveSignOut: (() => void) | null = null;
-    signOutMock.mockImplementation(
+    logoutMock.mockImplementation(
       () =>
         new Promise<void>((resolve) => {
           resolveSignOut = () => queueMicrotask(resolve);
@@ -283,8 +279,7 @@ describe('Header', () => {
     const loadingButton = screen.getByRole('button', { name: 'Saindo...' });
     expect(loadingButton).toBeDisabled();
     fireEvent.click(loadingButton);
-    expect(signOutMock).toHaveBeenCalledTimes(1);
-    expect(signOutMock).toHaveBeenCalledWith({ redirectUrl: '/' });
+    expect(logoutMock).toHaveBeenCalledTimes(1);
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.getByText('Confirmar saída')).toBeInTheDocument();
@@ -296,5 +291,51 @@ describe('Header', () => {
     });
 
     expect(screen.queryByText('Confirmar saída')).not.toBeInTheDocument();
+  });
+
+  it('disables the sign-in action when auth is not configured', () => {
+    isSignedInRef.value = false;
+    isAuthConfiguredRef.value = false;
+    renderHeader();
+
+    fireEvent.click(screen.getByRole('button', { name: /menu/i }));
+    const loginButton = screen.getByRole('button', { name: /login indisponível/i });
+
+    expect(loginButton).toBeDisabled();
+    fireEvent.click(loginButton);
+    expect(openLoginMock).not.toHaveBeenCalled();
+  });
+
+  it('disables the services action when the catalog is offline', () => {
+    const setDoc = vi.fn();
+
+    render(
+      <Header
+        onSearch={vi.fn()}
+        doc="tipi"
+        setDoc={setDoc}
+        searchKey="search-1"
+        onOpenSettings={vi.fn()}
+        onOpenStats={vi.fn()}
+        onOpenComparator={vi.fn()}
+        onOpenModerate={vi.fn()}
+        onOpenProfile={vi.fn()}
+        servicesUnavailableReason="Catálogo NBS indisponível no momento."
+        history={[]}
+        onClearHistory={vi.fn()}
+        onRemoveHistory={vi.fn()}
+        onMenuOpen={vi.fn()}
+      />,
+    );
+
+    openMenu();
+    expect(screen.getByText(/Serviços \(NBS\) indisponível/)).toBeInTheDocument();
+
+    const nbsButton = screen.getByRole('button', { name: /Serviços \(NBS\) indisponível/i });
+
+    expect(nbsButton).toBeDisabled();
+
+    fireEvent.click(nbsButton);
+    expect(setDoc).not.toHaveBeenCalled();
   });
 });

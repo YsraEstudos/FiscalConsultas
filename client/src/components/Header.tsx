@@ -1,12 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { UserButton, OrganizationSwitcher, SignInButton, useClerk } from '@clerk/react';
+import toast from 'react-hot-toast';
 import { SearchBar } from './SearchBar';
 import { HistoryItem } from '../hooks/useHistory';
-import {
-    clerkOrganizationSwitcherAppearance,
-    clerkTheme,
-    clerkUserButtonAppearance
-} from '../config/clerkAppearance';
 import { useAuth } from '../context/AuthContext';
 import { useIsAdmin } from '../hooks/useIsAdmin';
 import { Modal } from './Modal';
@@ -14,7 +9,6 @@ import styles from './Header.module.css';
 
 const DOC_SUBTITLES: Record<string, string> = {
     nbs: 'Classificação Brasileira de Serviços',
-    nebs: 'Classificação Brasileira de Serviços',
     nesh: 'Notas Explicativas do Sistema Harmonizado',
     tipi: 'Tabela de Incidência do IPI',
 };
@@ -25,47 +19,135 @@ interface HeaderProps {
     setDoc: (doc: string) => void;
     searchKey: string;
     onOpenSettings: () => void;
-    onOpenTutorial: () => void;
     onOpenStats: () => void;
     onOpenComparator: () => void;
-    onOpenServices: () => void;
     onOpenModerate: () => void;
     onOpenProfile: () => void;
+    servicesUnavailableReason?: string | null;
     history: HistoryItem[];
     onClearHistory: () => void;
     onRemoveHistory: (term: string) => void;
-    onMenuOpen: () => void;
     isLoading?: boolean;
 }
 
+function getPrimaryDocButtonConfig(doc: string): {
+label: string;
+target: string;
+isActive: boolean;
+} {
+switch (doc) {
+case 'nesh':
+    return { label: 'NESH', target: 'nesh', isActive: true };
+case 'nbs':
+    return { label: 'NBS', target: 'nbs', isActive: true };
+default:
+    return { label: 'NESH', target: 'nesh', isActive: false };
+}
+}
+
+function getConditionalClassName(
+baseClass: string,
+isActive: boolean,
+activeClass: string,
+): string {
+return [baseClass, isActive ? activeClass : ''].filter(Boolean).join(' ');
+}
+
+function getServicesButtonLabel(
+servicesUnavailableReason: string | null | undefined,
+): string {
+return servicesUnavailableReason ? 'Serviços (NBS) indisponível' : 'Serviços (NBS)';
+}
+
+function getAuthButtonLabel(isAuthConfigured: boolean): string {
+return isAuthConfigured ? 'Entrar' : 'Login indisponível';
+}
+
+function getAuthButtonTitle(
+isAuthConfigured: boolean,
+authUnavailableReason: string | null | undefined,
+): string | undefined {
+if (isAuthConfigured) {
+return undefined;
+}
+
+return authUnavailableReason || 'Login indisponível no momento.';
+}
+
+function getLogoutButtonLabel(isSigningOut: boolean): string {
+return isSigningOut ? 'Saindo...' : 'Sair';
+}
+
 export function Header({
-    onSearch,
-    doc,
+onSearch,
+doc,
     setDoc,
     searchKey,
     onOpenSettings,
-    onOpenTutorial,
     onOpenStats,
     onOpenComparator,
-    onOpenServices,
     onOpenModerate,
     onOpenProfile,
+    servicesUnavailableReason = null,
     history,
     onClearHistory,
     onRemoveHistory,
-    onMenuOpen,
     isLoading
 }: HeaderProps) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [shouldRenderClerkWidgets, setShouldRenderClerkWidgets] = useState(false);
     const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
     const [isSigningOut, setIsSigningOut] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
-    const { signOut } = useClerk();
-    const { isSignedIn, userName, userEmail } = useAuth();
+    const {
+        isSignedIn,
+        userName,
+        userEmail,
+        isAuthConfigured,
+        authUnavailableReason,
+        openLogin,
+        logout
+    } = useAuth();
     const isAdmin = useIsAdmin();
-    const isServiceDoc = doc === 'nbs' || doc === 'nebs';
+    const isServiceDoc = doc === 'nbs';
     const titleSubtitle = DOC_SUBTITLES[doc] || DOC_SUBTITLES.tipi;
+const primaryDocButton = getPrimaryDocButtonConfig(doc);
+const primaryDocButtonClassName = getConditionalClassName(
+styles.docButton,
+primaryDocButton.isActive,
+styles.docButtonActive,
+);
+const tipiDocButtonClassName = getConditionalClassName(
+styles.docButton,
+doc === 'tipi',
+styles.docButtonActive,
+);
+const menuTriggerClassName = getConditionalClassName(
+styles.menuTrigger,
+isMenuOpen,
+styles.menuTriggerActive,
+);
+const menuContentClassName = getConditionalClassName(
+styles.menuContent,
+isMenuOpen,
+styles.menuContentOpen,
+);
+const servicesButtonClassName = getConditionalClassName(
+'',
+Boolean(servicesUnavailableReason),
+styles.menuButtonDisabled,
+);
+const loginButtonClassName = getConditionalClassName(
+'',
+!isAuthConfigured,
+styles.menuButtonDisabled,
+);
+const servicesButtonLabel = getServicesButtonLabel(servicesUnavailableReason);
+const authButtonLabel = getAuthButtonLabel(isAuthConfigured);
+const authButtonTitle = getAuthButtonTitle(
+isAuthConfigured,
+authUnavailableReason,
+);
+const logoutButtonLabel = getLogoutButtonLabel(isSigningOut);
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -86,20 +168,14 @@ export function Header({
     };
 
     const handleToggleMenu = () => {
-        setIsMenuOpen(prev => {
-            const next = !prev;
-            if (next && !shouldRenderClerkWidgets) {
-                setShouldRenderClerkWidgets(true);
-            }
-            return next;
-        });
+        setIsMenuOpen(prev => !prev);
     };
 
     const handleConfirmLogout = async () => {
         if (isSigningOut) return;
         setIsSigningOut(true);
         try {
-            await signOut({ redirectUrl: '/' });
+            await logout();
         } finally {
             setIsSigningOut(false);
             setIsLogoutConfirmOpen(false);
@@ -110,17 +186,12 @@ export function Header({
         <header className={styles.header}>
             <div className={styles.headerContent}>
                 <div className={styles.logo}>
-                    {/* Mobile Nav Toggle */}
-                    <button
-                        className={styles.mobileNavToggle}
-                        onClick={onMenuOpen}
-                        aria-label="Abrir Navegação"
-                    >
-                        📑
-                    </button>
                     <div className={styles.logoIcon}>📦</div>
                     <div className={styles.logoText}>
-                        <h1>Busca NCM</h1>
+                        <div className={styles.logoTitleRow}>
+                            <h1>FiscalConsultas</h1>
+                            <span className={styles.versionBadge}>0.0.1</span>
+                        </div>
                         <span className={styles.logoSubtitle}>{titleSubtitle}</span>
                     </div>
                 </div>
@@ -138,28 +209,35 @@ export function Header({
 
                 <div className={styles.docSelector}>
                     <button
-                        className={`${styles.docButton} ${doc === (isServiceDoc ? 'nbs' : 'nesh') ? styles.docButtonActive : ''}`}
-                        onClick={() => setDoc(isServiceDoc ? 'nbs' : 'nesh')}
+className={primaryDocButtonClassName}
+onClick={() => setDoc(primaryDocButton.target)}
                     >
-                        {isServiceDoc ? 'NBS' : 'NESH'}
+{primaryDocButton.label}
                     </button>
                     <button
-                        className={`${styles.docButton} ${doc === (isServiceDoc ? 'nebs' : 'tipi') ? styles.docButtonActive : ''}`}
-                        onClick={() => setDoc(isServiceDoc ? 'nebs' : 'tipi')}
+className={tipiDocButtonClassName}
+                        onClick={() => setDoc('tipi')}
                     >
-                        {isServiceDoc ? 'NEBS' : 'TIPI'}
+                        TIPI
+                    </button>
+                    <button
+                        className={`${styles.docButton} ${styles.docButtonLocked}`}
+                        onClick={() => toast('UNSPSC estará disponível em breve! 🔒\nEstamos trabalhando para trazer esta classificação internacional.', { icon: '🚧', duration: 4000, style: { background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', fontSize: '0.9rem', lineHeight: '1.5' } })}
+                    >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6 }}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                        UNSPSC
                     </button>
                 </div>
 
                 <div className={styles.menuDropdown} ref={menuRef}>
                     <button
-                        className={`${styles.menuTrigger} ${isMenuOpen ? styles.menuTriggerActive : ''}`}
+className={menuTriggerClassName}
                         onClick={handleToggleMenu}
                     >
                         <span>☰</span> Menu
                     </button>
 
-                    <div className={`${styles.menuContent} ${isMenuOpen ? styles.menuContentOpen : ''}`}>
+<div className={menuContentClassName}>
                         {isServiceDoc && (
                             <>
                                 <button onClick={() => { setIsMenuOpen(false); setDoc('nesh'); }}>
@@ -174,16 +252,21 @@ export function Header({
                         <button onClick={() => { setIsMenuOpen(false); onOpenComparator(); }}>
                             <span>⚖️</span> Comparar NCMs
                         </button>
-                        <button onClick={() => { setIsMenuOpen(false); onOpenServices(); }}>
-                            <span>🧭</span> Serviços (NBS)
-                        </button>
+                        {!isServiceDoc && (
+                            <button 
+                                onClick={() => { setIsMenuOpen(false); setDoc('nbs'); }}
+                                disabled={Boolean(servicesUnavailableReason)}
+className={servicesButtonClassName}
+                                title={servicesUnavailableReason ?? undefined}
+                            >
+<span>🧭</span> {servicesButtonLabel}
+                            </button>
+                        )}
                         <div className={styles.menuDivider}></div>
                         <button onClick={() => { setIsMenuOpen(false); onOpenSettings(); }}>
                             <span>⚙️</span> Configurações
                         </button>
-                        <button onClick={() => { setIsMenuOpen(false); onOpenTutorial(); }}>
-                            <span>❓</span> Ajuda / Tutorial
-                        </button>
+
                         <div className={styles.menuDivider}></div>
                         {isAdmin && (
                             <button onClick={() => { setIsMenuOpen(false); onOpenStats(); }}>
@@ -199,41 +282,34 @@ export function Header({
                         <div className={styles.menuDivider}></div>
 
                         {/* Clerk Auth Section */}
-                        {shouldRenderClerkWidgets && (
-                            <>
-                                {!isSignedIn && (
-                                    <SignInButton mode="modal" appearance={clerkTheme}>
-                                        <button onClick={() => setIsMenuOpen(false)}>
-                                            <span>🔐</span> Entrar
-                                        </button>
-                                    </SignInButton>
-                                )}
+                        {!isSignedIn && (
+                            <button
+                                onClick={() => {
+                                    setIsMenuOpen(false);
+                                    openLogin();
+                                }}
+                                disabled={!isAuthConfigured}
+className={loginButtonClassName}
+title={authButtonTitle}
+                            >
+<span>🔐</span> {authButtonLabel}
+                            </button>
+                        )}
 
-                                {isSignedIn && (
-                                    <>
-                                        {/* Admin: apenas OrganizationSwitcher (dropdown já tem "Manage account") */}
-                                        {isAdmin ? (
-                                            <div className={styles.orgSwitcher}>
-                                                <OrganizationSwitcher appearance={clerkOrganizationSwitcherAppearance} />
-                                            </div>
-                                        ) : (
-                                            /* Usuário comum: apenas UserButton — sem avatar duplicado */
-                                            <div className={styles.userSection}>
-                                                <UserButton appearance={clerkUserButtonAppearance} />
-                                            </div>
-                                        )}
-                                        <div className={styles.userSummary}>
-                                            <strong>{userName || 'Usuário'}</strong>
-                                            <span>{userEmail || 'Conta autenticada'}</span>
-                                        </div>
-                                        <button onClick={() => { setIsMenuOpen(false); onOpenProfile(); }}>
-                                            <span>👤</span> Meu Perfil
-                                        </button>
-                                        <button className={styles.logoutMenuButton} onClick={handleLogoutClick}>
-                                            <span>🚪</span> Sair da conta
-                                        </button>
-                                    </>
-                                )}
+                        {isSignedIn && (
+                            <>
+                                <div className={styles.userSection}>
+                                    <div className={styles.userSummary}>
+                                        <strong>{userName || 'Usuário'}</strong>
+                                        <span>{userEmail || 'Conta autenticada'}</span>
+                                    </div>
+                                </div>
+                                <button onClick={() => { setIsMenuOpen(false); onOpenProfile(); }}>
+                                    <span>👤</span> Meu Perfil
+                                </button>
+                                <button className={styles.logoutMenuButton} onClick={handleLogoutClick}>
+                                    <span>🚪</span> Sair da conta
+                                </button>
                             </>
                         )}
                     </div>
@@ -261,7 +337,7 @@ export function Header({
                             onClick={handleConfirmLogout}
                             disabled={isSigningOut}
                         >
-                            {isSigningOut ? 'Saindo...' : 'Sair'}
+{logoutButtonLabel}
                         </button>
                     </div>
                 </div>

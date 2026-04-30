@@ -11,7 +11,7 @@ from backend.config.exceptions import NeshError
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-logger = logging.getLogger("server")
+logger = logging.getLogger("nesh.server.error_handlers")
 
 
 async def nesh_exception_handler(request: Request, exc: NeshError) -> JSONResponse:

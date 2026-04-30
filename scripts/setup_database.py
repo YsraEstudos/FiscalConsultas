@@ -30,6 +30,16 @@ except ModuleNotFoundError:
     from backend.utils.nesh_sections import extract_chapter_sections
 
 
+def configure_utf8_stdio() -> None:
+    """Best-effort UTF-8 stdio setup for Windows shells launched without UTF-8."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except (AttributeError, OSError, ValueError):
+                pass
+
+
 def _parse_notes_for_precompute(notes_content: str) -> dict:
     """Parse notes at ingestion time to avoid runtime regex."""
     if not notes_content:
@@ -83,6 +93,66 @@ def get_current_db_hash() -> str | None:
         return result[0] if result else None
     except (sqlite3.OperationalError, sqlite3.DatabaseError):
         return None
+
+
+def bootstrap_metadata_if_missing(content_hash: str) -> bool:
+    """
+    Backfill the metadata table for legacy databases that already contain usable data.
+
+    This avoids forcing a full SQLite rebuild on startup when an older local DB is
+    still structurally valid but was created before the metadata table existed.
+    """
+    if not os.path.exists(DB_FILE):
+        return False
+
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('chapters', 'positions')"
+        )
+        existing_tables = {row[0] for row in cursor.fetchall()}
+        if existing_tables != {"chapters", "positions"}:
+            conn.close()
+            return False
+
+        chapters_count = cursor.execute("SELECT COUNT(*) FROM chapters").fetchone()[0]
+        positions_count = cursor.execute("SELECT COUNT(*) FROM positions").fetchone()[0]
+        if chapters_count <= 0 or positions_count <= 0:
+            conn.close()
+            return False
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+        cursor.execute(
+            """
+            INSERT INTO metadata (key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value
+            """,
+            ("last_update", str(time.time())),
+        )
+        cursor.execute(
+            """
+            INSERT INTO metadata (key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value
+            """,
+            ("content_hash", content_hash),
+        )
+        conn.commit()
+        conn.close()
+
+        print(
+            "ℹ️  Banco legado detectado sem metadata. Hash atual foi registrado para evitar rebuild desnecessário."
+        )
+        return True
+    except (sqlite3.OperationalError, sqlite3.DatabaseError) as exc:
+        print(f"⚠️ Não foi possível registrar metadata no banco legado: {exc}")
+        return False
 
 
 def read_nesh_content() -> tuple[str | None, str | None, str | None]:
@@ -510,6 +580,7 @@ def compress_nesh_file():
 
 
 def main():
+    configure_utf8_stdio()
     print("=" * 50)
     print("🚀 Setup Nesh Database")
     print("=" * 50)
@@ -527,6 +598,8 @@ def main():
     print("🔍 Verificando integridade...")
     current_hash = calculate_content_hash(content)
     db_hash = get_current_db_hash()
+    if db_hash is None and bootstrap_metadata_if_missing(current_hash):
+        db_hash = current_hash
 
     if db_hash == current_hash:
         print(

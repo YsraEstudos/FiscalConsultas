@@ -4,44 +4,62 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ServicesTabContent } from '../../src/components/ServicesTabContent';
 import {
-  makeNebsDetail,
-  makeNebsSearch,
   makeNbsDetail,
   makeNbsSearch,
 } from '../playwright/fixtures/service-mocks';
 import type {
   NbsSearchResponse,
-  NebsSearchResponse,
   ServiceDocType,
 } from '../../src/types/api.types';
 
 const refs = vi.hoisted(() => ({
-  getNbsServiceDetailMock: vi.fn(),
-  getNebsEntryDetailMock: vi.fn(),
+  getNbsServiceDetailPageMock: vi.fn(),
+  getNbsServiceTreePageMock: vi.fn(),
+  toastErrorMock: vi.fn(),
+  openNewTab: false,
 }));
 
 vi.mock('../../src/services/api', () => ({
-  getNbsServiceDetail: refs.getNbsServiceDetailMock,
-  getNebsEntryDetail: refs.getNebsEntryDetailMock,
+  getNbsServiceDetailPage: refs.getNbsServiceDetailPageMock,
+  getNbsServiceTreePage: refs.getNbsServiceTreePageMock,
 }));
 
 vi.mock('../../src/context/SettingsContext', () => ({
   useSettings: () => ({
-    tipiViewMode: 'chapter' as const,
+    openNewTab: refs.openNewTab,
   }),
 }));
 
 vi.mock('react-hot-toast', () => ({
   toast: {
-    error: vi.fn(),
+    error: refs.toastErrorMock,
   },
+}));
+
+vi.mock('../../src/context/LocalDatabaseContext', () => ({
+  useLocalDatabase: () => ({
+    status: 'not_installed',
+    searchLocal: vi.fn().mockResolvedValue(null),
+    getNbsDetailLocal: vi.fn().mockResolvedValue(null),
+    progress: 0,
+    progressStep: '',
+    localVersion: null,
+    remoteVersion: null,
+    updateAvailable: false,
+    error: null,
+    dbSizeBytes: null,
+    isSupported: false,
+    install: vi.fn(),
+    remove: vi.fn(),
+    refreshAvailability: vi.fn().mockResolvedValue(null),
+  }),
 }));
 
 type HarnessTab = {
   id: string;
   doc: ServiceDocType;
   query: string;
-  data: NbsSearchResponse | NebsSearchResponse;
+  data: NbsSearchResponse;
 };
 
 function makeTab(id: string, doc: ServiceDocType, query: string): HarnessTab {
@@ -49,16 +67,20 @@ function makeTab(id: string, doc: ServiceDocType, query: string): HarnessTab {
     id,
     doc,
     query,
-    data: doc === 'nbs' ? makeNbsSearch(query) : makeNebsSearch(query),
+    data: makeNbsSearch(query),
   };
 }
 
 function ServicesTabsHarness({
   initialDoc = 'nbs',
   initialQuery = '1.0101.11.00',
+  onContentReady,
+  onOpenDocInNewTab,
 }: Readonly<{
   initialDoc?: ServiceDocType;
   initialQuery?: string;
+  onContentReady?: () => void;
+  onOpenDocInNewTab?: (doc: ServiceDocType, query?: string) => void;
 }>) {
   const [tabs, setTabs] = useState<HarnessTab[]>([makeTab('tab-1', initialDoc, initialQuery)]);
   const [activeTabId, setActiveTabId] = useState('tab-1');
@@ -97,6 +119,8 @@ function ServicesTabsHarness({
         doc={activeTab.doc}
         data={activeTab.data}
         onSwitchDoc={(doc, query) => updateActiveTab(doc, query || '')}
+        onContentReady={onContentReady}
+        onOpenDocInNewTab={onOpenDocInNewTab}
       />
     </div>
   );
@@ -104,54 +128,127 @@ function ServicesTabsHarness({
 
 describe('services tabs flow', () => {
   beforeEach(() => {
-    refs.getNbsServiceDetailMock.mockReset();
-    refs.getNebsEntryDetailMock.mockReset();
-    refs.getNbsServiceDetailMock.mockResolvedValue(makeNbsDetail());
-    refs.getNebsEntryDetailMock.mockResolvedValue(makeNebsDetail());
+    refs.getNbsServiceDetailPageMock.mockReset();
+    refs.getNbsServiceTreePageMock.mockReset();
+    refs.toastErrorMock.mockReset();
+    refs.openNewTab = false;
+    refs.getNbsServiceDetailPageMock.mockResolvedValue(makeNbsDetail());
+    refs.getNbsServiceTreePageMock.mockResolvedValue({
+      success: true,
+      item: makeNbsDetail().item,
+      chapter_root: makeNbsDetail().chapter_root,
+      chapter_page: {
+        items: makeNbsDetail().chapter_items || [],
+        page: 1,
+        page_size: 50,
+        total: makeNbsDetail().chapter_items?.length || 0,
+        has_more: false,
+      },
+    });
   });
 
-  it('switches from NBS results to NEBS results in the same tab', async () => {
-    render(<ServicesTabsHarness initialDoc="nbs" initialQuery="1.0101.11.00" />);
+  it('loads the first detail automatically and signals when the workspace is ready', async () => {
+    const onContentReady = vi.fn();
 
-    await screen.findByText('Resultados NBS');
-    fireEvent.click(screen.getByRole('button', { name: 'Ver NEBS →' }));
+    render(
+      <ServicesTabsHarness
+        initialDoc="nbs"
+        initialQuery="1.0101.11.00"
+        onContentReady={onContentReady}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(refs.getNbsServiceDetailPageMock).toHaveBeenCalledWith('1.0101.11.00', {
+        includeTree: true,
+        page: 1,
+        pageSize: 50,
+      });
+    });
+
+    expect(await screen.findByText('NOTAS EXPLICATIVAS')).toBeInTheDocument();
+    expect(onContentReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps service-code navigation from inline explanatory notes inside the NBS tab', async () => {
+    const detail = makeNbsDetail();
+    refs.getNbsServiceDetailPageMock.mockResolvedValue({
+      ...detail,
+      nebs: {
+        ...detail.nebs!,
+        body_markdown: null,
+        body_text: 'Ver detalhes em 1.1703.2.',
+      },
+    });
+
+    const { container } = render(<ServicesTabsHarness initialDoc="nbs" initialQuery="1.0101.11.00" />);
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="notes-content"] [data-service-code="1.1703.2"]')).not.toBeNull();
+    });
+    const noteCodeLink = container.querySelector('[data-testid="notes-content"] [data-service-code="1.1703.2"]');
+    if (!noteCodeLink) throw new Error('Expected service code link inside inline explanatory note');
+    fireEvent.click(noteCodeLink, { bubbles: true });
 
     await waitFor(() => {
       expect(screen.getByTestId('tab-list')).toHaveAttribute('data-count', '1');
-      expect(screen.getByTestId('active-tab-meta')).toHaveTextContent('nebs:1.0101.11.00');
+      expect(screen.getByTestId('active-tab-meta')).toHaveTextContent('nbs:1.1703.2');
     });
-    expect(await screen.findByText('Resultados NEBS')).toBeInTheDocument();
-    expect(screen.getByText('Esta subposição inclui serviços de novas construções e reparo.')).toBeInTheDocument();
   });
 
-  it('switches back to NBS results when the user clicks the NEBS header action', async () => {
-    render(<ServicesTabsHarness initialDoc="nebs" initialQuery="1.0101.11.00" />);
+  it('opens service-code navigation from inline explanatory notes in a new tab when preference is enabled', async () => {
+    const onOpenDocInNewTab = vi.fn();
+    const detail = makeNbsDetail();
+    refs.openNewTab = true;
+    refs.getNbsServiceDetailPageMock.mockResolvedValue({
+      ...detail,
+      nebs: {
+        ...detail.nebs!,
+        body_markdown: null,
+        body_text: 'Ver detalhes em 1.1703.2.',
+      },
+    });
 
-    await screen.findByText('Resultados NEBS');
-    fireEvent.click(screen.getByRole('button', { name: '← Ver NBS' }));
+    const { container } = render(
+      <ServicesTabsHarness
+        initialDoc="nbs"
+        initialQuery="1.0101.11.00"
+        onOpenDocInNewTab={onOpenDocInNewTab}
+      />,
+    );
 
     await waitFor(() => {
-      expect(screen.getByTestId('tab-list')).toHaveAttribute('data-count', '1');
-      expect(screen.getByTestId('active-tab-meta')).toHaveTextContent('nbs:1.0101.11.00');
+      expect(container.querySelector('[data-testid="notes-content"] [data-service-code="1.1703.2"]')).not.toBeNull();
     });
-    expect(await screen.findByText('Resultados NBS')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Ver NEBS →' })).toBeInTheDocument();
+    const noteCodeLink = container.querySelector('[data-testid="notes-content"] [data-service-code="1.1703.2"]');
+    if (!noteCodeLink) throw new Error('Expected service code link inside inline explanatory note');
+    fireEvent.click(noteCodeLink, { bubbles: true, ctrlKey: true });
+
+    await waitFor(() => {
+      expect(onOpenDocInNewTab).toHaveBeenCalledWith('nbs', '1.1703.2');
+    });
+    expect(screen.getByTestId('active-tab-meta')).toHaveTextContent('nbs:1.0101.11.00');
   });
 
-  it('preserves the current query when toggling between NBS and NEBS results', async () => {
-    render(<ServicesTabsHarness initialDoc="nbs" initialQuery="1.0101.11.00" />);
-
-    await screen.findByText('Resultados NBS');
-    fireEvent.click(screen.getByRole('button', { name: 'Ver NEBS →' }));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('active-tab-meta')).toHaveTextContent('nebs:1.0101.11.00');
+  it('maps detail failures with the shared catalog copy instead of a generic toast', async () => {
+    refs.getNbsServiceDetailPageMock.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 503 },
     });
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    fireEvent.click(screen.getByRole('button', { name: '← Ver NBS' }));
+    try {
+      render(<ServicesTabsHarness initialDoc="nbs" initialQuery="1.0101.11.00" />);
 
-    await waitFor(() => {
-      expect(screen.getByTestId('active-tab-meta')).toHaveTextContent('nbs:1.0101.11.00');
-    });
+      await waitFor(() => {
+        expect(refs.toastErrorMock).toHaveBeenCalledWith(
+          'Catálogo de serviços indisponível no momento. Tente novamente em instantes.',
+        );
+      });
+
+      expect(screen.getByText('Selecione um servico')).toBeInTheDocument();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 });

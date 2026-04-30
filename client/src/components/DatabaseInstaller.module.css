@@ -1,0 +1,282 @@
+/* stylelint-disable selector-class-pattern */
+
+/* ━━━ Database Installer Card ━━━ */
+.installerCard {
+  grid-column: 1 / -1;
+  background: var(--bg-tertiary);
+  border-radius: 16px;
+  padding: 1.5rem;
+  border: 1px solid var(--border-color);
+  transition:
+    border-color 0.3s ease,
+    transform 0.2s ease,
+    box-shadow 0.3s ease;
+}
+
+.installerCard:hover {
+  border-color: var(--accent-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgb(99 102 241 / 10%);
+}
+
+/* ━━━ Card Header ━━━ */
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.cardIcon {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.cardTitle {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.cardDescription {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 1.25rem;
+}
+
+/* ━━━ Status Badge ━━━ */
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.statusReady {
+  background: rgb(16 185 129 / 15%);
+  color: #10b981;
+  border: 1px solid rgb(16 185 129 / 25%);
+}
+
+.statusInstalling {
+  background: rgb(99 102 241 / 15%);
+  color: #818cf8;
+  border: 1px solid rgb(99 102 241 / 25%);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.statusError {
+  background: rgb(239 68 68 / 15%);
+  color: #ef4444;
+  border: 1px solid rgb(239 68 68 / 25%);
+}
+
+.statusUnsupported {
+  background: rgb(245 158 11 / 15%);
+  color: #f59e0b;
+  border: 1px solid rgb(245 158 11 / 25%);
+}
+
+/* ━━━ Progress Bar ━━━ */
+.progressContainer {
+  margin: 1rem 0;
+}
+
+.progressBar {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--accent-gradient);
+  border-radius: 3px;
+  transition: width 0.4s ease-out;
+  position: relative;
+}
+
+.progressFill::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    rgb(255 255 255 / 0%) 0%,
+    rgb(255 255 255 / 20%) 50%,
+    rgb(255 255 255 / 0%) 100%
+  );
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.progressInfo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.progressPercent {
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+/* ━━━ Info Row (version, size) ━━━ */
+.infoRow {
+  display: flex;
+  gap: 1.5rem;
+  margin: 0.75rem 0;
+  flex-wrap: wrap;
+}
+
+.infoItem {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.infoLabel {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* ━━━ Action Buttons ━━━ */
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.btnInstall {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: 10px;
+  border: none;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  background: var(--accent-gradient);
+  color: white;
+  box-shadow: 0 4px 12px rgb(99 102 241 / 25%);
+}
+
+.btnInstall:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgb(99 102 241 / 35%);
+}
+
+.btnInstall:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btnInstall:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btnRemove {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btnRemove:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+  background: rgb(239 68 68 / 8%);
+}
+
+.btnRetry {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: 10px;
+  border: 1px solid rgb(245 158 11 / 40%);
+  background: rgb(245 158 11 / 10%);
+  color: #f59e0b;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btnRetry:hover {
+  background: rgb(245 158 11 / 20%);
+  border-color: #f59e0b;
+}
+
+/* ━━━ Error Message ━━━ */
+.errorMessage {
+  font-size: 0.82rem;
+  color: #ef4444;
+  background: rgb(239 68 68 / 8%);
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid rgb(239 68 68 / 15%);
+  margin-top: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+/* ━━━ Unsupported Banner ━━━ */
+.unsupportedInfo {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ━━━ Animations ━━━ */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ━━━ Step Labels ━━━ */
+.stepLabel {
+  text-transform: capitalize;
+}

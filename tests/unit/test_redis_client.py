@@ -1,4 +1,5 @@
 import pytest
+
 from backend.infrastructure import redis_client as redis_mod
 
 pytestmark = pytest.mark.unit
@@ -28,26 +29,49 @@ class _FakeRedis:
             raise RuntimeError("get failed")
         return self.store.get(key)
 
-    async def set(self, key, value, ex):
+    async def set(self, key, value, ex=None, nx=False, px=None):
         if self.fail_set:
             raise RuntimeError("set failed")
-        self.set_calls.append((key, value, ex))
+        if nx and key in self.store:
+            return False
+        self.set_calls.append((key, value, ex, nx, px))
         self.store[key] = value
+        return True
+
+    async def delete(self, key):
+        self.store.pop(key, None)
+
+    async def incr(self, key):
+        current = int(self.store.get(key, b"0"))
+        current += 1
+        self.store[key] = str(current).encode()
+        return current
 
 
 def _cache() -> redis_mod.RedisCache:
     return redis_mod.RedisCache(
         url="redis://localhost:6379/0",
         enabled=True,
+        max_payload_bytes=32_768,
         chapter_ttl=120,
         fts_ttl=60,
+        services_search_ttl=300,
+        services_detail_ttl=900,
+        status_ttl=20,
     )
 
 
 @pytest.mark.asyncio
 async def test_connect_skips_when_disabled():
     cache = redis_mod.RedisCache(
-        "redis://localhost", enabled=False, chapter_ttl=1, fts_ttl=1
+        "redis://localhost",
+        enabled=False,
+        max_payload_bytes=32_768,
+        chapter_ttl=1,
+        fts_ttl=1,
+        services_search_ttl=1,
+        services_detail_ttl=1,
+        status_ttl=1,
     )
     await cache.connect()
     assert cache.available is False
@@ -152,6 +176,19 @@ async def test_set_json_handles_serialize_or_write_errors(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_set_json_skips_payloads_above_limit():
+    cache = _cache()
+    cache.max_payload_bytes = 8
+    fake = _FakeRedis()
+    cache._client = fake
+
+    await cache.set_json("big", {"payload": "123456789"}, 10)
+
+    assert "big" not in fake.store
+    assert fake.set_calls == []
+
+
+@pytest.mark.asyncio
 async def test_chapter_and_fts_helpers_use_expected_keys(monkeypatch):
     cache = _cache()
 
@@ -180,3 +217,124 @@ async def test_chapter_and_fts_helpers_use_expected_keys(monkeypatch):
 
     await cache.set_fts("motor", [1, 2])
     assert seen["set"] == ("nesh:fts:motor", [1, 2], cache.fts_ttl)
+
+
+@pytest.mark.asyncio
+async def test_services_and_status_helpers_use_expected_keys(monkeypatch):
+    cache = _cache()
+
+    seen = {}
+
+    async def _fake_get(key):
+        seen["get"] = key
+        return {"ok": True}
+
+    async def _fake_set(key, value, ttl):
+        seen["set"] = (key, value, ttl)
+
+    versions = {
+        "meta:catalog-version:nbs:tenant-a": "v7",
+    }
+
+    async def _fake_get_version(key):
+        if key in versions:
+            return versions[key]
+        return await _fake_get(key)
+
+    monkeypatch.setattr(cache, "get_json", _fake_get)
+    monkeypatch.setattr(cache, "set_json", _fake_set)
+    monkeypatch.setattr(
+        cache,
+        "get_catalog_version",
+        lambda catalog, scope="public": _fake_get_version(
+            f"meta:catalog-version:{catalog}:{scope}"
+        ),
+    )
+
+    got_search = await cache.get_services_search("nbs", "tenant-a", "search-key")
+    assert got_search == {"ok": True}
+    assert seen["get"] == "services:nbs:search:v7:tenant-a:search-key"
+
+    await cache.set_services_search("nbs", "tenant-a", "search-key", {"items": 1})
+    assert seen["set"] == (
+        "services:nbs:search:v7:tenant-a:search-key",
+        {"items": 1},
+        cache.services_search_ttl,
+    )
+
+    got_status = await cache.get_status_snapshot("public")
+    assert got_status == {"ok": True}
+    assert seen["get"] == "system:status:public"
+
+    await cache.set_status_snapshot("public", {"status": "online"})
+    assert seen["set"] == (
+        "system:status:public",
+        {"status": "online"},
+        cache.status_ttl,
+    )
+
+
+@pytest.mark.asyncio
+async def test_catalog_version_helpers_and_token_normalization():
+    cache = _cache()
+    fake = _FakeRedis()
+    cache._client = fake
+
+    assert (
+        redis_mod.RedisCache.normalize_cache_token("  Motor   Eletrico ")
+        == "motor eletrico"
+    )
+    assert len(redis_mod.RedisCache.hash_cache_token("Motor")) == 64
+
+    assert await cache.get_catalog_version("nbs") == "v1"
+    bumped = await cache.bump_catalog_version("nbs")
+    assert bumped == "v1"
+    assert await cache.get_catalog_version("nbs") == "v1"
+
+
+@pytest.mark.asyncio
+async def test_cached_json_uses_fill_retry_and_stale_paths():
+    cache = _cache()
+    fake = _FakeRedis()
+    cache._client = fake
+
+    loader_calls = {"count": 0}
+
+    async def _loader():
+        loader_calls["count"] += 1
+        return {"value": 42}
+
+    first, stats_first = await cache.cached_json(
+        "services:nbs:test",
+        ttl_seconds=30,
+        loader=_loader,
+    )
+    assert first == {"value": 42}
+    assert stats_first["cache_status"] == "fill"
+    assert loader_calls["count"] == 1
+
+    second, stats_second = await cache.cached_json(
+        "services:nbs:test",
+        ttl_seconds=30,
+        loader=_loader,
+    )
+    assert second == {"value": 42}
+    assert stats_second["cache_status"] == "hit"
+    assert loader_calls["count"] == 1
+
+    fake.store.pop("services:nbs:test", None)
+    fake.store["stale:services:nbs:test"] = redis_mod.orjson.dumps({"value": 7})
+
+    async def _fake_set_if_not_exists(_key, _value, *, ttl_ms):
+        del ttl_ms
+        return False
+
+    cache.set_if_not_exists = _fake_set_if_not_exists  # type: ignore[method-assign]
+    stale_value, stale_stats = await cache.cached_json(
+        "services:nbs:test",
+        ttl_seconds=30,
+        loader=_loader,
+    )
+    assert stale_value == {"value": 7}
+    assert stale_stats["cache_status"] == "stale"
+    assert stale_stats["stale_served"] is True

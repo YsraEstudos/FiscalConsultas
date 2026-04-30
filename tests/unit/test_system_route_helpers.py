@@ -20,7 +20,7 @@ def _build_request(headers: dict[str, str] | None = None) -> Request:
 
 
 def test_normalize_db_status_with_missing_payload_returns_error_contract():
-    payload = system._normalize_db_status(None, latency_ms=12.34)
+    payload = system.normalize_db_status(None, latency_ms=12.34)
     assert payload == {
         "status": "error",
         "chapters": 0,
@@ -31,7 +31,7 @@ def test_normalize_db_status_with_missing_payload_returns_error_contract():
 
 
 def test_normalize_db_status_with_valid_stats_coerces_values():
-    payload = system._normalize_db_status(
+    payload = system.normalize_db_status(
         {"status": "online", "chapters": "10", "positions": "20"},
         latency_ms=5.5,
     )
@@ -44,10 +44,10 @@ def test_normalize_db_status_with_valid_stats_coerces_values():
 
 
 def test_normalize_tipi_status_handles_online_and_error_states():
-    online_payload = system._normalize_tipi_status(
+    online_payload = system.normalize_tipi_status(
         {"ok": True, "chapters": "3", "positions": "7"}
     )
-    error_payload = system._normalize_tipi_status(
+    error_payload = system.normalize_tipi_status(
         {"status": "error", "error": "db down"}
     )
 
@@ -65,7 +65,7 @@ def test_normalize_tipi_status_handles_online_and_error_states():
 
 
 def test_build_public_status_payload_strips_sensitive_fields():
-    payload = system._build_public_status_payload(
+    payload = system.build_public_status_payload(
         {
             "status": "online",
             "chapters": 10,
@@ -79,7 +79,7 @@ def test_build_public_status_payload_strips_sensitive_fields():
 
     assert payload == {
         "status": "error",
-        "database": {"status": "online", "latency_ms": 5.5},
+        "database": {"status": "online"},
         "tipi": {"status": "error"},
     }
 

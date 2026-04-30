@@ -17,9 +17,10 @@ def verify_frontend_build(project_root: str) -> None:
 
     # 1. Check existence
     if not os.path.exists(dist_dir) or not os.path.exists(index_html):
-        logger.error("❌ FRONTEND BUILD NOT FOUND!")
-        logger.error(f"Expected at: {dist_dir}")
-        logger.error("Please run: cd client && npm run build")
+        logger.warning(
+            "Frontend build not found at %s. This is fine if the frontend is hosted separately.",
+            dist_dir,
+        )
         return
 
     # 2. Check freshness (simple heuristic)

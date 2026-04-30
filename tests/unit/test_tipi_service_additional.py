@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,11 +13,11 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture(autouse=True)
 def _reset_pool_state():
-    TipiService._pool = {}
-    TipiService._pool_lock = None
+    TipiService._tipi_connection_pools = {}
+    TipiService._tipi_connection_pool_locks = {}
     yield
-    TipiService._pool = {}
-    TipiService._pool_lock = None
+    TipiService._tipi_connection_pools = {}
+    TipiService._tipi_connection_pool_locks = {}
 
 
 class _FakeCursor:
@@ -78,11 +79,45 @@ class _FakeRepo:
         return [{"codigo": "85", "titulo": "Capítulo 85", "secao": "XVI"}]
 
 
+class _FakeScalarResult:
+    def __init__(self, scalar_value=None, rows=None):
+        self._scalar_value = scalar_value
+        self._rows = rows or []
+
+    def scalar(self):
+        return self._scalar_value
+
+    def __iter__(self):
+        return iter(self._rows)
+
+
+class _FakeHealthRepo:
+    def __init__(self):
+        self.session = self
+        self._calls = 0
+
+    async def execute(self, _query):
+        self._calls += 1
+        if self._calls == 1:
+            return _FakeScalarResult(12)
+        if self._calls == 2:
+            return _FakeScalarResult(345)
+        return _FakeScalarResult(
+            rows=[
+                type(
+                    "Row",
+                    (),
+                    {"key": "tipi_updated_at", "value": "2026-03-25T10:00:00+00:00"},
+                )()
+            ]
+        )
+
+
 @pytest.mark.asyncio
 async def test_create_with_repository_raises_when_repo_unavailable(monkeypatch):
     monkeypatch.setattr(tipi_module, "_REPO_AVAILABLE", False)
     with pytest.raises(RuntimeError, match="Repository não disponível"):
-        await TipiService.create_with_repository()
+        TipiService.create_with_repository()
 
 
 @pytest.mark.asyncio
@@ -99,8 +134,8 @@ async def test_create_with_repository_success_uses_factory(monkeypatch):
     monkeypatch.setattr(tipi_module, "get_session", _fake_get_session)
     monkeypatch.setattr(tipi_module, "TipiRepository", _RepoFromFactory)
 
-    service = await TipiService.create_with_repository()
-    async with service._get_repo() as repo:
+    service = TipiService.create_with_repository()
+    async with service._acquire_tipi_repository() as repo:
         assert isinstance(repo, _RepoFromFactory)
         assert repo.session == "session-1"
 
@@ -108,7 +143,7 @@ async def test_create_with_repository_success_uses_factory(monkeypatch):
 @pytest.mark.asyncio
 async def test_get_repo_handles_direct_factory_and_none():
     direct = TipiService(repository="direct-repo")
-    async with direct._get_repo() as repo:
+    async with direct._acquire_tipi_repository() as repo:
         assert repo == "direct-repo"
 
     @asynccontextmanager
@@ -116,11 +151,11 @@ async def test_get_repo_handles_direct_factory_and_none():
         yield "factory-repo"
 
     from_factory = TipiService(repository_factory=_factory)
-    async with from_factory._get_repo() as repo:
+    async with from_factory._acquire_tipi_repository() as repo:
         assert repo == "factory-repo"
 
     no_repo = TipiService()
-    async with no_repo._get_repo() as repo:
+    async with no_repo._acquire_tipi_repository() as repo:
         assert repo is None
 
 
@@ -134,16 +169,16 @@ async def test_get_connection_raises_database_error_when_connect_fails(monkeypat
     monkeypatch.setattr(tipi_module.aiosqlite, "connect", _boom)
 
     with pytest.raises(DatabaseError, match="TIPI DB connection failed"):
-        await service._get_connection()
+        await service._acquire_tipi_connection()
 
 
 @pytest.mark.asyncio
 async def test_release_connection_closes_when_pool_is_full_and_close_fails(monkeypatch):
     service = TipiService()
     conn = _FakeConn(close_error=RuntimeError("close failed"))
-    monkeypatch.setattr(service, "_pool_max_size", 0)
+    monkeypatch.setattr(service, "_tipi_connection_pool_max_size", 0)
 
-    await service._release_connection(conn)
+    await service._release_tipi_connection(conn)
     assert conn.closed is True
 
 
@@ -151,11 +186,12 @@ async def test_release_connection_closes_when_pool_is_full_and_close_fails(monke
 async def test_close_handles_pool_connection_close_errors():
     service = TipiService()
     failing_conn = _FakeConn(close_error=RuntimeError("boom"))
-    TipiService._pool = {service.db_path: [failing_conn]}
+    pool_key = service._get_tipi_connection_pool_key()
+    TipiService._tipi_connection_pools = {pool_key: [failing_conn]}
 
     await service.close()
 
-    assert TipiService._pool == {}
+    assert TipiService._tipi_connection_pools == {}
     assert failing_conn.closed is True
 
 
@@ -184,10 +220,10 @@ async def test_connection_pool_is_scoped_by_resolved_db_path(monkeypatch, tmp_pa
     assert first_service.db_path == first_path.resolve()
     assert second_service.db_path == second_path.resolve()
 
-    first_conn = await first_service._get_connection()
-    await first_service._release_connection(first_conn)
+    first_conn = await first_service._acquire_tipi_connection()
+    await first_service._release_tipi_connection(first_conn)
 
-    second_conn = await second_service._get_connection()
+    second_conn = await second_service._acquire_tipi_connection()
 
     assert second_conn is not first_conn
     assert second_conn.path == second_path.resolve()
@@ -200,16 +236,49 @@ async def test_close_all_pools_closes_connections_across_paths(tmp_path):
     second_service = TipiService(db_path=tmp_path / "tipi-b.db")
     first_conn = _FakeConn()
     second_conn = _FakeConn()
-    TipiService._pool = {
-        first_service.db_path: [first_conn],
-        second_service.db_path: [second_conn],
+    current_loop_id = id(asyncio.get_running_loop())
+    TipiService._tipi_connection_pools = {
+        (first_service.db_path, current_loop_id): [first_conn],
+        (second_service.db_path, current_loop_id): [second_conn],
     }
 
     await TipiService.close_all_pools()
 
-    assert TipiService._pool == {}
+    assert TipiService._tipi_connection_pools == {}
     assert first_conn.closed is True
     assert second_conn.closed is True
+
+
+@pytest.mark.asyncio
+async def test_close_all_pools_warns_about_other_loop_pools(tmp_path, monkeypatch):
+    current_conn = _FakeConn()
+    leftover_conn = _FakeConn()
+    current_loop_id = id(asyncio.get_running_loop())
+    other_loop_id = current_loop_id + 1
+    TipiService._tipi_connection_pools = {
+        (tmp_path / "current.db", current_loop_id): [current_conn],
+        (tmp_path / "leftover.db", other_loop_id): [leftover_conn],
+    }
+    warnings: list[tuple[str, object]] = []
+
+    def _capture_warning(message: str, payload: object) -> None:
+        warnings.append((message, payload))
+
+    monkeypatch.setattr(tipi_module.logger, "warning", _capture_warning)
+
+    await TipiService.close_all_pools()
+
+    assert current_conn.closed is True
+    assert leftover_conn.closed is False
+    assert list(TipiService._tipi_connection_pools) == [
+        (tmp_path / "leftover.db", other_loop_id)
+    ]
+    assert warnings == [
+        (
+            "TIPI connection pools for other event loops were left open: %s",
+            {other_loop_id: 1},
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -229,7 +298,7 @@ async def test_check_connection_returns_error_when_query_fails(tmp_path, monkeyp
     async def _boom():
         raise RuntimeError("db broken")
 
-    monkeypatch.setattr(service, "_get_connection", _boom)
+    monkeypatch.setattr(service, "_acquire_tipi_connection", _boom)
     payload = await service.check_connection()
 
     assert payload["ok"] is False
@@ -237,36 +306,33 @@ async def test_check_connection_returns_error_when_query_fails(tmp_path, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_check_connection_uses_select_1_and_reuses_cached_stats(
+async def test_check_connection_returns_error_when_sqlite_driver_fails(
     tmp_path, monkeypatch
 ):
     db_file = tmp_path / "tipi.db"
     db_file.write_text("x", encoding="utf-8")
     service = TipiService(db_path=db_file)
-    conn = _FakeConn(scripted_rows=[[(1,)], [(7,)], [(11,)], [(1,)]])
-    time_points = iter([100.0, 130.0])
 
-    async def _fake_get_connection():
-        return conn
+    async def _boom():
+        raise sqlite3.OperationalError("driver broken")
 
-    async def _fake_release(_conn):
-        return None
+    monkeypatch.setattr(service, "_acquire_tipi_connection", _boom)
+    payload = await service.check_connection()
 
-    monkeypatch.setattr(service, "_get_connection", _fake_get_connection)
-    monkeypatch.setattr(service, "_release_connection", _fake_release)
-    monkeypatch.setattr(tipi_module.time, "time", lambda: next(time_points))
+    assert payload["ok"] is False
+    assert "driver broken" in payload["error"]
 
-    first = await service.check_connection()
-    second = await service.check_connection()
 
-    assert first == {"ok": True, "chapters": 7, "positions": 11}
-    assert second == first
-    assert [query for query, _params in conn.executed] == [
-        "SELECT 1",
-        "SELECT COUNT(*) FROM tipi_chapters",
-        "SELECT COUNT(*) FROM tipi_positions",
-        "SELECT 1",
-    ]
+@pytest.mark.asyncio
+async def test_check_connection_repository_mode_returns_counts_and_metadata():
+    service = TipiService(repository=_FakeHealthRepo())
+
+    payload = await service.check_connection()
+
+    assert payload["status"] == "online"
+    assert payload["chapters"] == 12
+    assert payload["positions"] == 345
+    assert payload["metadata"]["tipi_updated_at"] == "2026-03-25T10:00:00+00:00"
 
 
 @pytest.mark.asyncio
@@ -274,8 +340,8 @@ async def test_get_table_columns_uses_cache(monkeypatch):
     service = TipiService()
     conn = _FakeConn(scripted_rows=[[{"name": "ncm_sort"}, {"name": "ncm"}]])
 
-    first = await service._get_table_columns(conn, "tipi_positions")
-    second = await service._get_table_columns(conn, "tipi_positions")
+    first = await service._load_tipi_table_columns(conn, "tipi_positions")
+    second = await service._load_tipi_table_columns(conn, "tipi_positions")
 
     assert first == {"ncm_sort", "ncm"}
     assert second == {"ncm_sort", "ncm"}
@@ -288,7 +354,7 @@ async def test_get_table_columns_rejects_unknown_table():
     conn = _FakeConn()
 
     with pytest.raises(ValueError, match="Tabela não permitida"):
-        await service._get_table_columns(conn, "users")
+        await service._load_tipi_table_columns(conn, "users")
 
 
 @pytest.mark.asyncio
@@ -338,8 +404,8 @@ async def test_get_chapter_positions_sqlite_mode_evicts_cache(monkeypatch):
     async def _fake_release(_conn):
         return None
 
-    monkeypatch.setattr(service, "_get_connection", _fake_get_connection)
-    monkeypatch.setattr(service, "_release_connection", _fake_release)
+    monkeypatch.setattr(service, "_acquire_tipi_connection", _fake_get_connection)
+    monkeypatch.setattr(service, "_release_tipi_connection", _fake_release)
     monkeypatch.setattr(tipi_module.CacheConfig, "TIPI_CHAPTER_CACHE_SIZE", 0)
 
     rows = await service._get_chapter_positions("85")
@@ -385,7 +451,7 @@ async def test_search_by_code_handles_multi_part_merge_with_same_chapter(monkeyp
     monkeypatch.setattr(service, "_get_family_positions", _fake_family)
     monkeypatch.setattr(service, "_get_chapter_positions", _fake_chapter)
 
-    payload = await service.search_by_code("85,8517", view_mode="family")
+    payload = await service.searchTipiByNcmCode("85,8517", view_mode="family")
 
     cap = payload["resultados"]["85"]
     assert payload["total"] == 2
@@ -411,7 +477,7 @@ async def test_search_by_code_cache_returns_isolated_payloads(monkeypatch):
 
     monkeypatch.setattr(service, "_get_chapter_positions", _fake_chapter_positions)
 
-    first = await service.search_by_code("85")
+    first = await service.searchTipiByNcmCode("85")
     first["resultados"]["85"]["posicoes"].append(
         {
             "ncm": "85.99",
@@ -423,7 +489,7 @@ async def test_search_by_code_cache_returns_isolated_payloads(monkeypatch):
         }
     )
 
-    second = await service.search_by_code("85")
+    second = await service.searchTipiByNcmCode("85")
     assert [item["ncm"] for item in second["resultados"]["85"]["posicoes"]] == ["85.17"]
 
     second["resultados"]["85"]["posicoes"].append(
@@ -437,7 +503,7 @@ async def test_search_by_code_cache_returns_isolated_payloads(monkeypatch):
         }
     )
 
-    third = await service.search_by_code("85")
+    third = await service.searchTipiByNcmCode("85")
     assert [item["ncm"] for item in third["resultados"]["85"]["posicoes"]] == ["85.17"]
 
 
@@ -502,9 +568,11 @@ async def test_search_multiple_codes_deduplicates_positions_and_totals(monkeypat
             "total_capitulos": 1,
         }
 
-    monkeypatch.setattr(service, "search_by_code", _fake_search_by_code)
+    monkeypatch.setattr(service, "searchTipiByNcmCode", _fake_search_by_code)
 
-    payload = await service._search_multiple_codes("85,8517", "family", ["85", "8517"])
+    payload = await service._search_tipi_multi_code_parts(
+        "85,8517", "family", ["85", "8517"]
+    )
 
     assert payload["total"] == 2
     assert [item["ncm"] for item in payload["resultados"]["85"]["posicoes"]] == [
@@ -548,9 +616,11 @@ async def test_search_multiple_codes_prefers_more_specific_posicao_alvo(monkeypa
             "total_capitulos": 1,
         }
 
-    monkeypatch.setattr(service, "search_by_code", _fake_search_by_code)
+    monkeypatch.setattr(service, "searchTipiByNcmCode", _fake_search_by_code)
 
-    payload = await service._search_multiple_codes("85,8517", "family", ["85", "8517"])
+    payload = await service._search_tipi_multi_code_parts(
+        "85,8517", "family", ["85", "8517"]
+    )
 
     assert payload["resultados"]["85"]["posicao_alvo"] == "85.17"
 
@@ -577,10 +647,12 @@ async def test_search_by_code_caches_multi_code_payload(monkeypatch):
             "total_capitulos": 1,
         }
 
-    monkeypatch.setattr(service, "_search_multiple_codes", _fake_search_multiple_codes)
+    monkeypatch.setattr(
+        service, "_search_tipi_multi_code_parts", _fake_search_multiple_codes
+    )
 
-    first = await service.search_by_code("85,8517", view_mode="family")
-    second = await service.search_by_code("85,8517", view_mode="family")
+    first = await service.searchTipiByNcmCode("85,8517", view_mode="family")
+    second = await service.searchTipiByNcmCode("85,8517", view_mode="family")
 
     assert calls == 1
     assert first == second
@@ -617,11 +689,13 @@ async def test_search_by_code_deduplicates_multi_code_parts(monkeypatch):
         format_calls.append(value)
         return "85.17"
 
-    monkeypatch.setattr(service, "_search_multiple_codes", _fake_search_multiple_codes)
+    monkeypatch.setattr(
+        service, "_search_tipi_multi_code_parts", _fake_search_multiple_codes
+    )
     monkeypatch.setattr(service, "_get_family_positions", _fake_family_positions)
     monkeypatch.setattr(tipi_module.ncm_utils, "format_ncm_tipi", _fake_format_ncm_tipi)
 
-    payload = await service.search_by_code("85.17,8517", view_mode="family")
+    payload = await service.searchTipiByNcmCode("85.17,8517", view_mode="family")
 
     assert payload["query"] == "85.17,8517"
     assert payload["total"] == 1
@@ -649,9 +723,11 @@ async def test_search_by_code_caps_multi_code_parts(monkeypatch):
             "total_capitulos": 0,
         }
 
-    monkeypatch.setattr(service, "_search_multiple_codes", _fake_search_multiple_codes)
+    monkeypatch.setattr(
+        service, "_search_tipi_multi_code_parts", _fake_search_multiple_codes
+    )
 
-    payload = await service.search_by_code(
+    payload = await service.searchTipiByNcmCode(
         ",".join(f"{number:02d}" for number in range(1, 31)),
         view_mode="family",
     )
@@ -665,7 +741,7 @@ async def test_search_by_code_returns_empty_when_query_has_no_digits(monkeypatch
     monkeypatch.setattr(tipi_module.ncm_utils, "format_ncm_tipi", lambda _value: "")
     monkeypatch.setattr(tipi_module.ncm_utils, "clean_ncm", lambda _value: "")
 
-    payload = await service.search_by_code("abc")
+    payload = await service.searchTipiByNcmCode("abc")
 
     assert payload["total"] == 0
     assert payload["resultados"] == {}
@@ -689,7 +765,7 @@ async def test_search_by_code_evicts_code_cache_when_limit_is_zero(monkeypatch):
     monkeypatch.setattr(service, "_get_chapter_positions", _fake_chapter_positions)
     monkeypatch.setattr(tipi_module.CacheConfig, "TIPI_RESULT_CACHE_SIZE", 0)
 
-    payload = await service.search_by_code("85")
+    payload = await service.searchTipiByNcmCode("85")
     assert payload["total"] == 1
     assert service._code_search_cache == {}
 
@@ -713,17 +789,17 @@ async def test_search_by_code_cache_respects_exact_capacity(monkeypatch):
     monkeypatch.setattr(service, "_get_chapter_positions", _fake_chapter_positions)
     monkeypatch.setattr(tipi_module.CacheConfig, "TIPI_RESULT_CACHE_SIZE", 1)
 
-    await service.search_by_code("85")
+    await service.searchTipiByNcmCode("85")
     assert list(service._code_search_cache.keys()) == [("85", "family")]
 
-    await service.search_by_code("84")
+    await service.searchTipiByNcmCode("84")
     assert list(service._code_search_cache.keys()) == [("84", "family")]
 
 
 @pytest.mark.asyncio
 async def test_search_text_repository_mode_returns_repo_payload():
     service = TipiService(repository=_FakeRepo())
-    payload = await service.search_text("telefone", limit=10)
+    payload = await service.searchTipiByTextQuery("telefone", limit=10)
     assert payload["type"] == "text"
     assert payload["total"] == 1
     assert payload["results"][0]["ncm"] == "85.17"
@@ -765,10 +841,10 @@ async def test_search_text_sqlite_mode_runs_and_query_fallback(monkeypatch):
     async def _fake_release(_conn):
         return None
 
-    monkeypatch.setattr(service, "_get_connection", _fake_get_connection)
-    monkeypatch.setattr(service, "_release_connection", _fake_release)
+    monkeypatch.setattr(service, "_acquire_tipi_connection", _fake_get_connection)
+    monkeypatch.setattr(service, "_release_tipi_connection", _fake_release)
 
-    payload = await service.search_text("motor bomba", limit=10)
+    payload = await service.searchTipiByTextQuery("motor bomba", limit=10)
 
     assert payload["total"] == 2
     assert payload["results"][0]["ncm"] == "84.13"
@@ -788,10 +864,10 @@ async def test_search_text_sqlite_mode_escapes_quotes_in_match_queries(monkeypat
         await asyncio.sleep(0)
         return None
 
-    monkeypatch.setattr(service, "_get_connection", _fake_get_connection)
-    monkeypatch.setattr(service, "_release_connection", _fake_release)
+    monkeypatch.setattr(service, "_acquire_tipi_connection", _fake_get_connection)
+    monkeypatch.setattr(service, "_release_tipi_connection", _fake_release)
 
-    payload = await service.search_text('motor "bomba"', limit=10)
+    payload = await service.searchTipiByTextQuery('motor "bomba"', limit=10)
 
     assert payload["total"] == 0
     assert len(conn.executed) == 2
@@ -807,7 +883,7 @@ async def test_search_text_sqlite_mode_escapes_quotes_in_match_queries(monkeypat
 @pytest.mark.asyncio
 async def test_get_all_chapters_repository_and_sqlite_modes(monkeypatch):
     repo_service = TipiService(repository=_FakeRepo())
-    repo_payload = await repo_service.get_all_chapters()
+    repo_payload = await repo_service.fetchTipiChapterCatalog()
     assert repo_payload == [{"codigo": "85", "titulo": "Capítulo 85", "secao": "XVI"}]
 
     sqlite_service = TipiService()
@@ -821,10 +897,12 @@ async def test_get_all_chapters_repository_and_sqlite_modes(monkeypatch):
     async def _fake_release(_conn):
         return None
 
-    monkeypatch.setattr(sqlite_service, "_get_connection", _fake_get_connection)
-    monkeypatch.setattr(sqlite_service, "_release_connection", _fake_release)
+    monkeypatch.setattr(
+        sqlite_service, "_acquire_tipi_connection", _fake_get_connection
+    )
+    monkeypatch.setattr(sqlite_service, "_release_tipi_connection", _fake_release)
 
-    sqlite_payload = await sqlite_service.get_all_chapters()
+    sqlite_payload = await sqlite_service.fetchTipiChapterCatalog()
     assert sqlite_payload == [{"codigo": "01", "titulo": "Animais", "secao": "I"}]
 
 
@@ -836,7 +914,7 @@ async def test_get_internal_cache_metrics_reports_snapshots():
     service._code_search_cache_metrics.record_hit()
     service._chapter_positions_cache_metrics.record_miss()
 
-    payload = await service.get_internal_cache_metrics()
+    payload = await service.snapshotTipiInternalCacheMetrics()
 
     assert payload["code_search_cache"]["current_size"] == 1
     assert payload["code_search_cache"]["hits"] >= 1

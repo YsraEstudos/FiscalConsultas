@@ -1,7 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { canAccessRestrictedUi } from '../utils/featureAccess';
 import { useIsAdmin } from '../hooks/useIsAdmin';
+import type { DocType } from '../hooks/useTabs';
 
 // Lazy load modals
 const SettingsModal = lazy(() => import('./SettingsModal').then(module => ({ default: module.SettingsModal })));
@@ -9,11 +9,8 @@ const TutorialModal = lazy(() => import('./TutorialModal').then(module => ({ def
 const StatsModal = lazy(() => import('./StatsModal').then(module => ({ default: module.StatsModal })));
 const AIChat = lazy(() => import('./AIChat').then(module => ({ default: module.AIChat })));
 const ComparatorModal = lazy(() => import('./ComparatorModal').then(module => ({ default: module.ComparatorModal })));
-const ServicesModal = lazy(() => import('./ServicesModal').then(module => ({ default: module.ServicesModal })));
 const CrossNavContextMenu = lazy(() => import('./CrossNavContextMenu').then(module => ({ default: module.CrossNavContextMenu })));
 const AdminCommentModal = lazy(() => import('./AdminCommentModal').then(module => ({ default: module.AdminCommentModal })));
-
-type DocType = 'nesh' | 'tipi';
 
 interface ModalManagerProps {
     modals: {
@@ -21,7 +18,6 @@ interface ModalManagerProps {
         tutorial: boolean;
         stats: boolean;
         comparator: boolean;
-        services: boolean;
         moderate: boolean;
     };
     onClose: {
@@ -29,12 +25,11 @@ interface ModalManagerProps {
         tutorial: () => void;
         stats: () => void;
         comparator: () => void;
-        services: () => void;
         moderate: () => void;
     };
     currentDoc: DocType;
-    onOpenInDoc: (doc: DocType, ncm: string) => void;
-    onOpenInNewTab: (doc: DocType, ncm: string) => void;
+    onOpenInDoc: (doc: DocType, query: string) => void;
+    onOpenInNewTab: (doc: DocType, query: string) => void;
 }
 
 export const ModalManager: React.FC<ModalManagerProps> = ({
@@ -44,9 +39,8 @@ export const ModalManager: React.FC<ModalManagerProps> = ({
     onOpenInDoc,
     onOpenInNewTab
 }) => {
-    const { isSignedIn, userEmail } = useAuth();
+    const { isSignedIn, canUseAiChat } = useAuth();
     const isAdmin = useIsAdmin();
-    const canUseRestrictedUi = canAccessRestrictedUi(userEmail);
 
     return (
         <Suspense fallback={null}>
@@ -58,14 +52,7 @@ export const ModalManager: React.FC<ModalManagerProps> = ({
                 <ComparatorModal
                     isOpen
                     onClose={onClose.comparator}
-                    defaultDoc={currentDoc}
-                />
-            )}
-
-            {modals.services && (
-                <ServicesModal
-                    isOpen
-                    onClose={onClose.services}
+                    defaultDoc={currentDoc === 'tipi' ? 'tipi' : 'nesh'}
                 />
             )}
 
@@ -75,7 +62,7 @@ export const ModalManager: React.FC<ModalManagerProps> = ({
                 onOpenInNewTab={onOpenInNewTab}
             />
 
-            {isSignedIn && canUseRestrictedUi && <AIChat />}
+            {isSignedIn && canUseAiChat && <AIChat />}
 
             {isAdmin && modals.moderate && (
                 <AdminCommentModal isOpen onClose={onClose.moderate} />

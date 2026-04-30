@@ -15,8 +15,13 @@ import {
     getMyContributions,
     deleteMyAccount,
 } from '../services/api';
+import type {
+    MyContributionHistoryApiResponse,
+    MyProfileApiResponse,
+    UpdateMyProfileRequest,
+    UserContributionListItem,
+} from '../types/api.types';
 import styles from './UserProfilePage.module.css';
-import { canAccessRestrictedUi } from '../utils/featureAccess';
 import { sanitizeImageUrl } from '../utils/contentSecurity';
 
 interface UserProfilePageProps {
@@ -25,31 +30,6 @@ interface UserProfilePageProps {
 }
 
 type TabKey = 'profile' | 'contributions' | 'sessions' | 'organization';
-
-interface ProfileData {
-    user_id: string;
-    email: string;
-    full_name: string | null;
-    bio: string | null;
-    image_url: string | null;
-    tenant_id: string;
-    org_name: string | null;
-    is_active: boolean;
-    comment_count: number;
-    pending_comment_count: number;
-    approved_comment_count: number;
-}
-
-interface ContributionItem {
-    id: number;
-    type: string;
-    anchor_key: string;
-    selected_text: string;
-    body: string;
-    status: string;
-    created_at: string;
-    updated_at: string;
-}
 
 // ─── Module-level helpers ─────────────────────────────────────────────────
 
@@ -91,7 +71,7 @@ function formatDate(iso: string): string {
 // ─── ContributionsSection ────────────────────────────────────────────────
 
 interface ContributionsSectionProps {
-    contributions: ContributionItem[];
+    contributions: UserContributionListItem[];
     contribLoading: boolean;
     contribSearch: string;
     onSearchChange: (value: string) => void;
@@ -167,20 +147,19 @@ function ContributionsSection({
 // ─── UserProfilePage ─────────────────────────────────────────────────────
 
 export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePageProps>) {
-    const { userName, userEmail, userImageUrl } = useAuth();
+    const { userName, userEmail, userImageUrl, canUseRestrictedUi } = useAuth();
     const isAdmin = useIsAdmin();
-    const canUseRestrictedUi = canAccessRestrictedUi(userEmail);
     const safeUserImageUrl = sanitizeImageUrl(userImageUrl);
 
     const [activeTab, setActiveTab] = useState<TabKey>('profile');
-    const [profile, setProfile] = useState<ProfileData | null>(null);
+    const [profile, setProfile] = useState<MyProfileApiResponse | null>(null);
     const [bio, setBio] = useState('');
     const [bioSaving, setBioSaving] = useState(false);
     const [bioSaved, setBioSaved] = useState(false);
     const [loading, setLoading] = useState(true);
 
     // Contributions state
-    const [contributions, setContributions] = useState<ContributionItem[]>([]);
+    const [contributions, setContributions] = useState<UserContributionListItem[]>([]);
     const [contribTotal, setContribTotal] = useState(0);
     const [contribPage, setContribPage] = useState(1);
     const [contribHasNext, setContribHasNext] = useState(false);
@@ -238,7 +217,7 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
         if (!isOpen) return;
         setLoading(true);
         getMyProfile()
-            .then((data) => {
+            .then((data: MyProfileApiResponse) => {
                 setProfile(data);
                 setBio(data.bio || '');
             })
@@ -252,7 +231,11 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
         const requestId = latestContribReqRef.current;
         setContribLoading(true);
         try {
-            const data = await getMyContributions({ page, page_size: 15, search: search || undefined });
+            const data: MyContributionHistoryApiResponse = await getMyContributions({
+                page,
+                page_size: 15,
+                search: search || undefined,
+            });
             if (requestId === latestContribReqRef.current) {
                 setContributions(data.items);
                 setContribTotal(data.total);
@@ -291,7 +274,8 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
         setBioSaving(true);
         setBioSaved(false);
         try {
-            const updated = await updateMyProfile({ bio: bio || null });
+            const payload: UpdateMyProfileRequest = { bio: bio || null };
+            const updated = await updateMyProfile(payload);
             setProfile(updated);
             setBioSaved(true);
             setTimeout(() => setBioSaved(false), 3000);
@@ -321,9 +305,9 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
         }
     };
 
-    const tabs: { key: TabKey; label: string; icon: string; adminOnly?: boolean; restrictedEmailOnly?: boolean }[] = [
+    const tabs: { key: TabKey; label: string; icon: string; adminOnly?: boolean; restrictedUiOnly?: boolean }[] = [
         { key: 'profile', label: 'Perfil', icon: '👤' },
-        { key: 'contributions', label: 'Contribuições', icon: '💬', restrictedEmailOnly: true },
+        { key: 'contributions', label: 'Contribuições', icon: '💬', restrictedUiOnly: true },
         { key: 'sessions', label: 'Sessões', icon: '🔐' },
         { key: 'organization', label: 'Organização', icon: '🏢', adminOnly: true },
     ];
@@ -352,7 +336,7 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
                 {/* Tabs */}
                 <div className={styles.tabs}>
                     {tabs
-                        .filter(t => (!t.adminOnly || isAdmin) && (!t.restrictedEmailOnly || canUseRestrictedUi))
+                        .filter(t => (!t.adminOnly || isAdmin) && (!t.restrictedUiOnly || canUseRestrictedUi))
                         .map(t => (
                             <button
                                 key={t.key}

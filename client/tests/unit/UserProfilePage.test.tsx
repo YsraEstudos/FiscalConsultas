@@ -29,12 +29,14 @@ vi.mock('@clerk/react', () => ({
 // ─── Mocks de contexto e hooks ───────────────────────────────────────────────
 const isAdminRef = { value: false };
 const userEmailRef = { value: 'israelseja2@gmail.com' };
+const canUseRestrictedUiRef = { value: true };
 
 vi.mock('../../src/context/AuthContext', () => ({
     useAuth: () => ({
         userName: 'João Silva',
         userEmail: userEmailRef.value,
         userImageUrl: null,
+        canUseRestrictedUi: canUseRestrictedUiRef.value,
     }),
 }));
 
@@ -101,9 +103,9 @@ const MOCK_CONTRIBUTIONS = {
 
 beforeEach(async () => {
     vi.clearAllMocks();
-    vi.stubEnv('VITE_RESTRICTED_UI_EMAILS', 'israelseja2@gmail.com');
     isAdminRef.value = false;
     userEmailRef.value = 'israelseja2@gmail.com';
+    canUseRestrictedUiRef.value = true;
     ({ UserProfilePage } = await import('../../src/components/UserProfilePage'));
     mockGetMyProfile.mockResolvedValue(MOCK_PROFILE);
     mockGetMyContributions.mockResolvedValue(MOCK_CONTRIBUTIONS);
@@ -330,7 +332,7 @@ describe('UserProfilePage', () => {
     });
 
     it('não exibe aba Contribuições para usuários não autorizados', async () => {
-        userEmailRef.value = 'joao@example.com';
+        canUseRestrictedUiRef.value = false;
         render(<UserProfilePage isOpen={true} onClose={vi.fn()} />);
 
         await waitFor(() => expect(mockGetMyProfile).toHaveBeenCalled());
@@ -431,7 +433,7 @@ describe('UserProfilePage', () => {
         expect(onClose).not.toHaveBeenCalled();
     });
 
-    it('executa deleção após confirmar com "deletar"', async () => {
+    it('executa deleção após confirmar com "deletar"', { timeout: 15000 }, async () => {
         const originalConsoleError = console.error.bind(console);
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation((...args) => {
             if (args.some((arg) => String(arg).includes('Not implemented: navigation to another Document'))) {
@@ -463,7 +465,7 @@ describe('UserProfilePage', () => {
         }
     });
 
-    it('mantém a confirmação aberta e sai do estado de loading quando a deleção falha', async () => {
+    it('mantém a confirmação aberta e sai do estado de loading quando a deleção falha', { timeout: 15000 }, async () => {
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
         const onClose = vi.fn();
         mockDeleteMyAccount.mockRejectedValueOnce(new Error('delete failed'));

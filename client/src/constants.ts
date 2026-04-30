@@ -48,6 +48,9 @@ export const STORAGE_KEYS = {
   ADMIN_MODE: "nesh_admin_mode",
   TIPI_VIEW_MODE: "nesh_tipi_view_mode",
   SIDEBAR_POSITION: "nesh_sidebar_position",
+  OPEN_NEW_TAB: "nesh_open_new_tab",
+  NBS_PREFIX_AUTO_EXPAND: "nesh_nbs_prefix_auto_expand",
+  NBS_CHAPTER_NOTES_NEW_TAB: "nesh_nbs_chapter_notes_new_tab",
 } as const;
 
 // === Default Settings ===
@@ -59,4 +62,7 @@ export const DEFAULTS = {
   ADMIN_MODE: true,
   TIPI_VIEW_MODE: VIEW_MODE.CHAPTER,
   SIDEBAR_POSITION: SIDEBAR_POSITION.LEFT,
+  OPEN_NEW_TAB: false,
+  NBS_PREFIX_AUTO_EXPAND: true,
+  NBS_CHAPTER_NOTES_NEW_TAB: false,
 } as const;

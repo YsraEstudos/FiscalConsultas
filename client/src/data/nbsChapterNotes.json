@@ -1,0 +1,1240 @@
+{
+  "01": {
+    "chapter": "01",
+    "title": "Serviços de construção",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "A posição 1.0101 não inclui os serviços relacionados com a c onstrução de estruturas em concreto para edifícios, os quais se classificam na subposição 1.0105.40.",
+        "subitems": []
+      },
+      {
+        "label": "2",
+        "text": "As posições 1.0101 e 1.0102 incluem, além dos serviços de construção, os serviços de reparo.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "A posição 1.0101 inclui os serviços de incorporação de imóveis.",
+        "subitems": []
+      },
+      {
+        "label": "4",
+        "text": "Na posição 1.0102, a expressão “autoestradas elevadas” diz respeito aos viadutos e demais obras de arte de engenharia, que servem, por exemplo, para transpor outr as vias (rodovias ou ferrovias), vales, rios e depressões nos terrenos, dentre outros obstáculos à circulação de veículos.",
+        "subitems": []
+      },
+      {
+        "label": "5",
+        "text": "Na subposição 1.0105.70, os “serviços de andaimes” incluem os serviços de montagem e desmontagem dos mesmos.",
+        "subitems": []
+      }
+    ]
+  },
+  "02": {
+    "chapter": "02",
+    "title": "Serviços de intermediação na distribuição de mercadorias; serviços de despacho aduaneiro; comércio",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "Os “serviços de intermediação na distribuição de mercador ias” abrangem, exclusivamente, as atividades de intermediação de mercadorias de terceiros no comé rcio atacadista e varejista e os serviços prestados por agentes comissionados. Assim, não estão incluídas na Nomenclatura Brasileira de Serviços (NBS) as compras e vendas dos bens objeto dessa intermediação.",
+        "subitems": []
+      },
+      {
+        "label": "2",
+        "text": "O comércio, tanto o atacadista quanto o varejista, são tomados, exclusivamente, no âmbito da presente Nomenclatura como uma operação mista por envolver um conj unto de serviços com entrega de mercadorias, cuja propriedade é daquele que pratica essas modalidades comerciais.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "Os “serviços de despacho aduaneiro” são aqueles relacionados com o despacho de bens ou de mercadorias, inclusive bagagem de viajante, na importação ou na exportação, transportados por qualquer via.",
+        "subitems": []
+      },
+      {
+        "label": "4",
+        "text": "No contexto da posição 1.0205, quanto às operações realizadas sob a jurisdição e de acordo com a normativa brasileira, a comercialização da mercadoria energia elétrica, classificada como mercadoria na Nomenclatura Comum do Mercosul (NCM), só pode ser efetuada no âmbito da Câmara de Comercialização de Energia Elétrica (CCEE).",
+        "subitems": []
+      }
+    ]
+  },
+  "03": {
+    "chapter": "03",
+    "title": "Fornecimento de alimentação e bebidas e serviços de hospedagem",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "O fornecimento de alimentação e bebidas, embora envolva a prestação de serviços e a entrega de mercadoria, configurando dessa maneira uma operação mista, classifica-se no presente capítulo.",
+        "subitems": []
+      },
+      {
+        "label": "2",
+        "text": "“Alimentação” engloba o fornecimento de comida e refeiçõe s, com ou sem a oferta de bebidas. O termo “refeição” faz referência à porção de alimentos ger almente consumidos em horários regulares, como café da manhã, almoço e jantar.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "O fornecimento de bebidas da posição 1.0302 restringe-se à oferta de bebidas.",
+        "subitems": []
+      },
+      {
+        "label": "4",
+        "text": "“Hospedagem” consiste no acolhimento de pessoas que se encontram afastadas de suas residências com o propósito de trabalho, estudo ou lazer, mediante oferta de a comodações com os serviços necessários ao bem-estar do indivíduo, tais como instalações sanitárias. Pode ser entendido por aquilo que se convencionou chamar de hotelaria, assim como a oferta de outros tipos de estalagem, por períodos certos de tempo.",
+        "subitems": []
+      },
+      {
+        "label": "5",
+        "text": "Os serviços das subposições 1.0301.1 e 1.0301.2 ocorrem mesmo quando prestados em trens ( dining cars ) ou a bordo de navios, não se confundindo com os serviços prestados mediante contrato com companhia de transporte (comissaria ou catering ) da subposição 1.0301.32.",
+        "subitems": []
+      }
+    ]
+  },
+  "04": {
+    "chapter": "04",
+    "title": "Serviços de transporte de passageiros",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "No âmbito deste Capítulo, entende-se por:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Local: a região que compreende as áreas urbana e rural de um município e, ainda, a região metropolitana."
+          },
+          {
+            "label": "b",
+            "text": "Área metropolitana ou região metropolitana: o centro populaciona l resultante da reunião de dois ou mais municípios integrados tanto do ponto de vista econômico quanto político e cultural."
+          },
+          {
+            "label": "c",
+            "text": "Ônibus: o veículo automotor de transporte coletivo com capacidade pa ra mais de vinte passageiros sentados, ainda que, em virtude de adaptações com vistas à ma ior comodidade destes, possa transportar um número menor de passageiros."
+          },
+          {
+            "label": "d",
+            "text": "Serviço de transporte integrado: aquele que faz uso de mais de um veículo, em uma ou mais modalidades de transporte."
+          },
+          {
+            "label": "e",
+            "text": "Serviços de transporte aquaviário de passageiros: a modalida de de transporte feita por vias marítimas, lacustres ou fluviais."
+          },
+          {
+            "label": "f",
+            "text": "Passeios turísticos ( sightseeing ): os passeios de curta distância em áreas urbanas ou rurais, inclusive na área metropolitana, percorrendo locais que despertem interesse por seu valor cultural, importância histórica, beleza natural ou artificial, características únicas, raras ou misteriosas, e/ou percorrendo, ainda, locais para recreação ou diversão."
+          },
+          {
+            "label": "g",
+            "text": "Navegação interior: o transporte aquaviário feito em áreas abrigadas ou parcialmente abrigadas de mau tempo, onde as tempestades que ocorrem em mar aberto não afet am ou afetam muito pouco, como baías, enseadas, lagoas, rios, lagos, canais, etc., em percurso nacional ou internacional."
+          },
+          {
+            "label": "h",
+            "text": "Navegação costeira: o transporte aquaviário feito em regi ões em mar aberto onde ainda é possível avistar a costa, limitadas ao máximo de 20 (vinte) milhas náuticas da costa e, em princípio, não é necessária a utilização de instrumentos de orientação, pois navega-se observando a terra."
+          },
+          {
+            "label": "i",
+            "text": "Navegação transoceânica: o transporte aquaviário realizad o entre portos nacionais e estrangeiros, fora dos limites de visibilidade da costa e sem outros limite s estabelecidos. Requer a utilização de instrumentos de localização e orientação analógicos ou digitais."
+          },
+          {
+            "label": "j",
+            "text": "Fretamento: o serviço de transporte prestado por um propriet ário (fretador) de veículo a terceiro (afretador), para realizar uma ou mais viagens preestabelecidas, reservando-se ao fretador o controle sobre a tripulação e a condução técnica do veículo envolvido. O contr ato por viagem distingue-se do contrato por tempo (posição 1.0405) e da locação de veículo com operador (posição 1.0404)."
+          },
+          {
+            "label": "k",
+            "text": "Fretamento contínuo: o serviço de transporte prestado por um propri etário de veículo a pessoas jurídicas para o transporte de seus empregados, a instituições de ensino ou agremiações estudantis para o transporte de seus alunos, professores ou associados ou a entidades governamentais e outras instituições para o transporte de seus servidores e colaboradores , com frequência e horários estabelecidos em contrato, por prazo determinado, reservando-se ao fretador o controle sobre o operador e a condução técnica do veículo."
+          },
+          {
+            "label": "l",
+            "text": "Fretamento eventual ou turístico: o serviço prestado por um p roprietário de veículo a terceiro, este podendo ser pessoa ou grupo de pessoas, com caráter ocasional e para fins turísticos, em circuito fechado, por viagem, reservando-se ao fretador o controle sobre a tripulação/operador e a condução técnica do veículo."
+          },
+          {
+            "label": "m",
+            "text": "Locação de veículos de transporte de passageiros com operador: a operação em que o veículo destinado ao transporte de passageiros é colocado à disposição do loca tário durante determinado período, sendo o locador remunerado de acordo com esse intervalo de te mpo. O locatário detém o controle do veículo e das atividades do operador."
+          },
+          {
+            "label": "n",
+            "text": "Contrato de afretamento por tempo ( time charter party – TCP ): contrato sui generis , que não se enquadra como serviço de transporte nem como locação e se carac teriza pela colocação de navio e seus serviços sob gestão náutica do fretador, ou seja, armado, eq uipado e em condição de navegabilidade, à disposição do afretador, para que este assuma a gestão comercial do espaço naval por tempo determinado, mediante retribuição financeira."
+          }
+        ]
+      },
+      {
+        "label": "2",
+        "text": "Os serviços de transporte de passageiros incluem o trans porte de bagagens e animais, dentre outros itens, quando transportados concomitantemente com seus proprietários.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "Excluem-se deste Capítulo as operações de:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "“Afretamento por tempo” de embarcações projetadas para o trans porte de cargas, que se classificam na posição 1.0506 (Capítulo 5)."
+          },
+          {
+            "label": "b",
+            "text": "“Afretamento a casco nu”, nos quais o afretador passa a ter a posse, o uso e o controle da embarcação, por tempo determinado, incluindo o direito de designar o comandante e a tripulação, que se classificam, na subposição 1.1101.15 (Capítulo 11)."
+          }
+        ]
+      }
+    ]
+  },
+  "05": {
+    "chapter": "05",
+    "title": "Serviços de transporte de cargas",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "No âmbito deste Capítulo, entende-se por:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Carga a granel: a carga não embalada, quase sempre homogênea , e que é carregada diretamente nos meios de transporte apropriados, sem embalagem e em grande s quantidades. Este tipo de carga tem três espécies: i) granel sólido, que consiste em sólido fragmentado ou grão vegetal, como carvão, sal, trigo em grão e minério de ferro; ii) granel líquido ou liquefeito, que inclui o petróleo e seus derivados, como a gasolina e o óleo diesel, além de álcool combust ível, óleo de soja e melaço, e os granéis liquefeitos, exceto o “gás liquefeito de petróleo” (GLP)."
+          },
+          {
+            "label": "b",
+            "text": "Cargas vivas: os animais vivos, vertebrados e invertebrados , os vegetais plantados, bem como os microrganismos."
+          },
+          {
+            "label": "c",
+            "text": "Cargas especiais: aquelas que, por seu formato, requisit os de segurança ou atendimento de parâmetros exigem medidas especiais para serem transportadas, tais como as cargas de grande porte – das quais são exemplos as grandes peças para unidades industria is ou para usinas de energia – e as cargas perigosas – entendidas como toda substância ou artigo enc ontrado na natureza ou produzido por qualquer processo que, por suas características físico-quími cas, representem risco à saúde das pessoas, à segurança pública ou ao meio ambiente."
+          },
+          {
+            "label": "d",
+            "text": "Carga geral não unitizada: a carga transportada solta, em que as mercadorias se apresentam avulsas e são embarcadas separadamente, como por exemplo, em embrulhos, fardos, pacotes, sacas, caixas ou tambores, contendo marca de identificação e em unidades contadas."
+          },
+          {
+            "label": "e",
+            "text": "Carga geral unitizada: aquela agrupada em volumes maiores , como se dá, por exemplo, nas cargas paletizadas, colocadas em bigboxes ou colocada em contêineres."
+          },
+          {
+            "label": "f",
+            "text": "Contêiner: uma estrutura, via de regra, no formato de ca ixa provida de portas, construída em aço carbono, embora também possa ser feita de alumínio, plástico ou fibra de vidro, dentre outros materiais, criada com o intuito de facilitar o transporte de mercadorias de pequeno tamanho."
+          },
+          {
+            "label": "g",
+            "text": "Produto perigoso: toda substância ou artigo encontrado na natur eza ou produzido por qualquer processo que, por suas características físico-químicas, re presente risco à saúde das pessoas, à segurança pública ou ao meio ambiente."
+          },
+          {
+            "label": "h",
+            "text": "Gás liquefeito de petróleo (GLP): os seguintes gases liquefeitos propano, butano, etileno, propileno, butileno, butadieno e demais gases previstos na subposição 271 1.1 da Nomenclatura Comum do Mercosul (NCM), exceto o gás natural (NCM 2711.11.00), e/ou as misturas dos mesmos."
+          },
+          {
+            "label": "i",
+            "text": "Navegação interior: o transporte aquaviário feito em á reas abrigadas ou parcialmente abrigadas de mau tempo, onde as tempestades que ocorrem em mar aberto não af etam ou afetam muito pouco, como baías, enseadas, lagoas, rios, lagos, canais, etc., em percurso nacional ou internacional."
+          },
+          {
+            "label": "j",
+            "text": "Navegação costeira: o transporte aquaviário feito em reg iões em mar aberto onde ainda é possível avistar a costa, limitadas ao máximo de 20 (vinte) mil has náuticas da costa e, em princípio, não é necessária a utilização de instrumentos de orientação, pois navega-se observando a terra."
+          },
+          {
+            "label": "k",
+            "text": "Navegação transoceânica: o transporte aquaviário realizado entre portos nacionais e estrangeiros, fora dos limites de visibilidade da costa e sem outros limites estabelecidos. Requer a utilização de instrumentos de localização e orientação analógicos ou digitais."
+          },
+          {
+            "label": "l",
+            "text": "Transporte multimodal de cargas: aquele que, regido por um único contrato, utiliza duas ou mais modalidades de transporte, desde a origem até o destino, e é executado sob a responsabilidade de um único operador de transporte multimodal."
+          },
+          {
+            "label": "m",
+            "text": "Locação de veículos de transporte de cargas com operador: a operação em que o veículo destinado ao transporte de cargas é colocado à disposição do locatário durant e determinado período, sendo remunerado de acordo com esse período. O locatário detém o controle do veículo e das atividades do operador."
+          },
+          {
+            "label": "n",
+            "text": "Afretamento por tempo ( time charter party – TCP ): a operação sui generis , que não se enquadra como serviço de transporte nem como locação e se caracteriza pela colocação de navio e seus serviços sob gestão náutica do fretador, ou seja, armado, equipado e em condição de navegabilidade, à disposição do afretador, para que este assuma a gestão comerci al do espaço naval por tempo determinado, mediante retribuição financeira."
+          }
+        ]
+      },
+      {
+        "label": "2",
+        "text": "Os serviços de transporte aquaviário de cargas (posição 1.0 502) são prestados por empresas de navegação que, com suas tripulações, conduzem navios e outros tipos de embarcações.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "Excluem-se do presente Capítulo os serviços de:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Manuseio de cargas, que se classificam na posição 1.0601."
+          },
+          {
+            "label": "b",
+            "text": "Armazenagem em depósitos ou unidade armazenadoras, que se classificam na posição 1.0602."
+          },
+          {
+            "label": "c",
+            "text": "Navegação de apoio, seja portuário ou marítimo, que se classificam na subposição 1.0605.40."
+          },
+          {
+            "label": "d",
+            "text": "Transporte de água por meio de caminhões e outros veículos, que se classificam na subposição 1.0802.30."
+          },
+          {
+            "label": "e",
+            "text": "Carro-forte, que se classificam dentre os serviços de segurança, na subposição 1.1802.40."
+          }
+        ]
+      },
+      {
+        "label": "4",
+        "text": "Excluem-se, ainda, deste Capítulo, as operações de:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Afretamento por tempo de embarcações projetadas para o t ransporte de passageiros, que se classificam na posição 1.0405 (Capítulo 4)."
+          },
+          {
+            "label": "b",
+            "text": "Locação de navios e outras embarcações, sem tripulação (afr etamento a casco nu), na qual o afretador passa a ter a posse, o uso e o controle da embarc ação, por tempo determinado, incluindo o direito de designar o comandante e a tripulação, que se classificam na subposição 1.1101.15 (Capítulo 11)."
+          }
+        ]
+      }
+    ]
+  },
+  "06": {
+    "chapter": "06",
+    "title": "Serviços de apoio aos transportes",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "A armazenagem em depósitos é feita em armazéns gerais, que são estabelecimentos que têm por finalidade a guarda e conservação de mercadorias e a emissão de títulos especiais em armazéns gerais alfandegados.",
+        "subitems": []
+      },
+      {
+        "label": "2",
+        "text": "Os serviços de apoio ao transporte incluem, dentre outros, os serviços de reboque, vendas e reservas de passagem realizadas em terminais de passageiros, serviços de bagagem e “achados e perdidos”.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "Os “serviços de praticagem”, classificados na posição 1.0605 são:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Realizados pelo prático, profissional aquaviário não tripulante, que embarcado presta tal serviço."
+          },
+          {
+            "label": "b",
+            "text": "O conjunto de atividades profissionais de assessoria ao Comandante (tripulante responsável pela operação e manutenção de embarcação, em condições de segurança, e xtensivas à carga, aos tripulantes e às demais pessoas a bordo) requeridas por força de peculiaridades locais que dificultem a livre e segura movimentação da embarcação."
+          }
+        ]
+      },
+      {
+        "label": "4",
+        "text": "Na posição 1.0605, os “serviços de salvamento de embarcações” incluem, por exemplo, os serviços de desencalhe, reflutuação, recuperação de cargas e de embarcações.",
+        "subitems": []
+      },
+      {
+        "label": "5",
+        "text": "Os serviços de navegação de apoio, compreendendo o apoio marít imo e portuário, classificam-se na subposição 1.0605.40.",
+        "subitems": []
+      },
+      {
+        "label": "6",
+        "text": "Estão excluídos deste Capítulo os serviços auxiliares ao t ransporte de mudanças, tais como empacotamento e carregamento de mobílias domésticas e objetos de escritório, que se classificam no capítulo 5 de acordo com o modal de transporte.",
+        "subitems": []
+      }
+    ]
+  },
+  "07": {
+    "chapter": "07",
+    "title": "Serviços postais; serviços de coleta, remessa ou entrega de documentos ou encomendas; serviços de remessas expressas",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "Na posição 1.0701:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "“Serviço postal” é o serviço de recebimento, expedição, t ransporte e entrega de objetos de correspondência, valores e encomendas, prestados no âmbito de uma obrigação de serviço universal."
+          },
+          {
+            "label": "b",
+            "text": "“Objeto postal” compreende toda a correspondência, valor ou encomenda encaminhado por via postal."
+          },
+          {
+            "label": "c",
+            "text": "“Objetos de correspondência” são: a) carta; b) cartão-postal; c) impresso; d) cecograma; e) pequena encomenda."
+          },
+          {
+            "label": "d",
+            "text": "“Correspondência agrupada” é reunião, em volume, de objetos da mesma ou de diversas naturezas, quando, pelo menos um deles, for sujeito ao monopólio postal, remetidos a pessoas jurídicas de direito público ou privado e/ou suas agências, filiais ou representantes."
+          },
+          {
+            "label": "e",
+            "text": "“Serviço postal relativo a valores” corresponde a: a) remessa de dinheiro através de carta com valor declarado; b) remessa de ordem de pagamento por meio de vale-post al; c) Recebimento de tributos, prestações, contribuições e obrigações pagáveis à vista, por via postal."
+          },
+          {
+            "label": "f",
+            "text": "“Serviço postal relativo a encomendas” corresponde a remess a e entrega de objetos, com ou sem valor mercantil, por via postal."
+          },
+          {
+            "label": "g",
+            "text": "“Telegrama” corresponde às mensagens urgentes e confidenci ais transmitidas pela internet ou por outro meio eletrônico para o local em que a mensagem será impressa e auto-envelopada para entrega no endereço do destinatário. O serviço de telegrama é prestado no âmbito de uma obrigação de serviço universal."
+          }
+        ]
+      },
+      {
+        "label": "2",
+        "text": "Na posição 1.0702, classificam-se os serviços de coleta , transporte, remessa ou entrega de documentos ou encomendas, exceto os serviços postais prestados a tít ulo de obrigação universal e os serviços de remessa expressa.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "Na posição 1.0703, entende-se por “remessa expressa” a encomenda, transportada sob as condições de serviço expresso e entrega porta a porta, composta de documentos ou bens transportados em um ou mais volumes amparados por conhecimento de carga.",
+        "subitems": []
+      }
+    ]
+  },
+  "08": {
+    "chapter": "08",
+    "title": "Serviços de transmissão e distribuição de eletricidade; serviços de distribuição de gás e água",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "Na subposição 1.0801.20, inclui-se a manutenção de medidores de eletricidade.",
+        "subitems": []
+      },
+      {
+        "label": "2",
+        "text": "Na subposição 1.0802.10, inclui-se a manutenção dos medidores de água.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "Na posição 1.0803, inclui-se a distribuição de qualquer combustí vel gasoso por meio de tubulações e a manutenção de medidores de gás.",
+        "subitems": []
+      }
+    ]
+  },
+  "09": {
+    "chapter": "09",
+    "title": "Serviços financeiros e serviços relacionados",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "“Banco de investimento” é instituição financeira de natureza privada, especializada em operações de participação societária de caráter temporário, de financiame nto da atividade produtiva por meio do suprimento de capital fixo e de giro e de administração de recursos de terceiros.",
+        "subitems": []
+      },
+      {
+        "label": "2",
+        "text": "“Serviços de previdência complementar” são aqueles ofertados pe las entidades de previdência complementar, as quais têm por objeto principal a administração e execução de planos de benefícios de natureza previdenciária. Esses planos são facultativos, de caráter complementar e organizados de forma autônoma em relação ao regime geral de previdência social e baseiam-se na constituição de reservas que garantam o benefício.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "As “entidades de previdência complementar” classificam- se em entidades fechadas de previdência complementar (EFPCs) e em entidades abertas de previdência complementar (EAPCs):",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "As EFPCs, comumente chamadas de fundos de pensão, são entidades sem fins lucrativos que se organizam sob a forma de fundação ou sociedade civil. São constituíd as exclusivamente para empregados de uma empresa ou grupo de empresas, aos servidores públ icos da União, dos estados, do Distrito Federal e dos municípios, bem como para associados ou m embros de pessoas jurídicas de caráter profissional, classista ou setorial, denominadas instituidores."
+          },
+          {
+            "label": "b",
+            "text": "As EAPCs são entidades com fins lucrativos, constituídas unicam ente sob a forma de sociedades anônimas e têm por objetivo instituir e operar planos de benefíc ios de caráter previdenciário concedidos em forma de renda continuada ou pagamento único, acessíveis a quaisquer pessoas físicas interessadas."
+          }
+        ]
+      },
+      {
+        "label": "4",
+        "text": "Para fins deste Capítulo, “arrendamento mercantil financeiro” corresponde a operação em que:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "As contraprestações e demais pagamentos previstos no contra to, devidos pela arrendatária, sejam normalmente suficientes para que a arrendadora recupere o custo do bem arrendado durante o prazo contratual da operação e, adicionalmente, obtenha retorno sobre os recursos investidos."
+          },
+          {
+            "label": "b",
+            "text": "As despesas de manutenção, assistência técnica e serviç os correlatos à operacionalidade do bem arrendado sejam responsabilidade da arrendatária."
+          },
+          {
+            "label": "c",
+            "text": "O preço para o exercício da opção de compra seja livremente pactuado, podendo ser, inclusive, o valor de mercado do bem arrendado, quando a operação for realizada conf orme a legislação brasileira."
+          }
+        ]
+      },
+      {
+        "label": "5",
+        "text": "Para fins deste Capítulo, entende-se por:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Resseguro: a operação de transferência de riscos de uma cede nte (a sociedade seguradora que contrata operação de resseguro) para um ressegurador, enquanto o termo retrocessão designa a operação de transferência de riscos de resseguro de ressegura dores para resseguradores, ou de resseguradores para sociedades seguradoras locais."
+          },
+          {
+            "label": "b",
+            "text": "Retrocessão: a operação de transferência de riscos de resse guro de resseguradores, com vistas a sua própria proteção, para resseguradores ou para sociedades segurado ras locais, através de contratos automáticos ou facultativos, ou seja, é o resseguro de um resseguro."
+          },
+          {
+            "label": "c",
+            "text": "Commodity : é usado em transações comerciais para designar determinado bem , em estado bruto ou com pequeno grau de industrialização, produzido em escala mundial e com características físicas homogêneas. Em regra, esses bens são de origem agrícola ou mi neral, negociados por meio de contratos."
+          },
+          {
+            "label": "d",
+            "text": "Seguro de recebíveis: a operação em que uma instituição financ eira detentora de créditos (“recebíveis”) cede esses créditos a uma instituição não fina nceira, constituída sob a forma de sociedade por ações, cujo objeto social é, exclusivamente, a aqui sição de recebíveis (companhia securitizadora)."
+          },
+          {
+            "label": "e",
+            "text": "Fomento comercial ( factoring ): a prestação cumulativa e contínua de assessoria creditícia , mercadológica, gestão de crédito, seleção de riscos, administr ação de contas a pagar e a receber, compra de direitos creditórios resultantes de vendas mercantis a prazo ou de prestação de serviços."
+          },
+          {
+            "label": "f",
+            "text": "Trust : as relações jurídicas criadas, em vida ou após a morte, por determinada pessoa (o outorgante ou instituidor), com a finalidade de colocar seus bens sob o controle de uma outra pessoa (o trustee ou curador), que irá administrá-los em favor do beneficiário ou para alguma finalidade específica."
+          }
+        ]
+      },
+      {
+        "label": "6",
+        "text": "Na posição 1.0910 classificam-se, exclusivamente, os se rviços de planos privados de assistência à saúde, os quais não preveem a opção de livre escolha do prestador de serviços com reembolso, ao contrário dos serviços de seguro saúde, que preveem essa opção e s e classificam na subposição 1.0903.21.",
+        "subitems": []
+      }
+    ]
+  },
+  "10": {
+    "chapter": "10",
+    "title": "Serviços imobiliários",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "Não se incluem no presente Capítulo as incorporações imobiliária s, que se classificam na posição 1.0101.",
+        "subitems": []
+      },
+      {
+        "label": "2",
+        "text": "Imóvel é o bem constituído de terreno e eventuais benfeitorias a ele incorporadas. Os imóveis podem ser classificados em função de:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Titularidade, como próprios ou de terceiros."
+          },
+          {
+            "label": "b",
+            "text": "Uso, como residenciais ou não residenciais."
+          },
+          {
+            "label": "c",
+            "text": "Localização, como urbanos ou rurais."
+          }
+        ]
+      },
+      {
+        "label": "3",
+        "text": "No caso de imóvel de uso misto, o uso predominante determinará a c lassificação como imóvel residencial ou não residencial.",
+        "subitems": []
+      },
+      {
+        "label": "4",
+        "text": "Há três distintas categorias de imóveis não residenciais, quais sejam:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Imóveis comerciais, tais como salas e lojas."
+          },
+          {
+            "label": "b",
+            "text": "Imóveis industriais, como por exemplo, galpões e instalações prediais destinadas a fábricas."
+          },
+          {
+            "label": "c",
+            "text": "Imóveis cuja natureza difere das categorias anteriores, t ais como os imóveis comercial-industriais, os templos religiosos, os imóveis públicos e terrenos urbanos ou rurais."
+          }
+        ]
+      },
+      {
+        "label": "5",
+        "text": "A posição 1.1001 refere-se a imóveis de terceiros.",
+        "subitems": []
+      },
+      {
+        "label": "6",
+        "text": "A posição 1.1002 compreende a operação em que o imóvel é coloc ado à disposição do locatário, que detém a posse durante determinado período, sendo o locador ou o sublocador remunerado de acordo com esse período. Neste caso, não se confunde com os serviços de administração na locação.",
+        "subitems": []
+      }
+    ]
+  },
+  "11": {
+    "chapter": "11",
+    "title": "Arrendamento mercantil operacional, propriedade intelectual, franquias e outros direitos",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "Classificam-se no presente capítulo somente as operações de arrendamento mercantil operacional. As operações de arrendamento mercantil financeiro classificam-se no Capítulo 9.",
+        "subitems": []
+      },
+      {
+        "label": "2",
+        "text": "Considera-se “arrendamento mercantil operacional” a modalidade de arrendamento mercantil em que:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "As contraprestações a serem pagas pela arrendatária contemplem o custo de arrendamento do bem e os serviços inerentes à sua colocação à disposição da arrendatár ia, não podendo o total dos pagamentos da espécie ultrapassar 90% do custo do bem arrendado."
+          },
+          {
+            "label": "b",
+            "text": "As despesas de manutenção, assistência técnica e serviç os correlatos à operacionalidade do bem arrendado sejam de responsabilidade da arrendadora ou da arrendatária."
+          },
+          {
+            "label": "c",
+            "text": "O preço para o exercício da opção de compra seja o valor de mercado do bem arrendado."
+          }
+        ]
+      },
+      {
+        "label": "3",
+        "text": "Classificam-se neste Capítulo somente as operações de locaçã o de veículos sem operador. As operações de locação de veículo com operador classificam-se no Ca pítulo 4, quando os veículos são destinados ao transporte de passageiros, ou no Capítulo 5, quando os veí culos são destinados ao transporte de carga.",
+        "subitems": []
+      },
+      {
+        "label": "4",
+        "text": "Considera-se “operador” a pessoa que opera máquinas ou conduz veí culos, aplicando-se também às tripulações que conduzem navios e outros tipos de embarcações ou aeronaves.",
+        "subitems": []
+      },
+      {
+        "label": "5",
+        "text": "A duração da locação é irrelevante para sua classificação.",
+        "subitems": []
+      },
+      {
+        "label": "6",
+        "text": "Para os fins deste Capítulo, entende-se por:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Licenciamento de direitos: a autorização para usar ou explor ar comercialmente direito patrimonial de qualquer categoria de propriedade intelectual."
+          },
+          {
+            "label": "b",
+            "text": "Cessão temporária de direitos: a transferência, total ou par cial, de titularidade por tempo estipulado em contrato ou pelo prazo máximo de cinco anos na hipótese de nã o haver estipulação contratual escrita, aplicável somente aos direitos de autor e direitos conexos."
+          },
+          {
+            "label": "c",
+            "text": "Cessão definitiva de direitos: a transferência, total ou par cial, de titularidade, em caráter definitivo, de qualquer categoria de propriedade intelectual."
+          },
+          {
+            "label": "d",
+            "text": "Propriedade intelectual: a soma dos direitos de autor e direi tos conexos, relativos às obras literárias, artísticas e cientificas, às interpretaçõe s dos artistas intérpretes e às execuções dos artistas executantes, aos fonogramas e às emissões de radiodifusão; a os direitos de propriedade industrial, relativos a marcas, patentes e desenho industrial, além dos de mais direitos objeto de proteção sui generis, relativos a cultivares, topografias de circuitos i ntegrados, informação confidencial, inclusive informação não divulgada, e conhecimento tradicional associado ao patrimônio genético."
+          },
+          {
+            "label": "e",
+            "text": "Programas de computador ( software ): a expressão de um conjunto organizado de instruções em linguagem natural ou codificada, contida em suporte físico de qualquer natureza, de emprego necessário em máquinas automáticas de tratamento da informaçã o, dispositivos, instrumentos ou equipamentos periféricos, baseados em técnica digital ou análoga, para fazê-los funcionar de modo e para fins determinados;"
+          },
+          {
+            "label": "f",
+            "text": "Obra audiovisual: a resultante da fixação de imagens com ou s em som, que tenha a finalidade de criar, por meio de sua reprodução, a impressão de movimento, independentemente dos processos de sua captação, do suporte usado inicial ou posteriormente para fixá-lo, bem como dos meios utilizados para sua veiculação."
+          },
+          {
+            "label": "g",
+            "text": "Franquia ou franchising: o sistema pelo qual um franqueador cede ao franqueado o direito d e uso de marca ou patente, associado ao direito de distribuição exclusi va ou semi-exclusiva de produtos ou serviços e, eventualmente, também ao direito de uso de tecnologi a de implantação e administração de negócio ou sistema operacional desenvolvido ou detido pelo franqueador , mediante remuneração direta ou indireta, sem que, no entanto, fique caracterizado vínculo empregatício."
+          }
+        ]
+      }
+    ]
+  },
+  "12": {
+    "chapter": "12",
+    "title": "Serviços de pesquisa e desenvolvimento",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "No presente Capítulo, entende-se por:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Pesquisa: o processo que objetiva gerar, corroborar ou refutar conhecimentos, podendo assumir as formas de pesquisa básica ou pesquisa aplicada."
+          },
+          {
+            "label": "b",
+            "text": "Pesquisa Básica: a pesquisa onde os trabalhos experimentais ou teóricos são desenvolvidos com o intuito de obter novos conhecimentos sobre fenômenos e fatos observáveis, ainda não elucidados."
+          },
+          {
+            "label": "c",
+            "text": "Pesquisa aplicada: a pesquisa onde os trabalhos originais de investigação visam à obtenção de novos conhecimentos orientados para aplicações específicas."
+          },
+          {
+            "label": "d",
+            "text": "Desenvolvimento: o uso sistemático de conhecimentos científicos ou tecnológicos, com o intuito de obter novos produtos ou processos ou melhorar e/ou aperfeiçoar os já existentes."
+          },
+          {
+            "label": "e",
+            "text": "Pesquisa e desenvolvimento: o conjunto de trabalhos criativos, efetuados de forma sistemática com o intuito de ampliar a base de conhecimentos científicos e tecnológicos, e o uso desses conhecimentos para desenvolver novas aplicações, tais como produtos ou processos novos ou tecnologicamente aprimorados."
+          }
+        ]
+      },
+      {
+        "label": "2",
+        "text": "O termo “humanidades” inclui, por exemplo, línguas, liter atura, história, filosofia, artes, religião e teologia.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "Quando os serviços compreenderem, simultaneamente, as ciências referidas em mais de uma das subposições de segundo nível, a classificação se dá:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Na subposição de segundo nível correspondente à ciência natural que predominar sobre as demais na realização do serviço."
+          },
+          {
+            "label": "b",
+            "text": "Na subposição residual, quando na realização do serviço não houver predominância de nenhuma das ciências ou humanidades sobre as demais."
+          }
+        ]
+      },
+      {
+        "label": "4",
+        "text": "Para fins de classificação na posição 1.1203, a interdisc iplinaridade dos serviços exige a execução de pelo menos um serviço de pesquisa e desenvolvimento na área de ci ências naturais, engenharia e tecnologia, classificado na posição 1.1201, conjugada com a exec ução de outro serviço de pesquisa e desenvolvimento na área de ciências sociais ou humanidades, classi ficado na posição 1.1202. Todavia, caso haja a predominância de uma dessas ciências ou humanidades sobre as demais, cada um dos serviços deve ser classificado na posição original correspondente.",
+        "subitems": []
+      }
+    ]
+  },
+  "13": {
+    "chapter": "13",
+    "title": "Serviços jurídicos e contábeis",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "Na posição 1.1301, os “serviços de documentação e certificaç ão” incluem, por exemplo, os serviços de concessão de registro de patentes, direitos autorais e outra s propriedades intelectuais, certificados de origem de mercadorias e atestados de inexistência de produç ão nacional de máquinas e equipamentos.",
+        "subitems": []
+      },
+      {
+        "label": "2",
+        "text": "Na posição 1.1303, “pessoa jurídica” é a união ou sociedade de pessoas físicas que adquire, em função da lei, personalidade própria e distinta da de seus membros, para fins de direitos e obrigações. É também “pessoa jurídica” a união ou sociedade de pessoas jurídica s que adquire, em função da lei, personalidade própria e distinta da de seus membros.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "Na posição 1.1304, os “serviços notariais e de registro” incluem, por exemplo, autenticar fatos, lavrar escrituras e procurações públicas, lavrar testamentos públicos e aprovar os cerrados, lavrar atas notariais, reconhecer firmas e autenticar cópias.",
+        "subitems": []
+      }
+    ]
+  },
+  "14": {
+    "chapter": "14",
+    "title": "Serviços profissionais, técnicos e empresariais (exceto pesquisa e desenvolvimento, tecnologia da informação e serviços jurídicos e contábeis)",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "Não se incluem no presente Capítulo os “serviços de consultoria im obiliária”, que se classificam na posição 1.1001.",
+        "subitems": []
+      },
+      {
+        "label": "2",
+        "text": "No âmbito deste Capítulo, projeto deve ser entendido como o conjunto de desenhos, especificações e documentos que possibilitam a construção de um bem, tais como edifica ções, residenciais ou não, máquinas e embarcações.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "Na posição 1.1402, consideram-se “prédios históricos” aquele s que são tombados pelo Instituto do Patrimônio Histórico e Artístico Nacional (IPHAN) ou congêneres nacionais e internacionais.",
+        "subitems": []
+      },
+      {
+        "label": "4",
+        "text": "Na posição 1.1408:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Os “serviços videográficos de eventos” não incluem os serv iços de produção de programas de televisão, que se classificam na posição 1.2501."
+          },
+          {
+            "label": "b",
+            "text": "Os “serviços fotográficos especiais” não incluem fotografia s obtidas por satélites para fins de obtenção de dados topográficos, que se classificam na posição 1.1404, ou fotografias jornalísticas, que se classificam na posição 1.1704."
+          }
+        ]
+      }
+    ]
+  },
+  "15": {
+    "chapter": "15",
+    "title": "Serviços de tecnologia da informação",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "No presente Capítulo:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "A expressão “tecnologia da informação” é tomada como equivalen te à aplicação de diferentes ramos da tecnologia para criar, armazenar, trocar e usar informações, apresentadas nos mais diversos formatos, e que, para tanto, faz uso de equipamentos para informática ( hardware ) e seus dispositivos periféricos, programas de computador e seus recursos, sistema s de telecomunicações, gestão de dados e informações."
+          },
+          {
+            "label": "b",
+            "text": "A expressão “programas não personalizados (não customizados)” diz respeito aos programas para computadores adquiridos na forma que se apresentam e que, em regra, não permitem alterações com o intuito de atender necessidades particulares."
+          },
+          {
+            "label": "c",
+            "text": "A expressão “programas personalizados” são programas customi zados, que atendem às necessidades específicas do seu adquirente ou usuário."
+          },
+          {
+            "label": "d",
+            "text": "Por “circuito integrado”, entende-se um produto, em forma fina l ou intermediária, que possui elementos, dos quais pelo menos um seja ativo, cujas interconex ões, totais ou parte delas, são integralmente formadas sobre uma unidade (peça) de pequenas dimens ões, ou em seu interior. O “circuito integrado” tem por finalidade desempenhar funções eletrônicas determinadas."
+          }
+        ]
+      },
+      {
+        "label": "2",
+        "text": "O projeto, o desenvolvimento e a instalação de games e de jogos eletrônicos classificam-se na posição 1.1502 e a manutenção de games e de jogos eletrônicos classifica-se na posição 1.1508.",
+        "subitems": []
+      }
+    ]
+  },
+  "16": {
+    "chapter": "16",
+    "title": "Reservado para possível uso futuro",
+    "hasOfficialNotes": false,
+    "notes": []
+  },
+  "17": {
+    "chapter": "17",
+    "title": "Serviços de telecomunicações, difusão e fornecimento de informações",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "No presente Capítulo:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "“Serviços de telecomunicações” são entendidos como aqueles q ue possibilitam a oferta de telecomunicações."
+          },
+          {
+            "label": "b",
+            "text": "“Telecomunicação” é a transmissão, emissão ou recepção, por fi o, radioeletricidade, meios ópticos ou qualquer outro processo eletromagnético, de símbolos, caracter es, sinais, escritos, imagens, sons ou informações de qualquer natureza."
+          },
+          {
+            "label": "c",
+            "text": "“Interconexão” é compreendida como a ligação entre redes de t elecomunicações funcionalmente compatíveis, de modo que os usuários de serviços de uma das redes poss am comunicar-se com usuários de serviços de outra ou acessar serviços nela disponíveis."
+          },
+          {
+            "label": "d",
+            "text": "“Telefonia, comunicação de dados e transmissão de imagens” são f ormas de telecomunicação utilizadas no fornecimento de informações."
+          },
+          {
+            "label": "e",
+            "text": "“ Backbone ” compreende as ligações centrais de um sistema informatizado mais amplo, tipicamente de elevado desempenho, e que possibilita o fluxo de dados, voz e imag ens pela rede mundial de computadores."
+          }
+        ]
+      },
+      {
+        "label": "2",
+        "text": "Por “agência de notícias” entende-se a empresa jornalísti ca cujo foco de atuação é a difusão de informações e notícias, coletadas diretamente das fontes, par a os veículos de comunicação, tais como jornais, revistas, rádios e televisões.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "Estão excluídos deste capítulo os serviços de pesquisa e dese nvovimento em Tecnologia da Informação e Comunicação, que se classificam no Capítulo 12.",
+        "subitems": []
+      }
+    ]
+  },
+  "18": {
+    "chapter": "18",
+    "title": "Serviços de apoio às atividades empresariais",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "Na posição 1.1801:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "O termo “recrutamento” se refere a um conjunto de técnicas e procedimentos que objetivam atrair candidatos potencialmente qualificados, capazes de assumirem car gos dentro de uma entidade no Brasil ou no exterior. Após o recrutamento dos candidatos, passa-se à etapa de seleção daqueles mais aptos aos cargos oferecidos pela entidade."
+          },
+          {
+            "label": "b",
+            "text": "No “serviço de fornecimento de mão de obra” a empresa prestadora do serviço contrata, remunera e dirige o trabalho realizado por seus trabalhadores, ou subcontrata outras empresas para a realização destes serviços, e a empresa contratante transfere a exe cução de quaisquer de suas atividades à prestadora do serviço, não se configurando vínculo empregatício entre os trabalhadores da contratada e a contratante do serviço de fornecimento de mão de obra."
+          }
+        ]
+      },
+      {
+        "label": "2",
+        "text": "Na posição 1.1802, os “serviços de consultoria em segurança ” não incluem os serviços de segurança em tecnologia da informação, que se classificam na posição 1.1501.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "Na subposição 1.1802.40:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Os “serviços de carro-forte” compreendem os serviços de carros blindados, acompanhados por agentes de segurança, que são utilizados para recolhimento e transporte de dinheiro, títulos, valores mobiliários ou artigos de valor, como por exemplo, joias, pedras e metais preciosos."
+          },
+          {
+            "label": "b",
+            "text": "Excluem-se dessa subposição os serviços de transporte de valo res em meio ferroviário, aquaviário ou aéreo, que se classificam no Capítulo 5."
+          }
+        ]
+      },
+      {
+        "label": "4",
+        "text": "Na posição 1.1803:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Entende-se por “extermínio de pragas” a destruição de insetos, roedores e outras pestes."
+          },
+          {
+            "label": "b",
+            "text": "Excluem-se desta posição o controle e o extermínio de pragas relacionados à agricultura, que se classificam no capítulo 19."
+          }
+        ]
+      },
+      {
+        "label": "5",
+        "text": "Estão excluídos da posição 1.1804:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Serviços de embalagem e acondicionamento acessórios ao tra nsporte, que se classificam, de acordo com a especificidade (bagagem ou carga), nos Capítulos 4 (s erviços de transporte de passageiros); 5 (serviços de transporte de cargas) ou 6 (serviços de apoio aos transportes)."
+          },
+          {
+            "label": "b",
+            "text": "Serviços relacionados ao comércio atacadista, que se classificam na posição 1.0202."
+          }
+        ]
+      },
+      {
+        "label": "6",
+        "text": "Na posição 1.1805:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Os “serviços de operadoras de turismo” são aqueles de organização própria de agências de turismo, as quais são comumente chamadas de operadoras turísticas, e compr eendem a elaboração de programas, serviços e roteiros de viagens turísticas, nacio nais ou internacionais, emissivas ou receptivas, que incluam passagens, acomodações e outros serviços em meios de hospedagem, programas educacionais e de aprimoramento profissional, serv iços de recepção, de transferência e assistência e de excursões, viagens e passeios turísticos, marítimos, fluviais e lacustres."
+          },
+          {
+            "label": "b",
+            "text": "Os “serviços de guia de turismo” são aqueles produzidos nas atividades laborais do guia de turismo, que é o profissional que, devidamente cadastrado no Instituto Bras ileiro de Turismo (Embratur), exerce as atividades de acompanhar, orientar e transmitir inf ormações a pessoas ou grupos, em visitas, excursões urbanas, municipais, estaduais, interestaduais, internacionais ou especializadas."
+          },
+          {
+            "label": "c",
+            "text": "Os “serviços de promoção turística” são aqueles que objetivam divulgar o destino turístico junto aos mercados emissores, aproximando a oferta e a demanda turística."
+          }
+        ]
+      },
+      {
+        "label": "7",
+        "text": "Na posição 1.1806, entende-se por:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "“Call center ” a promoção de vendas e serviços, a atividade de cobrança, o atendimento e o suporte técnico ao consumidor, através de telefone."
+          },
+          {
+            "label": "b",
+            "text": "“Agenciamento” de modelos, artistas e atletas o serviço pre stado por uma pessoa ou empresa autorizada a agir e negociar em nome do agenciado com o objetivo de efetivar contratos comerciais (intermediação de negociação entre o agenciado e o contratante), incluindo, entre outros, os contratos de exploração de imagem."
+          }
+        ]
+      }
+    ]
+  },
+  "19": {
+    "chapter": "19",
+    "title": "Serviços de apoio à agricultura, pecuária, silvicultura, pesca, aquicultura, extração mineral e à transmissão e distribuição de eletricidade, gás e água",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "No presente Capítulo, entende-se por:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Agricultura: a atividade econômica voltada para a explora ção ordenada de recursos naturais vegetais em ambiente natural e protegido, sendo representa da pelo cultivo de lavouras, formado por quatro segmentos: - Produção de lavouras temporárias. - Horticultura e floricultura. - Produção de lavouras permanentes. - Produção de sementes e mudas certificadas."
+          },
+          {
+            "label": "b",
+            "text": "Pecuária: a atividade econômica voltada para a exploração orde nada de recursos animais em ambiente natural e protegido, sendo representada pela criação e pr odução de animais, inclusive a criação de animais modificados geneticamente, compreendendo a criação de: - Bovinos e outros animais de grande porte, tais como cavalos, asininos, muares e bubalinos. - Suínos, caprinos e ovinos. - Aves, tais como galinhas, patos, gansos, perus e avestruzes. - Outros animais com expressão econômica, tais como coelhos, abel ha, escargots e animais de estimação."
+          },
+          {
+            "label": "c",
+            "text": "Produção florestal (silvicultura): a atividade econômica base ada no cultivo de espécies florestais, produção de madeiras em toras e a exploração de produtos floresta is não madeireiros, incluindo-se também a produção de mudas florestais, os produtos da madeira res ultantes de pequenos processamentos, tais como lenha, carvão vegetal e lascas de madeira, ou sem processamento, como em moirões, estacas e postes."
+          },
+          {
+            "label": "d",
+            "text": "Pesca: a atividade econômica que abrange o uso de recursos pesque iros em águas marinhas, águas salobras e em água doce, objetivando a captura de peixes, crust áceos, moluscos e outros organismos ou produtos aquáticos, tais como plantas aquáticas, pérolas, corais e esponjas."
+          },
+          {
+            "label": "e",
+            "text": "Aquicultura: o processo de produção que envolve o cultivo de organismos aquáticos, dentre eles os peixes, crustáceos, moluscos, rãs, plantas aquáticas, jacar és e anfíbios, com o auxílio de técnicas que intensificam a produtividade desses organismos além da sua capacidade natural de desenvolvimento."
+          }
+        ]
+      },
+      {
+        "label": "2",
+        "text": "A pesca se refere à exploração, pelo público, de organismos a quáticos de propriedade comum, no que se difere da aquicultura, que corresponde ao cultivo de organis mos aquáticos de que se tem a propriedade.",
+        "subitems": []
+      }
+    ]
+  },
+  "20": {
+    "chapter": "20",
+    "title": "Serviços de manutenção, reparação e instalação (exceto construção)",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "No presente Capítulo, entende-se por:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Manutenção: o conjunto de ações realizadas com o objetivo de ma nter um bem no estado em que possa realizar sua função requerida, como cuidados técnicos indispensáveis ao funcionamento regular do bem, evitando assim sua deterioração."
+          },
+          {
+            "label": "b",
+            "text": "Reparação: o conjunto de ações realizadas com o objetivo de co nsertar um bem, restabelecendo o seu desempenho original para que possa realizar sua função requerida."
+          },
+          {
+            "label": "c",
+            "text": "Instalação: a montagem de maquinários ou equipamentos."
+          }
+        ]
+      },
+      {
+        "label": "2",
+        "text": "No âmbito do presente Capítulo, o termo “manutenção” refere-se à manutenção preventiva e o termo “reparação” refere-se à manutenção corretiva.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "Em relação aos instrumentos e equipamentos de precisão, os se rviços de manutenção e reparação são classificados na subposição 1.2001.82; e os serviços de instalação na subposição 1.2003.24.",
+        "subitems": []
+      }
+    ]
+  },
+  "21": {
+    "chapter": "21",
+    "title": "Serviços de publicação, impressão e reprodução",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "Editoração: alude ao serviço de gerenciamento da produção de public ações de caráter periódico ou não periódico, como livros, jornais, revistas, boletins, prospectos, álbuns e cadernos.",
+        "subitems": []
+      },
+      {
+        "label": "2",
+        "text": "Impressão: é o termo utilizado para designar a aplicação da tinta sobre o papel, segundo determinada forma de imagem ou texto.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "Serviços de reprodução de mídia gravada: são aqueles realiza dos a partir de gravação em mídias digitais, tais como CD-ROM, DVD, pen drive , disco externo ou armazenamento em nuvem, que são, direta ou indiretamente (via computador), conectados à impressora.",
+        "subitems": []
+      },
+      {
+        "label": "4",
+        "text": "Publicação: corresponde ao ato pelo qual um texto escrito é di sponibilizado para várias pessoas, que a ele poderão ter livre acesso por vontade própria, ou seja, é o momento da publicização do ato.",
+        "subitems": []
+      }
+    ]
+  },
+  "22": {
+    "chapter": "22",
+    "title": "Serviços educacionais",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "No âmbito deste Capítulo, entende-se por:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Serviços educacionais: serviços afetos à educação, abrang endo os processos formativos que se desenvolvem na vida familiar, na convivência humana, no trabalho, na s instituições de ensino e pesquisa, nos movimentos sociais e organizações da sociedade civil e nas manifestações culturais."
+          },
+          {
+            "label": "b",
+            "text": "Educação escolar: aquela composta de educação básica e educaç ão superior, incluindo-se em cada etapa a educação especial (destinada aos portadores de deficiênc ia, transtornos globais do desenvolvimento e altas habilidades ou superdotação)."
+          },
+          {
+            "label": "c",
+            "text": "Educação básica: formada pela pré-escola (educação infantil), ensino fundamental e ensino médio."
+          },
+          {
+            "label": "d",
+            "text": "Educação infantil: a oferecida em creches, ou entidades equivalentes, para crianças de até três anos de idade, e em pré-escolas, para crianças de quatro a cinco anos de idade."
+          },
+          {
+            "label": "e",
+            "text": "Educação de jovens e adultos: a educação destinada àqueles que nã o tiveram acesso ou continuidade de estudos no ensino fundamental e médio na idade própria."
+          },
+          {
+            "label": "f",
+            "text": "Educação superior: aquela que abrange os cursos e programas de graduação (abertos a candidatos que tenham concluído o ensino médio ou equivalente e tenham sido c lassificados em processo seletivo); de pós-graduação, compreendendo programas de mestrad o e doutorado; cursos de especialização, aperfeiçoamento e outros (abertos a candidatos diplomados em cursos de graduação e que atendam às exigências das instituições de ensino); e de ex tensão (abertos a candidatos que atendam aos requisitos estabelecidos em cada caso pelas instituições de ensino)."
+          }
+        ]
+      },
+      {
+        "label": "2",
+        "text": "A educação profissional e tecnológica integra-se aos dife rentes níveis e modalidades de educação e abrangerá os seguintes cursos: (i) de formação inicial e conti nuada ou qualificação profissional; (ii) de educação profissional técnica de nível médio; e (iii) de educação profissional tecnológica de graduação e pós-graduação.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "Os serviços de educação, com enfoque cultural, incluem, por exemplo, ensino de música (tais como piano, violino e teoria musical), artes, dança e fotografia.",
+        "subitems": []
+      }
+    ]
+  },
+  "23": {
+    "chapter": "23",
+    "title": "Serviços relacionados à saúde humana e de assistência social",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "Na posição1.2301, tem-se que:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Os “serviços de atenção à saúde humana” cobrem todas as formas de serviços relacionados à saúde humana prestados em hospitais, ambulatórios, consultórios, clínicas, centros de assistência psicossocial, unidades móveis de atendimento a urgências, remoções e, também, os serviços de saúde prestados nos domicílios. Compreendem também as práticas integrat ivas e complementares ao cuidado da saúde humana."
+          },
+          {
+            "label": "b",
+            "text": "“Serviços hospitalares” são aqueles prestados por estabelecim entos assistenciais de saúde que dispõem de estrutura material e de pessoal destinada a atender a internação de pacientes, garantir atendimento básico de diagnóstico e tratamento, com equipe clínic a organizada e assistência permanente prestada por médicos, que possuam serviços de enfer magem e atendimento terapêutico direto ao paciente, com disponibilidade de serviços de laboratório e radiologia, serviços de cirurgia e/ou parto, bem como registros médicos organizados para a rápida observação e acompanhamento de casos."
+          }
+        ]
+      },
+      {
+        "label": "2",
+        "text": "Nas posições 1.2302, 1.2303 e 1.2304, tem-se que:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Os “serviços sociais” correspondem aos serviços de assist ência a indivíduos ou famílias, que são realizadas por agências de governo ou por instituições privadas e, também, são prestadas nos domicílios. Essas atividades podem incluir ou não alojamento, ser viços médicos e serviços de educação, desde que estes não sejam os principais serviços oferecidos ."
+          },
+          {
+            "label": "b",
+            "text": "“Assistência social” é política de seguridade social não contr ibutiva, que provê os mínimos sociais, realizada através de um conjunto integrado de ações de iniciativa pública e da sociedade, para garantir o atendimento às necessidades básicas da população."
+          },
+          {
+            "label": "c",
+            "text": "São objetivos da assistência social: (i) a proteção social , que visa à garantia da vida, à redução de danos e à prevenção da incidência de riscos, especialmente: a pro teção à família, à maternidade, à infância, à adolescência e à velhice; o amparo às crianças e adolescentes carentes; a promoção da integração ao mercado de trabalho; a habilitação e reabilitação das pessoas portadoras de deficiência e a promoção de sua integração à vida comunitária; e a gara ntia de benefício mensal à pessoa portadora de deficiência e ao idoso que comprovem não possuir meios de prover a própria manutenção ou de tê-la provida por sua família; (ii) a vigi lância socioassistencial, que visa a analisar territorialmente a capacidade protetiva das famílias e nela a ocorrência de vulnerabilidades, de ameaças, de vitimizações e de danos; (iii) a defesa de dire itos, que visa a garantir o pleno acesso aos direitos no conjunto das provisões socioassistenciais."
+          },
+          {
+            "label": "d",
+            "text": "“Serviços de assistência social” são aqueles prestados de forma direta em unidades básicas e públicas de assistência social, bem como de forma indireta nas entidades e organizações não públicas de assistência social. São considerados serviços de assistência social ou serviços assistenciais os serviços continuados que visem à melhoria da vida da população e cujas ações estejam voltadas para as necessidades básicas de proteção social."
+          },
+          {
+            "label": "e",
+            "text": "A assistência social não abrange apenas idosos e deficiente s. A proteção social é ampla, incluindo pessoas em qualquer idade, sejam saudáveis ou não, desde que s e encontrem expostos a algum tipo de vulnerabilidade social."
+          }
+        ]
+      }
+    ]
+  },
+  "24": {
+    "chapter": "24",
+    "title": "Serviços de coleta, tratamento e eliminação de esgoto e resíduos e outros serviços de proteção ambiental.",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "No presente Capítulo, considera-se que:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Resíduo: é o material, substância, objeto ou bem descartado resultante de atividades humanas em sociedade, a cuja destinação final se procede, se propõe proceder ou se está obrigado a proceder. Os resíduos podem ser provenientes de serviços de saúde, ter orig em industrial ou doméstica, e podem se caracterizar como perigosos, não perigosos, recicláveis ou não recicláveis."
+          },
+          {
+            "label": "b",
+            "text": "Periculosidade de um resíduo: é a característica apresen tada por um resíduo que, em função de suas propriedades físicas, químicas ou infectocontagiosas, pode apre sentar riscos (i) à saúde pública, provocando mortalidade, incidência de doenças ou acentuando seus índices, ou (ii) ao meio ambiente."
+          },
+          {
+            "label": "c",
+            "text": "Resíduos perigosos: são aqueles que apresentam periculosidade, conforme definida no item b, e que possuem, entre outras, uma das seguintes característica s: inflamabilidade, corrosividade, reatividade, toxicidade, patogenicidade, carcinogenicidade, teratogenicidade e mutagenicidade."
+          },
+          {
+            "label": "d",
+            "text": "Resíduos não perigosos: são aqueles que não se enquadram nos quesitos estabelecidos para os resíduos perigosos."
+          },
+          {
+            "label": "e",
+            "text": "Resíduos de serviços de saúde: são aqueles resultantes dos s erviços relacionados com o atendimento à saúde humana ou animal, inclusive os serviços de as sistência domiciliar e de trabalhos de campo; laboratórios analíticos de produtos para saúde; necrotér ios, funerárias e serviços onde se realizem atividades de embalsamamento; serviços de medicina legal; drogarias e farmácias inclusive as de manipulação; estabelecimentos de ensino e pesquisa na área de s aúde; centros de controle de zoonoses; distribuidores de produtos farmacêuticos, importadores, dis tribuidores e produtores de materiais e controles para diagnóstico in vitro; unidades móvei s de atendimento à saúde; serviços de acupuntura; serviços de tatuagem, dentre outros similares."
+          },
+          {
+            "label": "f",
+            "text": "Resíduo reciclável: é aquele resíduo passível de retorno ao ciclo produtivo, após ter sofrido alteração de suas propriedades físicas, físico-químicas ou biológicas, t al como ocorre com papelão, papel, plástico, vidro e metal."
+          }
+        ]
+      },
+      {
+        "label": "2",
+        "text": "O tratamento para redução ou eliminação de produtos perigosos por pr ocesso de incineração está classificado na subposição 1.2404.21, enquanto a incineração de produtos não perigosos classifica-se na subposição 1.2404.33.",
+        "subitems": []
+      },
+      {
+        "label": "3",
+        "text": "Na posição 1.2405, entende-se por:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "Serviços de remediação: a aplicação de uma ou mais técnica s numa área contaminada ou degradada, com o intuito de restaurá-la de tal maneira a permit ir sua reutilização dentro de patamares de segurança adequados à preservação da saúde humana e do meio ambiente."
+          },
+          {
+            "label": "b",
+            "text": "Área contaminada: um terreno, local, instalação, edificação ou benfeitoria onde for constatada a presença de substância(s) química(s) no ar, água ou solo, decorrente de atividades antrópicas, em concentrações tais que restrinjam a utilização dessa área para os usos atual ou pretendido."
+          }
+        ]
+      },
+      {
+        "label": "4",
+        "text": "Para os fins da posição 1.2406, o serviço de limpeza urbana e similares compreende:",
+        "subitems": [
+          {
+            "label": "a",
+            "text": "A coleta, transbordo e transporte dos resíduos originários da var rição e limpeza de logradouros e vias públicas."
+          },
+          {
+            "label": "b",
+            "text": "A triagem para fins de reúso ou reciclagem, de tratament o, inclusive por compostagem, e de disposição final dos resíduos originários da varrição e limpeza de logradouros e vias públicas."
+          },
+          {
+            "label": "c",
+            "text": "A varrição, capina e poda de árvores em vias e logradouros públ icos e outros eventuais serviços pertinentes à limpeza pública urbana."
+          }
+        ]
+      }
+    ]
+  },
+  "25": {
+    "chapter": "25",
+    "title": "Serviços recreativos, culturais e desportivos",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "O presente Capítulo não compreende os serviços e rendimentos decorrentes do licenciamento ou da cessão total ou parcial dos direitos patrimoniais da propriedade i ntelectual, que se classificam no Capítulo 11.",
+        "subitems": []
+      },
+      {
+        "label": "2",
+        "text": "Na posição 1.2501, considera-se obra audiovisual o produto da fi xação ou transmissão de imagens, com ou sem som, que tenha a finalidade de criar a impressão de m ovimento, independentemente dos processos de captação, do suporte utilizado inicial ou posteriormen te para fixá-las ou transmiti-las, ou dos meios utilizados para sua veiculação, reprodução, transmissão ou difusão.",
+        "subitems": []
+      }
+    ]
+  },
+  "26": {
+    "chapter": "26",
+    "title": "Serviços pessoais",
+    "hasOfficialNotes": true,
+    "notes": [
+      {
+        "label": "1",
+        "text": "Na posição 1.2601, inclui-se na expressão “limpeza de têx teis”, dentre outros, lavagem e limpeza de roupas, móveis, estofados, painéis, tapetes (incluindo carpetes) e outros artigos de tapeçaria.",
+        "subitems": []
+      },
+      {
+        "label": "2",
+        "text": "Na posição 1.2602, o termo “bem-estar” inclui, por exemplo , saunas, banhos de vapor, spas , academias de ginástica e congêneres e massagens, exceto as terapêuticas, que se classificam no Capítulo 23.",
+        "subitems": []
+      }
+    ]
+  }
+}

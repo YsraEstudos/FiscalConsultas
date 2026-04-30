@@ -196,8 +196,6 @@ describe('useComments behavior', () => {
       selected_text: 'Motores elétricos',
       body: 'Novo comentário',
       is_private: true,
-      user_name: 'Alice',
-      user_image_url: undefined,
     });
     expect(result.current.comments).toEqual([
       expect.objectContaining({
@@ -232,7 +230,7 @@ describe('useComments behavior', () => {
 
       expect(result.current.comments).toEqual([]);
       expect(refs.toastErrorMock).toHaveBeenCalledWith(
-        'Token do Clerk indisponível neste host de rede. Abra em http://localhost:5173 para comentar.',
+        'Não foi possível validar sua sessão de comentários. Faça login novamente e tente de novo.',
       );
     } finally {
       restoreLocation();
@@ -413,7 +411,7 @@ describe('useComments behavior', () => {
     }
   });
 
-  it('shows the specific 401 Clerk messages for missing and expired tokens on localhost', async () => {
+  it('shows a generic 401 session message on localhost', async () => {
     const restoreLocation = swapLocation('http://localhost:5173/');
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
@@ -433,15 +431,15 @@ describe('useComments behavior', () => {
 
       expect(refs.toastErrorMock).toHaveBeenNthCalledWith(
         1,
-        'Token não enviado pelo Clerk. Faça logout/login e tente novamente.',
+        'Não foi possível validar sua sessão de comentários. Faça login novamente e tente de novo.',
       );
       expect(refs.toastErrorMock).toHaveBeenNthCalledWith(
         2,
-        'Token inválido/expirado. Faça login novamente.',
+        'Não foi possível validar sua sessão de comentários. Faça login novamente e tente de novo.',
       );
       expect(refs.toastErrorMock).toHaveBeenNthCalledWith(
         3,
-        'Sessão expirada. Faça login novamente para comentar.',
+        'Não foi possível validar sua sessão de comentários. Faça login novamente e tente de novo.',
       );
     } finally {
       restoreLocation();

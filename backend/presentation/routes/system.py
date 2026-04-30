@@ -1,6 +1,9 @@
 import re
-import time
+import secrets
 from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import PlainTextResponse
 
 from backend.config.settings import is_valid_admin_token, reload_settings, settings
 from backend.server.dependencies import get_nesh_service
@@ -8,15 +11,52 @@ from backend.server.middleware import decode_clerk_jwt
 from backend.server.rate_limit import status_rate_limiter
 from backend.services import NeshService
 from backend.utils.auth import extract_bearer_token, extract_client_ip, is_admin_payload
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+
+from .system_metrics import append_catalog_status_metrics  # noqa: F401 - re-exported for callers
+from .system_metrics import append_database_latency_metric  # noqa: F401 - re-exported for callers
+from .system_metrics import append_internal_cache_hit_rate_metrics  # noqa: F401 - re-exported for callers
+from .system_metrics import append_metric_line  # noqa: F401 - re-exported for callers
+from .system_metrics import append_payload_cache_metrics  # noqa: F401 - re-exported for callers
+from .system_metrics import build_prometheus_metrics_payload
+from .system_metrics import metric_value_from_status  # noqa: F401 - re-exported for callers
+from .system_status import await_status_refresh_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import build_detailed_status_payload
+from .system_status import build_public_status_payload
+from .system_status import build_status_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import coerce_int  # noqa: F401 - re-exported for callers
+from .system_status import collect_db_status  # noqa: F401 - re-exported for callers
+from .system_status import collect_nbs_catalog_health
+from .system_status import collect_status_payloads
+from .system_status import collect_status_payloads_uncached  # noqa: F401 - re-exported for callers
+from .system_status import collect_tipi_status  # noqa: F401 - re-exported for callers
+from .system_status import extract_prefixed_metadata  # noqa: F401 - re-exported for callers
+from .system_status import get_status_cache_lock  # noqa: F401 - re-exported for callers
+from .system_status import get_status_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import normalize_count_catalog_status  # noqa: F401 - re-exported for callers
+from .system_status import normalize_db_status  # noqa: F401 - re-exported for callers
+from .system_status import normalize_tipi_status  # noqa: F401 - re-exported for callers
+from .system_status import read_l1_status_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import read_redis_status_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import read_stale_l1_status_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import recover_status_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import refresh_status_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import reset_status_cache_for_tests  # noqa: F401 - re-exported for callers
+from .system_status import status_cache_ttl_seconds  # noqa: F401 - re-exported for callers
+from .system_status import store_status_snapshot  # noqa: F401 - re-exported for callers
+from .system_status import unpack_status_snapshot  # noqa: F401 - re-exported for callers
 
 router = APIRouter()
+collect_nbs_status = collect_nbs_catalog_health
 STATUS_RESPONSES = {
     429: {"description": "Limite de requisições para status excedido."},
 }
 STATUS_DETAILS_RESPONSES = {
     **STATUS_RESPONSES,
     403: {"description": "Forbidden (admin-only endpoint)."},
+}
+METRICS_RESPONSES = {
+    403: {"description": "Forbidden (invalid metrics token)."},
+    404: {"description": "Not Found when metrics endpoint is disabled."},
 }
 
 
@@ -30,6 +70,29 @@ async def _is_admin_request(request: Request) -> bool:
         return False
     payload = await decode_clerk_jwt(token)
     return is_admin_payload(payload)
+
+
+def _extract_metrics_token(request: Request) -> str | None:
+    header_token = request.headers.get("X-Metrics-Token", "").strip()
+    if header_token:
+        return header_token
+
+    authorization = request.headers.get("Authorization", "").strip()
+    if authorization.lower().startswith("bearer "):
+        return authorization[7:].strip() or None
+    return None
+
+
+def _metrics_endpoint_enabled() -> bool:
+    return settings.observability.metrics_enabled
+
+
+def _is_metrics_request_authorized(request: Request) -> bool:
+    configured_token = settings.observability.metrics_token.strip()
+    if not configured_token:
+        return False
+    token = _extract_metrics_token(request)
+    return bool(token and secrets.compare_digest(token, configured_token))
 
 
 def _status_limiter_key(request: Request) -> str:
@@ -50,192 +113,77 @@ async def _apply_status_rate_limit(request: Request) -> None:
     )
 
 
-def _to_int(value, default: int = 0) -> int:
-    try:
-        if value is None:
-            return default
-        return int(value)
-    except (TypeError, ValueError):
-        return default
+async def _collect_system_cache_metrics_payload(request: Request) -> dict:
+    from backend.presentation.routes import search as search_route
+    from backend.presentation.routes import tipi as tipi_route
 
+    nesh_internal = None
+    if hasattr(request.app.state, "service") and request.app.state.service:
+        nesh_internal = (
+            await request.app.state.service.snapshotNeshInternalCacheMetrics()
+        )
 
-def _normalize_db_status(raw_stats: dict | None, latency_ms: float) -> dict:
-    """Normaliza payload de status do banco principal para um contrato estável."""
-    if not raw_stats:
-        return {
-            "status": "error",
-            "chapters": 0,
-            "positions": 0,
-            "latency_ms": latency_ms,
-            "error": "Database unavailable",
-        }
+    tipi_internal = None
+    if hasattr(request.app.state, "tipi_service") and request.app.state.tipi_service:
+        tipi_internal = (
+            await request.app.state.tipi_service.snapshotTipiInternalCacheMetrics()
+        )
 
-    has_error = raw_stats.get("status") == "error"
-    payload = {
-        "status": "error" if has_error else "online",
-        "chapters": _to_int(raw_stats.get("chapters")),
-        "positions": _to_int(raw_stats.get("positions")),
-        "latency_ms": latency_ms,
-    }
-    if raw_stats.get("error"):
-        payload["error"] = str(raw_stats.get("error"))
-    return payload
-
-
-def _normalize_tipi_status(raw_stats: dict | None) -> dict:
-    """Normaliza payload de status da TIPI para o mesmo contrato do banco principal."""
-    raw_stats = raw_stats or {}
-    is_online = bool(raw_stats.get("ok") is True or raw_stats.get("status") == "online")
-
-    payload = {
-        "status": "online" if is_online else "error",
-        "chapters": _to_int(raw_stats.get("chapters")),
-        "positions": _to_int(raw_stats.get("positions")),
-    }
-    if raw_stats.get("error"):
-        payload["error"] = str(raw_stats.get("error"))
-    return payload
-
-
-_pg_stats_cache = {}
-_pg_stats_last_check_ts = 0.0
-
-
-async def _collect_db_status(request: Request) -> tuple[dict, float]:
-    global _pg_stats_cache, _pg_stats_last_check_ts
-
-    db = getattr(request.app.state, "db", None)
-    start = time.perf_counter()
-
-    if db:
-        db_stats = await db.check_connection()
-        latency_ms = round((time.perf_counter() - start) * 1000, 2)
-        return db_stats, latency_ms
-
-    try:
-        from backend.infrastructure.db_engine import get_session
-        from sqlalchemy import text
-
-        async with get_session() as session:
-            await session.execute(text("SELECT 1"))
-
-            now = time.time()
-            if not _pg_stats_cache or (now - _pg_stats_last_check_ts) > 60:
-                chapters_count = await session.execute(
-                    text("SELECT COUNT(*) FROM chapters")
-                )
-                positions_count = await session.execute(
-                    text("SELECT COUNT(*) FROM positions")
-                )
-                _pg_stats_cache = {
-                    "chapters": int(chapters_count.scalar() or 0),
-                    "positions": int(positions_count.scalar() or 0),
-                }
-                _pg_stats_last_check_ts = now
-        db_stats = {
-            "status": "online",
-            "chapters": _pg_stats_cache["chapters"],
-            "positions": _pg_stats_cache["positions"],
-        }
-    except Exception as e:
-        db_stats = {"status": "error", "error": str(e)}
-
-    latency_ms = round((time.perf_counter() - start) * 1000, 2)
-    return db_stats, latency_ms
-
-
-async def _collect_tipi_status(request: Request) -> dict:
-    tipi_service = getattr(request.app.state, "tipi_service", None)
-    if tipi_service is None:
-        return {"status": "error", "error": "TIPI service unavailable"}
-
-    try:
-        return await tipi_service.check_connection()
-    except Exception as tipi_err:
-        return {"status": "error", "error": str(tipi_err)}
-
-
-async def _collect_status_payloads(request: Request) -> tuple[dict, dict, str]:
-    db_stats, db_latency_ms = await _collect_db_status(request)
-    tipi_stats = await _collect_tipi_status(request)
-
-    normalized_db = _normalize_db_status(db_stats, db_latency_ms)
-    normalized_tipi = _normalize_tipi_status(tipi_stats)
-    overall_status = (
-        "online"
-        if normalized_db.get("status") == "online"
-        and normalized_tipi.get("status") == "online"
-        else "error"
-    )
-    return normalized_db, normalized_tipi, overall_status
-
-
-def _build_public_status_payload(
-    normalized_db: dict,
-    normalized_tipi: dict,
-    overall_status: str,
-) -> dict:
     return {
-        "status": overall_status,
-        "database": {
-            "status": normalized_db.get("status", "error"),
-            "latency_ms": normalized_db.get("latency_ms", 0),
-        },
-        "tipi": {
-            "status": normalized_tipi.get("status", "error"),
-        },
-    }
-
-
-def _build_detailed_status_payload(
-    request: Request,
-    normalized_db: dict,
-    normalized_tipi: dict,
-    overall_status: str,
-) -> dict:
-    return {
-        "status": overall_status,
-        "version": getattr(request.app, "version", "unknown"),
-        "backend": "FastAPI",
-        "database": normalized_db,
-        "tipi": normalized_tipi,
+        "status": "ok",
+        "search_code_payload_cache": (
+            search_route.snapshotSearchCodePayloadCacheMetrics()
+        ),
+        "tipi_code_payload_cache": (tipi_route.snapshotTipiCodePayloadCacheMetrics()),
+        "nesh_internal_caches": nesh_internal,
+        "tipi_internal_caches": tipi_internal,
     }
 
 
 @router.get("/status", responses=STATUS_RESPONSES)
-async def get_status(request: Request):
-    """
-    Healthcheck e Status do Sistema.
-
-    Verifica conectividade com:
-    - Banco de dados Principal (nesh.db)
-    - Banco de dados TIPI (tipi.db)
-
-    Retorna apenas o mínimo necessário para readiness público.
-    """
+async def fetch_system_status(request: Request):
     await _apply_status_rate_limit(request)
-    normalized_db, normalized_tipi, overall_status = await _collect_status_payloads(
-        request
+    (
+        normalized_db,
+        normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
+        overall_status,
+    ) = await collect_status_payloads(request)
+    return build_public_status_payload(
+        normalized_db,
+        normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
+        overall_status,
     )
-    return _build_public_status_payload(normalized_db, normalized_tipi, overall_status)
+
+
+@router.head("/status", include_in_schema=False)
+async def head_system_status(request: Request):
+    await collect_status_payloads(request)
+    return Response(status_code=200)
 
 
 @router.get("/status/details", responses=STATUS_DETAILS_RESPONSES)
-async def get_status_details(request: Request):
-    """
-    Status detalhado do sistema para administradores.
-    """
+async def fetch_system_status_details(request: Request):
     await _apply_status_rate_limit(request)
     if not await _is_admin_request(request):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    normalized_db, normalized_tipi, overall_status = await _collect_status_payloads(
-        request
-    )
-    return _build_detailed_status_payload(
+    (
+        normalized_db,
+        normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
+        overall_status,
+    ) = await collect_status_payloads(request)
+    return build_detailed_status_payload(
         request,
         normalized_db,
         normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
         overall_status,
     )
 
@@ -244,34 +192,46 @@ async def get_status_details(request: Request):
     "/cache-metrics",
     responses={403: {"description": "Forbidden (admin-only endpoint)."}},
 )
-async def get_cache_metrics(request: Request):
-    """
-    Métricas de hit/miss dos payload caches de /api/search e /api/tipi/search.
-    Restrito a admins por conter dados operacionais internos.
-    """
+async def fetch_system_cache_metrics(request: Request):
     if not await _is_admin_request(request):
         raise HTTPException(status_code=403, detail="Forbidden")
+    return await _collect_system_cache_metrics_payload(request)
 
-    from backend.presentation.routes import search as search_route
-    from backend.presentation.routes import tipi as tipi_route
 
-    nesh_internal = None
-    if hasattr(request.app.state, "service") and request.app.state.service:
-        nesh_internal = await request.app.state.service.get_internal_cache_metrics()
+@router.get(
+    "/metrics",
+    include_in_schema=False,
+    response_class=PlainTextResponse,
+    responses=METRICS_RESPONSES,
+)
+async def fetch_system_metrics(request: Request):
+    if not _metrics_endpoint_enabled():
+        raise HTTPException(status_code=404, detail="Not Found")
+    if not _is_metrics_request_authorized(request):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    await _apply_status_rate_limit(request)
 
-    tipi_internal = None
-    if hasattr(request.app.state, "tipi_service") and request.app.state.tipi_service:
-        tipi_internal = (
-            await request.app.state.tipi_service.get_internal_cache_metrics()
-        )
-
-    return {
-        "status": "ok",
-        "search_code_payload_cache": search_route.get_payload_cache_metrics(),
-        "tipi_code_payload_cache": tipi_route.get_payload_cache_metrics(),
-        "nesh_internal_caches": nesh_internal,
-        "tipi_internal_caches": tipi_internal,
-    }
+    (
+        normalized_db,
+        normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
+        overall_status,
+    ) = await collect_status_payloads(request)
+    status_payload = build_detailed_status_payload(
+        request,
+        normalized_db,
+        normalized_tipi,
+        normalized_nbs,
+        normalized_nebs,
+        overall_status,
+    )
+    cache_metrics = await _collect_system_cache_metrics_payload(request)
+    payload = build_prometheus_metrics_payload(status_payload, cache_metrics)
+    return PlainTextResponse(
+        payload,
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
 
 
 @router.get(
@@ -281,30 +241,23 @@ async def get_cache_metrics(request: Request):
         404: {"description": "Not found when debug mode is disabled."},
     },
 )
-async def debug_anchors(
+async def debug_nesh_anchors(
     request: Request,
     service: Annotated[NeshService, Depends(get_nesh_service)],
     ncm: Annotated[str, Query(description="Código NCM para debug de anchors")],
 ):
-    """
-    DEBUG: Retorna o HTML renderizado e lista todos os IDs injetados.
-    Útil para diagnosticar problemas de scroll.
-    """
     if not settings.features.debug_mode:
         raise HTTPException(status_code=404, detail="Not found")
-
     if not await _is_admin_request(request):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    response_data = await service.process_request(ncm)
-
-    # Collect all IDs from the rendered HTML
+    response_data = await service.executeNeshSearchWithVectorWeights(ncm)
     html_content = response_data.get("markdown", "") or ""
     id_pattern = re.compile(r'id="([^"]+)"')
     all_ids = id_pattern.findall(html_content)
-
-    # Filter to position-related IDs
-    pos_ids = [id for id in all_ids if id.startswith("pos-") or id.startswith("cap-")]
+    pos_ids = [
+        item for item in all_ids if item.startswith("pos-") or item.startswith("cap-")
+    ]
 
     return {
         "query": ncm,
@@ -321,12 +274,8 @@ async def debug_anchors(
     "/admin/reload-secrets",
     responses={403: {"description": "Forbidden (admin-only endpoint)."}},
 )
-async def reload_secrets(request: Request):
-    """
-    Recarrega secrets de env/.env sem reiniciar o servidor.
-    """
+async def reload_system_secrets(request: Request):
     if not await _is_admin_request(request):
         raise HTTPException(status_code=403, detail="Forbidden")
-
     reload_settings()
     return {"success": True}

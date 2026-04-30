@@ -30,7 +30,6 @@ describe("useTabs", () => {
       nesh: [],
       tipi: [],
       nbs: [],
-      nebs: [],
     });
     expect(result.current.tabsById.get("tab-1")?.title).toBe("Nova busca");
   });
@@ -53,7 +52,6 @@ describe("useTabs", () => {
         nesh: [],
         tipi: [],
         nbs: [],
-        nebs: [],
       },
     );
 
@@ -70,6 +68,22 @@ describe("useTabs", () => {
       result.current.switchTab("tab-1");
     });
     expect(result.current.activeTabId).toBe("tab-1");
+    uuidSpy.mockRestore();
+  });
+
+  it("creates a background tab when activate is false", () => {
+    const uuidSpy = mockRandomUuid("211");
+    const { result } = renderHook(() => useTabs());
+
+    act(() => {
+      const created = result.current.createTab("tipi", false);
+      expect(created).toBe("tab-211");
+    });
+
+    expect(result.current.tabs).toHaveLength(2);
+    expect(result.current.tabsById.get("tab-211")?.document).toBe("tipi");
+    expect(result.current.activeTabId).toBe("tab-1");
+    expect(result.current.activeTab.id).toBe("tab-1");
     uuidSpy.mockRestore();
   });
 
@@ -104,6 +118,37 @@ describe("useTabs", () => {
       }),
     );
 
+    uuidSpy.mockRestore();
+  });
+
+  it("supports functional tab updates against the live snapshot", () => {
+    const uuidSpy = mockRandomUuid("301");
+    const { result } = renderHook(() => useTabs());
+
+    act(() => {
+      result.current.createTab("tipi");
+    });
+
+    act(() => {
+      result.current.updateTab("tab-301", (currentTab) => {
+        expect(currentTab).toEqual(expect.objectContaining({
+          id: "tab-301",
+          document: "tipi",
+        }));
+
+        return {
+          title: "Nova busca hidratada",
+          scrollTop: 42,
+        };
+      });
+    });
+
+    expect(result.current.tabsById.get("tab-301")).toEqual(
+      expect.objectContaining({
+        title: "Nova busca hidratada",
+        scrollTop: 42,
+      }),
+    );
     uuidSpy.mockRestore();
   });
 

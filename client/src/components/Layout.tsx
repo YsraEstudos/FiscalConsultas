@@ -9,14 +9,12 @@ interface LayoutProps {
     doc: string;
     setDoc: (doc: string) => void;
     searchKey: string;
-    onMenuOpen: () => void;
     onOpenSettings: () => void;
-    onOpenTutorial: () => void;
     onOpenStats: () => void;
     onOpenComparator: () => void;
-    onOpenServices: () => void;
     onOpenModerate: () => void;
     onOpenProfile: () => void;
+    servicesUnavailableReason?: string | null;
     history: HistoryItem[];
     onClearHistory: () => void;
     onRemoveHistory: (term: string) => void;
@@ -29,14 +27,12 @@ export function Layout({
     doc,
     setDoc,
     searchKey,
-    onMenuOpen,
     onOpenSettings,
-    onOpenTutorial,
     onOpenStats,
     onOpenComparator,
-    onOpenServices,
     onOpenModerate,
     onOpenProfile,
+    servicesUnavailableReason,
     history,
     onClearHistory,
     onRemoveHistory,
@@ -49,14 +45,12 @@ export function Layout({
                 doc={doc}
                 setDoc={setDoc}
                 searchKey={searchKey}
-                onMenuOpen={onMenuOpen}
                 onOpenSettings={onOpenSettings}
-                onOpenTutorial={onOpenTutorial}
                 onOpenStats={onOpenStats}
                 onOpenComparator={onOpenComparator}
-                onOpenServices={onOpenServices}
                 onOpenModerate={onOpenModerate}
                 onOpenProfile={onOpenProfile}
+                servicesUnavailableReason={servicesUnavailableReason}
                 history={history}
                 onClearHistory={onClearHistory}
                 onRemoveHistory={onRemoveHistory}

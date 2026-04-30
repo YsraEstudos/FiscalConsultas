@@ -1,12 +1,12 @@
 """
 Testes para validar que a rota TIPI aplica highlights nas descrições antes de retornar JSON.
-Testa a função _apply_highlights_to_descriptions isoladamente.
+Testa a função _apply_tipi_description_highlights isoladamente.
 """
 
-from backend.presentation.routes.tipi import _apply_highlights_to_descriptions
+from backend.presentation.routes.tipi import _apply_tipi_description_highlights
 
 
-class TestApplyHighlightsToDescriptions:
+class TestApplyTipiDescriptionHighlights:
     """Testa a transformação de descrições no resultado da rota TIPI."""
 
     def test_code_search_applies_unit_highlights(self):
@@ -32,7 +32,7 @@ class TestApplyHighlightsToDescriptions:
                 }
             },
         }
-        _apply_highlights_to_descriptions(result)
+        _apply_tipi_description_highlights(result)
         desc1 = result["results"]["85"]["posicoes"][0]["descricao"]
         desc2 = result["results"]["85"]["posicoes"][1]["descricao"]
         assert 'highlight-unit">W</span>' in desc1
@@ -51,7 +51,7 @@ class TestApplyHighlightsToDescriptions:
                 },
             ],
         }
-        _apply_highlights_to_descriptions(result)
+        _apply_tipi_description_highlights(result)
         assert 'highlight-unit">W</span>' in result["results"][0]["descricao"]
         assert 'highlight-unit">kW</span>' in result["results"][1]["descricao"]
 
@@ -72,20 +72,20 @@ class TestApplyHighlightsToDescriptions:
                 }
             },
         }
-        _apply_highlights_to_descriptions(result)
+        _apply_tipi_description_highlights(result)
         desc = result["results"]["84"]["posicoes"][0]["descricao"]
         assert "highlight-exclusion" in desc
 
     def test_empty_results_no_error(self):
         """Resultado vazio não deve causar erro."""
         result = {"type": "code", "results": {}}
-        _apply_highlights_to_descriptions(result)
+        _apply_tipi_description_highlights(result)
         assert result["results"] == {}
 
     def test_none_results_no_error(self):
         """Resultado None não deve causar erro."""
         result = {"type": "code"}
-        _apply_highlights_to_descriptions(result)
+        _apply_tipi_description_highlights(result)
 
     def test_empty_description_no_error(self):
         """Descrição vazia não deve causar erro."""
@@ -99,7 +99,7 @@ class TestApplyHighlightsToDescriptions:
                 }
             },
         }
-        _apply_highlights_to_descriptions(result)
+        _apply_tipi_description_highlights(result)
         assert result["results"]["01"]["posicoes"][0]["descricao"] == ""
 
     def test_no_units_no_highlights(self):
@@ -110,7 +110,7 @@ class TestApplyHighlightsToDescriptions:
                 {"ncm": "0101", "descricao": "Cavalos vivos", "aliquota": "0"},
             ],
         }
-        _apply_highlights_to_descriptions(result)
+        _apply_tipi_description_highlights(result)
         assert result["results"][0]["descricao"] == "Cavalos vivos"
 
     def test_new_units_applied(self):
@@ -127,7 +127,7 @@ class TestApplyHighlightsToDescriptions:
                 {"ncm": "8414", "descricao": "Pressão de 30 psi", "aliquota": "10"},
             ],
         }
-        _apply_highlights_to_descriptions(result)
+        _apply_tipi_description_highlights(result)
         assert 'highlight-unit">dB</span>' in result["results"][0]["descricao"]
         assert 'highlight-unit">kΩ</span>' in result["results"][1]["descricao"]
         assert 'highlight-unit">psi</span>' in result["results"][2]["descricao"]
