@@ -376,6 +376,13 @@ def _render_chapter(
     return html
 
 
+# Compiled patterns for inject_comment_marks to avoid redundant compilation
+_RE_TAG_WITH_ID = re.compile(
+    r'<[a-zA-Z][^>]*\bid=(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))[^>]*>'
+)
+_RE_CLASS_ATTR = re.compile(r'(?<![\w-])(class=["\'])([^"\']*)(["\'])')
+
+
 def _render_full_response(
     results_map: Mapping[str, SearchResult],
     render_chapter_fn: Callable[[SearchResult], str],
@@ -408,27 +415,22 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     if not commented_anchor_keys or not html:
         return html
 
-    for key in commented_anchor_keys:
-        safe_key = re.escape(key)
-        class_attr_pattern = re.compile(r'(?<![\w-])(class=["\'])([^"\']*?)(["\'])')
+    target_keys = set(commented_anchor_keys)
 
-        def _add_class(match: re.Match[str]) -> str:
-            tag = match.group(0)
-            if class_attr_pattern.search(tag):
-                tag = class_attr_pattern.sub(
-                    lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
-                    tag,
-                    count=1,
-                )
-            else:
-                tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
+    def _add_class(match: re.Match[str]) -> str:
+        tag = match.group(0)
+        id_val = match.group(1) or match.group(2) or match.group(3)
+        if id_val not in target_keys:
             return tag
 
-        html = re.sub(
-            rf'<[a-zA-Z][^>]*\bid=(?:"{safe_key}"|\'{safe_key}\'|{safe_key})(?=[\s/>]|$)[^>]*>',
-            _add_class,
-            html,
-            count=1,
-        )
+        if _RE_CLASS_ATTR.search(tag):
+            tag = _RE_CLASS_ATTR.sub(
+                lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
+                tag,
+                count=1,
+            )
+        else:
+            tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
+        return tag
 
-    return html
+    return _RE_TAG_WITH_ID.sub(_add_class, html)
