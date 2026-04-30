@@ -196,8 +196,8 @@ def test_nbs_public_status_fails_on_explanatory_service_error():
 
 @pytest.mark.asyncio
 async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypatch):
-    monkeypatch.setattr(system, "_pg_stats_cache", {})
-    monkeypatch.setattr(system, "_pg_stats_last_check_ts", 0.0)
+    system_status._PG_STATS_CACHE.clear()
+    monkeypatch.setattr(system_status, "_PG_STATS_LAST_CHECK_TS", 0.0)
 
     class _ScalarResult:
         def __init__(self, value):
@@ -248,8 +248,8 @@ async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypat
 async def test_get_status_fallback_uses_lightweight_check_and_caches_counts(
     monkeypatch,
 ):
-    monkeypatch.setattr(system, "_pg_stats_cache", {})
-    monkeypatch.setattr(system, "_pg_stats_last_check_ts", 0.0)
+    system_status._PG_STATS_CACHE.clear()
+    monkeypatch.setattr(system_status, "_PG_STATS_LAST_CHECK_TS", 0.0)
 
     class _ScalarResult:
         def __init__(self, value):
@@ -278,20 +278,18 @@ async def test_get_status_fallback_uses_lightweight_check_and_caches_counts(
 
     time_points = iter([100.0, 120.0])
     monkeypatch.setattr(db_engine, "get_session", _fake_get_session)
-    monkeypatch.setattr(system.time, "time", lambda: next(time_points))
+    monkeypatch.setattr(system_status, "status_cache_ttl_seconds", lambda: 0)
+    monkeypatch.setattr(system_status.time, "time", lambda: next(time_points))
     request = _build_request("/api/status", state={"db": None, "tipi_service": None})
 
-    first = await system.get_status(request)
-    second = await system.get_status(request)
+    first = await system.fetch_system_status(request)
+    second = await system.fetch_system_status(request)
 
     assert first["database"]["status"] == "online"
     assert second["database"]["status"] == "online"
-    assert executed_queries == [
-        "SELECT 1",
-        "SELECT COUNT(*) FROM chapters",
-        "SELECT COUNT(*) FROM positions",
-        "SELECT 1",
-    ]
+    assert executed_queries.count("SELECT 1") == 2
+    assert executed_queries.count("SELECT COUNT(*) FROM chapters") == 1
+    assert executed_queries.count("SELECT COUNT(*) FROM positions") == 1
 
 
 @pytest.mark.asyncio
