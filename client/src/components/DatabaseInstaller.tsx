@@ -227,7 +227,7 @@ export default function DatabaseInstaller() {
       <p className={styles.cardDescription}>
         Instale o banco de dados localmente para buscar NBS, TIPI e NESH
         instantaneamente, sem depender de conexão de internet. O download é feito
-        uma única vez (~3-5 MB).
+        uma única vez{dbSizeBytes ? ` (~${formatBytes(dbSizeBytes)})` : " (~24 MB)"}.
       </p>
 
       <div className={styles.actions}>

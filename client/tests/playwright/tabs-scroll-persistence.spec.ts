@@ -210,7 +210,7 @@ test.beforeEach(async ({ page }) => {
 
 test('restores saved scroll when returning to a tab with a different document', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
 
   await searchNeshInDefaultTab(page);
   const savedNeshScrollTop = await setAndCaptureScrollTop(page, 'results-content-tab-1', 620);

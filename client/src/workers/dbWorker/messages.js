@@ -17,7 +17,9 @@ import { clearSearchCache, closeWorkerDb, getWorkerDb, getWorkerStatus, getWorke
 async function handleInitMessage(id, payload) {
   const encData = await readFromOpfs();
   const version = await readVersion();
-  const seed = await readSeed();
+  const opfsSeed = await readSeed();
+  const seed = opfsSeed || payload?.seed;
+  const usedPayloadSeedFallback = !opfsSeed && Boolean(payload?.seed);
 
   if (!encData || !version || !seed) {
     setWorkerStatus("not_installed");
@@ -44,7 +46,9 @@ async function handleInitMessage(id, payload) {
     closeWorkerDb();
     setWorkerVersion(null);
     setWorkerStatus("error");
-    await removeFromOpfs();
+    if (usedPayloadSeedFallback) {
+      await removeFromOpfs();
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     const recoverableMessage = `${message}. Reinstale o banco offline para continuar.`;
     postWorkerStatus(id, {
@@ -63,6 +67,7 @@ async function handleInitMessage(id, payload) {
     status: "ready",
     version,
     sizeBytes: encData.length,
+    seed,
   });
 }
 
@@ -127,6 +132,40 @@ async function fetchEncryptedDatabase(apiBase, token) {
   );
 }
 
+function waitBeforeOfflineDownloadRetry() {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 1200);
+  });
+}
+
+function isRetryableOfflineDownloadError(error) {
+  if (!(error instanceof Error)) return false;
+  if (error.message.includes("(403)") || error.message.includes("(429)")) return false;
+  if (error.message.includes("integrity verification failed")) return false;
+  return true;
+}
+
+async function fetchEncryptedDatabaseBundle(apiBase, id) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const tokenData = await requestInstallToken(apiBase);
+      postWorkerProgress(id, 10, "fetching_database");
+      const dlResp = await fetchEncryptedDatabase(apiBase, tokenData.token);
+      const encryptedBlob = await readEncryptedDatabaseBlob(dlResp, id);
+      return { tokenData, encryptedBlob };
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableOfflineDownloadError(error) || attempt === 1) break;
+      postWorkerProgress(id, 10, "retrying_download");
+      await waitBeforeOfflineDownloadRetry();
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Offline database download failed");
+}
+
 async function updateInstalledVersion(apiBase) {
   let nextVersion = null;
 
@@ -157,9 +196,8 @@ async function handleInstallMessage(id, payload) {
   let plaintext = null;
 
   try {
-    const tokenData = await requestInstallToken(apiBase);
+    const { tokenData, encryptedBlob } = await fetchEncryptedDatabaseBundle(apiBase, id);
     const {
-      token,
       app_seed: appSeed,
       encrypted_sha256: expectedEncryptedSha256,
       chunk_size: chunkSize = 65536,
@@ -169,11 +207,6 @@ async function handleInstallMessage(id, payload) {
       throw new Error("Offline database key was not provided by the server");
     }
     setAppSeed(appSeed);
-
-    postWorkerProgress(id, 10, "fetching_database");
-
-    const dlResp = await fetchEncryptedDatabase(apiBase, token);
-    const encryptedBlob = await readEncryptedDatabaseBlob(dlResp, id);
 
     if (expectedEncryptedSha256) {
       postWorkerProgress(id, 72, "verifying_integrity");
@@ -207,6 +240,7 @@ async function handleInstallMessage(id, payload) {
       status: "ready",
       version: getWorkerVersion(),
       sizeBytes: encryptedBlob.length,
+      seed: appSeed,
     });
   } catch (error) {
     setWorkerStatus("error");

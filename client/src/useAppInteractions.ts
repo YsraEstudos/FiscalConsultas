@@ -116,7 +116,7 @@ export function useAppInteractions({
 }: UseAppInteractionsArgs): AppInteractionsState {
     const { sidebarPosition } = useSettings();
     const { status: localDbStatus, install, progress } = useLocalDatabase();
-    const { history, addToHistory, removeFromHistory, clearHistory } = useHistory();
+    const { getHistoryForDoc, addToHistory, removeFromHistory, clearHistory } = useHistory();
     const { ensureServicesSearchAccess, servicesUnavailableReason } = useServicesAccess();
     const { executeSearchForTab } = useSearch(tabsById, updateTab, addToHistory);
     const { fetchNotes: fetchCrossChapterNotes } = useCrossChapterNotes();
@@ -128,6 +128,16 @@ export function useAppInteractions({
     const openServiceResultInNewTabRef = useRef<(code: string, textQuery?: string, activate?: boolean) => Promise<void> | void>(() => {});
 
     activeTabRef.current = activeTab;
+    const activeHistoryDoc = (activeTab?.document || 'nesh') as DocType;
+    const history = getHistoryForDoc(activeHistoryDoc);
+
+    const clearActiveHistory = useCallback(() => {
+        clearHistory(activeHistoryDoc);
+    }, [activeHistoryDoc, clearHistory]);
+
+    const removeFromActiveHistory = useCallback((term: string) => {
+        removeFromHistory(activeHistoryDoc, term);
+    }, [activeHistoryDoc, removeFromHistory]);
 
     const runNonBlockingTask = useCallback((task: Promise<unknown> | void, context: string) => {
         Promise.resolve(task).catch((error) => {
@@ -307,6 +317,8 @@ if (!content) {
     }, [updateTab]);
 
     useEffect(() => {
+        const middleMouseDownHandledLinks = new WeakSet<Element>();
+
         const handleDelegatedMiddleMouseDown = (event: MouseEvent) => {
             if (event.button !== 1) {
                 return;
@@ -314,6 +326,55 @@ if (!content) {
 
             const target = event.target;
             if (!(target instanceof Element)) {
+                return;
+            }
+
+            if (handleDelegatedSearchNavigation(
+                target,
+                'a.smart-link',
+                'ncm',
+                true,
+                event,
+                handleSearchRef.current,
+                openTextResultInNewTabRef.current,
+            )) {
+                const link = target.closest('a.smart-link');
+                if (link) {
+                    middleMouseDownHandledLinks.add(link);
+                }
+                return;
+            }
+
+            if (handleDelegatedSearchNavigation(
+                target,
+                '.service-smart-link, .service-code-target',
+                'serviceCode',
+                true,
+                event,
+                handleSearchRef.current,
+                openServiceResultInNewTabRef.current,
+            )) {
+                const link = target.closest('.service-smart-link, .service-code-target');
+                if (link) {
+                    middleMouseDownHandledLinks.add(link);
+                }
+            }
+        };
+
+        const handleDelegatedAuxClick = (event: MouseEvent) => {
+            if (event.button !== 1) {
+                return;
+            }
+
+            const target = event.target;
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            const handledMiddleLink = target.closest('a.smart-link, .service-smart-link, .service-code-target');
+            if (handledMiddleLink && middleMouseDownHandledLinks.has(handledMiddleLink)) {
+                middleMouseDownHandledLinks.delete(handledMiddleLink);
+                event.preventDefault();
                 return;
             }
 
@@ -380,9 +441,11 @@ if (!content) {
         };
 
         document.addEventListener('mousedown', handleDelegatedMiddleMouseDown);
+        document.addEventListener('auxclick', handleDelegatedAuxClick);
         document.addEventListener('click', handleDelegatedClick);
         return () => {
             document.removeEventListener('mousedown', handleDelegatedMiddleMouseDown);
+            document.removeEventListener('auxclick', handleDelegatedAuxClick);
             document.removeEventListener('click', handleDelegatedClick);
         };
     }, []);
@@ -545,8 +608,8 @@ if (!content) {
         localDbStatus,
         progress,
         history,
-        clearHistory,
-        removeFromHistory,
+        clearHistory: clearActiveHistory,
+        removeFromHistory: removeFromActiveHistory,
         servicesUnavailableReason,
         triggerInstall,
         handleSearch,

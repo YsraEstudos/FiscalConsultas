@@ -140,7 +140,7 @@ test.describe('live offline reopen with active service worker', () => {
     await installOfflineApiMock(page, counters);
 
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
     const isSecureContext = await page.evaluate(() => globalThis.isSecureContext);
     test.skip(!isSecureContext, 'PLAYWRIGHT_LIVE_BASE_URL must resolve to a secure context such as localhost or HTTPS.');
     test.skip(!(await hasServiceWorkerSupport(page)), 'Current browser environment does not expose service workers for this origin.');
@@ -184,7 +184,7 @@ test.describe('live offline reopen with active service worker', () => {
         }
       }).toBe(null);
 
-      await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
       await expectOfflineMetadataPersisted(page);
       await expectOfflineReadyInSettings(page);
     } finally {

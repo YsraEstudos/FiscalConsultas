@@ -68,7 +68,7 @@ test('main surfaces render without obvious visual breakage or defacement', async
   });
 
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'NESH' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'TIPI' })).toBeVisible();
 

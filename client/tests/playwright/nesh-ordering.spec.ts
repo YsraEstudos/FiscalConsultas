@@ -110,7 +110,7 @@ async function waitForScrollToSettle(page: Page, containerSelector: string) {
 test('renders NESH chapter 84 navigation items in order', async ({ page }) => {
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'NESH' })).toHaveClass(/docButtonActive/);
 
   const searchRequest = page.waitForRequest((request) =>
@@ -131,7 +131,7 @@ test('renders NESH chapter 84 navigation items in order', async ({ page }) => {
 
 test('navigates to a NESH position from sidebar click and highlights target anchor', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
 
   const searchRequest = page.waitForRequest((request) =>
     request.url().includes('/api/search')
@@ -217,7 +217,7 @@ test('auto-scrolls to target position right after NESH search in real browser fl
   });
 
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
 
   const searchRequest = page.waitForRequest((request) =>
     request.url().includes('/api/search')

@@ -319,6 +319,7 @@ vi.mock('../../src/hooks/useSearch', () => ({
 vi.mock('../../src/hooks/useHistory', () => ({
   useHistory: () => ({
     history: mocks.historyRef.value,
+    getHistoryForDoc: vi.fn(() => mocks.historyRef.value),
     addToHistory: mocks.addToHistoryMock,
     removeFromHistory: mocks.removeFromHistoryMock,
     clearHistory: mocks.clearHistoryMock,
@@ -870,8 +871,8 @@ describe('App behavior', () => {
 
     fireEvent.click(screen.getByTestId('layout-clear-history'));
     fireEvent.click(screen.getByTestId('layout-remove-history'));
-    expect(mocks.clearHistoryMock).toHaveBeenCalledTimes(1);
-    expect(mocks.removeFromHistoryMock).toHaveBeenCalledWith('8517');
+    expect(mocks.clearHistoryMock).toHaveBeenCalledWith('nesh');
+    expect(mocks.removeFromHistoryMock).toHaveBeenCalledWith('nesh', '8517');
 
     fireEvent.click(screen.getByTestId('modal-open-doc-current'));
     expect(mocks.updateTabMock).toHaveBeenCalledWith(
@@ -1197,6 +1198,24 @@ describe('App behavior', () => {
     });
   });
 
+  it('prevents browser tab navigation after middle-clicking a smart link', async () => {
+    render(<App />);
+
+    const smartLink = appendSmartLink('841320');
+    fireEvent.mouseDown(smartLink, { bubbles: true, button: 1 });
+
+    await waitFor(() => {
+      expect(mocks.createTabMock).toHaveBeenCalledTimes(1);
+      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nesh-1', 'nesh', '841320', false);
+    });
+
+    const auxClickEvent = new MouseEvent('auxclick', { bubbles: true, button: 1, cancelable: true });
+    smartLink.dispatchEvent(auxClickEvent);
+
+    expect(auxClickEvent.defaultPrevented).toBe(true);
+    expect(mocks.createTabMock).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps note navigation working when a smart-link anchor has no NCM data', async () => {
     setTabsState([
       buildTab({
@@ -1493,7 +1512,7 @@ describe('App behavior', () => {
     expect(screen.getByText('Falha no backend')).toBeInTheDocument();
     expect(screen.getByText('Pronto para buscar')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('layout-menu-toggle'));
+    fireEvent.click(screen.getByTestId('result-toggle-mobile-tab-1'));
     expect(screen.getByTestId('result-display-tab-1')).toHaveAttribute('data-mobile-open', 'true');
     fireEvent.click(screen.getByTestId('result-close-mobile-tab-1'));
     expect(screen.getByTestId('result-display-tab-1')).toHaveAttribute('data-mobile-open', 'false');
