@@ -317,6 +317,8 @@ if (!content) {
     }, [updateTab]);
 
     useEffect(() => {
+        const middleMouseDownHandledLinks = new WeakSet<Element>();
+
         const handleDelegatedMiddleMouseDown = (event: MouseEvent) => {
             if (event.button !== 1) {
                 return;
@@ -324,6 +326,55 @@ if (!content) {
 
             const target = event.target;
             if (!(target instanceof Element)) {
+                return;
+            }
+
+            if (handleDelegatedSearchNavigation(
+                target,
+                'a.smart-link',
+                'ncm',
+                true,
+                event,
+                handleSearchRef.current,
+                openTextResultInNewTabRef.current,
+            )) {
+                const link = target.closest('a.smart-link');
+                if (link) {
+                    middleMouseDownHandledLinks.add(link);
+                }
+                return;
+            }
+
+            if (handleDelegatedSearchNavigation(
+                target,
+                '.service-smart-link, .service-code-target',
+                'serviceCode',
+                true,
+                event,
+                handleSearchRef.current,
+                openServiceResultInNewTabRef.current,
+            )) {
+                const link = target.closest('.service-smart-link, .service-code-target');
+                if (link) {
+                    middleMouseDownHandledLinks.add(link);
+                }
+            }
+        };
+
+        const handleDelegatedAuxClick = (event: MouseEvent) => {
+            if (event.button !== 1) {
+                return;
+            }
+
+            const target = event.target;
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            const handledMiddleLink = target.closest('a.smart-link, .service-smart-link, .service-code-target');
+            if (handledMiddleLink && middleMouseDownHandledLinks.has(handledMiddleLink)) {
+                middleMouseDownHandledLinks.delete(handledMiddleLink);
+                event.preventDefault();
                 return;
             }
 
@@ -390,9 +441,11 @@ if (!content) {
         };
 
         document.addEventListener('mousedown', handleDelegatedMiddleMouseDown);
+        document.addEventListener('auxclick', handleDelegatedAuxClick);
         document.addEventListener('click', handleDelegatedClick);
         return () => {
             document.removeEventListener('mousedown', handleDelegatedMiddleMouseDown);
+            document.removeEventListener('auxclick', handleDelegatedAuxClick);
             document.removeEventListener('click', handleDelegatedClick);
         };
     }, []);
