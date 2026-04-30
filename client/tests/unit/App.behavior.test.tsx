@@ -1198,6 +1198,24 @@ describe('App behavior', () => {
     });
   });
 
+  it('prevents browser tab navigation after middle-clicking a smart link', async () => {
+    render(<App />);
+
+    const smartLink = appendSmartLink('841320');
+    fireEvent.mouseDown(smartLink, { bubbles: true, button: 1 });
+
+    await waitFor(() => {
+      expect(mocks.createTabMock).toHaveBeenCalledTimes(1);
+      expect(mocks.executeSearchForTabMock).toHaveBeenCalledWith('new-nesh-1', 'nesh', '841320', false);
+    });
+
+    const auxClickEvent = new MouseEvent('auxclick', { bubbles: true, button: 1, cancelable: true });
+    smartLink.dispatchEvent(auxClickEvent);
+
+    expect(auxClickEvent.defaultPrevented).toBe(true);
+    expect(mocks.createTabMock).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps note navigation working when a smart-link anchor has no NCM data', async () => {
     setTabsState([
       buildTab({
