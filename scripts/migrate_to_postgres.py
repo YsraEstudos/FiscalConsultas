@@ -688,24 +688,24 @@ async def update_search_vectors(pg_session: AsyncSession) -> None:
     """Refresh PostgreSQL tsvector columns after bulk loads."""
     print("\nAtualizando search_vectors...")
 
-    statements = (
-        """
-            UPDATE chapters
-            SET search_vector = to_tsvector('portuguese', COALESCE(content, ''))
-            """,
-        """
-            UPDATE positions
-            SET search_vector = to_tsvector('portuguese', COALESCE(descricao, ''))
-            """,
-        """
-            UPDATE tipi_positions
-            SET search_vector = to_tsvector('portuguese', COALESCE(descricao, ''))
-            """,
-        """
-            UPDATE nbs_items
-            SET search_vector = to_tsvector('portuguese', COALESCE(description, ''))
-            """,
-        """
+    catalog_vector_sources = (
+        ("chapters", "content"),
+        ("positions", "descricao"),
+        ("tipi_positions", "descricao"),
+        ("nbs_items", "description"),
+    )
+
+    for table_name, text_column in catalog_vector_sources:
+        sql = f"""
+                UPDATE {table_name}
+                SET search_vector = to_tsvector(
+                    'portuguese',
+                    COALESCE({text_column}, '')
+                )
+                """
+        await pg_session.execute(text(sql))
+
+    nebs_sql = """
             UPDATE nebs_entries
             SET search_vector = to_tsvector(
                 'portuguese',
@@ -715,10 +715,8 @@ async def update_search_vectors(pg_session: AsyncSession) -> None:
                     COALESCE(body_text, '')
                 )
             )
-            """,
-    )
-    for sql in statements:
-        await pg_session.execute(text(sql))
+            """
+    await pg_session.execute(text(nebs_sql))
 
     print("  OK search vectors atualizados")
 

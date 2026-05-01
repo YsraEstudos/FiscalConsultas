@@ -117,7 +117,7 @@ function makeNeshCodeSearchResponse(query = '8404'): CodeSearchResponse {
 export function makeNeshChapterData(
   capitulo: string,
   posicoes: ChapterPosition[],
-  overrides: Partial<ChapterData> = {},
+  overrides: Partial<ChapterData> = {}
 ): ChapterData {
   return {
     ncm_buscado: capitulo,
@@ -136,7 +136,7 @@ export function makeNeshChapterData(
 export function makeTipiChapterData(
   capitulo: string,
   posicoes: TipiPosition[],
-  overrides: Partial<TipiChapterData> = {},
+  overrides: Partial<TipiChapterData> = {}
 ): TipiChapterData {
   return {
     capitulo,
@@ -210,11 +210,22 @@ export function makeNebsDetail(code = '1.0101.11.00'): NbsCatalogDetailApiRespon
   return makeNbsDetail(code);
 }
 
+export async function searchCatalogCode(page: Page, endpoint: string, ncm: string) {
+  const searchRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname.endsWith(endpoint) && url.searchParams.get('ncm') === ncm;
+  });
+
+  await page.locator('#ncmInput').fill(ncm);
+  await page.locator('#ncmInput').press('Enter');
+  await searchRequest;
+}
+
 async function fulfillSearchRoute<TResponse>(
   route: Route,
   query: string,
   queue: MockResponseQueue,
-  makeResponse: (requestedQuery: string) => TResponse,
+  makeResponse: (requestedQuery: string) => TResponse
 ) {
   const trimmedQuery = query.trim();
   const next = trimmedQuery ? queue.shift() : undefined;
@@ -226,7 +237,10 @@ async function fulfillSearchRoute<TResponse>(
   await route.fulfill({
     status: next?.status ?? 200,
     contentType: 'application/json',
-    body: JSON.stringify(next?.body ?? (trimmedQuery ? makeResponse(trimmedQuery) : makeEmptySearchResponse(trimmedQuery))),
+    body: JSON.stringify(
+      next?.body ??
+        (trimmedQuery ? makeResponse(trimmedQuery) : makeEmptySearchResponse(trimmedQuery))
+    ),
   });
 }
 
@@ -249,7 +263,7 @@ async function handleNeshSearch(route: Route, query: string, neshQueue: MockResp
 async function handleNbsDetail(
   route: Route,
   code: string,
-  detailResponses: Record<string, NbsCatalogDetailApiResponse>,
+  detailResponses: Record<string, NbsCatalogDetailApiResponse>
 ) {
   await route.fulfill({ json: detailResponses[code] ?? makeNbsDetail(code) });
 }
@@ -257,7 +271,7 @@ async function handleNbsDetail(
 async function handleNebsDetail(
   route: Route,
   code: string,
-  detailResponses: Record<string, NbsCatalogDetailApiResponse>,
+  detailResponses: Record<string, NbsCatalogDetailApiResponse>
 ) {
   await route.fulfill({ json: detailResponses[code] ?? makeNebsDetail(code) });
 }
@@ -280,7 +294,8 @@ export async function installServicesMock(page: Page, options: ServicesMockOptio
   await routeScope.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
-    const isCodeCatalogSearch = path.endsWith('/tipi/search') || (path.endsWith('/search') && !path.includes('/services/'));
+    const isCodeCatalogSearch =
+      path.endsWith('/tipi/search') || (path.endsWith('/search') && !path.includes('/services/'));
     const queryParam = isCodeCatalogSearch ? 'ncm' : 'q';
     const query = url.searchParams.get(queryParam) ?? '';
 

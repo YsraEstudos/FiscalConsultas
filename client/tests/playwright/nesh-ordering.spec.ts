@@ -1,6 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { installServicesMock, makeNeshChapterData } from './fixtures/service-mocks';
+import {
+  installServicesMock,
+  makeNeshChapterData,
+  searchCatalogCode,
+} from './fixtures/service-mocks';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -62,7 +66,7 @@ test.beforeEach(async ({ page }) => {
               {
                 ncm_buscado: '8404',
                 posicao_alvo: '84.04',
-              },
+              }
             ),
           },
           total_capitulos: 1,
@@ -73,7 +77,8 @@ test.beforeEach(async ({ page }) => {
             '  <article id="pos-84-04" data-ncm="84.04">84.04 - Aparelhos auxiliares para caldeiras.</article>',
             ...Array.from(
               { length: 48 },
-              (_, index) => `<p>Trecho técnico de contexto ${index + 1} para validar navegação por âncora.</p>`,
+              (_, index) =>
+                `<p>Trecho técnico de contexto ${index + 1} para validar navegação por âncora.</p>`
             ),
             '  <article id="pos-84-05" data-ncm="84.05">84.05 - Geradores de gás.</article>',
             '</div>',
@@ -89,22 +94,27 @@ async function waitForScrollToSettle(page: Page, containerSelector: string) {
   let lastScrollTop: number | null = null;
   let sawMovement = false;
 
-  await expect.poll(async () => {
-    const currentScrollTop = await container.evaluate((element) => element.scrollTop);
+  await expect
+    .poll(
+      async () => {
+        const currentScrollTop = await container.evaluate((element) => element.scrollTop);
 
-    if (lastScrollTop !== null && Math.abs(currentScrollTop - lastScrollTop) < 1) {
-      return sawMovement;
-    }
+        if (lastScrollTop !== null && Math.abs(currentScrollTop - lastScrollTop) < 1) {
+          return sawMovement;
+        }
 
-    if (lastScrollTop !== null && Math.abs(currentScrollTop - lastScrollTop) >= 1) {
-      sawMovement = true;
-    } else if (currentScrollTop > 0) {
-      sawMovement = true;
-    }
+        if (lastScrollTop !== null && Math.abs(currentScrollTop - lastScrollTop) >= 1) {
+          sawMovement = true;
+        } else if (currentScrollTop > 0) {
+          sawMovement = true;
+        }
 
-    lastScrollTop = currentScrollTop;
-    return false;
-  }, { timeout: 10_000 }).toBe(true);
+        lastScrollTop = currentScrollTop;
+        return false;
+      },
+      { timeout: 10_000 }
+    )
+    .toBe(true);
 }
 
 test('renders NESH chapter 84 navigation items in order', async ({ page }) => {
@@ -112,35 +122,23 @@ test('renders NESH chapter 84 navigation items in order', async ({ page }) => {
 
   await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'NESH' })).toHaveClass(/docButtonActive/);
+  await searchCatalogCode(page, '/api/search', '8404');
 
-  const searchRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/search')
-    && new URL(request.url()).searchParams.get('ncm') === '8404',
-  );
-
-  await page.locator('#ncmInput').fill('8404');
-  await page.locator('#ncmInput').press('Enter');
-  await searchRequest;
-
-  await expect.poll(async () => {
-    const targetCodes = new Set(['84.03', '8404', '8404.10.10', '84.05']);
-    const codes = await page.locator('span[class*="itemCode"]').allTextContents();
-    return codes.map((code) => code.trim()).filter((code) => targetCodes.has(code));
-  }).toEqual(['84.03', '8404', '8404.10.10', '84.05']);
+  await expect
+    .poll(async () => {
+      const targetCodes = new Set(['84.03', '8404', '8404.10.10', '84.05']);
+      const codes = await page.locator('span[class*="itemCode"]').allTextContents();
+      return codes.map((code) => code.trim()).filter((code) => targetCodes.has(code));
+    })
+    .toEqual(['84.03', '8404', '8404.10.10', '84.05']);
 });
 
-test('navigates to a NESH position from sidebar click and highlights target anchor', async ({ page }) => {
+test('navigates to a NESH position from sidebar click and highlights target anchor', async ({
+  page,
+}) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
-
-  const searchRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/search')
-    && new URL(request.url()).searchParams.get('ncm') === '8404',
-  );
-
-  await page.locator('#ncmInput').fill('8404');
-  await page.locator('#ncmInput').press('Enter');
-  await searchRequest;
+  await searchCatalogCode(page, '/api/search', '8404');
 
   const resultsContainer = page.locator('#results-content-tab-1');
   const targetAnchor = page.locator('#pos-84-05');
@@ -152,9 +150,9 @@ test('navigates to a NESH position from sidebar click and highlights target anch
   await resultsContainer.evaluate((element) => {
     element.scrollTop = 0;
   });
-  await expect.poll(async () => (
-    resultsContainer.evaluate((element) => element.scrollTop)
-  )).toBeLessThanOrEqual(80);
+  await expect
+    .poll(async () => resultsContainer.evaluate((element) => element.scrollTop))
+    .toBeLessThanOrEqual(80);
 
   await page.getByRole('button', { name: /84\.05\s*Geradores de gás\./i }).click();
 
@@ -162,7 +160,10 @@ test('navigates to a NESH position from sidebar click and highlights target anch
   await waitForScrollToSettle(page, '#results-content-tab-1');
 });
 
-test('auto-scrolls to target position right after NESH search in real browser flow', async ({ page, context }) => {
+test('auto-scrolls to target position right after NESH search in real browser flow', async ({
+  page,
+  context,
+}) => {
   await context.unroute('**/api/**');
   await installServicesMock(page, {
     neshSearchResponses: [
@@ -195,7 +196,7 @@ test('auto-scrolls to target position right after NESH search in real browser fl
               {
                 ncm_buscado: '8405',
                 posicao_alvo: '84.05',
-              },
+              }
             ),
           },
           total_capitulos: 1,
@@ -205,7 +206,7 @@ test('auto-scrolls to target position right after NESH search in real browser fl
             '  <article id="pos-84-03" data-ncm="84.03">84.03 - Caldeiras para aquecimento central.</article>',
             ...Array.from(
               { length: 80 },
-              (_, index) => `<p>Contexto adicional ${index + 1} para auto-scroll.</p>`,
+              (_, index) => `<p>Contexto adicional ${index + 1} para auto-scroll.</p>`
             ),
             '  <article id="pos-84-04" data-ncm="84.04">84.04 - Aparelhos auxiliares para caldeiras.</article>',
             '  <article id="pos-84-05" data-ncm="84.05">84.05 - Geradores de gás.</article>',
@@ -218,15 +219,7 @@ test('auto-scrolls to target position right after NESH search in real browser fl
 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
-
-  const searchRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/search')
-    && new URL(request.url()).searchParams.get('ncm') === '8405',
-  );
-
-  await page.locator('#ncmInput').fill('8405');
-  await page.locator('#ncmInput').press('Enter');
-  await searchRequest;
+  await searchCatalogCode(page, '/api/search', '8405');
 
   const resultsContainer = page.locator('#results-content-tab-1');
   const targetAnchor = page.locator('#pos-84-05');
