@@ -41,6 +41,23 @@ describe('useHistory', () => {
     }
   });
 
+  it('clears structurally invalid persisted history data', async () => {
+    sessionStorage.setItem('nesh_search_history', JSON.stringify({ foo: 1 }));
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      const { result } = renderHook(() => useHistory());
+
+      await waitFor(() => {
+        expect(consoleErrorSpy).toHaveBeenCalled();
+      });
+      expect(result.current.history).toEqual([]);
+      expect(sessionStorage.getItem('nesh_search_history')).toBeNull();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
   it('adds unique terms case-insensitively and persists only the 10 most recent entries', () => {
     const { result } = renderHook(() => useHistory());
 

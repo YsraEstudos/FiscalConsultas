@@ -31,11 +31,12 @@ echo.
 :: [2] Subir Backend Python
 :: -----------------------------------------------------------
 echo [2/3] Iniciando Backend FastAPI (porta 8000)...
+set "BACKEND_CMD=uv run Nesh.py"
 if exist "%~dp0.venv\Scripts\python.exe" (
-    start "Nesh Backend" /D "%~dp0" cmd /k "set CACHE__ENABLE_REDIS=false& .venv\Scripts\python.exe Nesh.py"
-) else (
-    start "Nesh Backend" /D "%~dp0" cmd /k "set CACHE__ENABLE_REDIS=false& uv run Nesh.py"
+    "%~dp0.venv\Scripts\python.exe" -c "import sys" >nul 2>&1
+    if not errorlevel 1 set "BACKEND_CMD=.venv\Scripts\python.exe Nesh.py"
 )
+start "Nesh Backend" /D "%~dp0" cmd /k "set CACHE__ENABLE_REDIS=false& %BACKEND_CMD%"
 echo    Backend iniciado. Aguarde alguns segundos para ele subir.
 echo.
 

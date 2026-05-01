@@ -83,12 +83,14 @@ class PortugueseStemmer:
 
 # ⚡ Bolt: Cache stemming results for frequently repeated words across the application.
 # Stemming is CPU intensive and the total vocabulary of NCM codes is bounded.
+# Safe to share because PortugueseStemmer is currently stateless. The stemmer
+# instance is part of the key so future per-instance behavior stays isolated.
 _SHARED_STEMMER = PortugueseStemmer()
 
 
 @lru_cache(maxsize=10000)
-def _cached_stem(word: str) -> str:
-    return _SHARED_STEMMER.stem(word)
+def _cached_stem(stemmer: PortugueseStemmer, word: str) -> str:
+    return stemmer.stem(word)
 
 
 class NeshTextProcessor:
@@ -115,7 +117,7 @@ class NeshTextProcessor:
             if len(w) < 2:  # Ignora letras soltas
                 continue
 
-            stemmed = _cached_stem(w)
+            stemmed = _cached_stem(self.stemmer, w)
             processed.append(stemmed)
 
         return " ".join(processed)
@@ -130,7 +132,7 @@ class NeshTextProcessor:
             if w in self.stopwords:
                 continue
 
-            stemmed = _cached_stem(w)
+            stemmed = _cached_stem(self.stemmer, w)
             processed.append(f"{stemmed}*")
 
         return " ".join(processed)
@@ -145,7 +147,7 @@ class NeshTextProcessor:
             if w in self.stopwords:
                 continue
 
-            stemmed = _cached_stem(w)
+            stemmed = _cached_stem(self.stemmer, w)
             processed.append(stemmed)
 
         return " ".join(processed)

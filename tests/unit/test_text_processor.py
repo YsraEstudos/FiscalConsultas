@@ -39,6 +39,79 @@ def test_processor_normalize_and_process_with_stopwords():
     assert p.process(text) == "maquino lavar motor eletrico"
 
 
+def test_cached_processor_matches_direct_stemmer_for_common_words():
+    import backend.utils.text_processor as text_processor
+
+    text_processor._cached_stem.cache_clear()
+
+    processor = text_processor.NeshTextProcessor()
+    stemmer = text_processor.PortugueseStemmer()
+
+    words = [
+        "Máquinas",
+        "motores",
+        "animais",
+        "luzes",
+        "produtora",
+        "arranque",
+        "elétrico",
+    ]
+
+    try:
+        for word in words:
+            normalized = processor.normalize(word)
+            assert processor.process(word) == stemmer.stem(normalized)
+    finally:
+        text_processor._cached_stem.cache_clear()
+
+
+def test_cached_stem_reuses_result_across_processor_instances(monkeypatch):
+    import backend.utils.text_processor as text_processor
+
+    text_processor._cached_stem.cache_clear()
+
+    calls = {"count": 0}
+    original_stem = text_processor._SHARED_STEMMER.stem
+
+    def counting_stem(word: str) -> str:
+        calls["count"] += 1
+        return original_stem(word)
+
+    monkeypatch.setattr(text_processor._SHARED_STEMMER, "stem", counting_stem)
+
+    processor_1 = text_processor.NeshTextProcessor()
+    processor_2 = text_processor.NeshTextProcessor()
+
+    try:
+        assert processor_1.process("Motores motores") == "motor motor"
+        assert processor_2.process("motores") == "motor"
+
+        assert calls["count"] == 1
+    finally:
+        text_processor._cached_stem.cache_clear()
+
+
+def test_cached_stem_keeps_query_outputs_unchanged():
+    import backend.utils.text_processor as text_processor
+
+    text_processor._cached_stem.cache_clear()
+
+    processor = text_processor.NeshTextProcessor(stopwords=["de", "com"])
+
+    try:
+        assert processor.process("Máquinas de lavar, com motor elétrico!") == (
+            "maquino lavar motor eletrico"
+        )
+        assert processor.process_query_for_fts("Motores de arranque") == (
+            "motor* arranque*"
+        )
+        assert processor.process_query_exact("Motores de arranque") == (
+            "motor arranque"
+        )
+    finally:
+        text_processor._cached_stem.cache_clear()
+
+
 def test_process_ignores_single_letters_and_stopwords():
     p = NeshTextProcessor(stopwords=["a"])
     assert p.process("a b c de") == "de"

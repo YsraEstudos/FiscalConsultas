@@ -175,6 +175,13 @@ describe('api service', () => {
     getter.mockClear();
     headers.set.mockClear();
 
+    await mockAxios.handlers.requestFulfilled?.({ url: '/database/token', headers });
+    expect(getter).toHaveBeenCalledTimes(1);
+    expect(headers.set).toHaveBeenCalledWith('Authorization', 'Bearer jwt-token');
+
+    getter.mockClear();
+    headers.set.mockClear();
+
     await mockAxios.handlers.requestFulfilled?.({ url: 'https://example.com/status', headers });
     expect(getter).not.toHaveBeenCalled();
     expect(headers.set).not.toHaveBeenCalledWith('Authorization', 'Bearer jwt-token');

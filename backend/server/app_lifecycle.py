@@ -254,11 +254,22 @@ async def _init_tipi_service(app: FastAPI) -> None:
 async def _init_nbs_service(app: FastAPI) -> None:
     if settings.database.is_postgres:
         try:
-            app.state.nbs_service = (
+            nbs_service = (
                 await NbsService.initializeNbsServiceWithPostgresRepository()
             )
-            logger.info("NbsService initialized in Repository mode (Postgres)")
-            return
+            catalog_health = await nbs_service.probeNbsCatalogHealth()
+            if (
+                catalog_health.get("status") == "online"
+                and int(catalog_health.get("nbs_items", 0)) > 0
+            ):
+                app.state.nbs_service = nbs_service
+                logger.info("NbsService initialized in Repository mode (Postgres)")
+                return
+            logger.warning(
+                "NBS Postgres catalog healthcheck failed, falling back to SQLite "
+                "mode: %s",
+                catalog_health,
+            )
         except Exception as exc:
             logger.warning(
                 "NbsService repository init failed, falling back to SQLite mode: %s",

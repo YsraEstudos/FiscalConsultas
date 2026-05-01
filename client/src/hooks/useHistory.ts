@@ -19,17 +19,37 @@ export interface HistoryItem {
     timestamp: number;
 }
 
+function isHistoryItem(value: unknown): value is HistoryItem {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        typeof (value as HistoryItem).term === 'string' &&
+        typeof (value as HistoryItem).timestamp === 'number'
+    );
+}
+
+function parseStoredHistory(saved: string): HistoryItem[] {
+    const parsed = JSON.parse(saved) as unknown;
+    if (!Array.isArray(parsed) || !parsed.every(isHistoryItem)) {
+        throw new Error('Stored search history has an invalid shape');
+    }
+    return parsed;
+}
+
 export function useHistory() {
     const [history, setHistory] = useState<HistoryItem[]>([]);
 
     // Load from session storage on mount to avoid persisting search behavior across browser sessions.
     useEffect(() => {
-        const saved = getHistoryStorage()?.getItem(STORAGE_KEY);
+        const storage = getHistoryStorage();
+        const saved = storage?.getItem(STORAGE_KEY);
         if (saved) {
             try {
-                setHistory(JSON.parse(saved));
+                setHistory(parseStoredHistory(saved));
             } catch (e) {
                 console.error("Failed to parse history", e);
+                storage?.removeItem(STORAGE_KEY);
+                setHistory([]);
             }
         }
     }, []);

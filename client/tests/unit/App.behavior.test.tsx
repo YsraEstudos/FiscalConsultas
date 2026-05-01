@@ -871,6 +871,7 @@ describe('App behavior', () => {
     fireEvent.click(screen.getByTestId('layout-clear-history'));
     fireEvent.click(screen.getByTestId('layout-remove-history'));
     expect(mocks.clearHistoryMock).toHaveBeenCalledTimes(1);
+    expect(mocks.removeFromHistoryMock).toHaveBeenCalledTimes(1);
     expect(mocks.removeFromHistoryMock).toHaveBeenCalledWith('8517');
 
     fireEvent.click(screen.getByTestId('modal-open-doc-current'));
