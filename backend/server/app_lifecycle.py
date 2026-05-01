@@ -254,9 +254,7 @@ async def _init_tipi_service(app: FastAPI) -> None:
 async def _init_nbs_service(app: FastAPI) -> None:
     if settings.database.is_postgres:
         try:
-            nbs_service = (
-                await NbsService.initializeNbsServiceWithPostgresRepository()
-            )
+            nbs_service = await NbsService.initializeNbsServiceWithPostgresRepository()
             catalog_health = await nbs_service.probeNbsCatalogHealth()
             if (
                 catalog_health.get("status") == "online"
