@@ -7,7 +7,8 @@ from fastapi import HTTPException
 from starlette.requests import Request
 
 import backend.infrastructure.db_engine as db_engine
-from backend.presentation.routes import system, system_status
+from backend.presentation.routes import system
+from backend.presentation.routes import system_status
 
 pytestmark = pytest.mark.unit
 
@@ -81,7 +82,9 @@ class _FakeNeshService:
     async def snapshotNeshInternalCacheMetrics(self):  # NOSONAR
         return {"cache": "nesh"}
 
-    async def executeNeshSearchWithVectorWeights(self, _ncm: str, **kwargs):  # NOSONAR
+    async def executeNeshSearchWithVectorWeights(  # NOSONAR
+        self, _ncm: str, **kwargs
+    ):
         return self.response
 
 
@@ -193,6 +196,9 @@ def test_nbs_public_status_fails_on_explanatory_service_error():
 
 @pytest.mark.asyncio
 async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypatch):
+    system_status._PG_STATS_CACHE.clear()
+    monkeypatch.setattr(system_status, "_PG_STATS_LAST_CHECK_TS", 0.0)
+
     class _ScalarResult:
         def __init__(self, value):
             self._value = value
@@ -201,12 +207,15 @@ async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypat
             return self._value
 
     class _Session:
-        def __init__(self):
-            self.calls = 0
-
-        async def execute(self, _query):
-            self.calls += 1
-            return _ScalarResult(12 if self.calls == 1 else 34)
+        async def execute(self, query):
+            query_str = str(query)
+            if "SELECT 1" in query_str:
+                return _ScalarResult(1)
+            if "SELECT COUNT(*) FROM chapters" in query_str:
+                return _ScalarResult(12)
+            if "SELECT COUNT(*) FROM positions" in query_str:
+                return _ScalarResult(34)
+            return _ScalarResult(0)
 
     @asynccontextmanager
     async def _fake_get_session():  # NOSONAR
@@ -233,6 +242,54 @@ async def test_get_status_uses_db_engine_fallback_when_db_not_in_state(monkeypat
     assert payload["tipi"]["status"] == "online"
     assert payload["nbs"]["status"] == "online"
     assert "nebs" not in payload
+
+
+@pytest.mark.asyncio
+async def test_get_status_fallback_uses_lightweight_check_and_caches_counts(
+    monkeypatch,
+):
+    system_status._PG_STATS_CACHE.clear()
+    monkeypatch.setattr(system_status, "_PG_STATS_LAST_CHECK_TS", 0.0)
+
+    class _ScalarResult:
+        def __init__(self, value):
+            self._value = value
+
+        def scalar(self):
+            return self._value
+
+    executed_queries = []
+
+    class _Session:
+        async def execute(self, query):
+            query_str = str(query)
+            executed_queries.append(query_str)
+            if "SELECT 1" in query_str:
+                return _ScalarResult(1)
+            if "SELECT COUNT(*) FROM chapters" in query_str:
+                return _ScalarResult(12)
+            if "SELECT COUNT(*) FROM positions" in query_str:
+                return _ScalarResult(34)
+            return _ScalarResult(0)
+
+    @asynccontextmanager
+    async def _fake_get_session():  # NOSONAR
+        yield _Session()
+
+    time_points = iter([100.0, 120.0])
+    monkeypatch.setattr(db_engine, "get_session", _fake_get_session)
+    monkeypatch.setattr(system_status, "status_cache_ttl_seconds", lambda: 0)
+    monkeypatch.setattr(system_status.time, "time", lambda: next(time_points))
+    request = _build_request("/api/status", state={"db": None, "tipi_service": None})
+
+    first = await system.fetch_system_status(request)
+    second = await system.fetch_system_status(request)
+
+    assert first["database"]["status"] == "online"
+    assert second["database"]["status"] == "online"
+    assert executed_queries.count("SELECT 1") == 2
+    assert executed_queries.count("SELECT COUNT(*) FROM chapters") == 1
+    assert executed_queries.count("SELECT COUNT(*) FROM positions") == 1
 
 
 @pytest.mark.asyncio

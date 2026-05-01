@@ -17,54 +17,54 @@ from starlette.responses import JSONResponse
 
 from backend.config.settings import settings
 from backend.infrastructure.db_engine import tenant_context
-from backend.server.middleware_context import (  # noqa: F401 - re-exported for callers
+from backend.server.middleware_context import (
     _jwt_failure_reason_ctx,
     _request_id_ctx,
     _schedule_background_task,
-    get_current_request_id,
-    get_current_tenant,
+    get_current_request_id,  # noqa: F401 - re-exported for callers
+    get_current_tenant,  # noqa: F401 - re-exported for callers
     get_last_jwt_failure_reason,
 )
-from backend.server.middleware_jwt_support import (  # noqa: F401 - re-exported for callers
+from backend.server.middleware_jwt_support import (
+    _build_jwt_decode_kwargs,  # noqa: F401 - re-exported for callers
+    _build_temporal_claims_extra,  # noqa: F401 - re-exported for callers
     _build_jwks_url,
-    _build_jwt_decode_kwargs,
-    _build_temporal_claims_extra,
-    _configured_clock_skew_seconds,
+    _configured_clock_skew_seconds,  # noqa: F401 - re-exported for callers
     _decode_jwt_with_signature,
-    _derive_issuer_hint_from_domain,
+    _derive_issuer_hint_from_domain,  # noqa: F401 - re-exported for callers
     _effective_clock_skew_seconds,
-    _get_payload_exp,
+    _get_payload_exp,  # noqa: F401 - re-exported for callers
     _is_payload_expired,
-    _is_recently_provisioned,
-    _jwt_error_reason,
+    _jwt_error_reason,  # noqa: F401 - re-exported for callers
     _log_jwt_failure,
     _log_jwt_validation_error,
     _log_jwt_validation_success,
-    _mark_entities_as_provisioned,
-    _normalize_clerk_domain,
-    _normalize_issuer,
-    _normalize_token_audience,
-    _parse_clock_skew_seconds,
+    _normalize_clerk_domain,  # noqa: F401 - re-exported for callers
+    _normalize_issuer,  # noqa: F401 - re-exported for callers
+    _normalize_token_audience,  # noqa: F401 - re-exported for callers
+    _parse_clock_skew_seconds,  # noqa: F401 - re-exported for callers
     _resolve_expected_audience,
     _resolve_expected_azp,
     _resolve_expected_issuer,
-    _resolve_full_name,
+    _resolve_full_name,  # noqa: F401 - re-exported for callers
     _resolve_identity_fields,
     _resolve_user_id,
-    _safe_float_claim,
-    _safe_get_unverified_claims,
-    _safe_get_unverified_header,
+    _safe_float_claim,  # noqa: F401 - re-exported for callers
+    _safe_get_unverified_claims,  # noqa: F401 - re-exported for callers
+    _safe_get_unverified_header,  # noqa: F401 - re-exported for callers
     _token_observability_snapshot,
     _upsert_clerk_entities,
     _validate_expected_audience_claim,
     _validate_expected_azp,
     _validate_expected_issuer,
-    _validate_not_before_like_claim,
+    _validate_not_before_like_claim,  # noqa: F401 - re-exported for callers
     _validate_temporal_claims,
+    _is_recently_provisioned,
+    _mark_entities_as_provisioned,
 )
-from backend.server.middleware_network import (  # noqa: F401 - re-exported for callers
+from backend.server.middleware_network import (
     is_loopback_host,
-    origin_looks_like_loopback,
+    origin_looks_like_loopback,  # noqa: F401 - re-exported for callers
 )
 
 logger = logging.getLogger("nesh.middleware.tenant")
@@ -352,6 +352,8 @@ class TenantMiddleware:
         "/api/tipi/chapters",
         "/api/webhooks",
         "/api/database/version",
+        "/api/database/token",
+        "/api/database/download",
     }
     PUBLIC_PREFIX_PATHS = (
         "/api/webhooks/",

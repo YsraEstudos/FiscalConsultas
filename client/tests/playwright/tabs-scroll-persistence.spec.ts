@@ -9,16 +9,10 @@ import {
 async function getActiveTabDocument(page: Page): Promise<string | null> {
   return page.locator('div[draggable="true"][data-document]').evaluateAll((tabs) => {
     const activeTab = tabs.find((tab): tab is HTMLElement => (
-      tab instanceof HTMLElement && tab.dataset.active === 'true'
+      tab.getAttribute('data-active') === 'true' && tab instanceof HTMLElement
     ));
     return activeTab?.dataset.document ?? null;
   });
-}
-
-function waitForNextPaint(page: Page) {
-  return page.evaluate(() => new Promise<void>((resolve) => {
-    requestAnimationFrame(() => resolve());
-  }));
 }
 
 async function getActiveResultsContainerId(page: Page): Promise<string> {
@@ -60,8 +54,11 @@ async function setAndCaptureScrollTop(page: Page, containerId: string, targetScr
   }
 
   expect(currentScrollTop, `Expected #${containerId} to reach at least ${targetScrollTop}px`).toBeGreaterThanOrEqual(targetScrollTop);
-  await waitForNextPaint(page);
-  await waitForNextPaint(page);
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  }));
   return currentScrollTop;
 }
 
@@ -213,7 +210,7 @@ test.beforeEach(async ({ page }) => {
 
 test('restores saved scroll when returning to a tab with a different document', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
 
   await searchNeshInDefaultTab(page);
   const savedNeshScrollTop = await setAndCaptureScrollTop(page, 'results-content-tab-1', 620);

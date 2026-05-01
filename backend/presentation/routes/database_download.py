@@ -229,9 +229,13 @@ async def get_database_version():
     return {
         "version": meta.get("version"),
         "size_bytes": meta.get("size_bytes"),
+        "sha256": meta.get("sha256"),
+        "encrypted_sha256": meta.get("encrypted_sha256"),
         "updated_at": meta.get("built_at"),
         "built_at": meta.get("built_at"),
         "format_version": meta.get("format_version", 1),
+        "chunk_size": meta.get("chunk_size", 65536),
+        "pbkdf2_iterations": meta.get("pbkdf2_iterations", 600_000),
     }
 
 

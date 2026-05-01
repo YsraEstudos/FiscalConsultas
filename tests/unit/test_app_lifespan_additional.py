@@ -84,10 +84,6 @@ class _FakeNbsService:
     async def close(self):
         await self.shutdownNbsServiceResources()
 
-    async def probeNbsCatalogHealth(self):
-        await asyncio.sleep(0)
-        return {"status": "online", "nbs_items": 1, "nebs_entries": 0}
-
     @classmethod
     async def initializeNbsServiceWithPostgresRepository(cls):
         await asyncio.sleep(0)
@@ -381,10 +377,19 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
 async def test_lifespan_postgres_tipi_count_failure_falls_back_to_sqlite_mode(
     monkeypatch, core_mocks
 ):
+    class _ScalarResult:
+        def __init__(self, value):
+            self._value = value
+
+        def scalar(self):
+            return self._value
+
     class _BrokenSession:
-        async def execute(self, _query):
+        async def execute(self, query):
             await asyncio.sleep(0)
-            raise RuntimeError("tipi count failed")
+            if "tipi_positions" in str(query):
+                raise RuntimeError("tipi count failed")
+            return _ScalarResult(True)
 
     @asynccontextmanager
     async def _broken_get_session():
@@ -406,45 +411,6 @@ async def test_lifespan_postgres_tipi_count_failure_falls_back_to_sqlite_mode(
         assert app.state.tipi_service.mode == "sqlite"
         assert app.state.tipi_service.created_repo is False
         assert app.state.nbs_service.mode == "repo"
-
-
-@pytest.mark.asyncio
-async def test_lifespan_postgres_nbs_empty_catalog_falls_back_to_sqlite_mode(
-    monkeypatch, core_mocks
-):
-    class _EmptyCatalogNbsService(_FakeNbsService):
-        async def probeNbsCatalogHealth(self):
-            await asyncio.sleep(0)
-            return {"status": "error", "nbs_items": 0, "nebs_entries": 0}
-
-    class _ScalarResult:
-        def __init__(self, value):
-            self._value = value
-
-        def scalar(self):
-            return self._value
-
-    class _Session:
-        async def execute(self, _query):
-            await asyncio.sleep(0)
-            return _ScalarResult(123)
-
-    @asynccontextmanager
-    async def _fake_get_session():
-        yield _Session()
-
-    monkeypatch.setattr(app_module.settings.database, "engine", "postgresql")
-    monkeypatch.setattr(app_module.settings.cache, "enable_redis", False)
-    monkeypatch.setattr(db_engine, "get_session", _fake_get_session)
-    monkeypatch.setattr(nesh_service_module, "NeshService", _FakeNeshService)
-    monkeypatch.setattr(app_module, "NbsService", _EmptyCatalogNbsService)
-
-    app = _make_fake_fastapi()
-    async with app_module.lifespan(app):
-        assert app.state.sqlmodel_enabled is True
-        assert app.state.tipi_service.mode == "repo"
-        assert app.state.nbs_service.mode == "sqlite"
-        assert app.state.nbs_service.created_repo is False
 
 
 @pytest.mark.asyncio

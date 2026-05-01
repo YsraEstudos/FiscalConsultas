@@ -73,12 +73,10 @@ export async function installOfflineApiMock(page: Page, counters: OfflineApiCoun
           database: { status: 'online', latency_ms: 1 },
           tipi: { status: 'online' },
           nbs: { status: 'online' },
-          nebs: { status: 'online' },
           catalogs: {
             nesh: { status: 'online', latency_ms: 1 },
             tipi: { status: 'online' },
             nbs: { status: 'online' },
-            nebs: { status: 'online' },
           },
         }),
       });
@@ -113,17 +111,6 @@ export async function installOfflineWorkerMock(page: Page) {
       payload: Record<string, unknown>;
     };
 
-    type WorkerTarget = {
-      onmessage: ((event: MessageEvent<WorkerMessage>) => void) | null;
-      listeners: Set<(event: MessageEvent<WorkerMessage>) => void>;
-    };
-
-    type WorkerCommand = (
-      worker: WorkerTarget,
-      id: string | null,
-      payload: Record<string, unknown>,
-    ) => Promise<void> | void;
-
     function readInstalledMeta() {
       const raw = globalThis.localStorage.getItem(OFFLINE_META_KEY);
       if (!raw) return null;
@@ -138,7 +125,10 @@ export async function installOfflineWorkerMock(page: Page) {
     }
 
     function emitToWorker(
-      worker: WorkerTarget,
+      worker: {
+        onmessage: ((event: MessageEvent<WorkerMessage>) => void) | null;
+        listeners: Set<(event: MessageEvent<WorkerMessage>) => void>;
+      },
       message: WorkerMessage,
     ) {
       const event = { data: message } as MessageEvent<WorkerMessage>;
@@ -146,123 +136,32 @@ export async function installOfflineWorkerMock(page: Page) {
       worker.listeners.forEach((listener) => listener(event));
     }
 
-    function installedStatusPayload() {
+    function getInstalledStatusPayload() {
       const installedMeta = readInstalledMeta();
-      return installedMeta?.version
-        ? {
-          status: 'ready',
-          version: installedMeta.version,
-          sizeBytes: installedMeta.size_bytes || 0,
-        }
-        : { status: 'not_installed' };
+      if (!installedMeta?.version) {
+        return { status: 'not_installed' };
+      }
+
+      return {
+        status: 'ready',
+        version: installedMeta.version,
+        sizeBytes: installedMeta.size_bytes || 0,
+      };
     }
 
-    function emitInstalledStatus(worker: WorkerTarget, id: string | null) {
-      emitToWorker(worker, {
-        type: 'STATUS',
-        id,
-        payload: installedStatusPayload(),
-      });
-    }
-
-    function emitError(worker: WorkerTarget, id: string | null, error: unknown) {
-      emitToWorker(worker, {
-        type: 'ERROR',
-        id,
-        payload: {
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-    }
-
-    function resolveApiBase(payload: Record<string, unknown>) {
-      return typeof payload.apiBase === 'string' && payload.apiBase.trim()
-        ? payload.apiBase
-        : '/api';
-    }
-
-    async function installOfflineBundle(
-      worker: WorkerTarget,
+    function emitInstalledStatus(
+      worker: {
+        onmessage: ((event: MessageEvent<WorkerMessage>) => void) | null;
+        listeners: Set<(event: MessageEvent<WorkerMessage>) => void>;
+      },
       id: string | null,
-      payload: Record<string, unknown>,
     ) {
       emitToWorker(worker, {
-        type: 'PROGRESS',
-        id,
-        payload: { progress: 0, step: 'requesting_token' },
-      });
-
-      const apiBase = resolveApiBase(payload);
-      const tokenResponse = await fetch(`${apiBase}/database/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      const tokenPayload = await tokenResponse.json() as { token?: string };
-
-      emitToWorker(worker, {
-        type: 'PROGRESS',
-        id,
-        payload: { progress: 40, step: 'downloading' },
-      });
-
-      const downloadResponse = await fetch(`${apiBase}/database/download`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: tokenPayload.token || 'mock-offline-token' }),
-      });
-      await downloadResponse.arrayBuffer();
-
-      const versionResponse = await fetch(`${apiBase}/database/version`, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-      });
-      const versionPayload = await versionResponse.json() as {
-        version?: string;
-        size_bytes?: number;
-      };
-
-      const installedMeta = {
-        ...metadata,
-        version: versionPayload.version || metadata.version,
-        size_bytes: versionPayload.size_bytes || metadata.size_bytes,
-      };
-
-      globalThis.localStorage.setItem(OFFLINE_META_KEY, JSON.stringify(installedMeta));
-
-      emitToWorker(worker, {
-        type: 'PROGRESS',
-        id,
-        payload: { progress: 100, step: 'done' },
-      });
-      emitToWorker(worker, {
         type: 'STATUS',
         id,
-        payload: {
-          status: 'ready',
-          version: installedMeta.version,
-          sizeBytes: installedMeta.size_bytes,
-        },
+        payload: getInstalledStatusPayload(),
       });
     }
-
-    const commands: Record<string, WorkerCommand> = {
-      INIT: (worker, id) => emitInstalledStatus(worker, id),
-      INSTALL: installOfflineBundle,
-      GET_STATUS: (worker, id) => emitInstalledStatus(worker, id),
-      SEARCH: (worker, id) => emitToWorker(worker, {
-        type: 'RESULT',
-        id,
-        payload: { results: null, source: 'not_ready' },
-      }),
-      REMOVE: (worker, id) => {
-        globalThis.localStorage.removeItem(OFFLINE_META_KEY);
-        emitToWorker(worker, {
-          type: 'STATUS',
-          id,
-          payload: { status: 'not_installed' },
-        });
-      },
-    };
 
     class MockOfflineWorker {
       public onmessage: ((event: MessageEvent<WorkerMessage>) => void) | null = null;
@@ -297,11 +196,113 @@ export async function installOfflineWorkerMock(page: Page) {
         const payload = message.payload || {};
 
         try {
-          const command = commands[type];
-          if (!command) throw new Error(`Unknown message type: ${type}`);
-          await command(this, id, payload);
+          if (type === 'INIT') {
+            emitInstalledStatus(this, id);
+            return;
+          }
+
+          if (type === 'INSTALL') {
+            emitToWorker(this, {
+              type: 'PROGRESS',
+              id,
+              payload: { progress: 0, step: 'requesting_token' },
+            });
+
+            const apiBase =
+              typeof payload.apiBase === 'string' && payload.apiBase.trim()
+                ? payload.apiBase
+                : '/api';
+
+            const tokenResponse = await fetch(`${apiBase}/database/token`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+            });
+            const tokenPayload = await tokenResponse.json() as { token?: string };
+
+            emitToWorker(this, {
+              type: 'PROGRESS',
+              id,
+              payload: { progress: 40, step: 'downloading' },
+            });
+
+            const downloadResponse = await fetch(`${apiBase}/database/download`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: tokenPayload.token || 'mock-offline-token' }),
+            });
+            await downloadResponse.arrayBuffer();
+
+            const versionResponse = await fetch(`${apiBase}/database/version`, {
+              method: 'GET',
+              headers: { Accept: 'application/json' },
+            });
+            const versionPayload = await versionResponse.json() as {
+              version?: string;
+              size_bytes?: number;
+            };
+
+            const installedMeta = {
+              ...metadata,
+              version: versionPayload.version || metadata.version,
+              size_bytes: versionPayload.size_bytes || metadata.size_bytes,
+            };
+
+            globalThis.localStorage.setItem(OFFLINE_META_KEY, JSON.stringify(installedMeta));
+
+            emitToWorker(this, {
+              type: 'PROGRESS',
+              id,
+              payload: { progress: 100, step: 'done' },
+            });
+            emitToWorker(this, {
+              type: 'STATUS',
+              id,
+              payload: {
+                status: 'ready',
+                version: installedMeta.version,
+                sizeBytes: installedMeta.size_bytes,
+              },
+            });
+            return;
+          }
+
+          if (type === 'GET_STATUS') {
+            emitInstalledStatus(this, id);
+            return;
+          }
+
+          if (type === 'SEARCH') {
+            emitToWorker(this, {
+              type: 'RESULT',
+              id,
+              payload: { results: null, source: 'not_ready' },
+            });
+            return;
+          }
+
+          if (type === 'REMOVE') {
+            globalThis.localStorage.removeItem(OFFLINE_META_KEY);
+            emitToWorker(this, {
+              type: 'STATUS',
+              id,
+              payload: { status: 'not_installed' },
+            });
+            return;
+          }
+
+          emitToWorker(this, {
+            type: 'ERROR',
+            id,
+            payload: { error: `Unknown message type: ${type}` },
+          });
         } catch (error) {
-          emitError(this, id, error instanceof Error ? error : new Error('Mock worker failure'));
+          emitToWorker(this, {
+            type: 'ERROR',
+            id,
+            payload: {
+              error: error instanceof Error ? error.message : 'Mock worker failure',
+            },
+          });
         }
       }
     }

@@ -15,40 +15,41 @@ const RUNTIME_CACHE = 'runtime-assets-v3';
 
 async function installOfflineSupportMock(page: Page) {
   await page.addInitScript(() => {
-    function installSharedArrayBufferShim() {
+    try {
       if (globalThis.SharedArrayBuffer === undefined) {
         Object.defineProperty(globalThis, 'SharedArrayBuffer', {
           configurable: true,
           value: class SharedArrayBufferShim {},
         });
       }
+    } catch {
+      // Some browsers expose this as a non-configurable global; ignore that.
     }
 
-    function defineOnObjectOrPrototype(target: object, key: string, value: unknown) {
-      try {
-        Object.defineProperty(target, key, {
-          configurable: true,
-          value,
-        });
-      } catch {
-        const prototype = Object.getPrototypeOf(target);
-        if (prototype) {
-          Object.defineProperty(prototype, key, {
-            configurable: true,
-            value,
-          });
-        }
-      }
-    }
-
-    function installCryptoSubtleShim() {
+    try {
       const cryptoObject = globalThis.crypto as Crypto & { subtle?: unknown } | undefined;
       if (cryptoObject && cryptoObject.subtle === undefined) {
-        defineOnObjectOrPrototype(cryptoObject, 'subtle', {});
+        const subtleShim = {};
+        try {
+          Object.defineProperty(cryptoObject, 'subtle', {
+            configurable: true,
+            value: subtleShim,
+          });
+        } catch {
+          const cryptoPrototype = Object.getPrototypeOf(cryptoObject);
+          if (cryptoPrototype) {
+            Object.defineProperty(cryptoPrototype, 'subtle', {
+              configurable: true,
+              value: subtleShim,
+            });
+          }
+        }
       }
+    } catch {
+      // If crypto is read-only, the live spec will still surface the unsupported state.
     }
 
-    function installStorageDirectoryShim() {
+    try {
       const navigatorWithStorage = navigator as Navigator & {
         storage?: { getDirectory?: unknown };
       };
@@ -58,24 +59,21 @@ async function installOfflineSupportMock(page: Page) {
           ...(storage && typeof storage === 'object' ? storage : {}),
           getDirectory: async () => ({}),
         };
-        defineOnObjectOrPrototype(navigatorWithStorage, 'storage', storageShim);
+        try {
+          Object.defineProperty(navigatorWithStorage, 'storage', {
+            configurable: true,
+            value: storageShim,
+          });
+        } catch {
+          const navigatorPrototype = Object.getPrototypeOf(navigatorWithStorage);
+          if (navigatorPrototype) {
+            Object.defineProperty(navigatorPrototype, 'storage', {
+              configurable: true,
+              value: storageShim,
+            });
+          }
+        }
       }
-    }
-
-    try {
-      installSharedArrayBufferShim();
-    } catch {
-      // Some browsers expose this as a non-configurable global; ignore that.
-    }
-
-    try {
-      installCryptoSubtleShim();
-    } catch {
-      // If crypto is read-only, the live spec will still surface the unsupported state.
-    }
-
-    try {
-      installStorageDirectoryShim();
     } catch {
       // If storage is read-only, the live spec will still surface the unsupported state.
     }
@@ -142,7 +140,7 @@ test.describe('live offline reopen with active service worker', () => {
     await installOfflineApiMock(page, counters);
 
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
     const isSecureContext = await page.evaluate(() => globalThis.isSecureContext);
     test.skip(!isSecureContext, 'PLAYWRIGHT_LIVE_BASE_URL must resolve to a secure context such as localhost or HTTPS.');
     test.skip(!(await hasServiceWorkerSupport(page)), 'Current browser environment does not expose service workers for this origin.');
@@ -186,7 +184,7 @@ test.describe('live offline reopen with active service worker', () => {
         }
       }).toBe(null);
 
-      await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
       await expectOfflineMetadataPersisted(page);
       await expectOfflineReadyInSettings(page);
     } finally {

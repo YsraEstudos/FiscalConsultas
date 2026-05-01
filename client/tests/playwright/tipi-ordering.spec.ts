@@ -1,22 +1,30 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-import {
-  disableBrowserStorageApis,
-  installServicesMock,
-  makeTipiChapterData,
-  searchCatalogCode,
-} from './fixtures/service-mocks';
-
-async function openTipiSearch(page: Page) {
-  await page.goto('/');
-
-  await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
-  await page.getByRole('button', { name: 'TIPI' }).click();
-  await expect(page.getByRole('button', { name: 'TIPI' })).toHaveClass(/docButtonActive/);
-}
+import { installServicesMock, makeTipiChapterData } from './fixtures/service-mocks';
 
 test.beforeEach(async ({ page }) => {
-  await disableBrowserStorageApis(page);
+  await page.addInitScript(() => {
+    try {
+      Object.defineProperty(globalThis, 'SharedArrayBuffer', {
+        value: undefined,
+        configurable: true,
+      });
+    } catch {
+      // Ignore environments where this global cannot be redefined.
+    }
+
+    try {
+      const storage = navigator.storage as unknown as { getDirectory?: unknown } | undefined;
+      if (storage) {
+        Object.defineProperty(storage, 'getDirectory', {
+          value: undefined,
+          configurable: true,
+        });
+      }
+    } catch {
+      // Ignore environments where navigator.storage is read-only.
+    }
+  });
 
   await installServicesMock(page, {
     tipiSearchResponses: [
@@ -46,8 +54,7 @@ test.beforeEach(async ({ page }) => {
               {
                 ncm: '11.02',
                 codigo: '11.02',
-                descricao:
-                  'Farinhas de cereais, exceto de trigo ou de mistura de trigo com centeio (méteil).',
+                descricao: 'Farinhas de cereais, exceto de trigo ou de mistura de trigo com centeio (méteil).',
                 aliquota: '0%',
                 nivel: 1,
                 anchor_id: 'pos-11-02',
@@ -82,28 +89,46 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('renders TIPI chapter 11 search results in order', async ({ page }) => {
-  await openTipiSearch(page);
-  await searchCatalogCode(page, '/api/tipi/search', '11');
+  await page.goto('/');
 
-  await expect
-    .poll(async () => {
-      const targetCodes = new Set(['1101', '1101.00.10', '11.02', '11.07']);
-      return page
-        .locator('article.tipi-position')
-        .evaluateAll((articles, expectedCodes: string[]) => {
-          return articles
-            .map((article) => (article.querySelector('.tipi-ncm')?.textContent || '').trim())
-            .filter((code) => expectedCodes.includes(code));
-        }, Array.from(targetCodes));
-    })
-    .toEqual(['1101', '1101.00.10', '11.02', '11.07']);
+  await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
+  await page.getByRole('button', { name: 'TIPI' }).click();
+  await expect(page.getByRole('button', { name: 'TIPI' })).toHaveClass(/docButtonActive/);
+
+  const searchRequest = page.waitForRequest((request) =>
+    request.url().includes('/api/tipi/search')
+    && new URL(request.url()).searchParams.get('ncm') === '11',
+  );
+
+  await page.locator('#ncmInput').fill('11');
+  await page.locator('#ncmInput').press('Enter');
+  await searchRequest;
+
+  await expect.poll(async () => {
+    const targetCodes = new Set(['1101', '1101.00.10', '11.02', '11.07']);
+    return page.locator('article.tipi-position').evaluateAll((articles, expectedCodes: string[]) => {
+      return articles
+        .map((article) => (article.querySelector('.tipi-ncm')?.textContent || '').trim())
+        .filter((code) => expectedCodes.includes(code));
+    }, Array.from(targetCodes));
+  }).toEqual(['1101', '1101.00.10', '11.02', '11.07']);
 });
 
-test('navigates to a TIPI position from sidebar click and highlights target anchor', async ({
-  page,
-}) => {
-  await openTipiSearch(page);
-  await searchCatalogCode(page, '/api/tipi/search', '11');
+test('navigates to a TIPI position from sidebar click and highlights target anchor', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
+  await page.getByRole('button', { name: 'TIPI' }).click();
+  await expect(page.getByRole('button', { name: 'TIPI' })).toHaveClass(/docButtonActive/);
+
+  const searchRequest = page.waitForRequest((request) =>
+    request.url().includes('/api/tipi/search')
+    && new URL(request.url()).searchParams.get('ncm') === '11',
+  );
+
+  await page.locator('#ncmInput').fill('11');
+  await page.locator('#ncmInput').press('Enter');
+  await searchRequest;
 
   const resultsContainer = page.locator('#results-content-tab-1');
   const targetAnchor = page.locator('#pos-11-02');

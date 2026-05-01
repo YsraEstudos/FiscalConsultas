@@ -111,7 +111,7 @@ test('renders NESH text results and opens selected item as code search in a new 
   });
 
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
 
   const initialTabCount = await page.locator('div[draggable="true"][data-document]').count();
   await searchNesh(page, 'caldeiras');

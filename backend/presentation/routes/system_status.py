@@ -12,6 +12,8 @@ logger = logging.getLogger("nesh.routes.system_status")
 _STATUS_CACHE: dict[str, object | None] = {"value": None, "expires_at": 0.0}
 _STATUS_CACHE_REFRESH_TASK: asyncio.Task | None = None
 _STATUS_CACHE_LOCK: asyncio.Lock | None = None
+_PG_STATS_CACHE: dict[str, object] = {}
+_PG_STATS_LAST_CHECK_TS = 0.0
 
 
 def _build_status_error_payload(catalog_name: str, exc: Exception) -> dict[str, str]:
@@ -46,11 +48,13 @@ def read_stale_l1_status_snapshot() -> dict | None:
 
 
 def reset_status_cache_for_tests() -> None:
-    global _STATUS_CACHE_LOCK, _STATUS_CACHE_REFRESH_TASK
+    global _PG_STATS_LAST_CHECK_TS, _STATUS_CACHE_LOCK, _STATUS_CACHE_REFRESH_TASK
     _STATUS_CACHE["value"] = None
     _STATUS_CACHE["expires_at"] = 0.0
     _STATUS_CACHE_REFRESH_TASK = None
     _STATUS_CACHE_LOCK = None
+    _PG_STATS_CACHE.clear()
+    _PG_STATS_LAST_CHECK_TS = 0.0
 
 
 def coerce_int(value, default: int = 0) -> int:
@@ -149,6 +153,8 @@ def normalize_count_catalog_status(
 
 
 async def collect_db_status(request: Request) -> tuple[dict, float]:
+    global _PG_STATS_LAST_CHECK_TS
+
     db = getattr(request.app.state, "db", None)
     start = time.perf_counter()
 
@@ -163,36 +169,49 @@ async def collect_db_status(request: Request) -> tuple[dict, float]:
         from backend.infrastructure.db_engine import get_session
 
         async with get_session() as session:
-            chapters_count = await session.execute(
-                text("SELECT COUNT(*) FROM chapters")
-            )
-            positions_count = await session.execute(
-                text("SELECT COUNT(*) FROM positions")
-            )
-            metadata: dict[str, str] = {}
-            if settings.database.is_postgres:
-                try:
-                    metadata_result = await session.execute(
-                        text(
-                            """
-                            SELECT key, value
-                            FROM catalog_metadata
-                            WHERE key LIKE 'nesh_%'
-                            ORDER BY key
-                            """
+            await session.execute(text("SELECT 1"))
+
+            now = time.time()
+            if not _PG_STATS_CACHE or (now - _PG_STATS_LAST_CHECK_TS) > 60:
+                chapters_count = await session.execute(
+                    text("SELECT COUNT(*) FROM chapters")
+                )
+                positions_count = await session.execute(
+                    text("SELECT COUNT(*) FROM positions")
+                )
+                metadata: dict[str, str] = {}
+                if settings.database.is_postgres:
+                    try:
+                        metadata_result = await session.execute(
+                            text(
+                                """
+                                SELECT key, value
+                                FROM catalog_metadata
+                                WHERE key LIKE 'nesh_%'
+                                ORDER BY key
+                                """
+                            )
                         )
-                    )
-                    metadata = {row.key: row.value for row in metadata_result}
-                except Exception:
-                    logger.debug(
-                        "Failed to fetch catalog_metadata for nesh", exc_info=True
-                    )
-                    metadata = {}
+                        metadata = {row.key: row.value for row in metadata_result}
+                    except Exception:
+                        logger.debug(
+                            "Failed to fetch catalog_metadata for nesh",
+                            exc_info=True,
+                        )
+                        metadata = {}
+                _PG_STATS_CACHE.update(
+                    {
+                        "chapters": int(chapters_count.scalar() or 0),
+                        "positions": int(positions_count.scalar() or 0),
+                        "metadata": metadata,
+                    }
+                )
+                _PG_STATS_LAST_CHECK_TS = now
         db_stats = {
             "status": "online",
-            "chapters": int(chapters_count.scalar() or 0),
-            "positions": int(positions_count.scalar() or 0),
-            "metadata": metadata,
+            "chapters": int(_PG_STATS_CACHE.get("chapters") or 0),
+            "positions": int(_PG_STATS_CACHE.get("positions") or 0),
+            "metadata": _PG_STATS_CACHE.get("metadata") or {},
         }
     except Exception as exc:
         db_stats = _build_status_error_payload("database", exc)

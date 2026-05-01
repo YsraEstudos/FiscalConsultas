@@ -277,8 +277,6 @@ class NebsEntry(SQLModel, table=True):
     section_title: Optional[str] = Field(default=None, sa_column=Column(Text))
     page_start: int = Field(default=0)
     page_end: int = Field(default=0)
-    parser_status: str = Field(default="trusted", max_length=32, index=True)
-    parse_warnings: Optional[str] = Field(default=None, sa_column=Column(Text))
     source_hash: str = Field(max_length=128)
     updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     tenant_id: Optional[str] = Field(

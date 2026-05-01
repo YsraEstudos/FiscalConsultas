@@ -326,7 +326,7 @@ async function prepareCommentJourney(page: Page, options: { comments?: MockComme
 
   await page.goto('/');
   await authMeResponse;
-  await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
 
   return state;
 }
