@@ -30,31 +30,6 @@ type UseOfflineDatabaseWorkerBridgeArgs = {
     setDbSizeBytes: Dispatch<SetStateAction<number | null>>;
 };
 
-type OfflineDatabaseRefreshTokenResponsePayload = Extract<
-    OfflineDatabaseWorkerRequest,
-    { type: 'TOKEN_RESPONSE' }
->['payload'];
-
-type OfflineDatabaseStatusResponse = Extract<
-    OfflineDatabaseWorkerResponse,
-    { type: 'STATUS' }
->;
-
-type HandleWorkerStatusMessageArgs = Pick<
-    UseOfflineDatabaseWorkerBridgeArgs,
-    | 'setDbSizeBytes'
-    | 'setError'
-    | 'setLocalVersion'
-    | 'setProgress'
-    | 'setProgressStep'
-    | 'setStatus'
-> & {
-    id: string | null;
-    pending: PendingOfflineDatabaseRequest | undefined;
-    pendingRequests: Map<string, PendingOfflineDatabaseRequest>;
-    response: OfflineDatabaseWorkerResponse;
-};
-
 function resolvePendingWorkerRequest(
     pendingRequests: Map<string, PendingOfflineDatabaseRequest>,
     id: string | null,
@@ -81,97 +56,6 @@ function rejectPendingWorkerRequest(
 
 function shouldResolveStatusRequest(status: OfflineDatabaseStatus): boolean {
     return status === 'ready' || status === 'not_installed';
-}
-
-function buildTokenRefreshErrorPayload(err: unknown): OfflineDatabaseRefreshTokenResponsePayload {
-    if (err instanceof Error) {
-        return {
-            error: err.message,
-            errorName: err.name,
-            errorStack: err.stack,
-        };
-    }
-
-    return {
-        error: 'Token refresh failed',
-        errorValue: String(err),
-    };
-}
-
-function handleRefreshTokenMessage(id: string | null, worker: Worker | null): void {
-    if (!id) {
-        console.warn('[LocalDatabase] REFRESH_TOKEN message missing id');
-        return;
-    }
-
-    getRegisteredClerkToken({ skipCache: true })
-        .then((token) => {
-            worker?.postMessage({
-                type: 'TOKEN_RESPONSE',
-                id,
-                payload: { clerkToken: token ?? null },
-            });
-        })
-        .catch((err: unknown) => {
-            worker?.postMessage({
-                type: 'TOKEN_RESPONSE',
-                id,
-                payload: buildTokenRefreshErrorPayload(err),
-            });
-        });
-}
-
-function handleReadyStatus(
-    payload: OfflineDatabaseStatusResponse['payload'],
-    {
-        setError,
-        setProgress,
-        setProgressStep,
-    }: Pick<
-        UseOfflineDatabaseWorkerBridgeArgs,
-        'setError' | 'setProgress' | 'setProgressStep'
-    >,
-): void {
-    setProgress(100);
-    setProgressStep('done');
-    setError(null);
-    if (payload.seed) {
-        sessionStorage.setItem('offline_db_seed', payload.seed);
-    }
-}
-
-function handleWorkerStatusMessage(
-    payload: OfflineDatabaseStatusResponse['payload'],
-    args: HandleWorkerStatusMessageArgs,
-): void {
-    const {
-        id,
-        pending,
-        pendingRequests,
-        response,
-        setDbSizeBytes,
-        setError,
-        setLocalVersion,
-        setProgress,
-        setProgressStep,
-        setStatus,
-    } = args;
-
-    setStatus(payload.status);
-    setLocalVersion(payload.version ?? null);
-    setDbSizeBytes(payload.sizeBytes ?? null);
-
-    if (payload.status === 'error') {
-        setError(formatOfflineDatabaseErrorMessage(payload.error));
-    }
-
-    if (payload.status === 'ready') {
-        handleReadyStatus(payload, { setError, setProgress, setProgressStep });
-    }
-
-    if (shouldResolveStatusRequest(payload.status)) {
-        resolvePendingWorkerRequest(pendingRequests, id, pending, response);
-    }
 }
 
 export interface OfflineDatabaseWorkerBridgeValue {
@@ -215,7 +99,45 @@ export function useOfflineDatabaseWorkerBridge({
             const pending = id ? pendingRef.current.get(id) : undefined;
 
             if (type === 'REFRESH_TOKEN') {
-                handleRefreshTokenMessage(id, workerRef.current);
+                if (!id) {
+                    console.warn('[LocalDatabase] REFRESH_TOKEN message missing id');
+                    return;
+                }
+                getRegisteredClerkToken({ skipCache: true })
+                    .then((token) => {
+                        workerRef.current?.postMessage({
+                            type: 'TOKEN_RESPONSE',
+                            id,
+                            payload: { clerkToken: token ?? null },
+                        });
+                    })
+                    .catch((err: unknown) => {
+                        const errorDetails: {
+                            message: string;
+                            name?: string;
+                            stack?: string;
+                            value?: string;
+                        } = err instanceof Error
+                            ? {
+                                message: err.message,
+                                name: err.name,
+                                stack: err.stack,
+                            }
+                            : {
+                                message: 'Token refresh failed',
+                                value: String(err),
+                            };
+                        workerRef.current?.postMessage({
+                            type: 'TOKEN_RESPONSE',
+                            id,
+                            payload: {
+                                error: errorDetails.message,
+                                errorName: errorDetails.name,
+                                errorStack: errorDetails.stack,
+                                errorValue: errorDetails.value,
+                            },
+                        });
+                    });
                 return;
             }
 
@@ -226,18 +148,25 @@ export function useOfflineDatabaseWorkerBridge({
             }
 
             if (type === 'STATUS') {
-                handleWorkerStatusMessage(payload, {
-                    id,
-                    pending,
-                    pendingRequests: pendingRef.current,
-                    response: event.data,
-                    setDbSizeBytes,
-                    setError,
-                    setLocalVersion,
-                    setProgress,
-                    setProgressStep,
-                    setStatus,
-                });
+                setStatus(payload.status);
+                setLocalVersion(payload.version ?? null);
+                setDbSizeBytes(payload.sizeBytes ?? null);
+                if (payload.status === 'error') {
+                    setError(formatOfflineDatabaseErrorMessage(payload.error));
+                }
+                if (payload.status === 'ready') {
+                    setProgress(100);
+                    setProgressStep('done');
+                    setError(null);
+                }
+                if (shouldResolveStatusRequest(payload.status)) {
+                    resolvePendingWorkerRequest(
+                        pendingRef.current,
+                        id,
+                        pending,
+                        event.data,
+                    );
+                }
                 return;
             }
 

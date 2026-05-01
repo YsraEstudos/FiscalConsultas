@@ -12,7 +12,6 @@ vi.mock('../../src/hooks/useSearch');
 vi.mock('../../src/hooks/useHistory', () => ({
     useHistory: () => ({
         history: [],
-        getHistoryForDoc: vi.fn(() => []),
         addToHistory: vi.fn(),
         removeFromHistory: vi.fn(),
         clearHistory: vi.fn(),

@@ -229,22 +229,46 @@
     color: #f44;
 }
 
+/* Mobile Navigation Toggle */
+.mobileNavToggle {
+    display: none;
+}
+
 @media (width <= 1024px) {
-    .header {
-        padding: 1rem 1.5rem;
+    .mobileNavToggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        font-size: 1.2rem;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        margin-right: 0.5rem;
+        padding: 0;
+    }
+
+    .mobileNavToggle:hover {
+        border-color: var(--accent-primary);
+        background: rgb(99 102 241 / 10%);
+        color: var(--accent-primary);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
+    }
+
+    .mobileNavToggle:active {
+        transform: scale(0.95);
+        box-shadow: none;
     }
 
     .headerContent {
         gap: 0.75rem;
         padding: 0;
-        flex-wrap: wrap;
-    }
-
-    .searchContainer {
-        order: 3;
-        flex: 1 1 100%;
-        max-width: 100%;
-        margin-top: 0.25rem;
     }
 
     .logoSubtitle {
@@ -354,21 +378,7 @@
 }
 
 @media (width <= 768px) {
-    .header {
-        padding: 0.75rem 1rem;
-    }
     .orgSwitcher {
         display: none;
-    }
-    .docSelector {
-        order: 4;
-        flex: 1 1 100%;
-        justify-content: center;
-        margin-top: 0.25rem;
-    }
-    .docButton {
-        flex: 1;
-        text-align: center;
-        padding: 0.5rem 0.5rem;
     }
 }

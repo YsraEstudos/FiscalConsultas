@@ -54,7 +54,6 @@
 
 ### Evidências usadas na classificação (amostra)
 - Offline contract backend: `tests/unit/test_database_download_route.py`
-- Offline metadata compatibility/retry: `client/tests/unit/offlineDatabaseSync.test.ts`
 - Auth e AI chat contracts: `tests/integration/test_auth_api_contract.py`
 - Webhooks contract: `tests/integration/test_webhooks_api_contract.py`
 - Search/services contracts: `tests/integration/test_search_route_contracts.py`, `tests/integration/test_services_route_contract.py`

@@ -10,10 +10,12 @@ import {
 
 import { getExpandedPrefixBranch, isCodeLikeNbsQuery } from './noteRendering';
 import type {
+    OpenCatalogDoc,
     ServicesWorkspaceNbsState,
 } from './types';
 
 interface NbsHierarchySectionProps {
+    readonly activeChapterNumber: string | null;
     readonly chapterButtonHint: string;
     readonly chapterButtonLabel: string;
     readonly currentChapterNotesEntry: ReturnType<typeof lookupNbsChapterNotesEntry>;
@@ -24,6 +26,7 @@ interface NbsHierarchySectionProps {
 }
 
 function NbsHierarchySection({
+    activeChapterNumber,
     chapterButtonHint,
     chapterButtonLabel,
     currentChapterNotesEntry,
@@ -48,6 +51,9 @@ function NbsHierarchySection({
                     </button>
                     Hierarquia NBS
                 </div>
+                <span className={styles.sectionBadge}>
+                    {activeChapterNumber ? `Capítulo ${activeChapterNumber} ativo` : 'Capítulo ativo'}
+                </span>
             </div>
 
             {nbsState.isSearching ? (
@@ -129,12 +135,14 @@ interface NbsDetailSectionProps {
     readonly nbsNoteBodyHtml: string;
     readonly nbsNotesContentRef: React.RefObject<HTMLDivElement | null>;
     readonly nbsState: ServicesWorkspaceNbsState;
+    readonly openCatalogDoc: OpenCatalogDoc;
 }
 
 function NbsDetailSection({
     nbsNoteBodyHtml,
     nbsNotesContentRef,
     nbsState,
+    openCatalogDoc,
 }: Readonly<NbsDetailSectionProps>) {
     const codeParts = nbsState.detail?.item.code.split('.') ?? [];
 
@@ -184,6 +192,17 @@ function NbsDetailSection({
                         </section>
                     )}
 
+                    {nbsState.detail.nebs && (
+                        <div className={styles.detailActions}>
+                            <button
+                                type="button"
+                                className={styles.secondaryAction}
+                                onClick={() => openCatalogDoc('nbs', nbsState.detail!.item.code)}
+                            >
+                                Ver NBS
+                            </button>
+                        </div>
+                    )}
                 </>
             ) : (
                 <div className={styles.emptyDetail}>
@@ -273,6 +292,7 @@ interface NbsWorkspaceViewProps {
     readonly nbsPrefixAutoExpand: boolean;
     readonly nbsState: ServicesWorkspaceNbsState;
     readonly onSelectNbs: (code: string) => void;
+    readonly openCatalogDoc: OpenCatalogDoc;
     readonly setIsChapterNotesOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
@@ -287,6 +307,7 @@ export function NbsWorkspaceView({
     nbsPrefixAutoExpand,
     nbsState,
     onSelectNbs,
+    openCatalogDoc,
     setIsChapterNotesOpen,
 }: Readonly<NbsWorkspaceViewProps>) {
     const sanitizedChapterNotesHtml = React.useMemo(
@@ -350,6 +371,7 @@ export function NbsWorkspaceView({
     return (
         <div className={styles.body}>
             <NbsHierarchySection
+                activeChapterNumber={activeChapterNumber}
                 chapterButtonHint={chapterButtonHint}
                 chapterButtonLabel={chapterButtonLabel}
                 currentChapterNotesEntry={currentChapterNotesEntry}
@@ -362,6 +384,7 @@ export function NbsWorkspaceView({
                 nbsNoteBodyHtml={nbsNoteBodyHtml}
                 nbsNotesContentRef={nbsNotesContentRef}
                 nbsState={nbsState}
+                openCatalogDoc={openCatalogDoc}
             />
             <NbsChapterNotesDialog
                 chapterNotesDialogRef={chapterNotesDialogRef}

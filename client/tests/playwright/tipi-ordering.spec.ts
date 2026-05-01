@@ -91,7 +91,7 @@ test.beforeEach(async ({ page }) => {
 test('renders TIPI chapter 11 search results in order', async ({ page }) => {
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
   await page.getByRole('button', { name: 'TIPI' }).click();
   await expect(page.getByRole('button', { name: 'TIPI' })).toHaveClass(/docButtonActive/);
 
@@ -117,7 +117,7 @@ test('renders TIPI chapter 11 search results in order', async ({ page }) => {
 test('navigates to a TIPI position from sidebar click and highlights target anchor', async ({ page }) => {
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
   await page.getByRole('button', { name: 'TIPI' }).click();
   await expect(page.getByRole('button', { name: 'TIPI' })).toHaveClass(/docButtonActive/);
 

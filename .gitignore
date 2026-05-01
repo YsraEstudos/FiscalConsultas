@@ -31,7 +31,6 @@ raw_data/
 raw_data/nesh.md
 
 # Node / Vite
-/node_modules/
 client/node_modules/
 client/dist/
 client/.vite/
@@ -51,10 +50,6 @@ Thumbs.db
 test_results*.txt
 *_runs.txt
 git_diff.txt
-/backend_diff.txt
-/local_diff.patch
-/pr*.diff
-/pytest_errors.txt
 .coverage
 .coverage.*
 coverage.xml
@@ -84,7 +79,6 @@ test_output.txt
 # Scripts
 verify_redis.py
 scripts/god_module_guardrail.py
-/scratch_search.py
 pull request pendences.md
 
 # Generated results / snapshots (local-only)

@@ -9,6 +9,7 @@ interface LayoutProps {
     doc: string;
     setDoc: (doc: string) => void;
     searchKey: string;
+    onMenuOpen: () => void;
     onOpenSettings: () => void;
     onOpenStats: () => void;
     onOpenComparator: () => void;
@@ -27,6 +28,7 @@ export function Layout({
     doc,
     setDoc,
     searchKey,
+    onMenuOpen,
     onOpenSettings,
     onOpenStats,
     onOpenComparator,
@@ -45,6 +47,7 @@ export function Layout({
                 doc={doc}
                 setDoc={setDoc}
                 searchKey={searchKey}
+                onMenuOpen={onMenuOpen}
                 onOpenSettings={onOpenSettings}
                 onOpenStats={onOpenStats}
                 onOpenComparator={onOpenComparator}

@@ -13,7 +13,6 @@ from starlette.requests import Request
 
 from backend.presentation.routes import database_download
 from backend.server import app_security
-from backend.server.middleware import TenantMiddleware
 
 pytestmark = pytest.mark.unit
 
@@ -23,14 +22,10 @@ def _build_request(
     *,
     method: str = "POST",
     headers: dict[str, str] | None = None,
-    auth_header: str | None = "Bearer test-token",
     client_host: str = "127.0.0.1",
     scheme: str = "http",
 ) -> Request:
-    headers = {
-        **({"Authorization": auth_header} if auth_header else {}),
-        **(headers or {}),
-    }
+    headers = {"Authorization": "Bearer test-token", **(headers or {})}
     scope_headers = [
         (key.lower().encode("latin-1"), value.encode("latin-1"))
         for key, value in headers.items()
@@ -105,10 +100,10 @@ async def test_get_database_version_exposes_offline_contract(offline_bundle):
     assert payload["size_bytes"] == 128
     assert payload["built_at"] == "2026-04-15T12:00:00Z"
     assert payload["format_version"] == 1
-    assert payload["sha256"] == "plain-sha"
-    assert payload["encrypted_sha256"] == "enc-sha"
-    assert payload["chunk_size"] == 65536
-    assert payload["pbkdf2_iterations"] == 600000
+    assert "sha256" not in payload
+    assert "encrypted_sha256" not in payload
+    assert "chunk_size" not in payload
+    assert "pbkdf2_iterations" not in payload
 
 
 @pytest.mark.asyncio
@@ -123,34 +118,6 @@ async def test_download_accepts_fresh_token(offline_bundle):
 
     assert Path(response.path).read_bytes() == b"encrypted-bundle"
     assert response.headers["Cross-Origin-Resource-Policy"] == "same-origin"
-
-
-@pytest.mark.asyncio
-async def test_download_token_flow_does_not_require_authorization_header(
-    offline_bundle,
-):
-    token_request = _build_request(
-        "/api/database/token",
-        auth_header=None,
-    )
-    token_payload = await database_download.create_download_token(token_request)
-
-    response = await database_download.download_database(
-        _build_request(
-            "/api/database/download",
-            auth_header=None,
-            client_host="127.0.0.1",
-        ),
-        database_download.DownloadDatabaseRequest(token=token_payload["token"]),
-    )
-
-    assert Path(response.path).read_bytes() == b"encrypted-bundle"
-
-
-def test_database_download_token_routes_are_public_middleware_paths():
-    assert TenantMiddleware._is_public_path("/api/database/version") is True
-    assert TenantMiddleware._is_public_path("/api/database/token") is True
-    assert TenantMiddleware._is_public_path("/api/database/download") is True
 
 
 @pytest.mark.asyncio

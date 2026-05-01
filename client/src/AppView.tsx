@@ -72,6 +72,7 @@ export function AppView({ controller }: { controller: AppControllerState }) {
         reorderTabs,
         handleSearch,
         setDoc,
+        onMenuOpen,
         closeMobileMenu,
         toggleMobileMenu,
         mobileMenuOpen,
@@ -159,6 +160,7 @@ export function AppView({ controller }: { controller: AppControllerState }) {
                 doc={currentDoc}
                 setDoc={setDoc}
                 searchKey={`${activeTabId}-${currentDoc}`}
+                onMenuOpen={onMenuOpen}
                 servicesUnavailableReason={servicesUnavailableReason}
                 onOpenSettings={onOpenSettings}
                 onOpenStats={onOpenStats}

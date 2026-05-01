@@ -96,7 +96,7 @@ export type OfflineDatabaseWorkerRequest =
     | {
         type: 'INIT';
         id: string | null;
-        payload: { chunkSize: number; pbkdf2Iterations: number; seed?: string };
+        payload: { chunkSize: number; pbkdf2Iterations: number };
     }
     | {
         type: 'INSTALL';
@@ -158,7 +158,6 @@ export type OfflineDatabaseWorkerStatusMessage = {
         version?: string | null;
         sizeBytes?: number | null;
         error?: unknown;
-        seed?: string;
     };
 };
 

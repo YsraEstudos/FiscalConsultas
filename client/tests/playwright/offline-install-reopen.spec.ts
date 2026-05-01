@@ -21,7 +21,7 @@ test.describe('offline install and reopen flow', () => {
     await installOfflineApiMock(page, counters);
 
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
 
     await installOfflineFromSettings(page);
 
@@ -56,7 +56,7 @@ test.describe('offline install and reopen flow', () => {
 
     await page.reload();
 
-    await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Busca NCM' })).toBeVisible();
     await expectOfflineMetadataPersisted(page);
     await expectOfflineReadyInSettings(page);
   });

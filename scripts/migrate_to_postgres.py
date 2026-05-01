@@ -4,6 +4,7 @@ This script loads:
 - NESH from the legacy SQLite database
 - TIPI from the legacy TIPI SQLite database
 - NBS from ``data/nbs.csv``
+- NEBS from ``data/nebs.pdf`` (trusted entries only)
 
 It also refreshes PostgreSQL FTS vectors and persists load metadata into
 ``catalog_metadata`` so the runtime health endpoints can expose freshness.
@@ -36,15 +37,21 @@ from backend.domain.sqlmodels import (  # noqa: E402
     ChapterNotes,
     Glossary,
     NbsItem,
+    NebsEntry,
     Position,
     TipiPosition,
 )
 from backend.infrastructure.db_engine import get_session  # noqa: E402
 from backend.utils.hash_util import calculate_file_sha256  # noqa: E402
 from backend.utils.nbs_parser import build_nbs_items, iter_nbs_rows  # noqa: E402
+from backend.utils.nebs_parser import parse_nebs_pdf, write_nebs_audit_report  # noqa: E402
 
 DATA_DIR = PROJECT_ROOT / "data"
+REPORTS_DIR = PROJECT_ROOT / "reports" / "nebs"
 NBS_CSV_PATH = DATA_DIR / "nbs.csv"
+NEBS_PDF_PATH = DATA_DIR / "nebs.pdf"
+NEBS_AUDIT_CSV_PATH = REPORTS_DIR / "nebs_audit.csv"
+NEBS_AUDIT_JSON_PATH = REPORTS_DIR / "nebs_audit.json"
 
 
 def _mask_database_url(url: str | None) -> str:
@@ -127,8 +134,9 @@ async def _replace_metadata(
 async def _reset_runtime_catalog(pg_session: AsyncSession) -> None:
     """Clear global/runtime catalog rows so imports stay idempotent."""
     statements = (
+        "DELETE FROM nebs_entries WHERE tenant_id IS NULL",
         "DELETE FROM nbs_items WHERE tenant_id IS NULL",
-        "DELETE FROM catalog_metadata WHERE key LIKE 'nesh_%' OR key LIKE 'tipi_%' OR key LIKE 'nbs_%'",
+        "DELETE FROM catalog_metadata WHERE key LIKE 'nesh_%' OR key LIKE 'tipi_%' OR key LIKE 'nbs_%' OR key LIKE 'nebs_%'",
         "DELETE FROM chapter_notes WHERE tenant_id IS NULL",
         "DELETE FROM positions WHERE tenant_id IS NULL",
         "DELETE FROM chapters WHERE tenant_id IS NULL",
@@ -157,6 +165,7 @@ async def _load_runtime_counts(pg_session: AsyncSession) -> dict[str, int]:
         "nesh_chapters": "SELECT COUNT(*) FROM chapters WHERE tenant_id IS NULL",
         "tipi_positions": "SELECT COUNT(*) FROM tipi_positions",
         "nbs_items": "SELECT COUNT(*) FROM nbs_items WHERE tenant_id IS NULL",
+        "nebs_entries": "SELECT COUNT(*) FROM nebs_entries WHERE tenant_id IS NULL",
     }
     counts: dict[str, int] = {}
     for key, sql in queries.items():
@@ -173,11 +182,13 @@ async def _catalog_sync_reasons(pg_session: AsyncSession) -> list[str]:
         "nesh_source_hash": calculate_file_sha256(settings.database.path),
         "tipi_source_hash": calculate_file_sha256(settings.database.tipi_path),
         "nbs_source_hash": calculate_file_sha256(NBS_CSV_PATH),
+        "nebs_source_hash": calculate_file_sha256(NEBS_PDF_PATH),
     }
     count_requirements = {
         "nesh_chapters": 1,
         "tipi_positions": 1,
         "nbs_items": 1,
+        "nebs_entries": 1,
     }
 
     reasons: list[str] = []
@@ -203,6 +214,7 @@ async def check_sync_needed() -> int:
         Path(settings.database.path),
         Path(settings.database.tipi_path),
         NBS_CSV_PATH,
+        NEBS_PDF_PATH,
     )
     missing_sources = [str(path) for path in required_sources if not path.exists()]
     if missing_sources:
@@ -524,6 +536,7 @@ async def migrate_nbs_items(csv_path: Path, pg_session: AsyncSession) -> list:
                 "level": item.level,
                 "source_order": item.source_order,
                 "sort_path": item.sort_path,
+                "has_nebs": bool(item.has_nebs),
                 "tenant_id": None,
             }
         )
@@ -539,6 +552,7 @@ async def migrate_nbs_items(csv_path: Path, pg_session: AsyncSession) -> list:
                     "level": stmt.excluded.level,
                     "source_order": stmt.excluded.source_order,
                     "sort_path": stmt.excluded.sort_path,
+                    "has_nebs": stmt.excluded.has_nebs,
                     "tenant_id": None,
                 },
             )
@@ -557,6 +571,7 @@ async def migrate_nbs_items(csv_path: Path, pg_session: AsyncSession) -> list:
                 "level": stmt.excluded.level,
                 "source_order": stmt.excluded.source_order,
                 "sort_path": stmt.excluded.sort_path,
+                "has_nebs": stmt.excluded.has_nebs,
                 "tenant_id": None,
             },
         )
@@ -564,6 +579,106 @@ async def migrate_nbs_items(csv_path: Path, pg_session: AsyncSession) -> list:
 
     print(f"  OK {len(items)} itens NBS migrados")
     return items
+
+
+async def migrate_nebs_entries(
+    pdf_path: Path,
+    *,
+    valid_nbs_items: dict[str, str],
+    pg_session: AsyncSession,
+) -> dict[str, int]:
+    """Load trusted NEBS entries into PostgreSQL and persist audit artifacts."""
+    if not pdf_path.exists():
+        raise FileNotFoundError(f"Arquivo NEBS não encontrado: {pdf_path}")
+
+    outcome = parse_nebs_pdf(pdf_path, valid_nbs_items=valid_nbs_items)
+    write_nebs_audit_report(
+        outcome,
+        csv_path=NEBS_AUDIT_CSV_PATH,
+        json_path=NEBS_AUDIT_JSON_PATH,
+    )
+
+    batch: list[dict[str, str | int | datetime | None]] = []
+    for entry in outcome.entries:
+        batch.append(
+            {
+                "code": entry.code,
+                "code_clean": entry.code_clean,
+                "title": entry.title,
+                "title_normalized": entry.title_normalized,
+                "body_text": entry.body_text,
+                "body_markdown": entry.body_markdown,
+                "body_normalized": entry.body_normalized,
+                "section_title": entry.section_title,
+                "page_start": entry.page_start,
+                "page_end": entry.page_end,
+                "parser_status": entry.parser_status,
+                "parse_warnings": entry.parse_warnings,
+                "source_hash": entry.source_hash,
+                "updated_at": _coerce_pg_timestamp(entry.updated_at),
+                "tenant_id": None,
+            }
+        )
+        if len(batch) >= 500:
+            stmt = pg_insert(NebsEntry).values(batch)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["code"],
+                set_={
+                    "code_clean": stmt.excluded.code_clean,
+                    "title": stmt.excluded.title,
+                    "title_normalized": stmt.excluded.title_normalized,
+                    "body_text": stmt.excluded.body_text,
+                    "body_markdown": stmt.excluded.body_markdown,
+                    "body_normalized": stmt.excluded.body_normalized,
+                    "section_title": stmt.excluded.section_title,
+                    "page_start": stmt.excluded.page_start,
+                    "page_end": stmt.excluded.page_end,
+                    "parser_status": stmt.excluded.parser_status,
+                    "parse_warnings": stmt.excluded.parse_warnings,
+                    "source_hash": stmt.excluded.source_hash,
+                    "updated_at": stmt.excluded.updated_at,
+                    "tenant_id": None,
+                },
+            )
+            await pg_session.execute(stmt)
+            batch = []
+
+    if batch:
+        stmt = pg_insert(NebsEntry).values(batch)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["code"],
+            set_={
+                "code_clean": stmt.excluded.code_clean,
+                "title": stmt.excluded.title,
+                "title_normalized": stmt.excluded.title_normalized,
+                "body_text": stmt.excluded.body_text,
+                "body_markdown": stmt.excluded.body_markdown,
+                "body_normalized": stmt.excluded.body_normalized,
+                "section_title": stmt.excluded.section_title,
+                "page_start": stmt.excluded.page_start,
+                "page_end": stmt.excluded.page_end,
+                "parser_status": stmt.excluded.parser_status,
+                "parse_warnings": stmt.excluded.parse_warnings,
+                "source_hash": stmt.excluded.source_hash,
+                "updated_at": stmt.excluded.updated_at,
+                "tenant_id": None,
+            },
+        )
+        await pg_session.execute(stmt)
+
+    trusted_codes = [entry.code for entry in outcome.entries]
+    if trusted_codes:
+        await pg_session.execute(
+            text("UPDATE nbs_items SET has_nebs = false WHERE tenant_id IS NULL")
+        )
+        await pg_session.execute(
+            text("UPDATE nbs_items SET has_nebs = true WHERE code = ANY(:codes)"),
+            {"codes": trusted_codes},
+        )
+
+    print(f"  OK {outcome.counts['trusted']} entradas NEBS confiáveis migradas")
+    print(f"  OK auditoria NEBS atualizada em {NEBS_AUDIT_CSV_PATH}")
+    return outcome.counts
 
 
 async def update_search_vectors(pg_session: AsyncSession) -> None:
@@ -602,6 +717,21 @@ async def update_search_vectors(pg_session: AsyncSession) -> None:
             """
         )
     )
+    await pg_session.execute(
+        text(
+            """
+            UPDATE nebs_entries
+            SET search_vector = to_tsvector(
+                'portuguese',
+                trim(
+                    COALESCE(title, '') || ' ' ||
+                    COALESCE(section_title, '') || ' ' ||
+                    COALESCE(body_text, '')
+                )
+            )
+            """
+        )
+    )
 
     print("  OK search vectors atualizados")
 
@@ -623,6 +753,7 @@ async def run_full_migration() -> int:
         "nesh_sqlite": Path(settings.database.path),
         "tipi_sqlite": Path(settings.database.tipi_path),
         "nbs_csv": NBS_CSV_PATH,
+        "nebs_pdf": NEBS_PDF_PATH,
     }
     missing_sources = [
         f"{name}: {path}"
@@ -638,11 +769,13 @@ async def run_full_migration() -> int:
     print(f"\nSQLite NESH source: {settings.database.path}")
     print(f"SQLite TIPI source: {settings.database.tipi_path}")
     print(f"NBS source: {NBS_CSV_PATH}")
+    print(f"NEBS source: {NEBS_PDF_PATH}")
     print(f"PostgreSQL target: {_mask_database_url(settings.database.postgres_url)}")
 
     nesh_updated_at = _now_iso()
     tipi_updated_at = _now_iso()
     nbs_updated_at = _now_iso()
+    nebs_updated_at = _now_iso()
 
     try:
         async with get_session() as session:
@@ -693,6 +826,27 @@ async def run_full_migration() -> int:
                     "source_hash": calculate_file_sha256(NBS_CSV_PATH),
                     "row_count": str(len(nbs_items)),
                     "updated_at": nbs_updated_at,
+                },
+            )
+
+            print("\nMigrando NEBS...")
+            nebs_counts = await migrate_nebs_entries(
+                NEBS_PDF_PATH,
+                valid_nbs_items={item.code: item.description for item in nbs_items},
+                pg_session=session,
+            )
+            await _replace_metadata(
+                session,
+                prefix="nebs",
+                values={
+                    "source_path": str(NEBS_PDF_PATH),
+                    "source_hash": calculate_file_sha256(NEBS_PDF_PATH),
+                    "trusted_count": str(nebs_counts.get("trusted", 0)),
+                    "suspect_count": str(nebs_counts.get("suspect", 0)),
+                    "rejected_count": str(nebs_counts.get("rejected", 0)),
+                    "updated_at": nebs_updated_at,
+                    "audit_csv": str(NEBS_AUDIT_CSV_PATH),
+                    "audit_json": str(NEBS_AUDIT_JSON_PATH),
                 },
             )
 

@@ -4,7 +4,7 @@ import {
     compareOfflineVersions,
     formatOfflineDatabaseErrorMessage,
 } from '../utils/offlineDatabase';
-
+import { getRegisteredClerkToken } from '../services/api';
 import {
     clearOfflineDatabaseInstallLock,
     getOfflineDatabaseInstallLock,
@@ -84,17 +84,20 @@ export function useOfflineDatabaseMutations({
             }
 
             runOfflineDatabaseTaskInBackground(primeOfflineShellCache());
-
+            const clerkToken = await getRegisteredClerkToken({ skipCache: true });
+            if (!clerkToken) {
+                throw new Error('Faça login para instalar o banco offline.');
+            }
             await sendToWorker(
                 {
                     type: 'INSTALL',
                     id: null,
                     payload: {
                         apiBase: getOfflineDatabaseApiBaseUrl(),
-                        clerkToken: '',
+                        clerkToken,
                     },
                 },
-                600_000,
+                180_000,
             );
 
             const effectiveMetadata =
@@ -155,7 +158,6 @@ export function useOfflineDatabaseMutations({
                 10_000,
             );
             persistStoredOfflineDatabaseMetadata(null);
-            sessionStorage.removeItem('offline_db_seed');
             setLocalVersion(null);
             setRemoteVersion(remoteMetadataRef.current?.version ?? null);
             setDbSizeBytes(null);

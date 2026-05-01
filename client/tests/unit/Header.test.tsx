@@ -113,9 +113,11 @@ describe('Header', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'TIPI' }));
     fireEvent.click(screen.getByRole('button', { name: 'NESH' }));
+    fireEvent.click(screen.getByLabelText('Abrir Navegação'));
 
     expect(setDoc).toHaveBeenCalledWith('tipi');
     expect(setDoc).toHaveBeenCalledWith('nesh');
+    expect(onMenuOpen).toHaveBeenCalledTimes(1);
     expect(screen.getByText('Notas Explicativas do Sistema Harmonizado')).toBeInTheDocument();
   });
 

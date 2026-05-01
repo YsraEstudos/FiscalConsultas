@@ -2,7 +2,7 @@ import type { InternalAxiosRequestConfig } from 'axios';
 
 import type { ClerkTokenGetterOptions } from './authTypes';
 
-const PUBLIC_ROUTES = ['/status', '/glossary', '/services/', '/database/'];
+const PUBLIC_ROUTES = ['/status', '/glossary', '/services/'];
 const JWT_DEBUG_FIELDS = ['iss', 'sub', 'sid', 'azp', 'aud', 'org_id', 'exp', 'iat', 'nbf'] as const;
 
 export const AUTH_DEBUG_ENABLED =

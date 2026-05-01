@@ -27,6 +27,7 @@ interface HeaderProps {
     history: HistoryItem[];
     onClearHistory: () => void;
     onRemoveHistory: (term: string) => void;
+    onMenuOpen: () => void;
     isLoading?: boolean;
 }
 
@@ -92,6 +93,7 @@ doc,
     history,
     onClearHistory,
     onRemoveHistory,
+    onMenuOpen,
     isLoading
 }: HeaderProps) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -186,11 +188,19 @@ const logoutButtonLabel = getLogoutButtonLabel(isSigningOut);
         <header className={styles.header}>
             <div className={styles.headerContent}>
                 <div className={styles.logo}>
+                    {/* Mobile Nav Toggle */}
+                    <button
+                        className={styles.mobileNavToggle}
+                        onClick={onMenuOpen}
+                        aria-label="Abrir Navegação"
+                    >
+                        📑
+                    </button>
                     <div className={styles.logoIcon}>📦</div>
                     <div className={styles.logoText}>
                         <div className={styles.logoTitleRow}>
-                            <h1>FiscalConsultas</h1>
-                            <span className={styles.versionBadge}>0.0.1</span>
+                            <h1>Busca NCM</h1>
+                            <span className={styles.versionBadge}>1.0.0</span>
                         </div>
                         <span className={styles.logoSubtitle}>{titleSubtitle}</span>
                     </div>
