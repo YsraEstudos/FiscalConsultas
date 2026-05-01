@@ -7,8 +7,7 @@ from fastapi import HTTPException
 from starlette.requests import Request
 
 import backend.infrastructure.db_engine as db_engine
-from backend.presentation.routes import system
-from backend.presentation.routes import system_status
+from backend.presentation.routes import system, system_status
 
 pytestmark = pytest.mark.unit
 
@@ -82,9 +81,7 @@ class _FakeNeshService:
     async def snapshotNeshInternalCacheMetrics(self):  # NOSONAR
         return {"cache": "nesh"}
 
-    async def executeNeshSearchWithVectorWeights(  # NOSONAR
-        self, _ncm: str, **kwargs
-    ):
+    async def executeNeshSearchWithVectorWeights(self, _ncm: str, **kwargs):  # NOSONAR
         return self.response
 
 

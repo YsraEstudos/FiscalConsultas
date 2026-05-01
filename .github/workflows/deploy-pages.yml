@@ -1,7 +1,7 @@
 name: Deploy GitHub Pages
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 on:
   push:
@@ -28,7 +28,7 @@ jobs:
       VITE_API_URL: https://fiscal-api-5eok.onrender.com
       VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
       VITE_CLERK_TOKEN_TEMPLATE: backend_api
-      ALLOW_TEST_CLERK_KEY: "true" # Temporary explicit override while using pk_test on Pages
+      ALLOW_TEST_CLERK_KEY: 'true' # Temporary explicit override while using pk_test on Pages
     steps:
       - name: Checkout
         uses: actions/checkout@v4

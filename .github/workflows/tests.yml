@@ -28,7 +28,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
-          python-version: "3.14"
+          python-version: '3.14'
 
       - name: Setup uv
         uses: astral-sh/setup-uv@e06108dd0aef18192324c70427afc47652e63a82 # v7
@@ -104,8 +104,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
-          node-version: "24"
-          cache: "npm"
+          node-version: '24'
+          cache: 'npm'
           cache-dependency-path: client/package-lock.json
 
       - name: Install frontend dependencies
@@ -143,8 +143,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
-          node-version: "24"
-          cache: "npm"
+          node-version: '24'
+          cache: 'npm'
           cache-dependency-path: client/package-lock.json
 
       - name: Install frontend dependencies
@@ -159,7 +159,7 @@ jobs:
         working-directory: client
         env:
           PLAYWRIGHT_LIVE_BASE_URL: http://localhost:4173
-          ALLOW_TEST_CLERK_KEY: "true"
+          ALLOW_TEST_CLERK_KEY: 'true'
         run: >
           npx playwright test
           tests/playwright/services-tabs.spec.ts
