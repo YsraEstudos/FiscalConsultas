@@ -9,10 +9,16 @@ import {
 async function getActiveTabDocument(page: Page): Promise<string | null> {
   return page.locator('div[draggable="true"][data-document]').evaluateAll((tabs) => {
     const activeTab = tabs.find((tab): tab is HTMLElement => (
-      tab.getAttribute('data-active') === 'true' && tab instanceof HTMLElement
+      tab instanceof HTMLElement && tab.dataset.active === 'true'
     ));
     return activeTab?.dataset.document ?? null;
   });
+}
+
+function waitForNextPaint(page: Page) {
+  return page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  }));
 }
 
 async function getActiveResultsContainerId(page: Page): Promise<string> {
@@ -54,11 +60,8 @@ async function setAndCaptureScrollTop(page: Page, containerId: string, targetScr
   }
 
   expect(currentScrollTop, `Expected #${containerId} to reach at least ${targetScrollTop}px`).toBeGreaterThanOrEqual(targetScrollTop);
-  await page.evaluate(() => new Promise<void>((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => resolve());
-    });
-  }));
+  await waitForNextPaint(page);
+  await waitForNextPaint(page);
   return currentScrollTop;
 }
 

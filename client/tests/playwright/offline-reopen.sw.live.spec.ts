@@ -15,41 +15,40 @@ const RUNTIME_CACHE = 'runtime-assets-v3';
 
 async function installOfflineSupportMock(page: Page) {
   await page.addInitScript(() => {
-    try {
+    function installSharedArrayBufferShim() {
       if (globalThis.SharedArrayBuffer === undefined) {
         Object.defineProperty(globalThis, 'SharedArrayBuffer', {
           configurable: true,
           value: class SharedArrayBufferShim {},
         });
       }
-    } catch {
-      // Some browsers expose this as a non-configurable global; ignore that.
     }
 
-    try {
-      const cryptoObject = globalThis.crypto as Crypto & { subtle?: unknown } | undefined;
-      if (cryptoObject && cryptoObject.subtle === undefined) {
-        const subtleShim = {};
-        try {
-          Object.defineProperty(cryptoObject, 'subtle', {
+    function defineOnObjectOrPrototype(target: object, key: string, value: unknown) {
+      try {
+        Object.defineProperty(target, key, {
+          configurable: true,
+          value,
+        });
+      } catch {
+        const prototype = Object.getPrototypeOf(target);
+        if (prototype) {
+          Object.defineProperty(prototype, key, {
             configurable: true,
-            value: subtleShim,
+            value,
           });
-        } catch {
-          const cryptoPrototype = Object.getPrototypeOf(cryptoObject);
-          if (cryptoPrototype) {
-            Object.defineProperty(cryptoPrototype, 'subtle', {
-              configurable: true,
-              value: subtleShim,
-            });
-          }
         }
       }
-    } catch {
-      // If crypto is read-only, the live spec will still surface the unsupported state.
     }
 
-    try {
+    function installCryptoSubtleShim() {
+      const cryptoObject = globalThis.crypto as Crypto & { subtle?: unknown } | undefined;
+      if (cryptoObject && cryptoObject.subtle === undefined) {
+        defineOnObjectOrPrototype(cryptoObject, 'subtle', {});
+      }
+    }
+
+    function installStorageDirectoryShim() {
       const navigatorWithStorage = navigator as Navigator & {
         storage?: { getDirectory?: unknown };
       };
@@ -59,21 +58,24 @@ async function installOfflineSupportMock(page: Page) {
           ...(storage && typeof storage === 'object' ? storage : {}),
           getDirectory: async () => ({}),
         };
-        try {
-          Object.defineProperty(navigatorWithStorage, 'storage', {
-            configurable: true,
-            value: storageShim,
-          });
-        } catch {
-          const navigatorPrototype = Object.getPrototypeOf(navigatorWithStorage);
-          if (navigatorPrototype) {
-            Object.defineProperty(navigatorPrototype, 'storage', {
-              configurable: true,
-              value: storageShim,
-            });
-          }
-        }
+        defineOnObjectOrPrototype(navigatorWithStorage, 'storage', storageShim);
       }
+    }
+
+    try {
+      installSharedArrayBufferShim();
+    } catch {
+      // Some browsers expose this as a non-configurable global; ignore that.
+    }
+
+    try {
+      installCryptoSubtleShim();
+    } catch {
+      // If crypto is read-only, the live spec will still surface the unsupported state.
+    }
+
+    try {
+      installStorageDirectoryShim();
     } catch {
       // If storage is read-only, the live spec will still surface the unsupported state.
     }
