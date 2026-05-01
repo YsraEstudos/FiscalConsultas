@@ -81,8 +81,10 @@ class PortugueseStemmer:
         return word
 
 
-# ⚡ Bolt: Cache stemming results for frequently repeated words across the application.
-# Stemming is CPU intensive and the total vocabulary of NCM codes is bounded.
+# Cache stemming results for frequently repeated words across the application.
+# Safe to share/cache because PortugueseStemmer is currently stateless.
+# If future stemming behavior becomes configurable per instance, include that
+# configuration in the cache key or avoid the shared cache.
 _SHARED_STEMMER = PortugueseStemmer()
 
 
