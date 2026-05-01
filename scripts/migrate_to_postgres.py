@@ -18,6 +18,7 @@ import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import aiosqlite
@@ -58,6 +59,31 @@ NBS_CSV_PATH = DATA_DIR / "nbs.csv"
 NEBS_PDF_PATH = DATA_DIR / "nebs.pdf"
 NEBS_AUDIT_CSV_PATH = REPORTS_DIR / "nebs_audit.csv"
 NEBS_AUDIT_JSON_PATH = REPORTS_DIR / "nebs_audit.json"
+NBS_ITEM_UPSERT_COLUMNS = (
+    "code_clean",
+    "description",
+    "description_normalized",
+    "parent_code",
+    "level",
+    "source_order",
+    "sort_path",
+    "has_nebs",
+)
+NEBS_ENTRY_UPSERT_COLUMNS = (
+    "code_clean",
+    "title",
+    "title_normalized",
+    "body_text",
+    "body_markdown",
+    "body_normalized",
+    "section_title",
+    "page_start",
+    "page_end",
+    "parser_status",
+    "parse_warnings",
+    "source_hash",
+    "updated_at",
+)
 
 
 def _mask_database_url(url: str | None) -> str:
@@ -133,6 +159,30 @@ async def _replace_metadata(
     stmt = stmt.on_conflict_do_update(
         index_elements=["key"],
         set_={"value": stmt.excluded.value, "tenant_id": None},
+    )
+    await pg_session.execute(stmt)
+
+
+async def _upsert_rows(
+    pg_session: AsyncSession,
+    model: Any,
+    rows: list[dict[str, Any]],
+    *,
+    index_elements: list[str],
+    update_columns: tuple[str, ...],
+    fixed_values: dict[str, Any] | None = None,
+) -> None:
+    if not rows:
+        return
+
+    stmt = pg_insert(model).values(rows)
+    update_values = {
+        column: getattr(stmt.excluded, column) for column in update_columns
+    }
+    update_values.update(fixed_values or {})
+    stmt = stmt.on_conflict_do_update(
+        index_elements=index_elements,
+        set_=update_values,
     )
     await pg_session.execute(stmt)
 
@@ -544,41 +594,24 @@ async def migrate_nbs_items(csv_path: Path, pg_session: AsyncSession) -> list:
             }
         )
         if len(batch) >= 1000:
-            stmt = pg_insert(NbsItem).values(batch)
-            stmt = stmt.on_conflict_do_update(
+            await _upsert_rows(
+                pg_session,
+                NbsItem,
+                batch,
                 index_elements=["code"],
-                set_={
-                    "code_clean": stmt.excluded.code_clean,
-                    "description": stmt.excluded.description,
-                    "description_normalized": stmt.excluded.description_normalized,
-                    "parent_code": stmt.excluded.parent_code,
-                    "level": stmt.excluded.level,
-                    "source_order": stmt.excluded.source_order,
-                    "sort_path": stmt.excluded.sort_path,
-                    "has_nebs": stmt.excluded.has_nebs,
-                    "tenant_id": None,
-                },
+                update_columns=NBS_ITEM_UPSERT_COLUMNS,
+                fixed_values={"tenant_id": None},
             )
-            await pg_session.execute(stmt)
             batch = []
 
-    if batch:
-        stmt = pg_insert(NbsItem).values(batch)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["code"],
-            set_={
-                "code_clean": stmt.excluded.code_clean,
-                "description": stmt.excluded.description,
-                "description_normalized": stmt.excluded.description_normalized,
-                "parent_code": stmt.excluded.parent_code,
-                "level": stmt.excluded.level,
-                "source_order": stmt.excluded.source_order,
-                "sort_path": stmt.excluded.sort_path,
-                "has_nebs": stmt.excluded.has_nebs,
-                "tenant_id": None,
-            },
-        )
-        await pg_session.execute(stmt)
+    await _upsert_rows(
+        pg_session,
+        NbsItem,
+        batch,
+        index_elements=["code"],
+        update_columns=NBS_ITEM_UPSERT_COLUMNS,
+        fixed_values={"tenant_id": None},
+    )
 
     print(f"  OK {len(items)} itens NBS migrados")
     return items
@@ -623,51 +656,24 @@ async def migrate_nebs_entries(
             }
         )
         if len(batch) >= 500:
-            stmt = pg_insert(NebsEntry).values(batch)
-            stmt = stmt.on_conflict_do_update(
+            await _upsert_rows(
+                pg_session,
+                NebsEntry,
+                batch,
                 index_elements=["code"],
-                set_={
-                    "code_clean": stmt.excluded.code_clean,
-                    "title": stmt.excluded.title,
-                    "title_normalized": stmt.excluded.title_normalized,
-                    "body_text": stmt.excluded.body_text,
-                    "body_markdown": stmt.excluded.body_markdown,
-                    "body_normalized": stmt.excluded.body_normalized,
-                    "section_title": stmt.excluded.section_title,
-                    "page_start": stmt.excluded.page_start,
-                    "page_end": stmt.excluded.page_end,
-                    "parser_status": stmt.excluded.parser_status,
-                    "parse_warnings": stmt.excluded.parse_warnings,
-                    "source_hash": stmt.excluded.source_hash,
-                    "updated_at": stmt.excluded.updated_at,
-                    "tenant_id": None,
-                },
+                update_columns=NEBS_ENTRY_UPSERT_COLUMNS,
+                fixed_values={"tenant_id": None},
             )
-            await pg_session.execute(stmt)
             batch = []
 
-    if batch:
-        stmt = pg_insert(NebsEntry).values(batch)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["code"],
-            set_={
-                "code_clean": stmt.excluded.code_clean,
-                "title": stmt.excluded.title,
-                "title_normalized": stmt.excluded.title_normalized,
-                "body_text": stmt.excluded.body_text,
-                "body_markdown": stmt.excluded.body_markdown,
-                "body_normalized": stmt.excluded.body_normalized,
-                "section_title": stmt.excluded.section_title,
-                "page_start": stmt.excluded.page_start,
-                "page_end": stmt.excluded.page_end,
-                "parser_status": stmt.excluded.parser_status,
-                "parse_warnings": stmt.excluded.parse_warnings,
-                "source_hash": stmt.excluded.source_hash,
-                "updated_at": stmt.excluded.updated_at,
-                "tenant_id": None,
-            },
-        )
-        await pg_session.execute(stmt)
+    await _upsert_rows(
+        pg_session,
+        NebsEntry,
+        batch,
+        index_elements=["code"],
+        update_columns=NEBS_ENTRY_UPSERT_COLUMNS,
+        fixed_values={"tenant_id": None},
+    )
 
     trusted_codes = [entry.code for entry in outcome.entries]
     if trusted_codes:

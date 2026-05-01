@@ -221,6 +221,31 @@ export async function searchCatalogCode(page: Page, endpoint: string, ncm: strin
   await searchRequest;
 }
 
+export async function disableBrowserStorageApis(page: Page) {
+  await page.addInitScript(() => {
+    try {
+      Object.defineProperty(globalThis, 'SharedArrayBuffer', {
+        value: undefined,
+        configurable: true,
+      });
+    } catch {
+      // Ignore environments where this global cannot be redefined.
+    }
+
+    try {
+      const storage = navigator.storage as unknown as { getDirectory?: unknown } | undefined;
+      if (storage) {
+        Object.defineProperty(storage, 'getDirectory', {
+          value: undefined,
+          configurable: true,
+        });
+      }
+    } catch {
+      // Ignore environments where navigator.storage is read-only.
+    }
+  });
+}
+
 async function fulfillSearchRoute<TResponse>(
   route: Route,
   query: string,

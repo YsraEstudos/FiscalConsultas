@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import {
+  disableBrowserStorageApis,
   installServicesMock,
   makeTipiChapterData,
   searchCatalogCode,
@@ -15,28 +16,7 @@ async function openTipiSearch(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => {
-    try {
-      Object.defineProperty(globalThis, 'SharedArrayBuffer', {
-        value: undefined,
-        configurable: true,
-      });
-    } catch {
-      // Ignore environments where this global cannot be redefined.
-    }
-
-    try {
-      const storage = navigator.storage as unknown as { getDirectory?: unknown } | undefined;
-      if (storage) {
-        Object.defineProperty(storage, 'getDirectory', {
-          value: undefined,
-          configurable: true,
-        });
-      }
-    } catch {
-      // Ignore environments where navigator.storage is read-only.
-    }
-  });
+  await disableBrowserStorageApis(page);
 
   await installServicesMock(page, {
     tipiSearchResponses: [
