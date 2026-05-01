@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from functools import lru_cache
 from typing import List
 
 # Pre-compiled regex for word extraction (performance optimization)
@@ -80,11 +81,21 @@ class PortugueseStemmer:
         return word
 
 
+# ⚡ Bolt: Cache stemming results for frequently repeated words across the application.
+# Stemming is CPU intensive and the total vocabulary of NCM codes is bounded.
+_SHARED_STEMMER = PortugueseStemmer()
+
+
+@lru_cache(maxsize=10000)
+def _cached_stem(word: str) -> str:
+    return _SHARED_STEMMER.stem(word)
+
+
 class NeshTextProcessor:
     """Fachada para processamento de texto no Nesh."""
 
     def __init__(self, stopwords: List[str] = None):
-        self.stemmer = PortugueseStemmer()
+        self.stemmer = _SHARED_STEMMER
         self.stopwords = set(stopwords) if stopwords else set()
 
     def normalize(self, text: str) -> str:
@@ -104,7 +115,7 @@ class NeshTextProcessor:
             if len(w) < 2:  # Ignora letras soltas
                 continue
 
-            stemmed = self.stemmer.stem(w)
+            stemmed = _cached_stem(w)
             processed.append(stemmed)
 
         return " ".join(processed)
@@ -119,7 +130,7 @@ class NeshTextProcessor:
             if w in self.stopwords:
                 continue
 
-            stemmed = self.stemmer.stem(w)
+            stemmed = _cached_stem(w)
             processed.append(f"{stemmed}*")
 
         return " ".join(processed)
@@ -134,7 +145,7 @@ class NeshTextProcessor:
             if w in self.stopwords:
                 continue
 
-            stemmed = self.stemmer.stem(w)
+            stemmed = _cached_stem(w)
             processed.append(stemmed)
 
         return " ".join(processed)

@@ -78,4 +78,3 @@ def init_glossary(project_root: str) -> None:
     for path in candidates:
         if glossary_manager.load_from_json(path):
             return
-
