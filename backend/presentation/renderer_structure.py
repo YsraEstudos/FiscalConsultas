@@ -403,12 +403,13 @@ def _render_full_response(
     return full_html
 
 
-_INJECT_COMMENT_ID_EXTRACT_PATTERN = re.compile(
-    r'<[a-zA-Z][^\s>]*\s+[^>]*\bid=(?:"([^"]*)"|\'([^\']*)\'|([^\s>]*))(?=[\s/>]|$)[^>]*>'
-)  # NOSONAR
+_INJECT_COMMENT_TAG_PATTERN = re.compile(r"<[a-zA-Z][^\s>]*\s+[^>]*>")
+_INJECT_COMMENT_ID_ATTR_PATTERN = re.compile(
+    r'(?<![\w-])id=(?:"([^"]*)"|\'([^\']*)\'|([^\s>]*))'
+)
 _INJECT_COMMENT_CLASS_ATTR_PATTERN = re.compile(
     r'(?<![\w-])(class=["\'])([^"\']*)(["\'])'
-)  # NOSONAR
+)
 _INJECT_COMMENT_TAG_CLOSE_PATTERN = re.compile(r"(\s*/?>)$")
 
 
@@ -419,9 +420,13 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
 
     keys_set = set(commented_anchor_keys)
 
-    def _add_class_if_match(match: re.Match[str]) -> str:
+    def _add_class_if_tag(match: re.Match[str]) -> str:
         tag = match.group(0)
-        id_val = match.group(1) or match.group(2) or match.group(3)
+        id_match = _INJECT_COMMENT_ID_ATTR_PATTERN.search(tag)
+        if not id_match:
+            return tag
+
+        id_val = id_match.group(1) or id_match.group(2) or id_match.group(3)
 
         if id_val in keys_set:
             if _INJECT_COMMENT_CLASS_ATTR_PATTERN.search(tag):
@@ -440,4 +445,4 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
 
         return tag
 
-    return _INJECT_COMMENT_ID_EXTRACT_PATTERN.sub(_add_class_if_match, html)
+    return _INJECT_COMMENT_TAG_PATTERN.sub(_add_class_if_tag, html)
