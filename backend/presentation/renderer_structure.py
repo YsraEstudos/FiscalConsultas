@@ -403,32 +403,41 @@ def _render_full_response(
     return full_html
 
 
+_INJECT_COMMENT_ID_EXTRACT_PATTERN = re.compile(
+    r'<[a-zA-Z][^\s>]*\s+[^>]*\bid=(?:"([^"]*)"|\'([^\']*)\'|([^\s>]*))(?=[\s/>]|$)[^>]*>'
+)
+_INJECT_COMMENT_CLASS_ATTR_PATTERN = re.compile(
+    r'(?<![\w-])(class=["\'])([^"\']*)(["\'])'
+)
+_INJECT_COMMENT_TAG_CLOSE_PATTERN = re.compile(r"(\s*/?>)$")
+
+
 def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     """Add ``has-comment`` markers to rendered elements identified by anchor id."""
     if not commented_anchor_keys or not html:
         return html
 
-    for key in commented_anchor_keys:
-        safe_key = re.escape(key)
-        class_attr_pattern = re.compile(r'(?<![\w-])(class=["\'])([^"\']*?)(["\'])')
+    keys_set = set(commented_anchor_keys)
 
-        def _add_class(match: re.Match[str]) -> str:
-            tag = match.group(0)
-            if class_attr_pattern.search(tag):
-                tag = class_attr_pattern.sub(
+    def _add_class_if_match(match: re.Match[str]) -> str:
+        tag = match.group(0)
+        id_val = match.group(1) or match.group(2) or match.group(3)
+
+        if id_val in keys_set:
+            if _INJECT_COMMENT_CLASS_ATTR_PATTERN.search(tag):
+                tag = _INJECT_COMMENT_CLASS_ATTR_PATTERN.sub(
                     lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
                     tag,
                     count=1,
                 )
             else:
-                tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
-            return tag
+                tag = _INJECT_COMMENT_TAG_CLOSE_PATTERN.sub(
+                    ' class="has-comment"\\1', tag
+                )
 
-        html = re.sub(
-            rf'<[a-zA-Z][^>]*\bid=(?:"{safe_key}"|\'{safe_key}\'|{safe_key})(?=[\s/>]|$)[^>]*>',
-            _add_class,
-            html,
-            count=1,
-        )
+            # Remove from set to enforce the original 'count=1' per key behavior
+            keys_set.remove(id_val)
 
-    return html
+        return tag
+
+    return _INJECT_COMMENT_ID_EXTRACT_PATTERN.sub(_add_class_if_match, html)
