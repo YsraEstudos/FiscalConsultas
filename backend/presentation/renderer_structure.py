@@ -404,11 +404,11 @@ def _render_full_response(
 
 
 _INJECT_COMMENT_ID_EXTRACT_PATTERN = re.compile(
-    r'<[a-zA-Z][^\s>]*\s+[^>]*\bid=(?:"([^"]*)"|\'([^\']*)\'|([^\s>]*))(?=[\s/>]|$)[^>]*>'  # NOSONAR
-)
+    r'<[a-zA-Z][^\s>]*\s+[^>]*\bid=(?:"([^"]*)"|\'([^\']*)\'|([^\s>]*))(?=[\s/>]|$)[^>]*>'
+)  # NOSONAR
 _INJECT_COMMENT_CLASS_ATTR_PATTERN = re.compile(
-    r'(?<![\w-])(class=["\'])([^"\']*)(["\'])'  # NOSONAR
-)
+    r'(?<![\w-])(class=["\'])([^"\']*)(["\'])'
+)  # NOSONAR
 _INJECT_COMMENT_TAG_CLOSE_PATTERN = re.compile(r"(\s*/?>)$")
 
 
