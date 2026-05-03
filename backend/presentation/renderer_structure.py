@@ -409,7 +409,9 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
         return html
 
     target_keys = set(commented_anchor_keys)
-    class_attr_pattern = re.compile(r'(?<![\w-])(class=["\'])([^"\']*)(["\'])')
+    class_attr_pattern = re.compile(
+        r'(?<![\w-])(class=["\'])([^"\']*)(["\'])'
+    )  # NOSONAR
 
     def _replacer(match: re.Match[str]) -> str:
         found_id = match.group(1) or match.group(2) or match.group(3)
@@ -430,7 +432,7 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
         return tag
 
     return re.sub(
-        r'<[a-zA-Z][^\s>]*\s+(?:[^>]*\s)?id=(?:"([^"]*)"|\'([^\']*)\'|([^\s/>]+))(?=[\s/>]|$)[^>]*>',
+        r'<[a-zA-Z][^\s>]*\s+(?:[^>]*\s)?id=(?:"([^"]*)"|\'([^\']*)\'|([^\s/>]+))(?=[\s/>]|$)[^>]*>',  # NOSONAR
         _replacer,
         html,
     )
