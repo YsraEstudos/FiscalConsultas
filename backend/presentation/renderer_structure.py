@@ -432,7 +432,7 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
         return tag
 
     return re.sub(  # NOSONAR
-        r'<[a-zA-Z][^\s>]*\s+(?:[^>]*\s)?id=(?:"([^"]*)"|\'([^\']*)\'|([^\s/>]+))(?=[\s/>]|$)[^>]*>',  # NOSONAR
+        r'<[a-zA-Z][^\s>]*\s+(?:[^\s>]+(?:\s+[^\s>]+)*\s+)?id=(?:"([^"]*)"|\'([^\']*)\'|([^\s/>]+))(?=[\s/>]|$)[^>]*>',  # NOSONAR
         _replacer,
         html,
     )
