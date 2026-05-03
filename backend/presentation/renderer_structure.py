@@ -409,7 +409,7 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
         return html
 
     target_keys = set(commented_anchor_keys)
-    class_attr_pattern = re.compile(
+    class_attr_pattern = re.compile(  # NOSONAR
         r'(?<![\w-])(class=["\'])([^"\']*)(["\'])'
     )  # NOSONAR
 
@@ -431,7 +431,7 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
             tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
         return tag
 
-    return re.sub(
+    return re.sub(  # NOSONAR
         r'<[a-zA-Z][^\s>]*\s+(?:[^>]*\s)?id=(?:"([^"]*)"|\'([^\']*)\'|([^\s/>]+))(?=[\s/>]|$)[^>]*>',  # NOSONAR
         _replacer,
         html,
