@@ -7,12 +7,73 @@ export const OFFLINE_LOCK_TTL_MS = 180_000;
 
 let fallbackOfflineDatabaseInstanceCounter = 0;
 
+export type OfflineDatabaseMissingFeature =
+    | 'secure-context'
+    | 'cross-origin-isolation'
+    | 'shared-array-buffer'
+    | 'worker'
+    | 'web-crypto'
+    | 'opfs';
+
+export interface OfflineDatabaseSupportReport {
+    supported: boolean;
+    missingFeatures: OfflineDatabaseMissingFeature[];
+    canRecoverWithIsolationReload: boolean;
+    isSecureContext: boolean;
+    crossOriginIsolated: boolean;
+}
+
+function isLocalhostLikeOrigin(): boolean {
+    const hostname = globalThis.location?.hostname;
+    return hostname === 'localhost'
+        || hostname === '127.0.0.1'
+        || hostname === '[::1]';
+}
+
+export function getOfflineDatabaseSupportReport(): OfflineDatabaseSupportReport {
+    const isSecureContext =
+        globalThis.isSecureContext === true
+        || (
+            typeof globalThis.isSecureContext === 'undefined'
+            && (
+                globalThis.location?.protocol === 'https:'
+                || isLocalhostLikeOrigin()
+            )
+        );
+    const crossOriginIsolated = globalThis.crossOriginIsolated === true;
+    const hasSharedArrayBuffer = typeof globalThis.SharedArrayBuffer !== 'undefined';
+    const hasWorker = typeof globalThis.Worker !== 'undefined';
+    const hasWebCrypto = typeof globalThis.crypto?.subtle !== 'undefined';
+    const hasOpfs = typeof globalThis.navigator?.storage?.getDirectory === 'function';
+
+    const missingFeatures: OfflineDatabaseMissingFeature[] = [];
+    if (!isSecureContext) missingFeatures.push('secure-context');
+    if (!crossOriginIsolated) missingFeatures.push('cross-origin-isolation');
+    if (!hasSharedArrayBuffer) missingFeatures.push('shared-array-buffer');
+    if (!hasWorker) missingFeatures.push('worker');
+    if (!hasWebCrypto) missingFeatures.push('web-crypto');
+    if (!hasOpfs) missingFeatures.push('opfs');
+
+    const canRecoverWithIsolationReload =
+        isSecureContext
+        && !crossOriginIsolated
+        && !hasSharedArrayBuffer
+        && hasWorker
+        && hasWebCrypto
+        && hasOpfs
+        && typeof globalThis.navigator?.serviceWorker !== 'undefined';
+
+    return {
+        supported: missingFeatures.length === 0,
+        missingFeatures,
+        canRecoverWithIsolationReload,
+        isSecureContext,
+        crossOriginIsolated,
+    };
+}
+
 export function isOfflineDatabaseSupported(): boolean {
-    if (typeof SharedArrayBuffer === 'undefined') return false;
-    if (typeof Worker === 'undefined') return false;
-    if (typeof crypto?.subtle === 'undefined') return false;
-    if (typeof navigator?.storage?.getDirectory !== 'function') return false;
-    return true;
+    return getOfflineDatabaseSupportReport().supported;
 }
 
 export function readStoredOfflineDatabaseMetadata(): OfflineDatabaseMetadata | null {
