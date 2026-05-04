@@ -60,7 +60,11 @@ class MockWorker {
     });
   }
 
-  terminate(): void {}
+  terminate(): void {
+    this.onmessage = null;
+    this.onerror = null;
+    this.messageListeners.clear();
+  }
 
   private respond(message: WorkerPayload): void {
     if (message.type === 'INIT') {
@@ -170,6 +174,8 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     vi.stubGlobal('Worker', MockWorker as unknown as typeof Worker);
     vi.stubGlobal('BroadcastChannel', undefined);
     vi.stubGlobal('SharedArrayBuffer', class SharedArrayBufferMock {});
+    vi.stubGlobal('isSecureContext', true);
+    vi.stubGlobal('crossOriginIsolated', true);
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation(() => Promise.resolve(makeVersionResponse('2026.04'))),

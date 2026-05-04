@@ -2,6 +2,7 @@ import type {
     NbsCatalogDetailApiResponse,
 } from '../types/api.types';
 import type { OfflineDatabaseMetadata } from '../utils/offlineDatabase';
+import type { OfflineDatabaseSupportReport } from './offlineDatabaseStorage';
 
 export type OfflineDatabaseStatus =
     | 'checking'
@@ -24,6 +25,7 @@ export interface OfflineDatabaseState {
     error: string | null;
     dbSizeBytes: number | null;
     isSupported: boolean;
+    supportReport: OfflineDatabaseSupportReport;
     isRemoving: boolean;
 }
 
