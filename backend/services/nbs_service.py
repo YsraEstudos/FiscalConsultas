@@ -158,7 +158,9 @@ class NbsService:
                 nebs_entries = int(counts.get("nebs_entries", 0))
                 return {
                     "status": (
-                        "online" if nbs_items > 0 and nebs_entries > 0 else "error"
+                        "online"
+                        if nbs_items > 0 and nebs_entries > 0
+                        else "error"
                     ),
                     "nbs_items": nbs_items,
                     "nebs_entries": nebs_entries,
@@ -169,10 +171,7 @@ class NbsService:
                 return {"status": "error", "error": str(exc)}
 
         if not self.db_path.exists():
-            return {
-                "status": "error",
-                "error": f"Banco NBS não encontrado: {self.db_path}",
-            }
+            return {"status": "error", "error": f"Banco NBS não encontrado: {self.db_path}"}
 
         conn = await self._get_connection()
         try:
