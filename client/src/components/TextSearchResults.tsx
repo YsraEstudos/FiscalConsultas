@@ -85,11 +85,18 @@ export const TextSearchResults = React.memo(function TextSearchResults({ results
         const tierLabel = item.tier_label || 'Parcial';
 
         return (
-            <button
-                type="button"
+            <div
+                role="button"
+                tabIndex={0}
                 key={`${item.ncm}-${index}`}
                 className={styles.item}
                 onClick={() => onResultClick(item.ncm)}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onResultClick(item.ncm);
+                    }
+                }}
             >
                 <div className={styles.header}>
                     <div className={styles.identity}>
@@ -111,7 +118,7 @@ export const TextSearchResults = React.memo(function TextSearchResults({ results
                 <div className={styles.desc}>
                     {renderDescription(item.descricao)}
                 </div>
-            </button>
+            </div>
         );
     }, [onResultClick, renderDescription]);
 
