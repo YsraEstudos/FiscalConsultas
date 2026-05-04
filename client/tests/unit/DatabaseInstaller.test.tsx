@@ -50,7 +50,7 @@ describe('DatabaseInstaller', () => {
 
     render(<DatabaseInstaller />);
 
-    expect(screen.getByText('Busca Offline')).toBeInTheDocument();
+    expect(screen.getByText('Busca local')).toBeInTheDocument();
     expect(screen.getByText(/Seu navegador não suporta os recursos necessários/i)).toBeInTheDocument();
     expect(screen.getByText(/Indisponível/)).toBeInTheDocument();
   });
@@ -72,7 +72,7 @@ describe('DatabaseInstaller', () => {
     render(<DatabaseInstaller />);
 
     expect(screen.getByText(/Instalando…/)).toBeInTheDocument();
-    expect(screen.getByText('Baixando banco de dados…')).toBeInTheDocument();
+    expect(screen.getByText('Preparando base fiscal…')).toBeInTheDocument();
     expect(screen.getByText('1%')).toBeInTheDocument();
   });
 
@@ -90,17 +90,18 @@ describe('DatabaseInstaller', () => {
 
   it('renders the ready state without update information', () => {
     localDatabaseState.status = 'ready';
-    localDatabaseState.localVersion = '2026.04';
+    localDatabaseState.localVersion = '2026.04.24.143558';
     localDatabaseState.dbSizeBytes = 1_572_864;
 
     render(<DatabaseInstaller />);
 
-    expect(screen.getByText(/Ativa/)).toBeInTheDocument();
-    expect(screen.getByText(/Versão:/)).toBeInTheDocument();
-    expect(screen.getByText('2026.04')).toBeInTheDocument();
+    expect(screen.getByText(/Pronta/)).toBeInTheDocument();
+    expect(screen.getByText(/NBS, TIPI e NESH disponíveis neste computador/i)).toBeInTheDocument();
+    expect(screen.getByText(/Atualização:/)).toBeInTheDocument();
+    expect(screen.getByText('24/04/2026')).toBeInTheDocument();
     expect(screen.getByText('1.5 MB')).toBeInTheDocument();
     expect(screen.queryByText(/Nova versão:/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Atualizar Banco Offline/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Atualizar base local/i })).not.toBeInTheDocument();
   });
 
   it('renders the ready state with update information and handles update click', async () => {
@@ -111,7 +112,7 @@ describe('DatabaseInstaller', () => {
 
     render(<DatabaseInstaller />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Atualizar Banco Offline/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Atualizar base local/i }));
 
     expect(screen.getByText(/Nova versão:/)).toBeInTheDocument();
     expect(screen.getByText('2026.05')).toBeInTheDocument();

@@ -335,7 +335,7 @@ export async function expectOfflineReadyInSettings(page: Page, timeout = 15_000)
     await openSettings(page);
   }
 
-  await expect(page.getByText(/Ativa/)).toBeVisible({ timeout });
+  await expect(page.getByText(/Pronta/)).toBeVisible({ timeout });
 }
 
 export async function expectOfflineMetadataPersisted(page: Page) {

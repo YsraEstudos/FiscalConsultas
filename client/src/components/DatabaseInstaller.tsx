@@ -10,7 +10,7 @@ import styles from "./DatabaseInstaller.module.css";
 
 const STEP_LABELS: Record<string, string> = {
   requesting_token: "Solicitando token…",
-  downloading: "Baixando banco de dados…",
+  downloading: "Preparando base fiscal…",
   verifying_download: "Verificando integridade do arquivo…",
   decrypting: "Verificando e decriptando…",
   loading: "Carregando no motor de busca…",
@@ -29,6 +29,14 @@ function formatBytes(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function formatDatabaseVersion(version: string): string {
+  const match = version.match(/^(\d{4})\.(\d{2})\.(\d{2})/);
+  if (!match) return version;
+
+  const [, year, month, day] = match;
+  return `${day}/${month}/${year}`;
 }
 
 /**
@@ -68,7 +76,7 @@ export default function DatabaseInstaller() {
       <div className={styles.installerCard}>
         <div className={styles.cardHeader}>
           <span className={styles.cardIcon}>⚡</span>
-          <span className={styles.cardTitle}>Busca Offline</span>
+          <span className={styles.cardTitle}>Busca local</span>
           <span className={`${styles.statusBadge} ${styles.statusUnsupported}`}>
             ⚠ Indisponível
           </span>
@@ -88,7 +96,7 @@ export default function DatabaseInstaller() {
       <div className={styles.installerCard}>
         <div className={styles.cardHeader}>
           <span className={styles.cardIcon}>⚡</span>
-          <span className={styles.cardTitle}>Busca Offline</span>
+          <span className={styles.cardTitle}>Busca local</span>
           <span
             className={`${styles.statusBadge} ${styles.statusInstalling}`}
           >
@@ -108,7 +116,7 @@ export default function DatabaseInstaller() {
       <div className={styles.installerCard}>
         <div className={styles.cardHeader}>
           <span className={styles.cardIcon}>⚡</span>
-          <span className={styles.cardTitle}>Busca Offline</span>
+          <span className={styles.cardTitle}>Busca local</span>
           <span
             className={`${styles.statusBadge} ${styles.statusInstalling}`}
           >
@@ -140,22 +148,22 @@ export default function DatabaseInstaller() {
       <div className={styles.installerCard}>
         <div className={styles.cardHeader}>
           <span className={styles.cardIcon}>⚡</span>
-          <span className={styles.cardTitle}>Busca Offline</span>
+          <span className={styles.cardTitle}>Busca local</span>
           <span className={`${styles.statusBadge} ${styles.statusReady}`}>
-            ✅ Ativa
+            ✅ Pronta
           </span>
         </div>
 
         <p className={styles.cardDescription}>
-          O banco de dados está instalado. Suas buscas de NBS, TIPI e NESH
-          são executadas localmente em milissegundos.
+          NBS, TIPI e NESH disponíveis neste computador, sem depender da
+          internet.
         </p>
 
         <div className={styles.infoRow}>
           {localVersion && (
             <div className={styles.infoItem}>
-              <span className={styles.infoLabel}>Versão:</span>
-              <span>{localVersion}</span>
+              <span className={styles.infoLabel}>Atualização:</span>
+              <span>{formatDatabaseVersion(localVersion)}</span>
             </div>
           )}
           {updateAvailable && remoteVersion && (
@@ -166,7 +174,7 @@ export default function DatabaseInstaller() {
           )}
           {dbSizeBytes && (
             <div className={styles.infoItem}>
-              <span className={styles.infoLabel}>Tamanho:</span>
+              <span className={styles.infoLabel}>Espaço usado:</span>
               <span>{formatBytes(dbSizeBytes)}</span>
             </div>
           )}
@@ -180,7 +188,7 @@ export default function DatabaseInstaller() {
               onClick={handleInstall}
               id="db-installer-update"
             >
-              🔄 Atualizar Banco Offline
+              🔄 Atualizar base local
             </button>
           )}
         </div>
@@ -194,7 +202,7 @@ export default function DatabaseInstaller() {
       <div className={styles.installerCard}>
         <div className={styles.cardHeader}>
           <span className={styles.cardIcon}>⚡</span>
-          <span className={styles.cardTitle}>Busca Offline</span>
+          <span className={styles.cardTitle}>Busca local</span>
           <span className={`${styles.statusBadge} ${styles.statusError}`}>
             ❌ Erro
           </span>
@@ -221,13 +229,13 @@ export default function DatabaseInstaller() {
     <div className={styles.installerCard}>
       <div className={styles.cardHeader}>
         <span className={styles.cardIcon}>⚡</span>
-        <span className={styles.cardTitle}>Busca Offline</span>
+        <span className={styles.cardTitle}>Busca local</span>
       </div>
 
       <p className={styles.cardDescription}>
         Instale o banco de dados localmente para buscar NBS, TIPI e NESH
-        instantaneamente, sem depender de conexão de internet. O download é feito
-        uma única vez{dbSizeBytes ? ` (~${formatBytes(dbSizeBytes)})` : " (~24 MB)"}.
+        instantaneamente, sem depender de conexão de internet. A preparação é
+        feita uma única vez{dbSizeBytes ? ` (~${formatBytes(dbSizeBytes)})` : " (~24 MB)"}.
       </p>
 
       <div className={styles.actions}>
