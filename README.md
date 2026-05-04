@@ -249,7 +249,7 @@ Contrato publico do banco offline:
 
 - O pacote offline (`fiscal_offline.enc` + `fiscal_offline.meta`) e considerado publico. Ele pode ser baixado sem login por meio das rotas `/api/database/version`, `/api/database/token` e `/api/database/download`; o token efemero existe para limitar reuso/abuso do download, nao para transformar o pacote em dado privado.
 - A criptografia do pacote offline protege integridade/formato de distribuicao, mas nao deve ser tratada como controle de acesso a dados sigilosos. Nao incluir informacao privada, segredos, dados de usuarios ou conteudo restrito dentro do bundle offline.
-- O conteudo NEBS associado a NBS faz parte do contrato do catalogo offline e online. A descricao/entrada explicativa NEBS vinculada ao item NBS deve permanecer no banco, no bundle offline e no detalhe da NBS; nao remover `has_nebs`, `nebs_entries` nem o payload `detail.nebs` sem substituir o fluxo por equivalente compativel.
+- O conteudo NEBS associado a NBS faz parte do contrato do catalogo offline e online. A NEBS esta embutida nas notas explicativas da NBS e isso deve se manter assim: a descricao/entrada explicativa NEBS vinculada ao item NBS deve permanecer no banco, no bundle offline e no detalhe da NBS; nao remover `has_nebs`, `nebs_entries` nem o payload `detail.nebs` sem substituir o fluxo por equivalente compativel.
 
 Comportamento esperado do fluxo:
 
