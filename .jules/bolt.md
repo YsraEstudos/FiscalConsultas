@@ -1,3 +1,7 @@
 ## 2024-04-29 - [Bounded LRU Cache for Stemmer]
 **Learning:** Instantiating `PortugueseStemmer` inside the `NeshTextProcessor` facade and directly calling its `stem` method causes redundant CPU-intensive text normalizations for the same words, particularly across large datasets or repetitive FTS queries where the vocabulary is bounded. Applying `@functools.lru_cache` to a module-level proxy function significantly speeds up NLP stemming. Never apply `lru_cache` directly to an instance method.
 **Action:** Always use a module-level bounded `lru_cache` on a decoupled proxy function when caching results from an instance method (e.g., stemming) across multiple instances to avoid including `self` in the cache key and causing cache misses or memory leaks.
+
+## 2024-05-18 - [Python String Filtering]
+**Learning:** For stripping non-numeric characters from strings (common in NCM code processing), using `"".join(filter(str.isdigit, s))` is significantly faster (~50% improvement) than using regular expressions like `re.sub(r"[^0-9]", "", s)`, even when the regex is pre-compiled. Avoiding function call overhead by inlining the filter in frequently called parsing functions yields further performance gains.
+**Action:** Always prefer `"".join(filter(str.isdigit, s))` over `re.sub` for filtering digits in Python strings when performance is critical. Pre-compile regular expressions for complex matching or splitting, but use built-in string methods and generators where possible for simple character filtering.
