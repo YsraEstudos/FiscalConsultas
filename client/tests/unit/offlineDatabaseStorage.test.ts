@@ -2,14 +2,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildOfflineDatabaseInitPayload,
+  claimOfflineDatabaseInstallLease,
+  clearOfflineDatabaseAutoInstallOptOut,
   clearOfflineDatabaseInstallLock,
   getOfflineDatabaseSupportReport,
   getOfflineDatabaseInstallLock,
+  hasOfflineDatabaseAutoInstallOptOut,
   isOfflineDatabaseSupported,
+  OFFLINE_AUTO_INSTALL_OPT_OUT_KEY,
   OFFLINE_LOCK_KEY,
   OFFLINE_META_KEY,
   persistStoredOfflineDatabaseMetadata,
   readStoredOfflineDatabaseMetadata,
+  refreshOfflineDatabaseInstallLease,
+  releaseOfflineDatabaseInstallLease,
+  setOfflineDatabaseAutoInstallOptOut,
   setOfflineDatabaseInstallLock,
 } from '../../src/context/offlineDatabaseStorage';
 
@@ -146,6 +153,47 @@ describe('offlineDatabaseStorage', () => {
     vi.advanceTimersByTime(2);
 
     expect(getOfflineDatabaseInstallLock()).toBeNull();
+  });
+
+  it('claims, refreshes, expires, and releases the install lease by owner', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-05T12:00:00Z'));
+
+    const firstClaim = claimOfflineDatabaseInstallLease('tab-a');
+    expect(firstClaim.acquired).toBe(true);
+    expect(firstClaim.lease?.owner).toBe('tab-a');
+    expect(firstClaim.lease?.attempt).toBe(1);
+
+    const blockedClaim = claimOfflineDatabaseInstallLease('tab-b');
+    expect(blockedClaim.acquired).toBe(false);
+    expect(blockedClaim.lease?.owner).toBe('tab-a');
+
+    vi.advanceTimersByTime(60_000);
+    expect(refreshOfflineDatabaseInstallLease('tab-a')).toBe(true);
+    expect(refreshOfflineDatabaseInstallLease('tab-b')).toBe(false);
+
+    vi.advanceTimersByTime(181_000);
+    const takeoverClaim = claimOfflineDatabaseInstallLease('tab-b');
+    expect(takeoverClaim.acquired).toBe(true);
+    expect(takeoverClaim.lease?.owner).toBe('tab-b');
+    expect(takeoverClaim.lease?.attempt).toBe(2);
+
+    releaseOfflineDatabaseInstallLease('tab-a');
+    expect(claimOfflineDatabaseInstallLease('tab-c').acquired).toBe(false);
+
+    releaseOfflineDatabaseInstallLease('tab-b');
+    expect(claimOfflineDatabaseInstallLease('tab-c').acquired).toBe(true);
+  });
+
+  it('persists an auto-install opt-out until explicit install clears it', () => {
+    expect(hasOfflineDatabaseAutoInstallOptOut()).toBe(false);
+
+    setOfflineDatabaseAutoInstallOptOut();
+    expect(localStorage.getItem(OFFLINE_AUTO_INSTALL_OPT_OUT_KEY)).toBe('true');
+    expect(hasOfflineDatabaseAutoInstallOptOut()).toBe(true);
+
+    clearOfflineDatabaseAutoInstallOptOut();
+    expect(hasOfflineDatabaseAutoInstallOptOut()).toBe(false);
   });
 
   it('builds init payload from metadata or defaults', () => {
