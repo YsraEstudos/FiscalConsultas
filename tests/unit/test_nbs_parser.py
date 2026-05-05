@@ -80,3 +80,35 @@ def test_build_nbs_code_variants_adds_alias_without_trailing_zero_suffix():
 
 def test_build_nbs_code_variants_adds_canonical_leaf_suffix():
     assert build_nbs_code_variants("1.0101.11") == ("1.0101.11", "1.0101.11.00")
+
+
+def test_repository_nbs_source_matches_corrected_pdf_rows():
+    source_path = Path(__file__).resolve().parents[2] / "data" / "nbs.csv"
+
+    rows = dict(iter_nbs_rows(source_path))
+
+    assert "1.0402.11.11" in rows
+    assert "1.0402.11.19" in rows
+    assert "1.0402.11.10" not in rows
+    assert "1.0402.11.90" not in rows
+    assert (
+        rows["1.0501.24.22"]
+        == "Serviços de transporte rodoviário de produtos químicos perigosos, exceto lubrificantes e GLP"
+    )
+    assert rows["1.0505.10.00"] == "Locação de veículos rodoviários de carga com motorista"
+    assert (
+        rows["1.1404.49.00"]
+        == "Serviços de análise e exames técnicos não classificados em subposições anteriores"
+    )
+    assert (
+        rows["1.1706.2"]
+        == "Serviços de transmissão de sinais, sons e imagens de rádio e televisão, aberta ou por assinatura; e serviços de distribuição de pacotes de televisão por assinatura"
+    )
+    assert (
+        rows["1.2001.82.00"]
+        == "Serviços de manutenção e reparação de instrumentos e equipamentos médico- hospitalares, odontológicos, óticos e de precisão"
+    )
+    assert (
+        rows["1.2003.24.00"]
+        == "Serviços de instalação de maquinários, equipamentos, instrumentos e aparelhos médico- hospitalares, óticos e de precisão"
+    )
