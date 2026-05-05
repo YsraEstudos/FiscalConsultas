@@ -154,10 +154,102 @@ def test_database_download_token_routes_are_public_middleware_paths():
 
 
 @pytest.mark.asyncio
-async def test_download_token_is_bound_to_request_ip(offline_bundle):
+async def test_download_token_tolerates_proxy_ip_changes(offline_bundle):
     token_request = _build_request("/api/database/token", client_host="203.0.113.10")
     token_payload = await database_download.create_download_token(token_request)
     token = token_payload["token"]
+
+    response = await database_download.download_database(
+        _build_request("/api/database/download", client_host="203.0.113.20"),
+        database_download.DownloadDatabaseRequest(token=token),
+    )
+
+    assert Path(response.path).read_bytes() == b"encrypted-bundle"
+
+
+@pytest.mark.asyncio
+async def test_nonlocal_download_token_survives_missing_shared_store(offline_bundle):
+    token_request = _build_request(
+        "/api/database/token",
+        headers={"host": "fiscal.example.com"},
+        client_host="203.0.113.10",
+        scheme="https",
+    )
+    token_payload = await database_download.create_download_token(token_request)
+    token = token_payload["token"]
+    database_download._memory_tokens.clear()
+
+    response = await database_download.download_database(
+        _build_request(
+            "/api/database/download",
+            headers={"host": "fiscal.example.com"},
+            client_host="203.0.113.20",
+            scheme="https",
+        ),
+        database_download.DownloadDatabaseRequest(token=token),
+    )
+
+    assert Path(response.path).read_bytes() == b"encrypted-bundle"
+
+
+@pytest.mark.asyncio
+async def test_nonlocal_download_token_rejects_tampering(offline_bundle):
+    token_request = _build_request(
+        "/api/database/token",
+        headers={"host": "fiscal.example.com"},
+        client_host="203.0.113.10",
+        scheme="https",
+    )
+    token_payload = await database_download.create_download_token(token_request)
+    token = token_payload["token"]
+    tampered_token = f"{token[:-1]}x"
+
+    with pytest.raises(HTTPException) as exc:
+        await database_download.download_database(
+            _build_request(
+                "/api/database/download",
+                headers={"host": "fiscal.example.com"},
+                client_host="203.0.113.20",
+                scheme="https",
+            ),
+            database_download.DownloadDatabaseRequest(token=tampered_token),
+        )
+
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_redis_download_token_tolerates_proxy_ip_changes(
+    offline_bundle, monkeypatch: pytest.MonkeyPatch
+):
+    class FakeRedisCache:
+        available = True
+
+        def __init__(self):
+            self.values: dict[str, str] = {}
+
+        async def set_with_ttl(self, key: str, value: str, ttl_seconds: int) -> bool:
+            assert ttl_seconds > 0
+            self.values[key] = value
+            return True
+
+        async def consume_once(self, key: str) -> str | None:
+            return self.values.pop(key, None)
+
+    fake_redis = FakeRedisCache()
+    monkeypatch.setattr(database_download, "redis_cache", fake_redis)
+
+    token_request = _build_request("/api/database/token", client_host="203.0.113.10")
+    token_payload = await database_download.create_download_token(token_request)
+    token = token_payload["token"]
+    fake_redis.values[f"dbtoken:{token}"] = "203.0.113.10"
+
+    response = await database_download.download_database(
+        _build_request("/api/database/download", client_host="203.0.113.20"),
+        database_download.DownloadDatabaseRequest(token=token),
+    )
+
+    assert Path(response.path).read_bytes() == b"encrypted-bundle"
 
     with pytest.raises(HTTPException) as exc:
         await database_download.download_database(
@@ -166,13 +258,6 @@ async def test_download_token_is_bound_to_request_ip(offline_bundle):
         )
 
     assert exc.value.status_code == 403
-
-    response = await database_download.download_database(
-        _build_request("/api/database/download", client_host="203.0.113.10"),
-        database_download.DownloadDatabaseRequest(token=token),
-    )
-
-    assert Path(response.path).read_bytes() == b"encrypted-bundle"
 
 
 @pytest.mark.asyncio
@@ -201,10 +286,9 @@ async def test_download_token_expires_after_ttl(offline_bundle):
     token_request = _build_request("/api/database/token")
     token_payload = await database_download.create_download_token(token_request)
     token = token_payload["token"]
-    created_at, stored_ip = database_download._memory_tokens[token]
+    created_at = database_download._memory_tokens[token]
     database_download._memory_tokens[token] = (
-        created_at - database_download._TOKEN_TTL_SECONDS - 1,
-        stored_ip,
+        created_at - database_download._TOKEN_TTL_SECONDS - 1
     )
 
     with pytest.raises(HTTPException) as exc:

@@ -55,7 +55,7 @@ function getUnsupportedMessage(
     missingFeatures.includes("shared-array-buffer")
     || missingFeatures.includes("cross-origin-isolation")
   ) {
-    return "Seu navegador ainda não liberou SharedArrayBuffer para esta página. Use Edge ou Chrome atualizados e recarregue em uma origem segura.";
+    return "Seu navegador ainda não liberou SharedArrayBuffer para esta página. Aguarde alguns segundos e recarregue; se persistir, use Edge ou Chrome atualizados em HTTPS.";
   }
 
   return "Seu navegador não suporta todos os recursos necessários para busca offline. Use Edge, Chrome ou outro navegador baseado em Chromium atualizado.";
@@ -109,8 +109,8 @@ export default function DatabaseInstaller() {
         </div>
         <p className={styles.unsupportedInfo}>
           O navegador parece compatível, mas ainda precisa ativar o isolamento
-          de origem para liberar a busca local. Recarregue a página se ela não
-          atualizar automaticamente.
+          de origem para liberar a busca local. Aguarde alguns segundos e
+          recarregue esta página se ela não atualizar automaticamente.
         </p>
       </div>
     );
@@ -279,9 +279,10 @@ export default function DatabaseInstaller() {
       </div>
 
       <p className={styles.cardDescription}>
-        Instale o banco de dados localmente para buscar NBS, TIPI e NESH
-        instantaneamente, sem depender de conexão de internet. A preparação é
-        feita uma única vez{dbSizeBytes ? ` (~${formatBytes(dbSizeBytes)})` : " (~24 MB)"}.
+        A busca local é instalada automaticamente na primeira visita para manter
+        NBS, TIPI e NESH rápidos e disponíveis neste computador. Se você removeu
+        a base local, pode reinstalar quando quiser
+        {dbSizeBytes ? ` (~${formatBytes(dbSizeBytes)})` : " (~24 MB)"}.
       </p>
 
       <div className={styles.actions}>
@@ -291,7 +292,7 @@ export default function DatabaseInstaller() {
           onClick={handleInstall}
           id="db-installer-install"
         >
-          ⚡ Instalar Busca Instantânea
+          ⚡ Instalar agora
         </button>
       </div>
     </div>

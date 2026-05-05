@@ -192,6 +192,12 @@ async function fetchEncryptedDatabase(apiBase, token) {
   }
 
   const errText = await dlResp.text();
+  if (dlResp.status === 403) {
+    throw new Error(
+      `O token temporário do banco offline expirou ou foi recusado pelo servidor (${dlResp.status}). Tente instalar novamente.`
+    );
+  }
+
   throw new Error(
     `Offline database retrieval failed (${dlResp.status}): ${errText}`
   );

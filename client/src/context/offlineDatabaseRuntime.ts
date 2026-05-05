@@ -250,6 +250,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             error,
             isRemoving,
             isSupported,
+            supportReport,
             localVersion,
             progress,
             progressStep,

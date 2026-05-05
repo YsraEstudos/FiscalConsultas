@@ -211,11 +211,13 @@ describe('DatabaseInstaller', () => {
     expect(installMock).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the default install state and starts installation', () => {
+  it('describes automatic local search installation when not installed', () => {
+    localDatabaseState.dbSizeBytes = 24 * 1024 * 1024;
+
     render(<DatabaseInstaller />);
 
-    expect(screen.getByText(/Instale o banco de dados localmente/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Instalar Busca Instantânea/i }));
+    expect(screen.getByText(/A busca local é instalada automaticamente/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Instalar agora/i }));
     expect(installMock).toHaveBeenCalledTimes(1);
   });
 });

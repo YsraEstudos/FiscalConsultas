@@ -2,12 +2,14 @@ import { expect, test } from '@playwright/test';
 
 import {
   OFFLINE_METADATA,
+  expectOfflineAutoInstalled,
   expectOfflineMetadataPersisted,
   expectOfflineReadyInSettings,
   installOfflineApiMock,
   installOfflineFromSettings,
   installOfflineWorkerMock,
   openSettings,
+  seedFreshOfflineInstallLease,
   type OfflineApiCounters,
 } from './helpers/offlineHarness';
 
@@ -23,7 +25,7 @@ test.describe('offline install and reopen flow', () => {
     await expect(page.getByText(/Indisponível/)).not.toBeVisible();
   });
 
-  test('installs offline database using version/token/download endpoints', async ({ page }) => {
+  test('auto-installs offline database on first supported visit', async ({ page }) => {
     const counters: OfflineApiCounters = {
       version: 0,
       token: 0,
@@ -36,7 +38,7 @@ test.describe('offline install and reopen flow', () => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
 
-    await installOfflineFromSettings(page);
+    await expectOfflineAutoInstalled(page);
 
     expect(counters.version).toBeGreaterThanOrEqual(2);
     expect(counters.token).toBe(1);
@@ -48,6 +50,8 @@ test.describe('offline install and reopen flow', () => {
 
   test('shows an actionable error when backend CORS blocks offline install', async ({ page }) => {
     await page.addInitScript(() => {
+      localStorage.setItem('offline-db:auto-install-opt-out', 'true');
+
       type WorkerMessage = {
         type: string;
         id: string | null;
@@ -138,6 +142,26 @@ test.describe('offline install and reopen flow', () => {
     await expect(page.getByText(/Solicitando token/i)).not.toBeVisible();
   });
 
+  test('keeps manual install path available after user opt-out', async ({ page }) => {
+    const counters: OfflineApiCounters = {
+      version: 0,
+      token: 0,
+      download: 0,
+    };
+
+    await installOfflineWorkerMock(page);
+    await installOfflineApiMock(page, counters);
+    await page.addInitScript(() => {
+      localStorage.setItem('offline-db:auto-install-opt-out', 'true');
+    });
+
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
+    await installOfflineFromSettings(page);
+
+    expect(counters.download).toBe(1);
+  });
+
   test('reopens with offline DB ready when backend API is unavailable', async ({ page, context }) => {
     const counters: OfflineApiCounters = {
       version: 0,
@@ -164,5 +188,39 @@ test.describe('offline install and reopen flow', () => {
     await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
     await expectOfflineMetadataPersisted(page);
     await expectOfflineReadyInSettings(page);
+  });
+
+  test('recovers when a previous installing tab is closed before broadcasting completion', async ({ page, context }) => {
+    const counters: OfflineApiCounters = {
+      version: 0,
+      token: 0,
+      download: 0,
+    };
+
+    await installOfflineWorkerMock(page);
+    await installOfflineApiMock(page, counters);
+    await seedFreshOfflineInstallLease(page);
+
+    await page.goto('/');
+    await openSettings(page);
+    await expect(page.getByText(/Outra aba está instalando os dados/i)).toBeVisible();
+
+    const closingOwnerPage = await context.newPage();
+    await closingOwnerPage.goto('/');
+    await closingOwnerPage.evaluate(() => {
+      const raw = localStorage.getItem('offline-db:install-lock');
+      const lock = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+      localStorage.setItem(
+        'offline-db:install-lock',
+        JSON.stringify({
+          ...lock,
+          expiresAt: Date.now() - 1,
+        }),
+      );
+    });
+    await closingOwnerPage.close();
+
+    await expectOfflineReadyInSettings(page);
+    expect(counters.download).toBe(1);
   });
 });

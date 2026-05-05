@@ -47,12 +47,16 @@ vi.mock('./state.js', () => ({
 
 import {
   buildOfflineDatabaseNetworkErrorMessage,
+  dispatchWorkerMessage,
   fetchWithTimeout,
 } from './messages.js';
+import { removeFromOpfs } from './opfs.js';
+import { postWorkerError, postWorkerStatus } from './protocol.js';
 
 describe('dbWorker messages network helpers', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.clearAllMocks();
   });
 
   it('preserves the caught error as cause when fetch fails', async () => {
@@ -93,5 +97,56 @@ describe('dbWorker messages network helpers', () => {
 
     expect(message).toContain('https://3fbcaa44.fiscalconsultas.pages.dev');
     expect(message).toContain('/api/database/version');
+  });
+
+  it('shows a recoverable friendly message when the download token is rejected', async () => {
+    removeFromOpfs.mockResolvedValue(undefined);
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              token: 'token-1',
+              app_seed: 'seed-1',
+              encrypted_sha256: 'enc-sha',
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              detail: 'Token invalid, expired, or already used',
+            }),
+            { status: 403, headers: { 'content-type': 'application/json' } },
+          ),
+        ),
+    );
+
+    await dispatchWorkerMessage('INSTALL', 'install-1', {
+      apiBase: 'https://api.example.test/api',
+    });
+
+    const friendlyMessage =
+      'O token temporário do banco offline expirou ou foi recusado pelo servidor (403). Tente instalar novamente.';
+    expect(postWorkerError).toHaveBeenCalledWith(
+      'install-1',
+      expect.stringContaining(friendlyMessage),
+    );
+    expect(
+      postWorkerError.mock.calls.some(([, message]) =>
+        String(message).includes('Token invalid, expired, or already used'),
+      ),
+    ).toBe(false);
+    expect(postWorkerStatus).toHaveBeenCalledWith(
+      'install-1',
+      expect.objectContaining({
+        status: 'error',
+        recoverable: true,
+        error: expect.stringContaining(friendlyMessage),
+      }),
+    );
   });
 });
