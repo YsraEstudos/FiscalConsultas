@@ -54,6 +54,31 @@ export function formatOfflineDatabaseErrorMessage(
   return fallbackMessage;
 }
 
+export function buildOfflineDatabaseNetworkErrorMessage(
+  url: string,
+  action: "version" | "token" | "download" | "request" = "request"
+): string {
+  let targetOrigin = url;
+  try {
+    targetOrigin = new URL(url, globalThis.location?.href).origin;
+  } catch {
+    // Keep the original value when it is not URL-like.
+  }
+
+  const currentOrigin =
+    typeof globalThis.location !== "undefined"
+      ? globalThis.location.origin
+      : "esta origem";
+  const actionLabel = {
+    version: "consultar a versão do banco offline",
+    token: "solicitar o token do banco offline",
+    download: "baixar o banco offline",
+    request: "acessar o banco offline",
+  }[action];
+
+  return `Não foi possível ${actionLabel} em ${targetOrigin}. Verifique se o backend permite esta origem: ${currentOrigin}.`;
+}
+
 export function sanitizeOfflineMetadata(
   metadata: Partial<OfflineDatabaseMetadata> | null | undefined
 ): OfflineDatabaseMetadata | null {
