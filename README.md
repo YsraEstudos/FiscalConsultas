@@ -186,6 +186,9 @@ Observações:
 
 - `rebuild_index.py` (Fase 5) é o script consolidado: cria `database/nesh.db`, extrai seções e reconstrói o índice FTS com Stemming.
 - `setup_nbs_database.py` e `setup_nebs_database.py` alimentam `database/services.db`, usado por `NBS` e `NEBS`.
+- A fonte canônica da NBS neste repositório é `data/nbs.csv`; sempre execute `setup_nbs_database.py` antes de `setup_nebs_database.py` após qualquer correção na NBS.
+- A NEBS pública não representa o PDF integral: o site exibe somente notas explicativas confiáveis (`trusted`) vinculadas a códigos existentes na NBS carregada.
+- Blocos NEBS suspeitos ou rejeitados permanecem fora da consulta pública e são registrados em `reports/nebs/` para auditoria e reavaliação posterior.
 - Em Windows com encoding CP1252, scripts com emoji podem falhar; usar `PYTHONUTF8=1` (o `uv run` geralmente lida bem com isso, mas o script `.bat` já automatiza essa configuração).
 
 ### 4) Subir aplicação
