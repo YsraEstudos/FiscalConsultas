@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from backend.config.services_db_schema import NEBS_ENTRIES_CREATE_SQL, NBS_ITEMS_CREATE_SQL
+from backend.config.services_db_schema import (
+    NEBS_ENTRIES_CREATE_SQL,
+    NBS_ITEMS_CREATE_SQL,
+)
 from backend.config.settings import settings as app_settings
 from backend.utils.nebs_parser import NebsParseOutcome, ParsedNebsEntry
 

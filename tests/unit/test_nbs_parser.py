@@ -95,7 +95,9 @@ def test_repository_nbs_source_matches_corrected_pdf_rows():
         rows["1.0501.24.22"]
         == "Serviços de transporte rodoviário de produtos químicos perigosos, exceto lubrificantes e GLP"
     )
-    assert rows["1.0505.10.00"] == "Locação de veículos rodoviários de carga com motorista"
+    assert (
+        rows["1.0505.10.00"] == "Locação de veículos rodoviários de carga com motorista"
+    )
     assert (
         rows["1.1404.49.00"]
         == "Serviços de análise e exames técnicos não classificados em subposições anteriores"
