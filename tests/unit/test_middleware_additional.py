@@ -672,7 +672,7 @@ async def test_dispatch_skips_non_api_and_public_paths(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_dispatch_allows_public_catalog_routes_in_prod_postgres_without_tenant(
+async def test_dispatch_allows_only_non_fiscal_public_routes_in_prod_postgres_without_tenant(
     monkeypatch,
 ):
     monkeypatch.setattr(middleware.settings.server, "env", "production", raising=False)
@@ -687,20 +687,42 @@ async def test_dispatch_allows_public_catalog_routes_in_prod_postgres_without_te
         await response(scope, receive, send)
 
     mw = middleware.TenantMiddleware(app=app)
-    public_paths = [
-        "/api/search",
-        "/api/chapters",
-        "/api/glossary",
-        "/api/tipi/search",
-        "/api/tipi/chapters",
-        "/api/nesh/chapter/84/notes",
-    ]
+    public_paths = ["/api/glossary"]
 
     for path in public_paths:
         status, _ = await _invoke_middleware(mw, _build_scope(path))
         assert status == 200
 
     assert called == public_paths
+
+
+@pytest.mark.asyncio
+async def test_dispatch_protects_retired_fiscal_routes_in_prod_postgres_without_tenant(
+    monkeypatch,
+):
+    monkeypatch.setattr(middleware.settings.server, "env", "production", raising=False)
+    monkeypatch.setattr(
+        middleware.settings.database, "engine", "postgresql", raising=False
+    )
+
+    async def app(scope, receive, send):  # NOSONAR
+        response = JSONResponse({"ok": True})
+        await response(scope, receive, send)
+
+    mw = middleware.TenantMiddleware(app=app)
+    retired_paths = [
+        "/api/search",
+        "/api/chapters",
+        "/api/tipi/search",
+        "/api/tipi/chapters",
+        "/api/nesh/chapter/84/notes",
+        "/api/services/nbs/search",
+        "/api/database/download",
+    ]
+
+    for path in retired_paths:
+        status, _ = await _invoke_middleware(mw, _build_scope(path))
+        assert status == 401
 
 
 @pytest.mark.asyncio

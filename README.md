@@ -1,14 +1,67 @@
 # Nesh / Fiscal
 
-Sistema de consulta fiscal com backend FastAPI, frontend React/Vite e modo offline total no navegador para `NESH`, `TIPI`, `NBS` e `NEBS`.
+Sistema de consulta fiscal offline-first com frontend React/Vite. As pesquisas em `NESH`, `TIPI`, `NBS` e `UNSPSC` rodam localmente no navegador depois que o usuário baixa as bases fiscais.
 
 ## O que é
 
 - Busca por código e texto nas Notas Explicativas do Sistema Harmonizado (NESH).
 - Busca na TIPI com visualização por família (`family`) ou capítulo (`chapter`).
-- Busca em `NBS` e `NEBS`, com detalhe de catálogo e navegação por prefixo; a consulta pública dessas bases nao exige login.
+- Busca em `NBS` e, na arquitetura planejada, `UNSPSC`, com bases baixáveis separadas.
 - Frontend com navegação por abas, smart-links e recursos de produtividade (glossário, notas, chat IA).
-- Instalação offline em um botão: o app shell é cacheado e o banco local fica disponível no navegador após a instalação.
+- Instalação offline em um botão: o app shell é cacheado e as bases locais ficam disponíveis no navegador após a instalação.
+
+## Direção de arquitetura
+
+Este projeto passará a seguir uma arquitetura offline-first para as consultas fiscais.
+
+As pesquisas em NESH, TIPI, NBS e UNSPSC não dependerão mais de backend online. As bases fiscais serão disponibilizadas como pacotes baixáveis e consultadas localmente no navegador do usuário, reduzindo custo de infraestrutura, eliminando limites de requisição e melhorando a velocidade das buscas.
+
+O backend online deixará de ser responsável por pesquisas fiscais. Recursos como comentários, favoritos, perfil e preferências de usuário serão planejados para uma etapa futura, usando Cloudflare Workers + Cloudflare D1, com autenticação via Clerk.
+
+### Divisão planejada
+
+- Frontend estático: Cloudflare Pages.
+- Bases fiscais baixáveis: Cloudflare R2.
+- Busca fiscal: execução local no navegador.
+- Login: Clerk.
+- Dados de usuário futuros: Cloudflare Workers + Cloudflare D1.
+
+### Bases fiscais no R2
+
+As bases serão separadas por fonte, evitando um único banco monolítico:
+
+```text
+Cloudflare R2
+├── nesh/
+│   ├── nesh.meta.json
+│   └── nesh.enc
+├── tipi/
+│   ├── tipi.meta.json
+│   └── tipi.enc
+├── nbs/
+│   ├── nbs.meta.json
+│   └── nbs.enc
+└── unspsc/
+    ├── unspsc.meta.json
+    └── unspsc.enc
+```
+
+Cada base poderá ter seu próprio arquivo de dados e metadata de versão, permitindo download e atualização independentes.
+
+### Recursos futuros
+
+Os seguintes recursos ficam previstos para fases futuras:
+
+- comentários de usuários;
+- favoritos;
+- perfil de usuário;
+- preferências de usuário.
+
+Esses recursos não fazem parte da migração inicial. A prioridade inicial é remover a dependência do backend online para busca fiscal.
+
+### Segurança da arquitetura
+
+O threat model da migração offline-first está em [`docs/security/OFFLINE_FIRST_THREAT_MODEL.md`](docs/security/OFFLINE_FIRST_THREAT_MODEL.md). A regra principal é que os bundles fiscais devem conter apenas dados públicos, com verificação de metadata/hash no navegador, e que dados de usuário futuros fiquem isolados em Clerk + Workers + D1.
 
 ## Requisitos
 
@@ -80,98 +133,45 @@ pip install pytest pytest-cov pytest-benchmark httpx
 Copy-Item .env.example .env
 ```
 
-Configuração recomendada (cloud-first: API no Render + PostgreSQL no Neon):
+Configuração recomendada para a migração offline-first:
 
-Observação: quando o backend estiver no Render, configure esses valores no painel de Environment do provedor. O `.env` local é usado apenas quando você roda backend no seu computador.
-
-- em `.env` (backend), ajuste pelo menos:
+- em `.env` ou no ambiente de build que gera os pacotes fiscais, configure a semente pública de empacotamento:
 
 ```env
-SERVER__ENV=production
-DATABASE__ENGINE=postgresql
-DATABASE__POSTGRES_URL=postgresql+asyncpg://<user>:<password_urlencoded>@<host>/<db>?sslmode=require
-
-AUTH__CLERK_DOMAIN=your-instance.clerk.accounts.dev
-AUTH__CLERK_ISSUER=https://your-instance.clerk.accounts.dev
-AUTH__CLERK_AUDIENCE=fiscal-api
-AUTH__CLERK_AUTHORIZED_PARTIES=["http://localhost:5173","http://127.0.0.1:5173","https://seu-frontend.com"]
-AUTH__CLERK_AUTHORIZED_PARTIES_REGEX=^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$
-AUTH__CLERK_CLOCK_SKEW_SECONDS=120
-
-# Trave CORS para os domínios oficiais do frontend
-SERVER__CORS_ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","https://seu-frontend.com"]
-# Opcional: libere previews do mesmo projeto Cloudflare Pages
-SERVER__CORS_ALLOWED_ORIGIN_REGEX=^https://(?:[a-z0-9-]+\.)?fiscalconsultas\.pages\.dev$
-
-# Redis opcional (Upstash/Render Key Value)
-# Se este ambiente não tiver Redis provisionado, defina false explicitamente
-CACHE__ENABLE_REDIS=false
-# Preencha apenas quando CACHE__ENABLE_REDIS=true
-# Para Upstash, use a Redis URL TLS (rediss://), nao a REST URL/token
-CACHE__REDIS_URL=rediss://default:<password>@<host>:6379
-
-# IA opcional (Gemini)
-# Sem GOOGLE_API_KEY, o backend sobe normal e o chat IA fica desativado
-GOOGLE_API_KEY=
-SECURITY__AI_CHAT_ALLOWED_EMAILS=["voce@empresa.com","admin@empresa.com"]
-# Opcional: se omitida, a UI restrita reutiliza a allowlist do chat IA
-SECURITY__RESTRICTED_UI_ALLOWED_EMAILS=["voce@empresa.com","admin@empresa.com"]
+OFFLINE_DB_APP_SEED=change_me_32_byte_hex
 ```
 
-- em `client/.env.local`, defina:
+- em `client/.env.local`, defina a origem pública dos pacotes R2 e a mesma semente pública usada no build:
 
 ```env
-VITE_API_URL=https://seu-backend.onrender.com
+VITE_FISCAL_R2_BASE_URL=https://seu-bucket-publico.r2.dev
+VITE_OFFLINE_DB_PUBLIC_SEED=change_me_32_byte_hex
 VITE_CLERK_PUBLISHABLE_KEY=pk_live_sua_chave
 VITE_CLERK_TOKEN_TEMPLATE=backend_api
 ```
 
-Se voce estiver apenas desenvolvendo localmente, pode usar `pk_test_...`. Em site publicado, use `pk_live_...`.
+Durante a migração inicial, `VITE_API_URL` não deve ser necessário para pesquisa fiscal. O frontend pode ser publicado como site estático em Cloudflare Pages e baixar diretamente os pacotes públicos do R2.
 
-Configuração alternativa (local-first com SQLite):
+Configuração legada de backend FastAPI:
 
-- em `.env`, ajuste `DATABASE__ENGINE=sqlite`
-- em `client/.env.local`, defina:
+O backend FastAPI, Render, Neon/Postgres e Redis/Upstash não devem mais ser usados para NESH, TIPI, NBS ou UNSPSC. Se ainda forem mantidos localmente, trate-os como compatibilidade temporária ou apoio a scripts administrativos, não como caminho de busca fiscal do produto.
+
+Para comentários autenticados, favoritos, perfil e preferências, a direção futura é:
 
 ```env
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_sua_chave
+Clerk -> Cloudflare Worker -> Cloudflare D1
 ```
+
+Esses recursos ainda não fazem parte da migração inicial.
 
 Sem `VITE_CLERK_PUBLISHABLE_KEY`, o frontend exibe apenas a tela de erro de configuração.
 
-Para comentários autenticados com Clerk (`/api/comments/*`), configure também:
+Checklist Clerk para a fase futura de conta:
 
-- Template no Clerk Dashboard: `backend_api` com `aud = "fiscal-api"`.
-- em `.env`:
-
-```env
-AUTH__CLERK_DOMAIN=your-instance.clerk.accounts.dev
-AUTH__CLERK_ISSUER=https://your-instance.clerk.accounts.dev
-AUTH__CLERK_AUDIENCE=fiscal-api
-AUTH__CLERK_AUTHORIZED_PARTIES=["http://localhost:5173","http://127.0.0.1:5173"]
-AUTH__CLERK_CLOCK_SKEW_SECONDS=120
-SECURITY__AI_CHAT_ALLOWED_EMAILS=["voce@empresa.com","admin@empresa.com"]
-SECURITY__RESTRICTED_UI_ALLOWED_EMAILS=["voce@empresa.com","admin@empresa.com"]
-```
-
-- em `client/.env.local`:
-
-```env
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_sua_chave
-VITE_CLERK_TOKEN_TEMPLATE=backend_api
-```
-
-Checklist rápido Clerk (dev local):
-
-- `AUTH__CLERK_DOMAIN` e `AUTH__CLERK_ISSUER` devem apontar para o mesmo tenant Clerk.
-- `AUTH__CLERK_AUDIENCE` deve ser exatamente o `aud` emitido no template JWT (`backend_api`).
-- `VITE_CLERK_TOKEN_TEMPLATE` deve ter o mesmo nome do template configurado no Clerk.
-- O template JWT do Clerk precisa incluir `email` ou `email_address` no payload para permitir a allowlist server-side do chat IA/UI restrita.
-- `AUTH__CLERK_AUTHORIZED_PARTIES` deve incluir `http://localhost:5173` e `http://127.0.0.1:5173`.
-- `SECURITY__AI_CHAT_ALLOWED_EMAILS` controla a allowlist real do backend para `/api/ai/chat`.
-- `SECURITY__RESTRICTED_UI_ALLOWED_EMAILS` é opcional; se omitido, a UI restrita usa a mesma allowlist do chat IA.
-- `VITE_RESTRICTED_UI_EMAILS` e opcional e afeta apenas superficies restritas no frontend; nao substitui autorizacao no backend.
-- NBS/NEBS sao publicos para busca e detalhe; login continua necessario apenas para areas autenticadas como comentarios, chat IA e gestao/admin.
+- Criar template JWT `backend_api` com `aud = "fiscal-api"`.
+- Validar o token no Cloudflare Worker usando JWKS do Clerk.
+- Persistir somente dados de usuário no D1: comentários, favoritos, perfil e preferências.
+- Não recolocar NESH, TIPI, NBS ou UNSPSC no Worker, no D1, no Neon ou em qualquer backend online de busca.
 
 ### 3) Preparar dados locais (SQLite)
 
@@ -222,47 +222,47 @@ npm run dev
 
 Acesse `http://127.0.0.1:5173`.
 
-Healthcheck backend:
+O backend FastAPI não é mais necessário para pesquisa fiscal. Se ele for iniciado localmente para compatibilidade ou manutenção, o healthcheck de sistema permanece em `/api/status`, mas as rotas fiscais online devem estar aposentadas.
+
+### 5) Gerar os pacotes fiscais para R2
+
+Depois de preparar os bancos locais (`nesh.db`, `tipi.db`, `services.db` e, quando disponível, `unspsc.db`), gere os pacotes distribuíveis por fonte:
 
 ```powershell
-Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/status"
-```
-
-Resposta esperada: JSON com `status`, `database` e `tipi`.
-
-### 5) Gerar o pacote offline do navegador
-
-Depois de preparar os bancos locais (`nesh.db`, `tipi.db` e `services.db`), gere o pacote distribuível do modo offline:
-
-```powershell
-python scripts/build_offline_db.py
+python scripts/build_r2_fiscal_bundles.py
 ```
 
 Arquivos gerados:
 
-- `database/fiscal_offline.enc`
-- `database/fiscal_offline.meta`
+- `database/r2-fiscal-bundles/nesh/nesh.enc`
+- `database/r2-fiscal-bundles/nesh/nesh.meta.json`
+- `database/r2-fiscal-bundles/tipi/tipi.enc`
+- `database/r2-fiscal-bundles/tipi/tipi.meta.json`
+- `database/r2-fiscal-bundles/nbs/nbs.enc`
+- `database/r2-fiscal-bundles/nbs/nbs.meta.json`
+- `database/r2-fiscal-bundles/unspsc/unspsc.enc`
+- `database/r2-fiscal-bundles/unspsc/unspsc.meta.json`
 
-Esses dois arquivos sao o pacote offline usado pelo botao de instalacao no navegador.
+Esses arquivos devem ser publicados no Cloudflare R2 mantendo a mesma estrutura de pastas.
 
 Contrato publico do banco offline:
 
-- O pacote offline (`fiscal_offline.enc` + `fiscal_offline.meta`) e considerado publico. Ele pode ser baixado sem login por meio das rotas `/api/database/version`, `/api/database/token` e `/api/database/download`; o token efemero existe para limitar reuso/abuso do download, nao para transformar o pacote em dado privado.
+- Os pacotes fiscais no R2 são considerados públicos. Eles podem ser baixados sem login pelo navegador.
 - A criptografia do pacote offline protege integridade/formato de distribuicao, mas nao deve ser tratada como controle de acesso a dados sigilosos. Nao incluir informacao privada, segredos, dados de usuarios ou conteudo restrito dentro do bundle offline.
-- O conteudo NEBS associado a NBS faz parte do contrato do catalogo offline e online. A descricao/entrada explicativa NEBS vinculada ao item NBS deve permanecer no banco, no bundle offline e no detalhe da NBS; nao remover `has_nebs`, `nebs_entries` nem o payload `detail.nebs` sem substituir o fluxo por equivalente compativel.
+- NESH, TIPI, NBS e UNSPSC devem ser baixados, versionados e atualizados de forma independente.
 
 Comportamento esperado do fluxo:
 
-- o frontend consulta `GET /api/database/version`
-- solicita um token efemero em `POST /api/database/token`
-- baixa o artefato em `POST /api/database/download`
-- grava o pacote em OPFS
+- o frontend consulta os arquivos `*.meta.json` no R2
+- baixa somente os pacotes `*.enc` necessários
+- verifica hash/metadata de cada fonte
+- grava cada base em OPFS
 - inicializa o worker local
 - aquece o cache do app shell via `client/public/coi-serviceworker.js`
 
-Depois da instalacao concluida, as buscas e detalhes de `NESH`, `TIPI`, `NBS` e `NEBS` passam a funcionar localmente no navegador, inclusive apos recarregar a pagina sem rede, desde que o navegador suporte `SharedArrayBuffer` e OPFS.
+Depois da instalação concluída, as buscas e detalhes de `NESH`, `TIPI`, `NBS` e `UNSPSC` passam a funcionar localmente no navegador, inclusive após recarregar a página sem rede, desde que o navegador suporte `SharedArrayBuffer` e OPFS.
 
-O que continua online por natureza, como autenticacao, comentarios e chat IA, entra em modo degradado quando nao ha rede, sem quebrar a navegacao base.
+O que continua online por natureza, como autenticação e dados de usuário futuros, entra em modo degradado quando não há rede, sem quebrar a navegação base.
 
 ### 6) Validar o modo offline no localhost
 
@@ -270,7 +270,7 @@ O modo offline tambem deve funcionar em `http://127.0.0.1:5173/` durante o desen
 
 Fluxo recomendado:
 
-1. gere ou atualize `database/fiscal_offline.enc` e `database/fiscal_offline.meta`
+1. gere ou atualize os pacotes em `database/r2-fiscal-bundles/`
 2. rode `.\testar_tudo_local.bat`
 3. abra o frontend em `http://127.0.0.1:5173/`
 4. clique em `Baixar` no instalador offline
@@ -279,28 +279,30 @@ Fluxo recomendado:
 
 Importante:
 
-- o frontend local usa proxy para `http://127.0.0.1:8000`
-- se o backend nao subir, o Vite responde `502` nas rotas `/api/database/*`
+- configure `VITE_FISCAL_R2_BASE_URL`; em desenvolvimento, o padrão é `/fiscal-bases`
+- para testar sem R2 real, sirva a pasta de bundles no mesmo formato público esperado pelo frontend
 - o script `testar_tudo_local.bat` ja cria `client/.env.development.local` apontando para a API local
-- o script tambem sobe o backend com `CACHE__ENABLE_REDIS=false`, entao um warning de Redis nao deve bloquear o teste local
+- o backend local não deve ser necessário para NESH, TIPI, NBS ou UNSPSC
 
 ### 7) Diagnostico rapido do instalador offline
 
 Se o botao de instalacao mostrar erro:
 
-- `502` em `/api/database/version` ou `/api/database/token`: o frontend subiu, mas o backend local nao respondeu na porta `8000`
-- `Offline database not available`: faltam `database/fiscal_offline.enc` e/ou `database/fiscal_offline.meta`
+- `404` em `*.meta.json` ou `*.enc`: a estrutura no R2 ou no servidor estático local não corresponde ao contrato `fonte/fonte.meta.json` e `fonte/fonte.enc`
+- `Offline database not available`: faltam pacotes fiscais baixáveis ou a variável `VITE_OFFLINE_DB_PUBLIC_SEED`
 - navegador sem suporte: o instalador entra em `unsupported` quando faltar `SharedArrayBuffer`, `Worker`, `crypto.subtle` ou OPFS
-- detalhe de `NBS`/`NEBS` sem rede: confirme que a instalacao terminou em `ready`; sem isso o frontend ainda pode precisar da API
+- detalhe de `NBS` sem rede: confirme que a instalação da base NBS terminou em `ready`
 
 ## Deploy no Cloudflare
 
 O caminho mais simples para este repositório é:
 
 1. publicar o frontend em **Cloudflare Pages**
-2. manter o backend FastAPI em um host compatível com Python, como Render, Fly.io ou Railway
+2. publicar as bases fiscais em **Cloudflare R2**
+3. manter busca fiscal local no navegador
+4. planejar dados de usuário futuros em **Cloudflare Workers + Cloudflare D1**
 
-Motivo: o Cloudflare Pages hospeda bem o `client` estático, mas não executa este backend FastAPI diretamente sem uma reestruturação maior.
+O backend FastAPI/Render não faz parte do caminho de pesquisa fiscal da arquitetura offline-first.
 
 ### Frontend no Pages
 
@@ -312,18 +314,32 @@ Motivo: o Cloudflare Pages hospeda bem o `client` estático, mas não executa es
 Depois do deploy, ajuste `client/.env.local` ou as variáveis do projeto no Pages com:
 
 ```env
-VITE_API_URL=https://seu-backend.com
+VITE_FISCAL_R2_BASE_URL=https://seu-bucket-publico.r2.dev
+VITE_OFFLINE_DB_PUBLIC_SEED=change_me_32_byte_hex
 VITE_CLERK_PUBLISHABLE_KEY=pk_live_sua_chave
 VITE_CLERK_TOKEN_TEMPLATE=backend_api
 ```
 
-Se você quiser usar uma API própria em outro domínio, ela precisa permitir CORS para o domínio do Pages e aceitar o token do Clerk.
 Depois de trocar variáveis no Cloudflare Pages, faça um novo deploy e recarregue o site com `Ctrl + F5`.
 
-Para previews do Cloudflare Pages, o backend também precisa aceitar subdomínios como
-`https://<preview>.fiscalconsultas.pages.dev`. Como essas URLs mudam a cada deploy,
-o caminho mais estável é configurar um regex controlado no backend, além do domínio
-principal em `SERVER__CORS_ALLOWED_ORIGINS` e `AUTH__CLERK_AUTHORIZED_PARTIES`.
+Para previews do Cloudflare Pages, garanta que o bucket R2 público permita leitura a partir do domínio de preview ou use um domínio público estável para os pacotes fiscais.
+
+### Bases no R2
+
+Publique a saída de `scripts/build_r2_fiscal_bundles.py` no bucket R2:
+
+```text
+nesh/nesh.meta.json
+nesh/nesh.enc
+tipi/tipi.meta.json
+tipi/tipi.enc
+nbs/nbs.meta.json
+nbs/nbs.enc
+unspsc/unspsc.meta.json
+unspsc/unspsc.enc
+```
+
+Não publique segredos, dados de usuários ou tokens dentro desses bundles.
 
 ### Rotas do React
 
@@ -357,9 +373,18 @@ AUTH__CLERK_AUTHORIZED_PARTIES=["http://localhost:5173","http://127.0.0.1:5173",
 SERVER__CORS_ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","https://ysraestudos.github.io"]
 ```
 
-## Deploy no Render
+## Deploy no Render (legado)
 
-Se você quer deixar o projeto funcionando com `Render + Neon + Upstash`, o caminho mais simples é:
+Render, Neon/Postgres e Upstash/Redis eram a arquitetura anterior para backend online de consulta. Essa rota fica documentada apenas como histórico operacional e não deve ser usada para NESH, TIPI, NBS ou UNSPSC na arquitetura offline-first.
+
+Para a migração atual, use:
+
+- Cloudflare Pages para o frontend estático;
+- Cloudflare R2 para os pacotes fiscais;
+- busca local no navegador;
+- Clerk, Cloudflare Workers e D1 apenas em fase futura para dados de usuário.
+
+Se por compatibilidade temporária você ainda precisar manter `Render + Neon + Upstash`, o caminho legado era:
 
 1. colocar o backend FastAPI no Render
 2. colocar o banco Postgres no Neon

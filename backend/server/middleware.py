@@ -345,21 +345,11 @@ class TenantMiddleware:
         "/api/metrics",
         "/api/admin/reload-secrets",
         "/api/debug/anchors",
-        "/api/search",
-        "/api/chapters",
         "/api/glossary",
-        "/api/tipi/search",
-        "/api/tipi/chapters",
         "/api/webhooks",
-        "/api/database/version",
-        "/api/database/token",
-        "/api/database/download",
     }
     PUBLIC_PREFIX_PATHS = (
         "/api/webhooks/",
-        "/api/nesh/chapter/",
-        "/api/search/chapter/",
-        "/api/services/nbs/",
     )
 
     def __init__(self, app):

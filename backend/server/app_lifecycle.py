@@ -340,12 +340,7 @@ async def _lifespan(app: FastAPI):
         _record_release_metadata(app)
         _log_runtime_security_warnings()
         _validate_dev_tenant_override_safety()
-        await _init_primary_database(app)
         await _init_sqlmodel_engine(app)
-        await _init_nesh_service(app)
-        await _init_cache_warmup(app)
-        await _init_tipi_service(app)
-        await _init_nbs_service(app)
         app.state.ai_service = AiService()
 
         logger.info("Initializing Glossary...")

@@ -148,9 +148,9 @@ async def test_download_token_flow_does_not_require_authorization_header(
 
 
 def test_database_download_token_routes_are_public_middleware_paths():
-    assert TenantMiddleware._is_public_path("/api/database/version") is True
-    assert TenantMiddleware._is_public_path("/api/database/token") is True
-    assert TenantMiddleware._is_public_path("/api/database/download") is True
+    assert TenantMiddleware._is_public_path("/api/database/version") is False
+    assert TenantMiddleware._is_public_path("/api/database/token") is False
+    assert TenantMiddleware._is_public_path("/api/database/download") is False
 
 
 @pytest.mark.asyncio
