@@ -125,7 +125,7 @@ export function useOfflineDatabaseBroadcastChannel({
                                 {
                                     type: 'REMOVE',
                                     id: null,
-                                    payload: {},
+                                    payload: { source: message.source },
                                 },
                                 10_000,
                             );

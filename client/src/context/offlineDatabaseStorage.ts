@@ -1,7 +1,13 @@
+import type { FiscalSourceId } from './offlineSources';
 import type { OfflineDatabaseMetadata } from '../utils/offlineDatabase';
-import { sanitizeOfflineMetadata } from '../utils/offlineDatabase';
+import {
+    sanitizeOfflineMetadata,
+    sanitizeOfflineSourceMetadata,
+    type OfflineSourceMetadata,
+} from '../utils/offlineDatabase';
 
 export const OFFLINE_META_KEY = 'offline-db:installed-meta';
+export const OFFLINE_SOURCE_META_KEY_PREFIX = 'offline_fiscal_metadata:';
 export const OFFLINE_LOCK_KEY = 'offline-db:install-lock';
 export const OFFLINE_LOCK_TTL_MS = 180_000;
 
@@ -36,6 +42,48 @@ export function persistStoredOfflineDatabaseMetadata(
             return;
         }
         localStorage.setItem(OFFLINE_META_KEY, JSON.stringify(metadata));
+    } catch {
+        // Ignore storage failures. The worker state remains authoritative.
+    }
+}
+
+function getOfflineSourceMetadataKey(source: FiscalSourceId): string {
+    return `${OFFLINE_SOURCE_META_KEY_PREFIX}${source}`;
+}
+
+export function readStoredOfflineSourceMetadata(
+    source: FiscalSourceId,
+): OfflineSourceMetadata | null {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+        return sanitizeOfflineSourceMetadata(
+            source,
+            JSON.parse(localStorage.getItem(getOfflineSourceMetadataKey(source)) || 'null'),
+        );
+    } catch {
+        return null;
+    }
+}
+
+export function persistStoredOfflineSourceMetadata(
+    source: FiscalSourceId,
+    metadata: OfflineSourceMetadata | null,
+): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        if (!metadata) {
+            localStorage.removeItem(getOfflineSourceMetadataKey(source));
+            return;
+        }
+        const sanitized = sanitizeOfflineSourceMetadata(source, metadata);
+        if (!sanitized) {
+            localStorage.removeItem(getOfflineSourceMetadataKey(source));
+            return;
+        }
+        localStorage.setItem(
+            getOfflineSourceMetadataKey(source),
+            JSON.stringify(sanitized),
+        );
     } catch {
         // Ignore storage failures. The worker state remains authoritative.
     }

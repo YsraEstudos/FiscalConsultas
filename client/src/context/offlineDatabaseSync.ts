@@ -1,5 +1,15 @@
 import { API_BASE_URL } from '../services/api';
-import { sanitizeOfflineMetadata, type OfflineDatabaseMetadata } from '../utils/offlineDatabase';
+import {
+    sanitizeOfflineMetadata,
+    sanitizeOfflineSourceMetadata,
+    type OfflineDatabaseMetadata,
+    type OfflineSourceMetadata,
+} from '../utils/offlineDatabase';
+import {
+    buildFiscalBundleUrls,
+    normalizeFiscalR2BaseUrl,
+    type FiscalSourceId,
+} from './offlineSources';
 
 export const OFFLINE_CHANNEL_NAME = 'offline-db-channel';
 export const OFFLINE_WAIT_TIMEOUT_MS = 240_000;
@@ -7,6 +17,53 @@ const OFFLINE_METADATA_TIMEOUTS_MS = [4_000, 10_000, 20_000] as const;
 
 export function getOfflineDatabaseApiBaseUrl(): string {
     return API_BASE_URL;
+}
+
+export function getFiscalR2BaseUrl(): string {
+    const env = import.meta.env as { VITE_FISCAL_R2_BASE_URL?: string | undefined };
+    const configuredBaseUrl = normalizeFiscalR2BaseUrl(env.VITE_FISCAL_R2_BASE_URL);
+
+    const { metadataUrl } = buildFiscalBundleUrls(configuredBaseUrl, 'nesh');
+    return metadataUrl.replace(/\/nesh\/nesh\.meta\.json$/, '');
+}
+
+export function getOfflineDbPublicSeed(): string {
+    const env = import.meta.env as { VITE_OFFLINE_DB_PUBLIC_SEED?: string | undefined };
+    return (env.VITE_OFFLINE_DB_PUBLIC_SEED || '').trim();
+}
+
+export async function fetchOfflineSourceAvailabilityMetadata(
+    r2BaseUrl: string,
+    source: FiscalSourceId,
+): Promise<OfflineSourceMetadata | null> {
+    const { metadataUrl } = buildFiscalBundleUrls(r2BaseUrl, source);
+    const response = await fetch(metadataUrl, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+    });
+
+    if (!response.ok) {
+        throw new Error(`Source metadata check failed (${response.status})`);
+    }
+
+    return sanitizeOfflineSourceMetadata(source, await response.json());
+}
+
+export async function fetchEncryptedFiscalBundle(
+    r2BaseUrl: string,
+    source: FiscalSourceId,
+): Promise<Response> {
+    const { encryptedUrl } = buildFiscalBundleUrls(r2BaseUrl, source);
+    const response = await fetch(encryptedUrl, {
+        method: 'GET',
+        headers: { Accept: 'application/octet-stream' },
+    });
+
+    if (!response.ok) {
+        throw new Error(`Source bundle download failed (${response.status})`);
+    }
+
+    return response;
 }
 
 export async function primeOfflineShellCache(): Promise<void> {

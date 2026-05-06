@@ -20,11 +20,16 @@ export function isFiscalSourceId(value: unknown): value is FiscalSourceId {
   return typeof value === 'string' && FISCAL_SOURCE_IDS.has(value);
 }
 
+export function normalizeFiscalR2BaseUrl(value: string | undefined): string {
+  const normalizedValue = (value || '').trim().replace(/\/+$/, '');
+  return normalizedValue || '/fiscal-bases';
+}
+
 export function buildFiscalBundleUrls(
   baseUrl: string,
   source: FiscalSourceId,
 ): FiscalBundleUrls {
-  const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+  const normalizedBaseUrl = normalizeFiscalR2BaseUrl(baseUrl);
 
   return {
     metadataUrl: `${normalizedBaseUrl}/${source}/${source}.meta.json`,
