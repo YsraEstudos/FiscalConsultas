@@ -1,25 +1,25 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ServicesTabContent } from '../../src/components/ServicesTabContent';
 
 const hoisted = vi.hoisted(() => ({
   getNbsServiceDetailPageMock: vi.fn(),
   getNbsServiceTreePageMock: vi.fn(),
-  getNebsEntryDetailMock: vi.fn(),
+  getNbsDetailLocalMock: vi.fn(),
   toastErrorMock: vi.fn(),
-  reportedErrorsMock: vi.fn(),
 }));
 
 vi.mock('../../src/services/api', () => ({
   getNbsServiceDetailPage: hoisted.getNbsServiceDetailPageMock,
   getNbsServiceTreePage: hoisted.getNbsServiceTreePageMock,
-  getNebsEntryDetail: hoisted.getNebsEntryDetailMock,
 }));
 
-vi.mock('../../src/utils/servicesCatalog', () => ({
-  getServiceCatalogErrorInfo: () => ({ message: 'erro' }),
-  reportServiceCatalogError: hoisted.reportedErrorsMock,
+vi.mock('../../src/context/LocalDatabaseContext', () => ({
+  useLocalDatabase: () => ({
+    status: 'ready',
+    getNbsDetailLocal: hoisted.getNbsDetailLocalMock,
+  }),
 }));
 
 vi.mock('react-hot-toast', () => ({
@@ -40,40 +40,32 @@ vi.mock('../../src/components/ServicesWorkspace', () => ({
   ),
 }));
 
+const baseItem = {
+  code: '1.06',
+  code_clean: '106',
+  description: 'Serviços de apoio aos transportes',
+  parent_code: '1',
+  level: 2,
+  has_nebs: true,
+};
+
 describe('ServicesTabContent', () => {
-  it('accumulates paginated NBS chapter items for the hierarchy workspace', async () => {
-    hoisted.getNbsServiceDetailPageMock.mockResolvedValue({
-      success: true,
-      item: {
-        code: '1.06',
-        code_clean: '106',
-        description: 'Serviços de apoio aos transportes',
-        parent_code: '1',
-        level: 2,
-        has_nebs: true,
-      },
-      ancestors: [],
-      children: [],
-      chapter_root: {
-        code: '1.06',
-        code_clean: '106',
-        description: 'Serviços de apoio aos transportes',
-        parent_code: '1',
-        level: 2,
-        has_nebs: true,
-      },
-      chapter_items: [
-        {
-          code: '1.0605',
-          code_clean: '10605',
-          description: 'Serviços de apoio ao transporte aquaviário',
-          parent_code: '1.06',
-          level: 3,
-          has_nebs: false,
-        },
-      ],
-      chapter_page: {
-        items: [
+  beforeEach(() => {
+    hoisted.getNbsServiceDetailPageMock.mockReset();
+    hoisted.getNbsServiceTreePageMock.mockReset();
+    hoisted.getNbsDetailLocalMock.mockReset();
+    hoisted.toastErrorMock.mockReset();
+  });
+
+  it('accumulates paginated NBS chapter items from the local database only', async () => {
+    hoisted.getNbsDetailLocalMock
+      .mockResolvedValueOnce({
+        success: true,
+        item: baseItem,
+        ancestors: [],
+        children: [],
+        chapter_root: baseItem,
+        chapter_items: [
           {
             code: '1.0605',
             code_clean: '10605',
@@ -83,57 +75,57 @@ describe('ServicesTabContent', () => {
             has_nebs: false,
           },
         ],
-        page: 1,
-        page_size: 1,
-        total: 3,
-        has_more: true,
-      },
-      nebs: null,
-    });
-
-    hoisted.getNbsServiceTreePageMock.mockResolvedValue({
-      success: true,
-      item: {
-        code: '1.06',
-        code_clean: '106',
-        description: 'Serviços de apoio aos transportes',
-        parent_code: '1',
-        level: 2,
-        has_nebs: true,
-      },
-      chapter_root: {
-        code: '1.06',
-        code_clean: '106',
-        description: 'Serviços de apoio aos transportes',
-        parent_code: '1',
-        level: 2,
-        has_nebs: true,
-      },
-      chapter_page: {
-        items: [
-          {
-            code: '1.0608',
-            code_clean: '10608',
-            description: 'Serviços de apoio ao transporte multimodal de cargas',
-            parent_code: '1.06',
-            level: 3,
-            has_nebs: false,
-          },
-          {
-            code: '1.0609.00.00',
-            code_clean: '106090000',
-            description: 'Serviços de apoio aos transportes não classificados em posições anteriores',
-            parent_code: '1.06',
-            level: 3,
-            has_nebs: false,
-          },
-        ],
-        page: 2,
-        page_size: 1,
-        total: 3,
-        has_more: false,
-      },
-    });
+        chapter_page: {
+          items: [
+            {
+              code: '1.0605',
+              code_clean: '10605',
+              description: 'Serviços de apoio ao transporte aquaviário',
+              parent_code: '1.06',
+              level: 3,
+              has_nebs: false,
+            },
+          ],
+          page: 1,
+          page_size: 1,
+          total: 3,
+          has_more: true,
+        },
+        nebs: null,
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        item: baseItem,
+        ancestors: [],
+        children: [],
+        chapter_root: baseItem,
+        chapter_items: [],
+        chapter_page: {
+          items: [
+            {
+              code: '1.0608',
+              code_clean: '10608',
+              description: 'Serviços de apoio ao transporte multimodal de cargas',
+              parent_code: '1.06',
+              level: 3,
+              has_nebs: false,
+            },
+            {
+              code: '1.0609.00.00',
+              code_clean: '106090000',
+              description: 'Serviços de apoio aos transportes não classificados em posições anteriores',
+              parent_code: '1.06',
+              level: 3,
+              has_nebs: false,
+            },
+          ],
+          page: 2,
+          page_size: 1,
+          total: 3,
+          has_more: false,
+        },
+        nebs: null,
+      });
 
     render(
       <ServicesTabContent
@@ -143,16 +135,7 @@ describe('ServicesTabContent', () => {
           query: '1.06',
           normalized: '106',
           total: 1,
-          results: [
-            {
-              code: '1.06',
-              code_clean: '106',
-              description: 'Serviços de apoio aos transportes',
-              parent_code: '1',
-              level: 2,
-              has_nebs: true,
-            },
-          ],
+          results: [baseItem],
         }}
         onSwitchDoc={() => undefined}
       />,
@@ -162,16 +145,19 @@ describe('ServicesTabContent', () => {
       expect(screen.getByTestId('chapter-count')).toHaveTextContent('3');
     });
 
-    expect(hoisted.getNbsServiceDetailPageMock).toHaveBeenCalledWith('1.06', {
-      includeTree: true,
+    expect(hoisted.getNbsDetailLocalMock).toHaveBeenNthCalledWith(1, '1.06', {
       page: 1,
       pageSize: 50,
     });
-    expect(hoisted.getNbsServiceTreePageMock).toHaveBeenCalledWith('1.06', 2, 1);
+    expect(hoisted.getNbsDetailLocalMock).toHaveBeenNthCalledWith(2, '1.06', {
+      page: 2,
+      pageSize: 1,
+    });
+    expect(hoisted.getNbsServiceDetailPageMock).not.toHaveBeenCalled();
+    expect(hoisted.getNbsServiceTreePageMock).not.toHaveBeenCalled();
     expect(screen.getByTestId('chapter-codes')).toHaveTextContent(
       '1.0605,1.0608,1.0609.00.00',
     );
     expect(hoisted.toastErrorMock).not.toHaveBeenCalled();
-    expect(hoisted.reportedErrorsMock).not.toHaveBeenCalled();
   });
 });

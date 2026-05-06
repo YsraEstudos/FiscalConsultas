@@ -1,7 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { STORAGE_KEYS } from '../../src/constants';
 import { SettingsProvider } from '../../src/context/SettingsContext';
 import { useSearch } from '../../src/hooks/useSearch';
 import type { Tab } from '../../src/hooks/useTabs';
@@ -10,7 +9,9 @@ const refs = vi.hoisted(() => ({
   searchNCMMock: vi.fn(),
   searchTipiMock: vi.fn(),
   searchNbsServicesMock: vi.fn(),
+  searchLocalMock: vi.fn(),
   toastErrorMock: vi.fn(),
+  dbStatus: 'not_installed',
 }));
 
 vi.mock('../../src/services/api', () => ({
@@ -27,8 +28,8 @@ vi.mock('react-hot-toast', () => ({
 
 vi.mock('../../src/context/LocalDatabaseContext', () => ({
   useLocalDatabase: () => ({
-    status: 'not_installed',
-    searchLocal: vi.fn().mockResolvedValue(null),
+    status: refs.dbStatus,
+    searchLocal: refs.searchLocalMock,
     getNbsDetailLocal: vi.fn().mockResolvedValue(null),
     progress: 0,
     progressStep: '',
@@ -63,20 +64,14 @@ function createTab(overrides: Partial<Tab> = {}): Tab {
   };
 }
 
-function makeAxiosError(status?: number, code?: string) {
-  return {
-    isAxiosError: true,
-    response: status ? { status } : undefined,
-    code,
-  };
-}
-
-describe('useSearch behavior', () => {
+describe('useSearch local-only behavior', () => {
   beforeEach(() => {
     refs.searchNCMMock.mockReset();
     refs.searchTipiMock.mockReset();
     refs.searchNbsServicesMock.mockReset();
+    refs.searchLocalMock.mockReset();
     refs.toastErrorMock.mockReset();
+    refs.dbStatus = 'not_installed';
     localStorage.clear();
   });
 
@@ -99,155 +94,94 @@ describe('useSearch behavior', () => {
     expect(addToHistory).not.toHaveBeenCalled();
     expect(refs.searchNCMMock).not.toHaveBeenCalled();
     expect(refs.searchTipiMock).not.toHaveBeenCalled();
+    expect(refs.searchNbsServicesMock).not.toHaveBeenCalled();
   });
 
-  it('uses the persisted TIPI view mode and skips history writes when saveHistory=false', async () => {
-    localStorage.setItem(STORAGE_KEYS.TIPI_VIEW_MODE, 'family');
-
-    const updateTab = vi.fn();
-    const addToHistory = vi.fn();
-    const tabsById = new Map([
-      ['tab-1', createTab({ document: 'tipi', loadedChaptersByDoc: { nesh: [], tipi: ['84'], nbs: [] } })],
-    ]);
-
-    refs.searchTipiMock.mockResolvedValue({
-      success: true,
-      type: 'code',
-      query: '0101',
-      results: {
-        '01': {
-          capitulo: '01',
-          titulo: 'Animais vivos',
-          notas_gerais: null,
-          posicao_alvo: '0101',
-          posicoes: [],
-        },
-      },
-      total: 1,
-      total_capitulos: 1,
-      markdown: '<h3>01.01</h3>',
-    });
-
-    const { result } = renderHook(() => useSearch(tabsById, updateTab, addToHistory), { wrapper });
-
-    await act(async () => {
-      await result.current.executeSearchForTab('tab-1', 'tipi', '0101', false);
-    });
-
-    expect(addToHistory).not.toHaveBeenCalled();
-    expect(refs.searchTipiMock).toHaveBeenCalledWith('0101', 'family');
-    expect(updateTab).toHaveBeenNthCalledWith(1, 'tab-1', expect.objectContaining({
-      loading: true,
-      ncm: '0101',
-      title: '0101',
-    }));
-    expect(updateTab).toHaveBeenNthCalledWith(2, 'tab-1', expect.objectContaining({
-      loading: false,
-      loadedChaptersByDoc: {
-        nesh: [],
-        tipi: ['84', '01'],
-        nbs: [],
-        },
-    }));
-  });
-
-  it('resets loaded chapters when a text search response has no chapter map to merge', async () => {
-    const updateTab = vi.fn();
-    const addToHistory = vi.fn();
-    const tabsById = new Map([
-      ['tab-1', createTab({ loadedChaptersByDoc: { nesh: ['84'], tipi: [], nbs: [] } })],
-    ]);
-
-    refs.searchNCMMock.mockResolvedValue({
-      success: true,
-      type: 'text',
-      query: 'motor',
-      normalized: 'motor',
-      match_type: 'all_words',
-      warning: null,
-      results: [],
-      total_capitulos: 0,
-    });
-
-    const { result } = renderHook(() => useSearch(tabsById, updateTab, addToHistory), { wrapper });
-
-    await act(async () => {
-      await result.current.executeSearchForTab('tab-1', 'nesh', 'motor', true);
-    });
-
-    expect(refs.searchNCMMock).toHaveBeenCalledWith('motor');
-    expect(updateTab).toHaveBeenLastCalledWith('tab-1', expect.objectContaining({
-      content: '',
-      loadedChaptersByDoc: {
-        nesh: [],
-        tipi: [],
-        nbs: [],
-        },
-    }));
-  });
-
-  it.each([
-    ['404 responses', makeAxiosError(404), 'Conteúdo indisponível no momento.'],
-    ['generic status responses', makeAxiosError(503), 'Não foi possível carregar os dados agora. Tente novamente em instantes.'],
-    ['timeouts', makeAxiosError(undefined, 'ECONNABORTED'), 'Não foi possível carregar os dados agora. Tente novamente em instantes.'],
-    ['network failures', makeAxiosError(undefined, 'ERR_NETWORK'), 'Não foi possível carregar os dados agora. Tente novamente em instantes.'],
-  ])('maps %s into toast and tab error state', async (_label, error, message) => {
+  it('does not call backend fiscal APIs when local NESH is not installed', async () => {
     const updateTab = vi.fn();
     const addToHistory = vi.fn();
     const tabsById = new Map([['tab-1', createTab()]]);
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    refs.searchNCMMock.mockRejectedValue(error);
+    const { result } = renderHook(() => useSearch(tabsById, updateTab, addToHistory), { wrapper });
 
-    try {
-      const { result } = renderHook(() => useSearch(tabsById, updateTab, addToHistory), { wrapper });
+    await act(async () => {
+      await result.current.executeSearchForTab('tab-1', 'nesh', '0101', true);
+    });
 
-      await act(async () => {
-        await result.current.executeSearchForTab('tab-1', 'nesh', '8517', true);
-      });
-
-      expect(refs.toastErrorMock).toHaveBeenCalledWith(message);
-      expect(updateTab).toHaveBeenNthCalledWith(2, 'tab-1', {
-        error: message,
-        loading: false,
-      });
-    } finally {
-      consoleErrorSpy.mockRestore();
-    }
+    expect(refs.searchNCMMock).not.toHaveBeenCalled();
+    expect(refs.searchTipiMock).not.toHaveBeenCalled();
+    expect(refs.searchNbsServicesMock).not.toHaveBeenCalled();
+    expect(refs.toastErrorMock).toHaveBeenCalledWith('Instale a base NESH para pesquisar localmente.');
+    expect(updateTab).toHaveBeenLastCalledWith('tab-1', {
+      error: 'Instale a base NESH para pesquisar localmente.',
+      loading: false,
+    });
   });
 
-  it.each([
-    [429, 'Muitas tentativas no catálogo de serviços. Aguarde um instante e tente novamente.'],
-    [503, 'Catálogo de serviços indisponível no momento. Tente novamente em instantes.'],
-  ])('uses the shared catalog error mapper for NBS %s responses', async (status, message) => {
+  it('uses local worker results when the offline database is ready', async () => {
+    refs.dbStatus = 'ready';
+    refs.searchLocalMock.mockResolvedValue({
+      searchType: 'text',
+      results: [
+        {
+          codigo: '0101',
+          descricao: 'Cavalos',
+        },
+      ],
+    });
     const updateTab = vi.fn();
     const addToHistory = vi.fn();
-    const tabsById = new Map([[
-      'tab-1',
-      createTab({ document: 'nbs' }),
-    ]]);
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const error = {
-      isAxiosError: true,
-      response: { status },
-    };
+    const tabsById = new Map([['tab-1', createTab()]]);
 
-    refs.searchNbsServicesMock.mockRejectedValue(error);
+    const { result } = renderHook(() => useSearch(tabsById, updateTab, addToHistory), { wrapper });
 
-    try {
-      const { result } = renderHook(() => useSearch(tabsById, updateTab, addToHistory), { wrapper });
+    await act(async () => {
+      await result.current.executeSearchForTab('tab-1', 'nesh', 'cavalo', true);
+    });
 
-      await act(async () => {
-        await result.current.executeSearchForTab('tab-1', 'nbs', '1.0101.11.00', true);
-      });
+    expect(refs.searchNCMMock).not.toHaveBeenCalled();
+    expect(refs.searchLocalMock).toHaveBeenCalledWith('nesh', 'cavalo', 'chapter');
+    expect(updateTab).toHaveBeenLastCalledWith('tab-1', expect.objectContaining({
+      loading: false,
+      results: expect.objectContaining({
+        success: true,
+        query: 'cavalo',
+        total_capitulos: 1,
+      }),
+    }));
+  });
 
-      expect(refs.toastErrorMock).toHaveBeenCalledWith(message);
-      expect(updateTab).toHaveBeenNthCalledWith(2, 'tab-1', {
-        error: message,
-        loading: false,
-      });
-    } finally {
-      consoleErrorSpy.mockRestore();
-    }
+  it('preserves same-chapter navigation without searching again', async () => {
+    const updateTab = vi.fn();
+    const addToHistory = vi.fn();
+    const tabsById = new Map([
+      ['tab-1', createTab({
+        results: {
+          success: true,
+          type: 'text',
+          query: '0101',
+          normalized: '0101',
+          match_type: 'all_words',
+          warning: null,
+          total_capitulos: 0,
+          results: [],
+        },
+        loadedChaptersByDoc: { nesh: ['01'], tipi: [], nbs: [] },
+      })],
+    ]);
+
+    const { result } = renderHook(() => useSearch(tabsById, updateTab, addToHistory), { wrapper });
+
+    await act(async () => {
+      await result.current.executeSearchForTab('tab-1', 'nesh', '0102', true);
+    });
+
+    expect(refs.searchLocalMock).not.toHaveBeenCalled();
+    expect(refs.searchNCMMock).not.toHaveBeenCalled();
+    expect(updateTab).toHaveBeenLastCalledWith('tab-1', expect.objectContaining({
+      ncm: '0102',
+      title: '0102',
+      isNewSearch: true,
+    }));
   });
 });

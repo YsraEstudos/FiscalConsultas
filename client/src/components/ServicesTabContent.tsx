@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
-import {
-    getNbsServiceDetailPage,
-    getNbsServiceTreePage,
-} from '../services/api';
 import { useLocalDatabase } from '../context/LocalDatabaseContext';
 import type {
     NbsDetailResponse,
@@ -11,10 +7,6 @@ import type {
     NbsSearchResponse,
     ServiceDocType,
 } from '../types/api.types';
-import {
-    getServiceCatalogErrorInfo,
-    reportServiceCatalogError,
-} from '../utils/servicesCatalog';
 import {
     ServicesWorkspace,
     type ServicesWorkspaceNbsState,
@@ -34,6 +26,7 @@ interface ServicesTabContentProps {
 
 
 const DEFAULT_NBS_TREE_PAGE_SIZE = 50;
+const LOCAL_NBS_DETAIL_MESSAGE = 'Instale a base NBS para abrir detalhes e hierarquia localmente.';
 
 function runInBackground(task: Promise<unknown>) {
     task.catch(() => undefined);
@@ -74,34 +67,18 @@ async function fetchLocalNbsDetailPage(
 async function fetchInitialNbsDetailPage(
     code: string,
     pageSize: number,
-    preferLocal: boolean,
     getNbsDetailLocal: (
         code: string,
         options?: { page?: number; pageSize?: number },
     ) => Promise<NbsDetailResponse | null>,
 ): Promise<NbsDetailResponse | null> {
-    if (preferLocal) {
-        const localResponse = await fetchLocalNbsDetailPage(
-            getNbsDetailLocal,
-            code,
-            1,
-            pageSize,
-        );
-        if (localResponse) return localResponse;
-    }
-
-    return getNbsServiceDetailPage(code, {
-        includeTree: true,
-        page: 1,
-        pageSize,
-    });
+    return fetchLocalNbsDetailPage(getNbsDetailLocal, code, 1, pageSize);
 }
 
 async function fetchNextNbsDetailPage(
     code: string,
     page: number,
     pageSize: number,
-    preferLocal: boolean,
     getNbsDetailLocal: (
         code: string,
         options?: { page?: number; pageSize?: number },
@@ -109,17 +86,7 @@ async function fetchNextNbsDetailPage(
 ): Promise<
     Pick<NbsDetailResponse, 'chapter_root' | 'chapter_page'> | null
 > {
-    if (preferLocal) {
-        const localResponse = await fetchLocalNbsDetailPage(
-            getNbsDetailLocal,
-            code,
-            page,
-            pageSize,
-        );
-        if (localResponse) return localResponse;
-    }
-
-    return getNbsServiceTreePage(code, page, pageSize);
+    return fetchLocalNbsDetailPage(getNbsDetailLocal, code, page, pageSize);
 }
 
 function buildHydratedNbsResponse(
@@ -173,7 +140,6 @@ export function ServicesTabContent({
             code: string,
             response: NbsDetailResponse,
             requestId: number,
-            preferLocal: boolean,
         ): Promise<NbsDetailResponse | null> => {
             const firstPage = response.chapter_page;
             if (!firstPage?.has_more) {
@@ -194,7 +160,6 @@ export function ServicesTabContent({
                     code,
                     nextPageNumber,
                     firstPage.page_size,
-                    preferLocal,
                     getNbsDetailLocal,
                 );
                 if (!nextPageResponse) break;
@@ -230,15 +195,16 @@ export function ServicesTabContent({
         setDetailStatus('loading');
 
         try {
-            const preferLocal = localDbStatus === 'ready';
+            if (localDbStatus !== 'ready') {
+                throw new Error(LOCAL_NBS_DETAIL_MESSAGE);
+            }
             const response = await fetchInitialNbsDetailPage(
                 code,
                 DEFAULT_NBS_TREE_PAGE_SIZE,
-                preferLocal,
                 getNbsDetailLocal,
             );
             if (!response) {
-                throw new Error('NBS detail unavailable');
+                throw new Error(LOCAL_NBS_DETAIL_MESSAGE);
             }
             if (!isCurrentDetailRequest(requestId)) return;
 
@@ -246,7 +212,6 @@ export function ServicesTabContent({
                 code,
                 response,
                 requestId,
-                preferLocal,
             );
             if (!hydratedResponse) return;
 
@@ -258,9 +223,7 @@ export function ServicesTabContent({
             if (detailRequestRef.current !== requestId) return;
             setNbsDetail(null);
             setDetailStatus('error');
-            const serviceError = getServiceCatalogErrorInfo(error, 'nbs');
-            reportServiceCatalogError(error, 'nbs', serviceError);
-            toast.error(serviceError.message);
+            toast.error(error instanceof Error ? error.message : LOCAL_NBS_DETAIL_MESSAGE);
         }
     }, [getNbsDetailLocal, hydrateNbsDetailResponse, isCurrentDetailRequest, localDbStatus]);
 

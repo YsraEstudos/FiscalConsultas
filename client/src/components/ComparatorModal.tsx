@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { searchNCMFull, searchTipi } from '../services/api';
 import { useLocalDatabase } from '../context/LocalDatabaseContext';
 import { useSettings } from '../context/SettingsContext';
 import { buildLocalCodeSearchResponse, resolveSearchResponseMarkup } from '../utils/searchResultMarkup';
@@ -9,6 +8,7 @@ import { Loading } from './Loading';
 import styles from './ComparatorModal.module.css';
 
 type DocType = 'nesh' | 'tipi';
+const LOCAL_COMPARE_MESSAGE = 'Instale as bases locais para comparar NCMs sem backend.';
 
 interface ComparatorModalProps {
     isOpen: boolean;
@@ -101,16 +101,8 @@ export function ComparatorModal({ isOpen, onClose, defaultDoc = 'nesh' }: Compar
                 }
             }
 
-            if (!markdown) {
-                const data = doc === 'nesh'
-                    ? await searchNCMFull(clean)
-                    : await searchTipi(clean, tipiViewMode);
-
-                markdown = resolveSearchResponseMarkup(doc, data);
-            }
-
             if (!markdown || typeof markdown !== 'string') {
-                throw new Error('Nenhum conteúdo renderizável retornado para a comparação.');
+                throw new Error(LOCAL_COMPARE_MESSAGE);
             }
 
             setPanel({
@@ -126,7 +118,7 @@ export function ComparatorModal({ isOpen, onClose, defaultDoc = 'nesh' }: Compar
                 title: `${doc.toUpperCase()} ${clean}`,
                 markdown: null
             }));
-            toast.error('Erro ao comparar. Verifique a API.');
+            toast.error(e instanceof Error ? e.message : LOCAL_COMPARE_MESSAGE);
         }
     }, [dbStatus, doc, searchLocal, tipiViewMode]);
 
