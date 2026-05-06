@@ -81,7 +81,7 @@ export function useOfflineDatabaseBroadcastChannel({
 
         channel.onmessage = (event: MessageEvent<OfflineDatabaseChannelMessage>) => {
             const message = event.data;
-            if (!message || message.source === instanceId) return;
+            if (!message || message.senderId === instanceId) return;
 
             if (message.type === 'INSTALLING') {
                 const nextStatus =
