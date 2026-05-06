@@ -42,27 +42,33 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          enc = Path("database/fiscal_offline.enc")
-          meta = Path("database/fiscal_offline.meta")
+          bundle_root = Path("database/r2-fiscal-bundles")
+          sources = ("nesh", "tipi", "nbs", "unspsc")
           source_dbs = [
               Path("database/nesh.db"),
               Path("database/tipi.db"),
               Path("database/services.db"),
+              Path("database/unspsc.db"),
           ]
           existing_source_dbs = [path for path in source_dbs if path.exists()]
 
-          if enc.exists() != meta.exists():
+          if bundle_root.exists():
+              missing = []
+              for source in sources:
+                  meta = bundle_root / source / f"{source}.meta.json"
+                  enc = bundle_root / source / f"{source}.enc"
+                  if meta.exists() != enc.exists():
+                      missing.append(f"{source}: expected both {meta} and {enc}")
+              if missing:
+                  raise SystemExit("R2 fiscal bundle contract broken:\n" + "\n".join(missing))
+
+          if existing_source_dbs and len(existing_source_dbs) not in {3, len(source_dbs)}:
               raise SystemExit(
-                  "Offline bundle contract broken: fiscal_offline.enc and fiscal_offline.meta must exist together."
+                  "Offline bundle sources are partially present. Provide NESH, TIPI and services DBs together; UNSPSC is optional until that source DB exists."
               )
 
-          if existing_source_dbs and len(existing_source_dbs) != len(source_dbs):
-              raise SystemExit(
-                  "Offline bundle sources are partially present. Either provide all source databases or none."
-              )
-
-          if len(existing_source_dbs) == len(source_dbs):
-              print("Source databases detected. Validating offline bundle build script...")
+          if len(existing_source_dbs) >= 3:
+              print("Source databases detected. R2 bundle builder can be validated by focused tests.")
           else:
               print("Source databases not present in CI checkout. Skipping bundle generation, keeping contract check only.")
           PY

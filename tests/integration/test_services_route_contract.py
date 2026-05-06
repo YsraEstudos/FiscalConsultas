@@ -7,7 +7,15 @@ import backend.presentation.routes.services as services_routes
 from backend.services.nbs_service import NbsService
 from backend.server.app import app
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skip(
+        reason=(
+            "Legacy online NBS service routes were retired by the offline-first "
+            "R2 migration; active coverage lives in test_offline_first_backend_routes."
+        )
+    ),
+]
 
 
 class _FakeServicesCatalog:

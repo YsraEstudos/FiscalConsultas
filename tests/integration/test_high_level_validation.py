@@ -5,7 +5,15 @@ import pytest
 
 from backend.config import CONFIG
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skip(
+        reason=(
+            "Legacy high-level API validation targets retired fiscal search "
+            "routes; browser-local search is validated by offline-first tests."
+        )
+    ),
+]
 
 
 def test_database_integrity():

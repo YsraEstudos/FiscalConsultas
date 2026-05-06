@@ -10,7 +10,15 @@ from backend.server.app import app
 from backend.services.nesh_service import NeshService
 from backend.services.tipi_service import TipiService
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skip(
+        reason=(
+            "Legacy online fiscal search routes were retired by the offline-first "
+            "R2 migration; active coverage lives in test_offline_first_backend_routes."
+        )
+    ),
+]
 
 
 def _vary_tokens(response) -> set[str]:

@@ -3,7 +3,15 @@ import pytest
 from backend.presentation.renderer import HtmlRenderer
 from backend.presentation.tipi_renderer import TipiRenderer
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skip(
+        reason=(
+            "Legacy TIPI API integration targets retired online fiscal routes; "
+            "TIPI search now runs locally from the R2-installed bundle."
+        )
+    ),
+]
 
 
 class TestTipiApiIntegration:

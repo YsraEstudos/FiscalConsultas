@@ -6,6 +6,8 @@ import {
   makeTipiChapterData,
 } from './fixtures/service-mocks';
 
+test.skip(true, 'Legacy tab/search persistence E2E depends on retired online fiscal APIs.');
+
 async function getActiveTabDocument(page: Page): Promise<string | null> {
   return page.locator('div[draggable="true"][data-document]').evaluateAll((tabs) => {
     const activeTab = tabs.find((tab): tab is HTMLElement => (

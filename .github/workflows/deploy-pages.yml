@@ -25,7 +25,8 @@ jobs:
       run:
         working-directory: client
     env:
-      VITE_API_URL: https://fiscal-api-5eok.onrender.com
+      VITE_FISCAL_R2_BASE_URL: ${{ vars.VITE_FISCAL_R2_BASE_URL }}
+      VITE_OFFLINE_DB_PUBLIC_SEED: ${{ vars.VITE_OFFLINE_DB_PUBLIC_SEED }}
       VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
       VITE_CLERK_TOKEN_TEMPLATE: backend_api
       ALLOW_TEST_CLERK_KEY: "true" # Temporary explicit override while using pk_test on Pages
@@ -47,6 +48,14 @@ jobs:
         run: |
           if [ -z "${VITE_CLERK_PUBLISHABLE_KEY}" ]; then
             echo "Missing GitHub repository variable VITE_CLERK_PUBLISHABLE_KEY"
+            exit 1
+          fi
+          if [ -z "${VITE_FISCAL_R2_BASE_URL}" ]; then
+            echo "Missing GitHub repository variable VITE_FISCAL_R2_BASE_URL"
+            exit 1
+          fi
+          if [ -z "${VITE_OFFLINE_DB_PUBLIC_SEED}" ]; then
+            echo "Missing GitHub repository variable VITE_OFFLINE_DB_PUBLIC_SEED"
             exit 1
           fi
 

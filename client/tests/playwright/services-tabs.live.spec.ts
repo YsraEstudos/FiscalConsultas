@@ -1,5 +1,7 @@
 import { expect, type Locator, Page, test } from '@playwright/test';
 
+test.skip(true, 'Legacy live NBS backend E2E retired; future live coverage should install R2 bundles.');
+
 const liveEnv = {
   baseUrl: process.env.PLAYWRIGHT_LIVE_BASE_URL || '',
   email: process.env.PLAYWRIGHT_CLERK_EMAIL || '',

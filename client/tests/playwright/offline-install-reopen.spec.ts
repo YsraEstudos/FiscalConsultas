@@ -10,6 +10,8 @@ import {
 } from './helpers/offlineHarness';
 
 test.describe('offline install and reopen flow', () => {
+  test.skip(true, 'Legacy monolithic /api/database install flow retired; replace with per-source R2 install E2E.');
+
   test('installs offline database using version/token/download endpoints', async ({ page }) => {
     const counters: OfflineApiCounters = {
       version: 0,

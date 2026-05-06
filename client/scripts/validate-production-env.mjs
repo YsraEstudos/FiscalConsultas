@@ -50,6 +50,8 @@ function isRealProductionBuild(env) {
 export function validateProductionEnv(env = resolveBuildEnv()) {
   const errors = [];
   const publishableKey = String(env.VITE_CLERK_PUBLISHABLE_KEY || '').trim();
+  const fiscalR2BaseUrl = String(env.VITE_FISCAL_R2_BASE_URL || '').trim();
+  const offlineDbPublicSeed = String(env.VITE_OFFLINE_DB_PUBLIC_SEED || '').trim();
   const adminEmail = String(env.VITE_ADMIN_EMAIL || '').trim();
   const requireLivePublishableKey = isRealProductionBuild(env);
   const allowTestPublishableKey = isCiTestKeyOverrideEnabled(env);
@@ -62,6 +64,14 @@ export function validateProductionEnv(env = resolveBuildEnv()) {
 
   if (adminEmail) {
     errors.push('VITE_ADMIN_EMAIL must not be defined for production builds.');
+  }
+
+  if (!fiscalR2BaseUrl) {
+    errors.push('VITE_FISCAL_R2_BASE_URL must be defined for production builds.');
+  }
+
+  if (!offlineDbPublicSeed) {
+    errors.push('VITE_OFFLINE_DB_PUBLIC_SEED must be defined for production builds.');
   }
 
   if (!publishableKey) {

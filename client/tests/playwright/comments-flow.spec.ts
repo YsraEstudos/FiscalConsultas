@@ -2,6 +2,8 @@ import { expect, test, type Page, type Request, type Route } from '@playwright/t
 
 import { makeNeshChapterData, installServicesMock } from './fixtures/service-mocks';
 
+test.skip(true, 'Legacy search-backed comments E2E retired until account APIs move to Workers/D1.');
+
 test.use({
   viewport: { width: 1440, height: 900 },
 });

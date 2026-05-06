@@ -4,7 +4,7 @@
 - Catch regressions early on API contracts and core search logic.
 - Keep local feedback fast and deterministic.
 - Make CI failures actionable (high signal, low flakiness).
-- Protect the offline install flow, app-shell cache, and local search contract for `NESH`, `TIPI`, `NBS`, and `NEBS`.
+- Protect the offline install flow, app-shell cache, and local search contract for `NESH`, `TIPI`, `NBS`, and `UNSPSC`.
 
 ## Test Pyramid
 - Unit (`tests/unit`, `client/tests/unit`):
@@ -19,10 +19,10 @@
   - Run on demand for profiling/regression baselines.
 
 ## Top 10 Risk Areas (Execution Order)
-1. Instalacao offline (`/api/database/version`, `/api/database/token`, `/api/database/download`) e validacao de metadata.
+1. Instalacao offline via R2 (`fonte/fonte.meta.json`, `fonte/fonte.enc`) e validacao de metadata/hash.
 2. App shell offline via `coi-serviceworker.js` e reabertura sem rede.
-3. Realizar busca local e pública e detalhar `NESH`, `TIPI`, `NBS` e `NEBS`.
-4. Contrato das rotas publicas de `NBS`/`NEBS` (`200` anonimo, `429` ainda aplicado, sem modal de login).
+3. Realizar busca local e pública e detalhar `NESH`, `TIPI`, `NBS` e `UNSPSC`.
+4. Garantir que rotas fiscais online aposentadas retornem `404` e não voltem ao middleware público.
 5. Sanitização de HTML/backend-rendered content no frontend (`contentSecurity.ts`, `MarkdownPane`, `ResultDisplay`).
 6. Gating de moderação/admin por role do Clerk (`AuthContext`, `authz.ts`, `ModalManager`).
 7. Capacidades de UI restrita vindas de `/api/auth/me`, sem expor allowlists no bundle público.
@@ -41,10 +41,10 @@
 
 | # | Área de risco | Unit | Integration | E2E Playwright | Status | Prioridade |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Instalação offline (`/api/database/version`, `/token`, `/download`) | Forte | Limitada | Ausente | Parcial | P0 |
+| 1 | Instalação offline via R2 (`*.meta.json`, `*.enc`) | Forte | Limitada | Ausente | Parcial | P0 |
 | 2 | App shell offline + reabertura sem rede | Limitada | Ausente | Ausente | Não coberto | P0 |
-| 3 | Busca/detalhe local (`NESH`, `TIPI`, `NBS`, `NEBS`) | Forte | Forte | Parcial | Parcial | P0 |
-| 4 | Contrato das rotas públicas de `NBS`/`NEBS` | Forte | Forte | Parcial | Parcial | P0 |
+| 3 | Busca/detalhe local (`NESH`, `TIPI`, `NBS`, `UNSPSC`) | Forte | Forte | Parcial | Parcial | P0 |
+| 4 | Aposentadoria das rotas fiscais online | Forte | Forte | Parcial | Parcial | P0 |
 | 5 | Sanitização de HTML renderizado | Forte | Limitada | Ausente | Coberto | P1 |
 | 6 | Gating de moderação/admin por role | Forte | Limitada | Ausente | Parcial | P1 |
 | 7 | Capacidades de UI restrita vindas de `/api/auth/me` | Forte | Forte | Sim (`auth-capabilities.spec.ts`) | Coberto | P0 |
@@ -53,7 +53,7 @@
 | 10 | Contrato de webhook `/api/webhooks/asaas` | Limitada | Forte | N/A | Coberto | P1 |
 
 ### Evidências usadas na classificação (amostra)
-- Offline contract backend: `tests/unit/test_database_download_route.py`
+- Offline R2/backend retirement contract: `tests/unit/test_offline_first_backend_routes.py`
 - Offline metadata compatibility/retry: `client/tests/unit/offlineDatabaseSync.test.ts`
 - Auth e AI chat contracts: `tests/integration/test_auth_api_contract.py`
 - Webhooks contract: `tests/integration/test_webhooks_api_contract.py`

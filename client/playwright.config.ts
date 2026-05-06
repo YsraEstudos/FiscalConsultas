@@ -38,6 +38,8 @@ export default defineConfig({
     env: {
       ...process.env,
       VITE_E2E_MOCK_AUTH: 'true',
+      VITE_FISCAL_R2_BASE_URL: 'https://fiscal-bases.example.test',
+      VITE_OFFLINE_DB_PUBLIC_SEED: 'e2e-public-seed',
       VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_e2e',
       VITE_AUTH_DEBUG: 'false',
     },

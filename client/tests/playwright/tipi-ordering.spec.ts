@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test';
 
 import { installServicesMock, makeTipiChapterData } from './fixtures/service-mocks';
 
+test.skip(true, 'Legacy online TIPI API ordering E2E retired; replace with local R2 worker ordering coverage.');
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     try {

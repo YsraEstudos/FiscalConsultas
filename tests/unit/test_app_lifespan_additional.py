@@ -1,13 +1,11 @@
 import asyncio
 import builtins
-from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock
 
 import backend.infrastructure.db_engine as db_engine
 import backend.server.app as app_module
-import backend.services.nesh_service as nesh_service_module
 import pytest
 from fastapi import FastAPI
 from starlette.requests import Request
@@ -210,32 +208,29 @@ def test_configure_routes_keeps_fallback_when_frontend_index_missing(tmp_path):
 async def test_lifespan_sqlite_init_db_failure_keeps_startup_and_shutdown(
     monkeypatch, core_mocks
 ):
-    fake_db = _FakeDbAdapter("db.sqlite")
-
     async def _init_db_fail():
         await asyncio.sleep(0)
         raise RuntimeError("unsupported sqlite extension")
 
     monkeypatch.setattr(app_module.settings.database, "engine", "sqlite")
     monkeypatch.setattr(app_module.settings.cache, "enable_redis", False)
-    monkeypatch.setattr(app_module, "DatabaseAdapter", lambda _path: fake_db)
     monkeypatch.setattr(db_engine, "init_db", _init_db_fail)
-    monkeypatch.setattr(db_engine, "close_db", lambda: None)
-    monkeypatch.setattr(nesh_service_module, "NeshService", _FakeNeshService)
+
+    async def _close_db_ok():
+        await asyncio.sleep(0)
+
+    monkeypatch.setattr(db_engine, "close_db", _close_db_ok)
 
     app = _make_fake_fastapi()
     async with app_module.lifespan(app):
         assert app.state.sqlmodel_enabled is False
-        assert app.state.service.db is fake_db
-        assert app.state.tipi_service.mode == "sqlite"
-        assert isinstance(app.state.nbs_service, _FakeNbsService)
         assert isinstance(app.state.ai_service, _FakeAiService)
-        assert fake_db.pool_ready is True
+        assert not hasattr(app.state, "service")
+        assert not hasattr(app.state, "tipi_service")
+        assert not hasattr(app.state, "nbs_service")
         assert core_mocks["glossary"] is True
         assert core_mocks["frontend"] is True
 
-    assert fake_db.closed is True
-    assert app.state.nbs_service.closed is True
     assert core_mocks["redis_closed"] is True
 
 
@@ -243,8 +238,6 @@ async def test_lifespan_sqlite_init_db_failure_keeps_startup_and_shutdown(
 async def test_lifespan_sqlite_handles_import_error_for_db_engine(
     monkeypatch, core_mocks
 ):
-    fake_db = _FakeDbAdapter("db.sqlite")
-
     real_import = builtins.__import__
 
     def _fake_import(name, globals=None, locals=None, fromlist=(), level=0):
@@ -254,27 +247,20 @@ async def test_lifespan_sqlite_handles_import_error_for_db_engine(
 
     monkeypatch.setattr(app_module.settings.database, "engine", "sqlite")
     monkeypatch.setattr(app_module.settings.cache, "enable_redis", False)
-    monkeypatch.setattr(app_module, "DatabaseAdapter", lambda _path: fake_db)
-    monkeypatch.setattr(nesh_service_module, "NeshService", _FakeNeshService)
     monkeypatch.setattr(builtins, "__import__", _fake_import)
 
     app = _make_fake_fastapi()
     async with app_module.lifespan(app):
         assert app.state.sqlmodel_enabled is False
-        assert fake_db.pool_ready is True
-
-    assert fake_db.closed is True
-    assert app.state.nbs_service.closed is True
+        assert not hasattr(app.state, "service")
+        assert not hasattr(app.state, "tipi_service")
+        assert not hasattr(app.state, "nbs_service")
 
 
 @pytest.mark.asyncio
 async def test_lifespan_records_release_metadata(monkeypatch, core_mocks):
-    fake_db = _FakeDbAdapter("db.sqlite")
-
     monkeypatch.setattr(app_module.settings.database, "engine", "sqlite")
     monkeypatch.setattr(app_module.settings.cache, "enable_redis", False)
-    monkeypatch.setattr(app_module, "DatabaseAdapter", lambda _path: fake_db)
-    monkeypatch.setattr(nesh_service_module, "NeshService", _FakeNeshService)
     monkeypatch.setenv("RENDER_SERVICE_ID", "srv-test")
     monkeypatch.setenv("RENDER_GIT_COMMIT", "commit-test")
     monkeypatch.setenv("RENDER_GIT_BRANCH", "main")
@@ -287,16 +273,13 @@ async def test_lifespan_records_release_metadata(monkeypatch, core_mocks):
         assert (
             app.state.release_metadata["server_env"] == app_module.settings.server.env
         )
-
-    assert fake_db.closed is True
-    assert app.state.nbs_service.closed is True
+        assert not hasattr(app.state, "service")
 
 
 @pytest.mark.asyncio
 async def test_lifespan_sqlite_init_db_success_closes_sqlmodel_engine(
     monkeypatch, core_mocks
 ):
-    fake_db = _FakeDbAdapter("db.sqlite")
     close_db_called = {"value": False}
 
     async def _init_db_ok():
@@ -309,17 +292,14 @@ async def test_lifespan_sqlite_init_db_success_closes_sqlmodel_engine(
 
     monkeypatch.setattr(app_module.settings.database, "engine", "sqlite")
     monkeypatch.setattr(app_module.settings.cache, "enable_redis", False)
-    monkeypatch.setattr(app_module, "DatabaseAdapter", lambda _path: fake_db)
     monkeypatch.setattr(db_engine, "init_db", _init_db_ok)
     monkeypatch.setattr(db_engine, "close_db", _close_db_ok)
-    monkeypatch.setattr(nesh_service_module, "NeshService", _FakeNeshService)
 
     app = _make_fake_fastapi()
     async with app_module.lifespan(app):
         assert app.state.sqlmodel_enabled is True
+        assert not hasattr(app.state, "service")
 
-    assert fake_db.closed is True
-    assert app.state.nbs_service.closed is True
     assert close_db_called["value"] is True
 
 
@@ -327,49 +307,24 @@ async def test_lifespan_sqlite_init_db_success_closes_sqlmodel_engine(
 async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
     monkeypatch, core_mocks
 ):
-    class _FailingPrewarmNeshService(_FakeNeshService):
-        async def prewarmNeshChapterCache(self):
-            await asyncio.sleep(0)
-            raise RuntimeError("prewarm failed")
-
-    class _ScalarResult:
-        def __init__(self, value):
-            self._value = value
-
-        def scalar(self):
-            return self._value
-
-    class _Session:
-        async def execute(self, _query):
-            await asyncio.sleep(0)
-            return _ScalarResult(123)
-
-    @asynccontextmanager
-    async def _fake_get_session():
-        yield _Session()
-
     async def _close_db_fail():
         await asyncio.sleep(0)
         raise RuntimeError("close failed")
 
     monkeypatch.setattr(app_module.settings.database, "engine", "postgresql")
     monkeypatch.setattr(app_module.settings.cache, "enable_redis", True)
-    monkeypatch.setattr(db_engine, "get_session", _fake_get_session)
     monkeypatch.setattr(db_engine, "close_db", _close_db_fail)
-    monkeypatch.setattr(nesh_service_module, "NeshService", _FailingPrewarmNeshService)
 
     app = _make_fake_fastapi()
     async with app_module.lifespan(app):
-        assert app.state.db is None
         assert app.state.sqlmodel_enabled is True
-        assert isinstance(app.state.service, _FailingPrewarmNeshService)
-        assert app.state.tipi_service.mode == "repo"
-        assert app.state.nbs_service.mode == "repo"
-        assert app.state.nbs_service.created_repo is True
-        assert isinstance(app.state.nbs_service, _FakeNbsService)
-        assert core_mocks["redis_connected"] is True
+        assert isinstance(app.state.ai_service, _FakeAiService)
+        assert not hasattr(app.state, "db")
+        assert not hasattr(app.state, "service")
+        assert not hasattr(app.state, "tipi_service")
+        assert not hasattr(app.state, "nbs_service")
+        assert core_mocks["redis_connected"] is False
 
-    assert app.state.nbs_service.closed is True
     assert core_mocks["redis_closed"] is True
 
 
@@ -377,40 +332,19 @@ async def test_lifespan_postgres_redis_prewarm_failure_and_tipi_repository(
 async def test_lifespan_postgres_tipi_count_failure_falls_back_to_sqlite_mode(
     monkeypatch, core_mocks
 ):
-    class _ScalarResult:
-        def __init__(self, value):
-            self._value = value
-
-        def scalar(self):
-            return self._value
-
-    class _BrokenSession:
-        async def execute(self, query):
-            await asyncio.sleep(0)
-            if "tipi_positions" in str(query):
-                raise RuntimeError("tipi count failed")
-            return _ScalarResult(True)
-
-    @asynccontextmanager
-    async def _broken_get_session():
-        yield _BrokenSession()
-
     async def _close_db_ok():
         await asyncio.sleep(0)
         return None
 
     monkeypatch.setattr(app_module.settings.database, "engine", "postgresql")
     monkeypatch.setattr(app_module.settings.cache, "enable_redis", False)
-    monkeypatch.setattr(db_engine, "get_session", _broken_get_session)
     monkeypatch.setattr(db_engine, "close_db", _close_db_ok)
-    monkeypatch.setattr(nesh_service_module, "NeshService", _FakeNeshService)
 
     app = _make_fake_fastapi()
     async with app_module.lifespan(app):
         assert app.state.sqlmodel_enabled is True
-        assert app.state.tipi_service.mode == "sqlite"
-        assert app.state.tipi_service.created_repo is False
-        assert app.state.nbs_service.mode == "repo"
+        assert not hasattr(app.state, "tipi_service")
+        assert not hasattr(app.state, "nbs_service")
 
 
 @pytest.mark.asyncio
@@ -445,7 +379,7 @@ async def test_lifespan_runs_shutdown_when_startup_raises(monkeypatch):
         side_effect=lambda _app: calls.__setitem__("shutdown", True)
     )
 
-    monkeypatch.setattr(app_module, "_init_primary_database", init_fail)
+    monkeypatch.setattr(app_module, "_init_sqlmodel_engine", init_fail)
     monkeypatch.setattr(app_module, "_shutdown_resources", shutdown_mock)
 
     app = _make_fake_fastapi()
@@ -468,37 +402,19 @@ async def test_lifespan_postgres_import_error_still_enables_sqlmodel(
             raise ImportError("simulated missing db_engine")
         return real_import(name, globals, locals, fromlist, level)
 
-    class _ScalarResult:
-        def __init__(self, value):
-            self._value = value
-
-        def scalar(self):
-            return self._value
-
-    class _Session:
-        async def execute(self, _query):
-            await asyncio.sleep(0)
-            return _ScalarResult(True)
-
-    @asynccontextmanager
-    async def _fake_get_session():
-        yield _Session()
-
     async def _close_db_ok():
         await asyncio.sleep(0)
         return None
 
     monkeypatch.setattr(app_module.settings.database, "engine", "postgresql")
     monkeypatch.setattr(app_module.settings.cache, "enable_redis", False)
-    monkeypatch.setattr(db_engine, "get_session", _fake_get_session)
     monkeypatch.setattr(db_engine, "close_db", _close_db_ok)
-    monkeypatch.setattr(nesh_service_module, "NeshService", _FakeNeshService)
     monkeypatch.setattr(builtins, "__import__", _fake_import)
 
     app = _make_fake_fastapi()
     async with app_module.lifespan(app):
         assert app.state.sqlmodel_enabled is True
-        assert app.state.tipi_service.mode == "repo"
+        assert not hasattr(app.state, "tipi_service")
 
 
 def test_validate_dev_tenant_override_safety_allows_localhost(monkeypatch):

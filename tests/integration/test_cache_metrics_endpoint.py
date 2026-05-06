@@ -4,7 +4,15 @@ from backend.presentation.routes import search as search_route
 from backend.presentation.routes import system
 from backend.presentation.routes import tipi as tipi_route
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skip(
+        reason=(
+            "Legacy fiscal route payload cache metrics were retired with the "
+            "online search backend."
+        )
+    ),
+]
 
 
 @pytest.fixture(autouse=True)
