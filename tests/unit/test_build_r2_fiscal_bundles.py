@@ -1,4 +1,5 @@
 import json
+import shutil
 import sqlite3
 from pathlib import Path
 
@@ -272,13 +273,12 @@ def _copy_plaintext(plaintext_path: Path, encrypted_path: Path) -> dict:
     safe_plaintext_path = _resolve_test_bundle_path(plaintext_path, bundle_dir)
     safe_encrypted_path = _resolve_test_bundle_path(encrypted_path, bundle_dir)
 
-    safe_encrypted_path.write_bytes(safe_plaintext_path.read_bytes())
-    payload = safe_encrypted_path.read_bytes()
+    shutil.copyfile(safe_plaintext_path, safe_encrypted_path)  # NOSONAR
     return {
         "sha256": "plain-sha",
         "encrypted_sha256": "encrypted-sha",
         "salt": "salt",
-        "size_bytes": len(payload),
+        "size_bytes": safe_encrypted_path.stat().st_size,
         "chunks": 1,
     }
 

@@ -57,6 +57,8 @@ CHUNK_SIZE = 65536  # 64 KB per encrypted chunk
 PBKDF2_ITERATIONS = 600_000
 MAGIC = b"FCDB"  # File magic bytes
 FORMAT_VERSION = 1
+VERSION_TIMESTAMP_FORMAT = "%Y.%m.%d.%H%M%S"
+BUILT_AT_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 # The app seed is delivered by the authenticated token endpoint and is not
 # embedded in the frontend bundle.
 
@@ -198,8 +200,8 @@ def _initialize_output_db(output_path: Path) -> sqlite3.Connection:
 
 
 def _create_db_metadata(cursor: sqlite3.Cursor, source: str) -> tuple[str, str]:
-    version = time.strftime("%Y.%m.%d.%H%M%S", time.gmtime())
-    built_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    version = time.strftime(VERSION_TIMESTAMP_FORMAT, time.gmtime())
+    built_at = time.strftime(BUILT_AT_TIMESTAMP_FORMAT, time.gmtime())
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS db_metadata (
             key TEXT PRIMARY KEY,
@@ -250,12 +252,12 @@ def _read_output_metadata(output_path: Path) -> tuple[str, str]:
     version = (
         version_row[0]
         if version_row
-        else time.strftime("%Y.%m.%d.%H%M%S", time.gmtime())
+        else time.strftime(VERSION_TIMESTAMP_FORMAT, time.gmtime())
     )
     built_at = (
         built_row[0]
         if built_row
-        else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        else time.strftime(BUILT_AT_TIMESTAMP_FORMAT, time.gmtime())
     )
     return version, built_at
 
@@ -557,12 +559,12 @@ def _consolidate_databases(output_path: Path) -> None:
     conn.commit()
 
     # === Insert metadata ===
-    version = time.strftime("%Y.%m.%d.%H%M%S", time.gmtime())
+    version = time.strftime(VERSION_TIMESTAMP_FORMAT, time.gmtime())
     cursor.executemany(
         "INSERT INTO db_metadata (key, value) VALUES (?, ?)",
         [
             ("version", version),
-            ("built_at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
+            ("built_at", time.strftime(BUILT_AT_TIMESTAMP_FORMAT, time.gmtime())),
         ],
     )
     conn.commit()
@@ -1118,7 +1120,7 @@ def main() -> int:
     version = (
         version_row[0]
         if version_row
-        else time.strftime("%Y.%m.%d.%H%M%S", time.gmtime())
+        else time.strftime(VERSION_TIMESTAMP_FORMAT, time.gmtime())
     )
 
     cursor.execute("SELECT value FROM db_metadata WHERE key = 'built_at'")
@@ -1126,7 +1128,7 @@ def main() -> int:
     built_at = (
         built_row[0]
         if built_row
-        else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        else time.strftime(BUILT_AT_TIMESTAMP_FORMAT, time.gmtime())
     )
     conn.close()
 
