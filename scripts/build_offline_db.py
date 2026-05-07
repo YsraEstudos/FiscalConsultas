@@ -609,7 +609,9 @@ def _consolidate_databases(output_path: Path) -> None:
 
 def _require_source_db(source: str, db_path: Path) -> None:
     if not db_path.exists():
-        raise RuntimeError(f"Missing required {source.upper()} DB input: {db_path.name}")
+        raise RuntimeError(
+            f"Missing required {source.upper()} DB input: {db_path.name}"
+        )
 
 
 def _consolidate_nbs_database(output_path: Path) -> None:
@@ -1072,7 +1074,9 @@ def build_source_bundle(
     consolidator = SOURCE_CONSOLIDATORS.get(source_id)
     if consolidator is None:
         supported = ", ".join(sorted(SOURCE_CONSOLIDATORS))
-        raise ValueError(f"Unsupported fiscal source '{source}'. Expected one of: {supported}")
+        raise ValueError(
+            f"Unsupported fiscal source '{source}'. Expected one of: {supported}"
+        )
 
     encrypted_path.parent.mkdir(parents=True, exist_ok=True)
     metadata_path.parent.mkdir(parents=True, exist_ok=True)

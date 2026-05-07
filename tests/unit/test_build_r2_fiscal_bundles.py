@@ -45,14 +45,20 @@ def test_build_source_bundle_metadata_excludes_app_seed(
 
 def test_legacy_main_metadata_excludes_app_seed(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(build_offline_db, "OUTPUT_DB", tmp_path / "fiscal_offline.db")
-    monkeypatch.setattr(build_offline_db, "OUTPUT_ENCRYPTED", tmp_path / "fiscal_offline.enc")
-    monkeypatch.setattr(build_offline_db, "OUTPUT_META", tmp_path / "fiscal_offline.meta")
+    monkeypatch.setattr(
+        build_offline_db, "OUTPUT_ENCRYPTED", tmp_path / "fiscal_offline.enc"
+    )
+    monkeypatch.setattr(
+        build_offline_db, "OUTPUT_META", tmp_path / "fiscal_offline.meta"
+    )
     monkeypatch.setattr(build_offline_db, "_consolidate_databases", _create_metadata_db)
     monkeypatch.setattr(build_offline_db, "_encrypt_database", _copy_plaintext)
 
     assert build_offline_db.main() == 0
 
-    metadata = json.loads((tmp_path / "fiscal_offline.meta").read_text(encoding="utf-8"))
+    metadata = json.loads(
+        (tmp_path / "fiscal_offline.meta").read_text(encoding="utf-8")
+    )
     assert "app_seed" not in metadata
 
 
@@ -195,7 +201,9 @@ def test_populated_unspsc_uses_safe_fallbacks_for_missing_optional_columns(
 def test_build_all_builds_each_source_with_resolved_paths(tmp_path: Path, monkeypatch):
     calls = []
 
-    def fake_build_source_bundle(source: str, encrypted_path: Path, metadata_path: Path):
+    def fake_build_source_bundle(
+        source: str, encrypted_path: Path, metadata_path: Path
+    ):
         calls.append((source, encrypted_path, metadata_path))
         return build_offline_db.OfflineBundleOutput(
             source=source,
