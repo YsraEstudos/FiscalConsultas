@@ -19,6 +19,7 @@ import {
     OFFLINE_CHANNEL_NAME,
     primeOfflineShellCache,
 } from '../offlineDatabaseSync';
+import { isFiscalSourceId } from '../offlineSources';
 import type {
     OfflineDatabaseChannelMessage,
     OfflineDatabaseInitResult,
@@ -26,6 +27,8 @@ import type {
     OfflineDatabaseWorkerRequest,
     OfflineDatabaseWorkerResponse,
 } from '../offlineDatabase.types';
+
+const LEGACY_MONOLITHIC_BUNDLE_SOURCE = 'nesh';
 
 type UseOfflineDatabaseBroadcastChannelArgs = {
     isSupported: boolean;
@@ -50,6 +53,16 @@ type UseOfflineDatabaseBroadcastChannelArgs = {
     setDbSizeBytes: Dispatch<SetStateAction<number | null>>;
 };
 
+type LegacyOfflineDatabaseChannelMessage =
+    OfflineDatabaseChannelMessage extends infer Message
+        ? Message extends { senderId: string; source: unknown }
+            ? Omit<Message, 'senderId' | 'source'> & {
+                source: string;
+                senderId?: string;
+            }
+            : never
+        : never;
+
 export function useOfflineDatabaseBroadcastChannel({
     isSupported,
     instanceId,
@@ -68,6 +81,7 @@ export function useOfflineDatabaseBroadcastChannel({
     setDbSizeBytes,
 }: UseOfflineDatabaseBroadcastChannelArgs) {
     const channelRef = useRef<BroadcastChannel | null>(null);
+    const activeSourceRef = useRef(LEGACY_MONOLITHIC_BUNDLE_SOURCE);
 
     const broadcast = useCallback((message: OfflineDatabaseChannelMessage) => {
         channelRef.current?.postMessage(message);
@@ -79,9 +93,15 @@ export function useOfflineDatabaseBroadcastChannel({
         const channel = new BroadcastChannel(OFFLINE_CHANNEL_NAME);
         channelRef.current = channel;
 
-        channel.onmessage = (event: MessageEvent<OfflineDatabaseChannelMessage>) => {
+        channel.onmessage = (event: MessageEvent<LegacyOfflineDatabaseChannelMessage>) => {
             const message = event.data;
-            if (!message || message.senderId === instanceId) return;
+            if (!message || (message.senderId ?? message.source) === instanceId) return;
+            if (
+                isFiscalSourceId(message.source)
+                && message.source !== activeSourceRef.current
+            ) {
+                return;
+            }
 
             if (message.type === 'INSTALLING') {
                 const nextStatus =
@@ -125,7 +145,9 @@ export function useOfflineDatabaseBroadcastChannel({
                                 {
                                     type: 'REMOVE',
                                     id: null,
-                                    payload: { source: message.source },
+                                    payload: isFiscalSourceId(message.source)
+                                        ? { source: message.source }
+                                        : {},
                                 },
                                 10_000,
                             );

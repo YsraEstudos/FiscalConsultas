@@ -25,6 +25,71 @@ function isFiscalSourceId(value) {
   return typeof value === "string" && FISCAL_SOURCE_IDS.has(value);
 }
 
+const OFFLINE_FETCH_TIMEOUT_MS = 60_000;
+
+function getCurrentOrigin() {
+  return globalThis.self?.location?.origin || globalThis.location?.origin || "";
+}
+
+function resolveNetworkTarget(url) {
+  try {
+    const resolvedUrl = new URL(url, getCurrentOrigin() || undefined);
+    return {
+      origin: resolvedUrl.origin,
+      path: `${resolvedUrl.pathname}${resolvedUrl.search}`,
+    };
+  } catch {
+    return {
+      origin: String(url),
+      path: "",
+    };
+  }
+}
+
+export function buildOfflineDatabaseNetworkErrorMessage(url, action = "request") {
+  const target = resolveNetworkTarget(url);
+  const targetLabel = `${target.origin}${target.path}`;
+
+  const currentOrigin = getCurrentOrigin() || "esta origem";
+  const actionLabels = {
+    version: "consultar a versão do banco offline",
+    token: "solicitar o token do banco offline",
+    download: "baixar o banco offline",
+    request: "acessar o banco offline",
+  };
+  const actionLabel = actionLabels[action] || actionLabels.request;
+
+  return `Não foi possível ${actionLabel} em ${targetLabel}. Verifique se o backend permite esta origem: ${currentOrigin}.`;
+}
+
+export async function fetchWithTimeout(
+  url,
+  options = {},
+  timeoutMs = OFFLINE_FETCH_TIMEOUT_MS,
+  action = "request"
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(buildOfflineDatabaseNetworkErrorMessage(url, action), {
+        cause: error,
+      });
+    }
+    throw new Error(buildOfflineDatabaseNetworkErrorMessage(url, action), {
+      cause: error,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function handleInitMessage(id, payload) {
   const source = isFiscalSourceId(payload?.source) ? payload.source : null;
   const encData = source ? await readSourceFromOpfs(source) : await readFromOpfs();
@@ -116,10 +181,10 @@ async function readEncryptedDatabaseBlob(dlResp, id) {
 }
 
 async function requestInstallToken(apiBase) {
-  const tokenResp = await fetch(`${apiBase}/database/token`, {
+  const tokenResp = await fetchWithTimeout(`${apiBase}/database/token`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-  });
+  }, OFFLINE_FETCH_TIMEOUT_MS, "token");
 
   if (tokenResp.ok) {
     return tokenResp.json();
@@ -130,17 +195,23 @@ async function requestInstallToken(apiBase) {
 }
 
 async function fetchEncryptedDatabase(apiBase, token) {
-  const dlResp = await fetch(`${apiBase}/database/download`, {
+  const dlResp = await fetchWithTimeout(`${apiBase}/database/download`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token }),
-  });
+  }, OFFLINE_FETCH_TIMEOUT_MS, "download");
 
   if (dlResp.ok) {
     return dlResp;
   }
 
   const errText = await dlResp.text();
+  if (dlResp.status === 403) {
+    throw new Error(
+      `O token temporário do banco offline expirou ou foi recusado pelo servidor (${dlResp.status}). Tente instalar novamente.`
+    );
+  }
+
   throw new Error(
     `Offline database retrieval failed (${dlResp.status}): ${errText}`
   );
@@ -191,12 +262,8 @@ function getSourceAwareInstallPayloadIntent(payload) {
   return Boolean(
     payload
       && typeof payload === "object"
-      && (
-        "source" in payload
-        || "r2BaseUrl" in payload
-        || "publicSeed" in payload
-        || "metadata" in payload
-      )
+      && "source" in payload
+      && "r2BaseUrl" in payload
   );
 }
 
@@ -252,7 +319,12 @@ async function updateInstalledVersion(apiBase) {
   let nextVersion = null;
 
   try {
-    const versionResp = await fetch(`${apiBase}/database/version`);
+    const versionResp = await fetchWithTimeout(
+      `${apiBase}/database/version`,
+      {},
+      OFFLINE_FETCH_TIMEOUT_MS,
+      "version"
+    );
     if (versionResp.ok) {
       const versionData = await versionResp.json();
       nextVersion = versionData.version;
@@ -308,7 +380,6 @@ async function handleSourceAwareInstallMessage(id, payload) {
     postWorkerProgress(id, 90, "saving");
     await removeSourceFromOpfs(source);
     try {
-      setAppSeed(publicSeed);
       await saveSourceToOpfs(source, encryptedBlob);
       await saveSourceVersion(source, metadata.version || "unknown");
     } catch (error) {

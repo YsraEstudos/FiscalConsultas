@@ -20,6 +20,20 @@ export interface OfflineSourceMetadata extends OfflineDatabaseMetadata {
   encrypted_sha256: string;
 }
 
+export function isOfflineSourceMetadata(
+  metadata: unknown
+): metadata is OfflineSourceMetadata {
+  return Boolean(
+    metadata
+      && typeof metadata === "object"
+      && "source" in metadata
+      && isFiscalSourceId((metadata as { source?: unknown }).source)
+      && "encrypted_sha256" in metadata
+      && typeof (metadata as { encrypted_sha256?: unknown }).encrypted_sha256 === "string"
+      && (metadata as { encrypted_sha256: string }).encrypted_sha256.trim()
+  );
+}
+
 export function compareOfflineVersions(
   left: string | null | undefined,
   right: string | null | undefined
@@ -64,6 +78,31 @@ export function formatOfflineDatabaseErrorMessage(
   return fallbackMessage;
 }
 
+export function buildOfflineDatabaseNetworkErrorMessage(
+  url: string,
+  action: "version" | "token" | "download" | "request" = "request"
+): string {
+  let targetOrigin = url;
+  try {
+    targetOrigin = new URL(url, globalThis.location?.href).origin;
+  } catch {
+    // Keep the original value when it is not URL-like.
+  }
+
+  const currentOrigin =
+    typeof globalThis.location !== "undefined"
+      ? globalThis.location.origin
+      : "esta origem";
+  const actionLabel = {
+    version: "consultar a versão do banco offline",
+    token: "solicitar o token do banco offline",
+    download: "baixar o banco offline",
+    request: "acessar o banco offline",
+  }[action];
+
+  return `Não foi possível ${actionLabel} em ${targetOrigin}. Verifique se o backend permite esta origem: ${currentOrigin}.`;
+}
+
 export function sanitizeOfflineMetadata(
   metadata: Partial<OfflineDatabaseMetadata> | null | undefined
 ): OfflineDatabaseMetadata | null {
@@ -93,12 +132,12 @@ export function sanitizeOfflineSourceMetadata(
   }
 
   const sanitized = sanitizeOfflineMetadata(metadata);
-  if (!sanitized?.encrypted_sha256) return null;
+  if (!sanitized) return null;
 
   return {
     ...sanitized,
     source,
-    encrypted_sha256: sanitized.encrypted_sha256,
+    encrypted_sha256: sanitized.encrypted_sha256!,
   };
 }
 

@@ -21,8 +21,15 @@ export function isFiscalSourceId(value: unknown): value is FiscalSourceId {
 }
 
 export function normalizeFiscalR2BaseUrl(value: string | undefined): string {
-  const normalizedValue = (value || '').trim().replace(/\/+$/, '');
-  return normalizedValue || '/fiscal-bases';
+  return trimTrailingSlashes((value || '').trim());
+}
+
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return value.slice(0, end);
 }
 
 export function buildFiscalBundleUrls(
@@ -30,6 +37,9 @@ export function buildFiscalBundleUrls(
   source: FiscalSourceId,
 ): FiscalBundleUrls {
   const normalizedBaseUrl = normalizeFiscalR2BaseUrl(baseUrl);
+  if (!normalizedBaseUrl) {
+    throw new Error('baseUrl is required for fiscal bundle URLs');
+  }
 
   return {
     metadataUrl: `${normalizedBaseUrl}/${source}/${source}.meta.json`,
