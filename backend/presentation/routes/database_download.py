@@ -9,6 +9,9 @@ Provides:
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -57,9 +60,10 @@ _TOKEN_LIMIT_PER_HOUR = 3
 # ---------------------------------------------------------------------------
 _TOKEN_TTL_SECONDS = 300  # 5 minutes
 _REDIS_TOKEN_PREFIX = "dbtoken:"
+_SIGNED_TOKEN_PREFIX = "v1"
 
 # In-memory token store (fallback when Redis unavailable)
-_memory_tokens: dict[str, tuple[float, str]] = {}  # jti -> (created_at, client_ip)
+_memory_tokens: dict[str, float] = {}  # jti -> created_at
 _MEMORY_TOKEN_MAX = 100
 _OFFLINE_UNAVAILABLE_DETAIL = "Offline database not available"
 
@@ -98,6 +102,76 @@ def _load_metadata() -> dict | None:
 
 def _generate_token_jti() -> str:
     return secrets.token_urlsafe(32)
+
+
+def _b64url_encode(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def _get_signed_token_secret(meta: dict) -> str:
+    secret = (
+        os.environ.get("OFFLINE_DB_TOKEN_SECRET")
+        or settings.auth.secret_key
+        or _require_app_seed(meta)
+    )
+    return secret.strip()
+
+
+def _build_signed_token_payload(issued_at: int, nonce: str, bundle_hash: str) -> str:
+    return f"{_SIGNED_TOKEN_PREFIX}.{issued_at}.{nonce}.{bundle_hash}"
+
+
+def _sign_download_token_payload(payload: str, secret: str) -> str:
+    signature = hmac.new(
+        secret.encode("utf-8"),
+        payload.encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    return _b64url_encode(signature)
+
+
+def _generate_signed_download_token(meta: dict) -> str:
+    bundle_hash = str(meta.get("encrypted_sha256") or meta.get("sha256") or "")
+    issued_at = int(time.time())
+    nonce = secrets.token_urlsafe(24)
+    payload = _build_signed_token_payload(issued_at, nonce, bundle_hash)
+    signature = _sign_download_token_payload(payload, _get_signed_token_secret(meta))
+    return f"{payload}.{signature}"
+
+
+def _is_valid_signed_download_token(token: str) -> bool:
+    parts = token.split(".")
+    if len(parts) != 5 or parts[0] != _SIGNED_TOKEN_PREFIX:
+        return False
+
+    _, issued_at_raw, nonce, bundle_hash, supplied_signature = parts
+    if not nonce or not bundle_hash or not supplied_signature:
+        return False
+
+    try:
+        issued_at = int(issued_at_raw)
+    except ValueError:
+        return False
+
+    now = int(time.time())
+    if issued_at > now + 30 or now - issued_at > _TOKEN_TTL_SECONDS:
+        return False
+
+    meta = _load_metadata()
+    if meta is None:
+        return False
+
+    expected_bundle_hash = str(meta.get("encrypted_sha256") or meta.get("sha256") or "")
+    if not expected_bundle_hash or not secrets.compare_digest(
+        bundle_hash, expected_bundle_hash
+    ):
+        return False
+
+    payload = _build_signed_token_payload(issued_at, nonce, bundle_hash)
+    expected_signature = _sign_download_token_payload(
+        payload, _get_signed_token_secret(meta)
+    )
+    return hmac.compare_digest(supplied_signature, expected_signature)
 
 
 def _is_local_request(request: Request) -> bool:
@@ -157,55 +231,52 @@ def _require_app_seed(meta: dict) -> str:
     raise HTTPException(status_code=503, detail=_OFFLINE_UNAVAILABLE_DETAIL)
 
 
-async def _store_token(jti: str, client_ip: str) -> None:
-    """Store a one-time token bound to the requester's IP."""
+async def _store_token(jti: str, meta: dict, *, allow_memory_fallback: bool) -> str:
+    """Store a short-lived one-time token."""
     if redis_cache.available:
         key = f"{_REDIS_TOKEN_PREFIX}{jti}"
-        if await redis_cache.set_with_ttl(
-            key, client_ip, ttl_seconds=_TOKEN_TTL_SECONDS
-        ):
-            return
+        if await redis_cache.set_with_ttl(key, "1", ttl_seconds=_TOKEN_TTL_SECONDS):
+            return jti
+
+    if not allow_memory_fallback:
+        return _generate_signed_download_token(meta)
 
     # Memory fallback
     now = time.monotonic()
     # Cleanup expired tokens
     expired = [
         k
-        for k, (created, _) in _memory_tokens.items()
-        if now - created > _TOKEN_TTL_SECONDS
+        for k, created_at in _memory_tokens.items()
+        if now - created_at > _TOKEN_TTL_SECONDS
     ]
     for k in expired:
         del _memory_tokens[k]
     # Evict oldest if full
     if len(_memory_tokens) >= _MEMORY_TOKEN_MAX:
-        oldest_key = min(_memory_tokens, key=lambda k: _memory_tokens[k][0])
+        oldest_key = min(_memory_tokens, key=lambda k: _memory_tokens[k])
         del _memory_tokens[oldest_key]
 
-    _memory_tokens[jti] = (now, client_ip)
+    _memory_tokens[jti] = now
+    return jti
 
 
-async def _consume_token(jti: str, client_ip: str) -> bool:
+async def _consume_token(jti: str) -> bool:
     """Verify and consume a one-time token. Returns True if valid."""
+    if _is_valid_signed_download_token(jti):
+        return True
+
     if redis_cache.available:
         key = f"{_REDIS_TOKEN_PREFIX}{jti}"
-        stored_ip = await redis_cache.consume_once(key)
-        if stored_ip is None:
-            return False
-        if isinstance(stored_ip, bytes):
-            stored_ip = stored_ip.decode("utf-8", errors="ignore")
-        return str(stored_ip) == client_ip
+        return await redis_cache.consume_once(key) is not None
 
     # Memory fallback
     now = time.monotonic()
-    entry = _memory_tokens.get(jti)
-    if entry is None:
+    created_at = _memory_tokens.get(jti)
+    if created_at is None:
         return False
-    created_at, stored_ip = entry
     if now - created_at > _TOKEN_TTL_SECONDS:
         _memory_tokens.pop(jti, None)
         return False  # Expired
-    if stored_ip != client_ip:
-        return False
     _memory_tokens.pop(jti, None)
     return True
 
@@ -271,10 +342,12 @@ async def create_download_token(request: Request):
 
     app_seed = _require_app_seed(meta)
     jti = _generate_token_jti()
-    await _store_token(jti, client_ip)
+    token = await _store_token(
+        jti, meta, allow_memory_fallback=_is_local_request(request)
+    )
 
     return {
-        "token": jti,
+        "token": token,
         "app_seed": app_seed,
         "version": meta.get("version"),
         "sha256": meta.get("sha256"),
@@ -302,7 +375,7 @@ async def download_database(
     if not token:
         raise HTTPException(status_code=400, detail="Invalid token format")
 
-    is_valid = await _consume_token(token, extract_client_ip(request))
+    is_valid = await _consume_token(token)
     if not is_valid:
         raise HTTPException(
             status_code=403,

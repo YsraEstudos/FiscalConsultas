@@ -323,6 +323,10 @@ export async function openSettings(page: Page) {
 
 export async function installOfflineFromSettings(page: Page, timeout = 15_000) {
   await openSettings(page);
+  if (await page.getByText(/Pronta/).isVisible().catch(() => false)) {
+    return;
+  }
+
   const installButton = page.locator('#db-installer-install');
   await expect(installButton).toBeVisible({ timeout });
   await installButton.click();
@@ -342,4 +346,35 @@ export async function expectOfflineMetadataPersisted(page: Page) {
   await expect.poll(async () => (
     page.evaluate(() => Boolean(globalThis.localStorage.getItem('offline-db:installed-meta')))
   )).toBe(true);
+}
+
+export async function expectOfflineAutoInstalled(page: Page, timeout = 15_000) {
+  await expect.poll(async () => (
+    page.evaluate(() => Boolean(globalThis.localStorage.getItem('offline-db:installed-meta')))
+  ), { timeout }).toBe(true);
+  await openSettings(page);
+  await expect(page.getByText(/Pronta/)).toBeVisible({ timeout });
+  await expect(page.locator('#db-installer-install')).not.toBeVisible();
+}
+
+export async function seedFreshOfflineInstallLease(
+  page: Page,
+  owner = 'abandoned-tab',
+) {
+  await page.addInitScript(({ ownerName }) => {
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: undefined,
+    });
+    localStorage.setItem(
+      'offline-db:install-lock',
+      JSON.stringify({
+        owner: ownerName,
+        attempt: 1,
+        startedAt: Date.now(),
+        refreshedAt: Date.now(),
+        expiresAt: Date.now() + 180_000,
+      }),
+    );
+  }, { ownerName: owner });
 }
