@@ -234,6 +234,18 @@ def test_build_all_builds_each_source_with_resolved_paths(tmp_path: Path, monkey
     ]
 
 
+def test_copy_plaintext_rejects_output_outside_test_bundle_dir(tmp_path: Path):
+    plaintext_path = tmp_path / "unspsc.db"
+    plaintext_path.write_bytes(b"bundle")
+
+    try:
+        _copy_plaintext(plaintext_path, tmp_path.parent / "unspsc.enc")
+    except ValueError as exc:
+        assert str(exc) == "Test bundle paths must stay in the same directory"
+    else:
+        raise AssertionError("Expected path validation failure")
+
+
 def _create_metadata_db(output_path: Path) -> None:
     conn = sqlite3.connect(output_path)
     try:
@@ -256,8 +268,12 @@ def _create_metadata_db(output_path: Path) -> None:
 
 
 def _copy_plaintext(plaintext_path: Path, encrypted_path: Path) -> dict:
-    encrypted_path.write_bytes(plaintext_path.read_bytes())
-    payload = encrypted_path.read_bytes()
+    bundle_dir = plaintext_path.parent.resolve()
+    safe_plaintext_path = _resolve_test_bundle_path(plaintext_path, bundle_dir)
+    safe_encrypted_path = _resolve_test_bundle_path(encrypted_path, bundle_dir)
+
+    safe_encrypted_path.write_bytes(safe_plaintext_path.read_bytes())
+    payload = safe_encrypted_path.read_bytes()
     return {
         "sha256": "plain-sha",
         "encrypted_sha256": "encrypted-sha",
@@ -265,6 +281,13 @@ def _copy_plaintext(plaintext_path: Path, encrypted_path: Path) -> dict:
         "size_bytes": len(payload),
         "chunks": 1,
     }
+
+
+def _resolve_test_bundle_path(path: Path, bundle_dir: Path) -> Path:
+    resolved_path = path.resolve(strict=False)
+    if not resolved_path.is_relative_to(bundle_dir):
+        raise ValueError("Test bundle paths must stay in the same directory")
+    return resolved_path
 
 
 def _fail_encryption(plaintext_path: Path, encrypted_path: Path) -> dict:

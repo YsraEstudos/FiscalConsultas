@@ -465,28 +465,9 @@ def _consolidate_databases(output_path: Path) -> None:
     """)
     has_notes_table = cursor.fetchone() is not None
 
-    notes_by_chapter: dict[str, sqlite3.Row] = {}
-    if has_notes_table:
-        for row in conn.execute("""
-            SELECT chapter_num, notes_content, titulo, notas,
-                   consideracoes, definicoes, parsed_notes_json
-            FROM nesh.chapter_notes
-            """):
-            notes_by_chapter[str(row["chapter_num"])] = row
-
-    positions_by_chapter: dict[str, list[sqlite3.Row]] = {}
-    for row in conn.execute("""
-        SELECT chapter_num, codigo, descricao
-        FROM nesh.positions
-        ORDER BY chapter_num, codigo
-        """):
-        positions_by_chapter.setdefault(str(row["chapter_num"]), []).append(row)
-
-    chapter_rows = conn.execute("""
-        SELECT chapter_num, content
-        FROM nesh.chapters
-        ORDER BY chapter_num
-        """).fetchall()
+    notes_by_chapter, positions_by_chapter, chapter_rows = _load_nesh_render_context(
+        conn, has_notes_table
+    )
     cursor.executemany(
         """
         INSERT OR IGNORE INTO nesh_chapters (chapter_num, content, rendered_html)
@@ -606,6 +587,35 @@ def _consolidate_databases(output_path: Path) -> None:
 
     size_kb = output_path.stat().st_size / 1024
     _log(f"Consolidated DB: {size_kb:.1f} KB")
+
+
+def _load_nesh_render_context(
+    conn: sqlite3.Connection,
+    has_notes_table: bool,
+) -> tuple[dict[str, sqlite3.Row], dict[str, list[sqlite3.Row]], list[sqlite3.Row]]:
+    notes_by_chapter: dict[str, sqlite3.Row] = {}
+    if has_notes_table:
+        for row in conn.execute("""
+            SELECT chapter_num, notes_content, titulo, notas,
+                   consideracoes, definicoes, parsed_notes_json
+            FROM nesh.chapter_notes
+            """):
+            notes_by_chapter[str(row["chapter_num"])] = row
+
+    positions_by_chapter: dict[str, list[sqlite3.Row]] = {}
+    for row in conn.execute("""
+        SELECT chapter_num, codigo, descricao
+        FROM nesh.positions
+        ORDER BY chapter_num, codigo
+        """):
+        positions_by_chapter.setdefault(str(row["chapter_num"]), []).append(row)
+
+    chapter_rows = conn.execute("""
+        SELECT chapter_num, content
+        FROM nesh.chapters
+        ORDER BY chapter_num
+        """).fetchall()
+    return notes_by_chapter, positions_by_chapter, chapter_rows
 
 
 def _require_source_db(source: str, db_path: Path) -> None:
@@ -801,28 +811,9 @@ def _consolidate_nesh_database(output_path: Path) -> None:
     """)
     has_notes_table = cursor.fetchone() is not None
 
-    notes_by_chapter: dict[str, sqlite3.Row] = {}
-    if has_notes_table:
-        for row in conn.execute("""
-            SELECT chapter_num, notes_content, titulo, notas,
-                   consideracoes, definicoes, parsed_notes_json
-            FROM nesh.chapter_notes
-            """):
-            notes_by_chapter[str(row["chapter_num"])] = row
-
-    positions_by_chapter: dict[str, list[sqlite3.Row]] = {}
-    for row in conn.execute("""
-        SELECT chapter_num, codigo, descricao
-        FROM nesh.positions
-        ORDER BY chapter_num, codigo
-        """):
-        positions_by_chapter.setdefault(str(row["chapter_num"]), []).append(row)
-
-    chapter_rows = conn.execute("""
-        SELECT chapter_num, content
-        FROM nesh.chapters
-        ORDER BY chapter_num
-        """).fetchall()
+    notes_by_chapter, positions_by_chapter, chapter_rows = _load_nesh_render_context(
+        conn, has_notes_table
+    )
     cursor.executemany(
         """
         INSERT OR IGNORE INTO nesh_chapters (chapter_num, content, rendered_html)
