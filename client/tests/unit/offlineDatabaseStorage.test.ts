@@ -2,14 +2,90 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildOfflineDatabaseInitPayload,
+  claimOfflineDatabaseInstallLease,
+  clearOfflineDatabaseAutoInstallOptOut,
   clearOfflineDatabaseInstallLock,
+  getOfflineDatabaseSupportReport,
   getOfflineDatabaseInstallLock,
+  hasOfflineDatabaseAutoInstallOptOut,
+  isOfflineDatabaseSupported,
+  OFFLINE_AUTO_INSTALL_OPT_OUT_KEY,
   OFFLINE_LOCK_KEY,
   OFFLINE_META_KEY,
   persistStoredOfflineDatabaseMetadata,
   readStoredOfflineDatabaseMetadata,
+  refreshOfflineDatabaseInstallLease,
+  releaseOfflineDatabaseInstallLease,
+  setOfflineDatabaseAutoInstallOptOut,
   setOfflineDatabaseInstallLock,
 } from '../../src/context/offlineDatabaseStorage';
+
+const originalNavigatorStorageDescriptor = Object.getOwnPropertyDescriptor(
+  navigator,
+  'storage',
+);
+const originalNavigatorServiceWorkerDescriptor = Object.getOwnPropertyDescriptor(
+  navigator,
+  'serviceWorker',
+);
+
+type OfflineSupportStubOptions = {
+  sharedArrayBuffer?: boolean;
+  worker?: boolean;
+  webCrypto?: boolean;
+  opfs?: boolean;
+  serviceWorker?: boolean;
+  secureContext?: boolean;
+  isolated?: boolean;
+};
+
+function restoreNavigatorProperty(
+  property: 'storage' | 'serviceWorker',
+  descriptor: PropertyDescriptor | undefined,
+) {
+  if (descriptor) {
+    Object.defineProperty(navigator, property, descriptor);
+    return;
+  }
+
+  Reflect.deleteProperty(navigator, property);
+}
+
+function stubOfflineSupport({
+  sharedArrayBuffer = true,
+  worker = true,
+  webCrypto = true,
+  opfs = true,
+  serviceWorker = true,
+  secureContext = true,
+  isolated = true,
+}: OfflineSupportStubOptions = {}) {
+  vi.stubGlobal('isSecureContext', secureContext);
+  vi.stubGlobal('crossOriginIsolated', isolated);
+
+  if (sharedArrayBuffer) {
+    vi.stubGlobal('SharedArrayBuffer', class SharedArrayBufferMock {});
+  } else {
+    vi.stubGlobal('SharedArrayBuffer', undefined);
+  }
+
+  if (worker) {
+    vi.stubGlobal('Worker', class WorkerMock {});
+  } else {
+    vi.stubGlobal('Worker', undefined);
+  }
+
+  vi.stubGlobal('crypto', webCrypto ? { subtle: {} } : {});
+
+  Object.defineProperty(navigator, 'storage', {
+    configurable: true,
+    value: opfs ? { getDirectory: vi.fn() } : {},
+  });
+  Object.defineProperty(navigator, 'serviceWorker', {
+    configurable: true,
+    value: serviceWorker ? {} : undefined,
+  });
+}
 
 describe('offlineDatabaseStorage', () => {
   beforeEach(() => {
@@ -18,6 +94,12 @@ describe('offlineDatabaseStorage', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
+    restoreNavigatorProperty('storage', originalNavigatorStorageDescriptor);
+    restoreNavigatorProperty(
+      'serviceWorker',
+      originalNavigatorServiceWorkerDescriptor,
+    );
   });
 
   it('persists and reads sanitized offline metadata', () => {
@@ -73,6 +155,47 @@ describe('offlineDatabaseStorage', () => {
     expect(getOfflineDatabaseInstallLock()).toBeNull();
   });
 
+  it('claims, refreshes, expires, and releases the install lease by owner', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-05T12:00:00Z'));
+
+    const firstClaim = claimOfflineDatabaseInstallLease('tab-a');
+    expect(firstClaim.acquired).toBe(true);
+    expect(firstClaim.lease?.owner).toBe('tab-a');
+    expect(firstClaim.lease?.attempt).toBe(1);
+
+    const blockedClaim = claimOfflineDatabaseInstallLease('tab-b');
+    expect(blockedClaim.acquired).toBe(false);
+    expect(blockedClaim.lease?.owner).toBe('tab-a');
+
+    vi.advanceTimersByTime(60_000);
+    expect(refreshOfflineDatabaseInstallLease('tab-a')).toBe(true);
+    expect(refreshOfflineDatabaseInstallLease('tab-b')).toBe(false);
+
+    vi.advanceTimersByTime(181_000);
+    const takeoverClaim = claimOfflineDatabaseInstallLease('tab-b');
+    expect(takeoverClaim.acquired).toBe(true);
+    expect(takeoverClaim.lease?.owner).toBe('tab-b');
+    expect(takeoverClaim.lease?.attempt).toBe(2);
+
+    releaseOfflineDatabaseInstallLease('tab-a');
+    expect(claimOfflineDatabaseInstallLease('tab-c').acquired).toBe(false);
+
+    releaseOfflineDatabaseInstallLease('tab-b');
+    expect(claimOfflineDatabaseInstallLease('tab-c').acquired).toBe(true);
+  });
+
+  it('persists an auto-install opt-out until explicit install clears it', () => {
+    expect(hasOfflineDatabaseAutoInstallOptOut()).toBe(false);
+
+    setOfflineDatabaseAutoInstallOptOut();
+    expect(localStorage.getItem(OFFLINE_AUTO_INSTALL_OPT_OUT_KEY)).toBe('true');
+    expect(hasOfflineDatabaseAutoInstallOptOut()).toBe(true);
+
+    clearOfflineDatabaseAutoInstallOptOut();
+    expect(hasOfflineDatabaseAutoInstallOptOut()).toBe(false);
+  });
+
   it('builds init payload from metadata or defaults', () => {
     expect(buildOfflineDatabaseInitPayload(null)).toEqual({
       chunkSize: 65536,
@@ -91,5 +214,73 @@ describe('offlineDatabaseStorage', () => {
       chunkSize: 4096,
       pbkdf2Iterations: 750000,
     });
+  });
+
+  it('reports Edge or Chromium with required browser primitives as supported', () => {
+    stubOfflineSupport();
+
+    expect(isOfflineDatabaseSupported()).toBe(true);
+    expect(getOfflineDatabaseSupportReport()).toEqual({
+      supported: true,
+      missingFeatures: [],
+      canRecoverWithIsolationReload: false,
+      isSecureContext: true,
+      crossOriginIsolated: true,
+    });
+  });
+
+  it('treats missing SharedArrayBuffer in a secure service-worker origin as recoverable', () => {
+    stubOfflineSupport({
+      sharedArrayBuffer: false,
+      isolated: false,
+    });
+
+    expect(isOfflineDatabaseSupported()).toBe(false);
+    expect(getOfflineDatabaseSupportReport()).toEqual({
+      supported: false,
+      missingFeatures: ['cross-origin-isolation', 'shared-array-buffer'],
+      canRecoverWithIsolationReload: true,
+      isSecureContext: true,
+      crossOriginIsolated: false,
+    });
+  });
+
+  it('does not treat a SharedArrayBuffer failure as recoverable when already isolated', () => {
+    stubOfflineSupport({
+      sharedArrayBuffer: false,
+      isolated: true,
+    });
+
+    expect(getOfflineDatabaseSupportReport()).toMatchObject({
+      supported: false,
+      canRecoverWithIsolationReload: false,
+      crossOriginIsolated: true,
+    });
+  });
+
+  it('reports insecure origins as a non-recoverable missing feature', () => {
+    stubOfflineSupport({
+      sharedArrayBuffer: false,
+      secureContext: false,
+      isolated: false,
+    });
+
+    expect(getOfflineDatabaseSupportReport()).toMatchObject({
+      supported: false,
+      canRecoverWithIsolationReload: false,
+      isSecureContext: false,
+      crossOriginIsolated: false,
+    });
+    expect(getOfflineDatabaseSupportReport().missingFeatures).toContain('secure-context');
+  });
+
+  it('reports missing OPFS as a non-recoverable missing feature', () => {
+    stubOfflineSupport({ opfs: false });
+
+    expect(getOfflineDatabaseSupportReport()).toMatchObject({
+      supported: false,
+      canRecoverWithIsolationReload: false,
+    });
+    expect(getOfflineDatabaseSupportReport().missingFeatures).toContain('opfs');
   });
 });

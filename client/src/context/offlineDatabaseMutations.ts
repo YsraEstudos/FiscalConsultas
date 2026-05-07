@@ -6,13 +6,13 @@ import {
 } from '../utils/offlineDatabase';
 
 import {
-    clearOfflineDatabaseInstallLock,
-    getOfflineDatabaseInstallLock,
+    clearOfflineDatabaseAutoInstallOptOut,
     persistStoredOfflineDatabaseMetadata,
     readStoredOfflineDatabaseMetadata,
     runOfflineDatabaseTaskInBackground,
-    setOfflineDatabaseInstallLock,
+    setOfflineDatabaseAutoInstallOptOut,
 } from './offlineDatabaseStorage';
+import { runCoordinatedOfflineDatabaseInstall } from './offlineDatabaseInstallCoordinator';
 import { getOfflineDatabaseApiBaseUrl, primeOfflineShellCache } from './offlineDatabaseSync';
 import type { OfflineDatabaseOperations } from './offlineDatabaseOperations.shared';
 import type { OfflineDatabaseOperationsArgs } from './offlineDatabaseOperations.shared';
@@ -57,30 +57,20 @@ export function useOfflineDatabaseMutations({
         setProgress(0);
         setProgressStep('starting');
         setError(null);
+        clearOfflineDatabaseAutoInstallOptOut();
 
-        const currentLock = getOfflineDatabaseInstallLock();
         const lockOwner = instanceId;
-        const ownsLock = !currentLock || currentLock.owner === lockOwner
-            ? setOfflineDatabaseInstallLock(lockOwner)
-            : false;
 
-        if (!ownsLock) {
-            setProgress(5);
-            setProgressStep('waiting_for_other_tab');
-            await waitForOtherTabSync();
-            return;
-        }
+        const runInstall = async () => {
+            broadcast({
+                type: 'INSTALLING',
+                source: LEGACY_MONOLITHIC_BUNDLE_SOURCE,
+                senderId: lockOwner,
+                payload: {
+                    mode: targetStatus === 'updating' ? 'updating' : 'installing',
+                },
+            });
 
-        broadcast({
-            type: 'INSTALLING',
-            source: LEGACY_MONOLITHIC_BUNDLE_SOURCE,
-            senderId: lockOwner,
-            payload: {
-                mode: targetStatus === 'updating' ? 'updating' : 'installing',
-            },
-        });
-
-        try {
             const metadata = await refreshOfflineDatabaseAvailability(true);
             if (metadata) {
                 remoteMetadataRef.current = metadata;
@@ -117,6 +107,18 @@ export function useOfflineDatabaseMutations({
                 senderId: lockOwner,
                 payload: { metadata: effectiveMetadata },
             });
+        };
+
+        try {
+            await runCoordinatedOfflineDatabaseInstall({
+                owner: lockOwner,
+                runInstall,
+                waitForPeerInstall: waitForOtherTabSync,
+                onWaitingForPeer: () => {
+                    setProgress(5);
+                    setProgressStep('waiting_for_other_tab');
+                },
+            });
         } catch (err) {
             const message = formatOfflineDatabaseErrorMessage(err);
             setStatus('error');
@@ -128,8 +130,6 @@ export function useOfflineDatabaseMutations({
                 payload: { message },
             });
             throw new Error(message);
-        } finally {
-            clearOfflineDatabaseInstallLock(lockOwner);
         }
     }, [
         applyInstalledMetadata,
@@ -161,6 +161,7 @@ export function useOfflineDatabaseMutations({
                 10_000,
             );
             persistStoredOfflineDatabaseMetadata(null);
+            setOfflineDatabaseAutoInstallOptOut();
             sessionStorage.removeItem('offline_db_seed');
             setLocalVersion(null);
             setRemoteVersion(remoteMetadataRef.current?.version ?? null);

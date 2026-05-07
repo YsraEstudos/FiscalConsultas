@@ -175,6 +175,22 @@ describe('api service', () => {
     }
   });
 
+  it('falls back to the public backend on Cloudflare Pages when API env is missing', async () => {
+    const restoreLocation = swapLocation('https://1d6c99f0.fiscalconsultas.pages.dev/');
+
+    try {
+      await loadApiModule();
+
+      expect(mockAxios.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseURL: 'https://fiscal-api-5eok.onrender.com/api',
+        }),
+      );
+    } finally {
+      restoreLocation();
+    }
+  });
+
   it('injects auth token for protected routes and skips public routes', async () => {
     const apiModule = await loadApiModule();
     const getter = vi.fn().mockResolvedValue('jwt-token');

@@ -6,6 +6,11 @@ const clerkMockPath = fileURLToPath(
   new URL('./tests/playwright/mocks/clerk.tsx', import.meta.url)
 );
 
+const crossOriginIsolationHeaders = {
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'require-corp',
+};
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -33,10 +38,7 @@ export default defineConfig(({ mode }) => {
         : {},
     },
     server: {
-      headers: {
-        'Cross-Origin-Opener-Policy': 'same-origin',
-        'Cross-Origin-Embedder-Policy': 'require-corp',
-      },
+      headers: crossOriginIsolationHeaders,
       proxy: {
         '/api': {
           target: proxyTarget, // NOSONAR: dev proxy target comes from local env or local backend
@@ -46,6 +48,7 @@ export default defineConfig(({ mode }) => {
     },
     preview: {
       allowedHosts: ['offline-e2e.local'],
+      headers: crossOriginIsolationHeaders,
     },
     optimizeDeps: {
       exclude: ['@sqlite.org/sqlite-wasm'],

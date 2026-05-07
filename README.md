@@ -186,6 +186,9 @@ Observações:
 
 - `rebuild_index.py` (Fase 5) é o script consolidado: cria `database/nesh.db`, extrai seções e reconstrói o índice FTS com Stemming.
 - `setup_nbs_database.py` e `setup_nebs_database.py` alimentam `database/services.db`, usado por `NBS` e `NEBS`.
+- A fonte canônica da NBS neste repositório é `data/nbs.csv`; sempre execute `setup_nbs_database.py` antes de `setup_nebs_database.py` após qualquer correção na NBS.
+- A NEBS pública não representa o PDF integral: o site exibe somente notas explicativas confiáveis (`trusted`) vinculadas a códigos existentes na NBS carregada.
+- Blocos NEBS suspeitos ou rejeitados permanecem fora da consulta pública e são registrados em `reports/nebs/` para auditoria e reavaliação posterior.
 - Em Windows com encoding CP1252, scripts com emoji podem falhar; usar `PYTHONUTF8=1` (o `uv run` geralmente lida bem com isso, mas o script `.bat` já automatiza essa configuração).
 
 ### 4) Subir aplicação
@@ -249,7 +252,7 @@ Contrato publico do banco offline:
 
 - O pacote offline (`fiscal_offline.enc` + `fiscal_offline.meta`) e considerado publico. Ele pode ser baixado sem login por meio das rotas `/api/database/version`, `/api/database/token` e `/api/database/download`; o token efemero existe para limitar reuso/abuso do download, nao para transformar o pacote em dado privado.
 - A criptografia do pacote offline protege integridade/formato de distribuicao, mas nao deve ser tratada como controle de acesso a dados sigilosos. Nao incluir informacao privada, segredos, dados de usuarios ou conteudo restrito dentro do bundle offline.
-- O conteudo NEBS associado a NBS faz parte do contrato do catalogo offline e online. A descricao/entrada explicativa NEBS vinculada ao item NBS deve permanecer no banco, no bundle offline e no detalhe da NBS; nao remover `has_nebs`, `nebs_entries` nem o payload `detail.nebs` sem substituir o fluxo por equivalente compativel.
+- O conteudo NEBS associado a NBS faz parte do contrato do catalogo offline e online. A NEBS esta embutida nas notas explicativas da NBS e isso deve se manter assim: a descricao/entrada explicativa NEBS vinculada ao item NBS deve permanecer no banco, no bundle offline e no detalhe da NBS; nao remover `has_nebs`, `nebs_entries` nem o payload `detail.nebs` sem substituir o fluxo por equivalente compativel.
 
 Comportamento esperado do fluxo:
 

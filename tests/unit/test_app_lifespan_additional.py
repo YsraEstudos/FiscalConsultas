@@ -1,5 +1,6 @@
 import asyncio
 import builtins
+import re
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import cast
@@ -566,6 +567,30 @@ def test_build_cors_configuration_fails_closed_in_production(monkeypatch):
 
     assert origins == []
     assert cors_regex is None
+
+
+def test_build_cors_configuration_accepts_cloudflare_pages_previews(monkeypatch):
+    monkeypatch.setattr(app_module.settings.server, "env", "production", raising=False)
+    monkeypatch.setattr(
+        app_module.settings.server,
+        "cors_allowed_origins",
+        ["https://fiscalconsultas.pages.dev"],
+        raising=False,
+    )
+    monkeypatch.setattr(
+        app_module.settings.server,
+        "cors_allowed_origin_regex",
+        r"^https://[a-z0-9-]+\.fiscalconsultas\.pages\.dev$",
+        raising=False,
+    )
+
+    origins, cors_regex = app_module._build_cors_configuration()
+
+    assert origins == ["https://fiscalconsultas.pages.dev"]
+    assert cors_regex is not None
+    compiled = re.compile(cors_regex)
+    assert compiled.fullmatch("https://3fbcaa44.fiscalconsultas.pages.dev")
+    assert not compiled.fullmatch("https://attacker.example.com")
 
 
 def test_log_runtime_security_warnings_for_production_misconfiguration(monkeypatch):

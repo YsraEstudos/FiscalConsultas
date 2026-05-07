@@ -14,10 +14,11 @@ import {
 import {
     buildOfflineDatabaseInitPayload,
     createOfflineDatabaseInstanceId,
-    isOfflineDatabaseSupported,
+    getOfflineDatabaseSupportReport,
     persistStoredOfflineDatabaseMetadata,
     readStoredOfflineDatabaseMetadata,
     runOfflineDatabaseTaskInBackground,
+    type OfflineDatabaseSupportReport,
 } from './offlineDatabaseStorage';
 import {
     fetchOfflineDatabaseAvailabilityMetadata,
@@ -43,6 +44,7 @@ export interface OfflineDatabaseRuntimeState {
     error: string | null;
     dbSizeBytes: number | null;
     isSupported: boolean;
+    supportReport: OfflineDatabaseSupportReport;
     isRemoving: boolean;
 }
 
@@ -58,7 +60,8 @@ export interface OfflineDatabaseRuntimeValue {
 }
 
 export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
-    const isSupported = useMemo(() => isOfflineDatabaseSupported(), []);
+    const supportReport = useMemo(() => getOfflineDatabaseSupportReport(), []);
+    const isSupported = supportReport.supported;
     const instanceIdRef = useRef(createOfflineDatabaseInstanceId());
     const remoteCheckRef = useRef<Promise<OfflineDatabaseMetadata | null> | null>(null);
     const remoteMetaRef = useRef<OfflineDatabaseMetadata | null>(
@@ -66,7 +69,9 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
     );
 
     const [status, setStatus] = useState<OfflineDatabaseStatus>(
-        isSupported ? 'checking' : 'unsupported',
+        isSupported || supportReport.canRecoverWithIsolationReload
+            ? 'checking'
+            : 'unsupported',
     );
     const [progress, setProgress] = useState(0);
     const [progressStep, setProgressStep] = useState('');
@@ -237,6 +242,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             error,
             dbSizeBytes,
             isSupported,
+            supportReport,
             isRemoving,
         }),
         [
@@ -244,11 +250,13 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             error,
             isRemoving,
             isSupported,
+            supportReport,
             localVersion,
             progress,
             progressStep,
             remoteVersion,
             status,
+            supportReport,
             updateAvailable,
         ],
     );
