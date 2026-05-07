@@ -1,6 +1,7 @@
 import type {
     NbsCatalogDetailApiResponse,
 } from '../types/api.types';
+import type { FiscalSourceId } from './offlineSources';
 import type { OfflineDatabaseMetadata } from '../utils/offlineDatabase';
 import type { OfflineDatabaseSupportReport } from './offlineDatabaseStorage';
 
@@ -13,7 +14,18 @@ export type OfflineDatabaseStatus =
     | 'error'
     | 'unsupported';
 
-export type OfflineDocumentType = 'nbs' | 'tipi' | 'ncm' | 'nesh';
+export type OfflineFiscalSourceId = FiscalSourceId;
+export type OfflineLegacyDocumentType = 'ncm';
+export type OfflineSearchDocumentType =
+    | Exclude<OfflineFiscalSourceId, 'unspsc'>
+    | OfflineLegacyDocumentType;
+/**
+ * Currently equals OfflineSearchDocumentType. This can diverge once
+ * source-scoped installs support non-searchable bundles.
+ *
+ * @see OfflineSearchDocumentType
+ */
+export type OfflineDocumentType = OfflineSearchDocumentType;
 
 export interface OfflineDatabaseState {
     status: OfflineDatabaseStatus;
@@ -205,21 +217,25 @@ export type OfflineDatabaseWorkerMessage =
 export type OfflineDatabaseChannelMessage =
     | {
         type: 'INSTALLING';
-        source: string;
+        source: OfflineFiscalSourceId;
+        senderId: string;
         payload: { mode: 'installing' | 'updating' };
     }
     | {
         type: 'INSTALLED';
-        source: string;
+        source: OfflineFiscalSourceId;
+        senderId: string;
         payload: { metadata: OfflineDatabaseMetadata | null };
     }
     | {
         type: 'REMOVED';
-        source: string;
+        source: OfflineFiscalSourceId;
+        senderId: string;
         payload: Record<string, never>;
     }
     | {
         type: 'ERROR';
-        source: string;
+        source: OfflineFiscalSourceId;
+        senderId: string;
         payload: { message: string };
     };

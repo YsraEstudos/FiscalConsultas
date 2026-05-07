@@ -17,6 +17,9 @@ import { getOfflineDatabaseApiBaseUrl, primeOfflineShellCache } from './offlineD
 import type { OfflineDatabaseOperations } from './offlineDatabaseOperations.shared';
 import type { OfflineDatabaseOperationsArgs } from './offlineDatabaseOperations.shared';
 
+// Current installs still use the legacy monolithic bundle until source-scoped installs land.
+const LEGACY_MONOLITHIC_BUNDLE_SOURCE = 'nesh';
+
 export function useOfflineDatabaseMutations({
     applyInstalledMetadata,
     broadcast,
@@ -61,7 +64,8 @@ export function useOfflineDatabaseMutations({
         const runInstall = async () => {
             broadcast({
                 type: 'INSTALLING',
-                source: lockOwner,
+                source: LEGACY_MONOLITHIC_BUNDLE_SOURCE,
+                senderId: lockOwner,
                 payload: {
                     mode: targetStatus === 'updating' ? 'updating' : 'installing',
                 },
@@ -99,7 +103,8 @@ export function useOfflineDatabaseMutations({
 
             broadcast({
                 type: 'INSTALLED',
-                source: lockOwner,
+                source: LEGACY_MONOLITHIC_BUNDLE_SOURCE,
+                senderId: lockOwner,
                 payload: { metadata: effectiveMetadata },
             });
         };
@@ -120,7 +125,8 @@ export function useOfflineDatabaseMutations({
             setError(message);
             broadcast({
                 type: 'ERROR',
-                source: lockOwner,
+                source: LEGACY_MONOLITHIC_BUNDLE_SOURCE,
+                senderId: lockOwner,
                 payload: { message },
             });
             throw new Error(message);
@@ -165,7 +171,8 @@ export function useOfflineDatabaseMutations({
             setError(null);
             broadcast({
                 type: 'REMOVED',
-                source: instanceId,
+                source: LEGACY_MONOLITHIC_BUNDLE_SOURCE,
+                senderId: instanceId,
                 payload: {},
             });
         } catch (err) {

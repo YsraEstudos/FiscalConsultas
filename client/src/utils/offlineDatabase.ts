@@ -1,3 +1,8 @@
+import {
+  isFiscalSourceId,
+  type FiscalSourceId,
+} from '../context/offlineSources';
+
 export interface OfflineDatabaseMetadata {
   version: string;
   size_bytes: number;
@@ -8,6 +13,11 @@ export interface OfflineDatabaseMetadata {
   format_version?: number;
   chunk_size?: number;
   pbkdf2_iterations?: number;
+}
+
+export interface OfflineSourceMetadata extends OfflineDatabaseMetadata {
+  source: FiscalSourceId;
+  encrypted_sha256: string;
 }
 
 export function compareOfflineVersions(
@@ -96,6 +106,24 @@ export function sanitizeOfflineMetadata(
     format_version: Number(metadata.format_version || 1),
     chunk_size: Number(metadata.chunk_size || 65536),
     pbkdf2_iterations: Number(metadata.pbkdf2_iterations || 600000),
+  };
+}
+
+export function sanitizeOfflineSourceMetadata(
+  source: unknown,
+  metadata: Partial<OfflineDatabaseMetadata> | null | undefined
+): OfflineSourceMetadata | null {
+  if (!isFiscalSourceId(source) || !metadata?.version || !metadata.encrypted_sha256) {
+    return null;
+  }
+
+  const sanitized = sanitizeOfflineMetadata(metadata);
+  if (!sanitized) return null;
+
+  return {
+    ...sanitized,
+    source,
+    encrypted_sha256: sanitized.encrypted_sha256!,
   };
 }
 
