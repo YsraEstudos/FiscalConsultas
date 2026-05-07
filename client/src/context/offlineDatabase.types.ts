@@ -19,6 +19,12 @@ export type OfflineLegacyDocumentType = 'ncm';
 export type OfflineSearchDocumentType =
     | Exclude<OfflineFiscalSourceId, 'unspsc'>
     | OfflineLegacyDocumentType;
+/**
+ * Currently equals OfflineSearchDocumentType. This can diverge once
+ * source-scoped installs support non-searchable bundles.
+ *
+ * @see OfflineSearchDocumentType
+ */
 export type OfflineDocumentType = OfflineSearchDocumentType;
 
 export interface OfflineDatabaseState {

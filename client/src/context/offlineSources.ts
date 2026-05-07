@@ -20,11 +20,22 @@ export function isFiscalSourceId(value: unknown): value is FiscalSourceId {
   return typeof value === 'string' && FISCAL_SOURCE_IDS.has(value);
 }
 
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 export function buildFiscalBundleUrls(
   baseUrl: string,
   source: FiscalSourceId,
 ): FiscalBundleUrls {
-  const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+  const normalizedBaseUrl = trimTrailingSlashes(baseUrl.trim());
+  if (!normalizedBaseUrl) {
+    throw new Error('baseUrl is required for fiscal bundle URLs');
+  }
 
   return {
     metadataUrl: `${normalizedBaseUrl}/${source}/${source}.meta.json`,

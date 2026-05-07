@@ -118,12 +118,12 @@ export function sanitizeOfflineSourceMetadata(
   }
 
   const sanitized = sanitizeOfflineMetadata(metadata);
-  if (!sanitized?.encrypted_sha256) return null;
+  if (!sanitized) return null;
 
   return {
     ...sanitized,
     source,
-    encrypted_sha256: sanitized.encrypted_sha256,
+    encrypted_sha256: sanitized.encrypted_sha256!,
   };
 }
 

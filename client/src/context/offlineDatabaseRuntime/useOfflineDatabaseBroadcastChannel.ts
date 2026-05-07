@@ -50,6 +50,16 @@ type UseOfflineDatabaseBroadcastChannelArgs = {
     setDbSizeBytes: Dispatch<SetStateAction<number | null>>;
 };
 
+type LegacyOfflineDatabaseChannelMessage =
+    OfflineDatabaseChannelMessage extends infer Message
+        ? Message extends { senderId: string; source: unknown }
+            ? Omit<Message, 'senderId' | 'source'> & {
+                source: string;
+                senderId?: string;
+            }
+            : never
+        : never;
+
 export function useOfflineDatabaseBroadcastChannel({
     isSupported,
     instanceId,
@@ -79,9 +89,9 @@ export function useOfflineDatabaseBroadcastChannel({
         const channel = new BroadcastChannel(OFFLINE_CHANNEL_NAME);
         channelRef.current = channel;
 
-        channel.onmessage = (event: MessageEvent<OfflineDatabaseChannelMessage>) => {
+        channel.onmessage = (event: MessageEvent<LegacyOfflineDatabaseChannelMessage>) => {
             const message = event.data;
-            if (!message || message.senderId === instanceId) return;
+            if (!message || (message.senderId ?? message.source) === instanceId) return;
 
             if (message.type === 'INSTALLING') {
                 const nextStatus =
