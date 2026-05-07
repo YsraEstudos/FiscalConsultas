@@ -13,7 +13,6 @@ from pathlib import Path
 
 from scripts.build_offline_db import DB_DIR, OfflineBundleOutput, build_source_bundle
 
-
 DEFAULT_OUTPUT_ROOT = DB_DIR / "r2"
 
 

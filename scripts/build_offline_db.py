@@ -90,7 +90,14 @@ def _resolve_app_seed() -> str:
     return generated
 
 
-APP_SEED = _resolve_app_seed()
+_APP_SEED: str | None = None
+
+
+def _get_app_seed() -> str:
+    global _APP_SEED
+    if _APP_SEED is None:
+        _APP_SEED = _resolve_app_seed()
+    return _APP_SEED
 
 
 def _get_html_renderer():
@@ -460,32 +467,26 @@ def _consolidate_databases(output_path: Path) -> None:
 
     notes_by_chapter: dict[str, sqlite3.Row] = {}
     if has_notes_table:
-        for row in conn.execute(
-            """
+        for row in conn.execute("""
             SELECT chapter_num, notes_content, titulo, notas,
                    consideracoes, definicoes, parsed_notes_json
             FROM nesh.chapter_notes
-            """
-        ):
+            """):
             notes_by_chapter[str(row["chapter_num"])] = row
 
     positions_by_chapter: dict[str, list[sqlite3.Row]] = {}
-    for row in conn.execute(
-        """
+    for row in conn.execute("""
         SELECT chapter_num, codigo, descricao
         FROM nesh.positions
         ORDER BY chapter_num, codigo
-        """
-    ):
+        """):
         positions_by_chapter.setdefault(str(row["chapter_num"]), []).append(row)
 
-    chapter_rows = conn.execute(
-        """
+    chapter_rows = conn.execute("""
         SELECT chapter_num, content
         FROM nesh.chapters
         ORDER BY chapter_num
-        """
-    ).fetchall()
+        """).fetchall()
     cursor.executemany(
         """
         INSERT OR IGNORE INTO nesh_chapters (chapter_num, content, rendered_html)
@@ -802,32 +803,26 @@ def _consolidate_nesh_database(output_path: Path) -> None:
 
     notes_by_chapter: dict[str, sqlite3.Row] = {}
     if has_notes_table:
-        for row in conn.execute(
-            """
+        for row in conn.execute("""
             SELECT chapter_num, notes_content, titulo, notas,
                    consideracoes, definicoes, parsed_notes_json
             FROM nesh.chapter_notes
-            """
-        ):
+            """):
             notes_by_chapter[str(row["chapter_num"])] = row
 
     positions_by_chapter: dict[str, list[sqlite3.Row]] = {}
-    for row in conn.execute(
-        """
+    for row in conn.execute("""
         SELECT chapter_num, codigo, descricao
         FROM nesh.positions
         ORDER BY chapter_num, codigo
-        """
-    ):
+        """):
         positions_by_chapter.setdefault(str(row["chapter_num"]), []).append(row)
 
-    chapter_rows = conn.execute(
-        """
+    chapter_rows = conn.execute("""
         SELECT chapter_num, content
         FROM nesh.chapters
         ORDER BY chapter_num
-        """
-    ).fetchall()
+        """).fetchall()
     cursor.executemany(
         """
         INSERT OR IGNORE INTO nesh_chapters (chapter_num, content, rendered_html)
@@ -981,7 +976,7 @@ def _derive_key(salt: bytes) -> bytes:
         salt=salt,
         iterations=PBKDF2_ITERATIONS,
     )
-    return kdf.derive(APP_SEED.encode("utf-8"))
+    return kdf.derive(_get_app_seed().encode("utf-8"))
 
 
 def _compute_hmac(data: bytes, key: bytes) -> bytes:

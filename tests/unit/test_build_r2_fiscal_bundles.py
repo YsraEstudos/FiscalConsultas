@@ -2,8 +2,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from scripts import build_r2_fiscal_bundles
-from scripts import build_offline_db
+from scripts import build_offline_db, build_r2_fiscal_bundles
 from scripts.build_r2_fiscal_bundles import (
     DEFAULT_OUTPUT_ROOT,
     FISCAL_SOURCES,
