@@ -38,8 +38,8 @@ describe('offlineDatabaseSync', () => {
     expect(getOfflineDbPublicSeed()).toBe('public-seed')
   })
 
-  it('falls back to the static fiscal bundle base when R2 env is absent', () => {
-    expect(getFiscalR2BaseUrl()).toBe('/fiscal-bases')
+  it('disables source bundles when R2 env is absent', () => {
+    expect(getFiscalR2BaseUrl()).toBe('')
   })
 
   it('retries metadata checks after a transient abort', async () => {

@@ -151,6 +151,49 @@ describe('useSearch local-only behavior', () => {
     }));
   });
 
+  it('does not show install guidance when the ready local worker returns no result', async () => {
+    refs.dbStatus = 'ready';
+    refs.searchLocalMock.mockResolvedValue(null);
+    const updateTab = vi.fn();
+    const addToHistory = vi.fn();
+    const tabsById = new Map([['tab-1', createTab()]]);
+
+    const { result } = renderHook(() => useSearch(tabsById, updateTab, addToHistory), { wrapper });
+
+    await act(async () => {
+      await result.current.executeSearchForTab('tab-1', 'nesh', '0101', true);
+    });
+
+    expect(refs.searchNCMMock).not.toHaveBeenCalled();
+    expect(refs.toastErrorMock).toHaveBeenCalledWith('Nenhum resultado encontrado na base local.');
+    expect(refs.toastErrorMock).not.toHaveBeenCalledWith('Instale a base NESH para pesquisar localmente.');
+    expect(updateTab).toHaveBeenLastCalledWith('tab-1', {
+      error: 'Nenhum resultado encontrado na base local.',
+      loading: false,
+    });
+  });
+
+  it('maps local worker failures to a user-facing Portuguese message', async () => {
+    refs.dbStatus = 'ready';
+    refs.searchLocalMock.mockRejectedValue(new Error('Worker request timed out'));
+    const updateTab = vi.fn();
+    const addToHistory = vi.fn();
+    const tabsById = new Map([['tab-1', createTab()]]);
+
+    const { result } = renderHook(() => useSearch(tabsById, updateTab, addToHistory), { wrapper });
+
+    await act(async () => {
+      await result.current.executeSearchForTab('tab-1', 'nesh', '0101', true);
+    });
+
+    expect(refs.toastErrorMock).toHaveBeenCalledWith('Erro ao pesquisar na base local. Tente reinstalar.');
+    expect(refs.toastErrorMock).not.toHaveBeenCalledWith('Worker request timed out');
+    expect(updateTab).toHaveBeenLastCalledWith('tab-1', {
+      error: 'Erro ao pesquisar na base local. Tente reinstalar.',
+      loading: false,
+    });
+  });
+
   it('preserves same-chapter navigation without searching again', async () => {
     const updateTab = vi.fn();
     const addToHistory = vi.fn();

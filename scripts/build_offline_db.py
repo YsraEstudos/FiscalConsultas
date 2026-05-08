@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import sqlite3
 import struct
@@ -45,6 +46,7 @@ NESH_DB = DB_DIR / "nesh.db"
 TIPI_DB = DB_DIR / "tipi.db"
 SERVICES_DB = DB_DIR / "services.db"
 UNSPSC_DB = DB_DIR / "unspsc.db"
+SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 OUTPUT_DB = DB_DIR / "fiscal_offline.db"
 OUTPUT_ENCRYPTED = DB_DIR / "fiscal_offline.enc"
@@ -869,10 +871,11 @@ def _consolidate_nesh_database(output_path: Path) -> None:
 
 
 def _source_columns(cursor: sqlite3.Cursor, attached_db: str, table: str) -> set[str]:
-    return {
+    columns = {
         str(row[1])
         for row in cursor.execute(f"PRAGMA {attached_db}.table_info({table})")
     }
+    return {column for column in columns if SQL_IDENTIFIER_RE.fullmatch(column)}
 
 
 def _source_text_expr(columns: set[str], column: str, fallback: str = "NULL") -> str:
@@ -947,6 +950,8 @@ def _consolidate_unspsc_database(output_path: Path) -> None:
             """)  # nosec B608
         conn.commit()
         cursor.execute("DETACH DATABASE unspsc")
+    else:
+        _log("WARNING: unspsc.db not found, building empty UNSPSC bundle")
 
     cursor.execute("""
         CREATE VIRTUAL TABLE unspsc_fts USING fts5(

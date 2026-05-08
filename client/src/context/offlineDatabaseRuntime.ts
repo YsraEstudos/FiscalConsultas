@@ -9,8 +9,8 @@ import {
 import {
     compareOfflineVersions,
     formatOfflineDatabaseErrorMessage,
+    isOfflineSourceMetadata,
     type OfflineDatabaseMetadata,
-    type OfflineSourceMetadata,
 } from '../utils/offlineDatabase';
 import {
     buildOfflineDatabaseInitPayload,
@@ -30,7 +30,6 @@ import {
     getOfflineDatabaseApiBaseUrl,
     primeOfflineShellCache,
 } from './offlineDatabaseSync';
-import { isFiscalSourceId } from './offlineSources';
 import type {
     OfflineDatabaseInitResult,
     OfflineDatabaseStatus,
@@ -41,18 +40,6 @@ import { useOfflineDatabaseSyncWaiter } from './offlineDatabaseRuntime/useOfflin
 import { useOfflineDatabaseWorkerBridge } from './offlineDatabaseRuntime/useOfflineDatabaseWorkerBridge';
 
 const LEGACY_MONOLITHIC_BUNDLE_SOURCE = 'nesh';
-
-function isOfflineSourceMetadata(
-    metadata: unknown,
-): metadata is OfflineSourceMetadata {
-    return Boolean(
-        metadata
-        && typeof metadata === 'object'
-        && 'source' in metadata
-        && isFiscalSourceId((metadata as { source?: unknown }).source)
-        && 'encrypted_sha256' in metadata,
-    );
-}
 
 function readInitialOfflineMetadata(): OfflineDatabaseMetadata | null {
     if (getFiscalR2BaseUrl() && getOfflineDbPublicSeed()) {
@@ -144,10 +131,10 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             if (!metadata) return;
             remoteMetaRef.current = metadata;
             persistStoredOfflineDatabaseMetadata(metadata);
-            if ('source' in metadata && isFiscalSourceId(metadata.source)) {
+            if (isOfflineSourceMetadata(metadata)) {
                 persistStoredOfflineSourceMetadata(
                     metadata.source,
-                    metadata as OfflineSourceMetadata,
+                    metadata,
                 );
             }
             setLocalVersion(metadata.version);

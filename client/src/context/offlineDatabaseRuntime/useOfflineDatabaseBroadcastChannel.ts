@@ -27,6 +27,14 @@ import type {
     OfflineDatabaseWorkerResponse,
 } from '../offlineDatabase.types';
 
+export function getOfflineChannelSenderId(
+    message: OfflineDatabaseChannelMessage | { senderId?: unknown; source?: unknown },
+): string | undefined {
+    if (typeof message.senderId === 'string') return message.senderId;
+    if (typeof message.source === 'string') return message.source;
+    return undefined;
+}
+
 type UseOfflineDatabaseBroadcastChannelArgs = {
     isSupported: boolean;
     instanceId: string;
@@ -81,7 +89,7 @@ export function useOfflineDatabaseBroadcastChannel({
 
         channel.onmessage = (event: MessageEvent<OfflineDatabaseChannelMessage>) => {
             const message = event.data;
-            if (!message || message.senderId === instanceId) return;
+            if (!message || getOfflineChannelSenderId(message) === instanceId) return;
 
             if (message.type === 'INSTALLING') {
                 const nextStatus =

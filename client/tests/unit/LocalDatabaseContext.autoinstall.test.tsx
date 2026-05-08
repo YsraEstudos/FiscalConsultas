@@ -300,4 +300,45 @@ describe('LocalDatabaseContext auto-install behavior', () => {
       }),
     );
   });
+
+  it('reports corrupted R2 metadata without sending an install request', async () => {
+    vi.stubEnv('VITE_FISCAL_R2_BASE_URL', 'https://r2.example.com/fiscal');
+    vi.stubEnv('VITE_OFFLINE_DB_PUBLIC_SEED', 'public-seed');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            source: 'nesh',
+            version: '2026.05.01',
+            size_bytes: 4096,
+            sha256: 'plain-sha',
+          }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      ),
+    );
+
+    render(
+      <LocalDatabaseProvider>
+        <Probe />
+      </LocalDatabaseProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('status')).toHaveTextContent('not_installed'),
+    );
+    expect(currentContext).not.toBeNull();
+
+    await expect(currentContext!.install()).rejects.toThrow(
+      'Metadados da fonte fiscal estão corrompidos. Limpe o cache do navegador e tente novamente.',
+    );
+
+    expect(getPostedWorkerMessages().map((message) => message.type)).not.toContain('INSTALL');
+  });
 });

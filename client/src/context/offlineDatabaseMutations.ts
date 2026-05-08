@@ -3,7 +3,7 @@ import { useCallback } from 'react';
 import {
     compareOfflineVersions,
     formatOfflineDatabaseErrorMessage,
-    type OfflineSourceMetadata,
+    isOfflineSourceMetadata,
 } from '../utils/offlineDatabase';
 
 import {
@@ -21,24 +21,11 @@ import {
     getOfflineDatabaseApiBaseUrl,
     primeOfflineShellCache,
 } from './offlineDatabaseSync';
-import { isFiscalSourceId } from './offlineSources';
 import type { OfflineDatabaseOperations } from './offlineDatabaseOperations.shared';
 import type { OfflineDatabaseOperationsArgs } from './offlineDatabaseOperations.shared';
 
 // Current installs still use the legacy monolithic bundle until source-scoped installs land.
 const LEGACY_MONOLITHIC_BUNDLE_SOURCE = 'nesh';
-
-function isOfflineSourceMetadata(
-    metadata: unknown,
-): metadata is OfflineSourceMetadata {
-    return Boolean(
-        metadata
-        && typeof metadata === 'object'
-        && 'source' in metadata
-        && isFiscalSourceId((metadata as { source?: unknown }).source)
-        && 'encrypted_sha256' in metadata,
-    );
-}
 
 export function useOfflineDatabaseMutations({
     applyInstalledMetadata,
@@ -111,18 +98,21 @@ export function useOfflineDatabaseMutations({
 
             const r2BaseUrl = getFiscalR2BaseUrl();
             const publicSeed = getOfflineDbPublicSeed();
+            if (r2BaseUrl && publicSeed && !isOfflineSourceMetadata(metadata)) {
+                throw new Error(
+                    'Metadados da fonte fiscal estão corrompidos. Limpe o cache do navegador e tente novamente.',
+                );
+            }
+
+            const sourceMetadata = isOfflineSourceMetadata(metadata) ? metadata : null;
             const installPayload =
-                r2BaseUrl && publicSeed
-                    ? isOfflineSourceMetadata(metadata)
-                        ? {
-                        source: metadata.source,
+                r2BaseUrl && publicSeed && sourceMetadata
+                    ? {
+                        source: sourceMetadata.source,
                         r2BaseUrl,
                         publicSeed,
-                        metadata,
+                        metadata: sourceMetadata,
                     }
-                        : (() => {
-                            throw new Error('R2 source metadata unavailable');
-                        })()
                     : {
                         apiBase: getOfflineDatabaseApiBaseUrl(),
                         clerkToken: '',

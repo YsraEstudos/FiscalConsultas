@@ -21,8 +21,11 @@ export function getOfflineDatabaseApiBaseUrl(): string {
 
 export function getFiscalR2BaseUrl(): string {
     const env = import.meta.env as { VITE_FISCAL_R2_BASE_URL?: string | undefined };
-    const configuredBaseUrl = normalizeFiscalR2BaseUrl(env.VITE_FISCAL_R2_BASE_URL);
+    if (!env.VITE_FISCAL_R2_BASE_URL?.trim()) {
+        return '';
+    }
 
+    const configuredBaseUrl = normalizeFiscalR2BaseUrl(env.VITE_FISCAL_R2_BASE_URL);
     const { metadataUrl } = buildFiscalBundleUrls(configuredBaseUrl, 'nesh');
     return metadataUrl.replace(/\/nesh\/nesh\.meta\.json$/, '');
 }

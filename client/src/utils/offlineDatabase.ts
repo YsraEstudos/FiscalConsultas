@@ -20,6 +20,22 @@ export interface OfflineSourceMetadata extends OfflineDatabaseMetadata {
   encrypted_sha256: string;
 }
 
+export function isOfflineSourceMetadata(
+  metadata: unknown,
+): metadata is OfflineSourceMetadata {
+  if (!metadata || typeof metadata !== 'object') return false;
+  const candidate = metadata as {
+    source?: unknown;
+    encrypted_sha256?: unknown;
+  };
+
+  return Boolean(
+    isFiscalSourceId(candidate.source)
+    && typeof candidate.encrypted_sha256 === 'string'
+    && candidate.encrypted_sha256.trim()
+  );
+}
+
 export function compareOfflineVersions(
   left: string | null | undefined,
   right: string | null | undefined
@@ -88,12 +104,16 @@ export function sanitizeOfflineSourceMetadata(
   source: unknown,
   metadata: Partial<OfflineDatabaseMetadata> | null | undefined
 ): OfflineSourceMetadata | null {
-  if (!isFiscalSourceId(source) || !metadata?.version || !metadata.encrypted_sha256) {
+  if (
+    !isFiscalSourceId(source)
+    || !metadata?.version
+    || !metadata.encrypted_sha256?.trim()
+  ) {
     return null;
   }
 
   const sanitized = sanitizeOfflineMetadata(metadata);
-  if (!sanitized?.encrypted_sha256) return null;
+  if (!sanitized?.encrypted_sha256?.trim()) return null;
 
   return {
     ...sanitized,
