@@ -6,8 +6,21 @@ import { AuthProvider } from '../../src/../src/context/AuthContext';
 import { SettingsProvider } from '../../src/../src/context/SettingsContext';
 import * as api from '../../src/../src/services/api';
 
+const localDatabaseState = vi.hoisted(() => ({
+    searchLocal: vi.fn(),
+}));
+
 // Mock dependencies to avoid real API calls and context issues
 vi.mock('../../src/services/api');
+vi.mock('../../src/context/LocalDatabaseContext', () => ({
+    useLocalDatabase: () => ({
+        status: 'ready',
+        searchLocal: localDatabaseState.searchLocal,
+    }),
+    useOptionalLocalDatabase: () => ({
+        status: 'ready',
+    }),
+}));
 vi.mock('../../src/hooks/useHistory', () => ({
     useHistory: () => ({
         history: [],
@@ -36,6 +49,7 @@ const SLOW_SEARCH_FLOW_TIMEOUT_MS = 15000;
 describe('App Search Integration', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        localDatabaseState.searchLocal.mockReset();
         api.getSystemStatus.mockResolvedValue({
             nbs: { status: 'online' },
             nebs: { status: 'online' },
@@ -54,8 +68,8 @@ describe('App Search Integration', () => {
             resolvePromise = resolve;
         });
 
-        // Mock searchNCM to return our controlled promise
-        api.searchNCM.mockReturnValue(promise);
+        // Mock local NESH search to return our controlled promise
+        localDatabaseState.searchLocal.mockReturnValue(promise);
 
         // 2. Render App wrapped in AuthProvider
         render(
@@ -77,22 +91,20 @@ describe('App Search Integration', () => {
         // 4. Verify Loading State
         // A UI atual mantém o texto "Buscar" e mostra spinner + desabilita o botão.
         await waitFor(() => {
-            expect(api.searchNCM).toHaveBeenCalledWith('8517');
+            expect(localDatabaseState.searchLocal).toHaveBeenCalledWith('nesh', '8517', 'chapter');
             expect(screen.getByRole('button', { name: /buscar/i })).toBeDisabled();
         }, { timeout: SLOW_SEARCH_FLOW_TIMEOUT_MS });
 
         // 5. Resolve Promise and Verify Results
         const mockResponse = {
-            query: '8517',
-            type: 'code',
-            results: {},
-            resultados: {
+            searchType: 'code',
+            results: {
                 '85': {
                     capitulo: '85',
-                    posicoes: [{ codigo: '85.17', descricao: 'Telefones' }]
+                    posicoes: [{ codigo: '85.17', descricao: 'Telefones' }],
                 }
             },
-            markdown: '<div class="chapter-content"><h1>Telefones</h1></div>'
+            markdown: '<div class="chapter-content"><h1>Telefones</h1></div>',
         };
 
         await act(async () => {

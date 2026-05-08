@@ -272,7 +272,9 @@ def test_build_all_builds_each_source_with_resolved_paths(tmp_path: Path, monkey
 def test_build_all_can_filter_sources(tmp_path: Path, monkeypatch):
     calls = []
 
-    def fake_build_source_bundle(source: str, encrypted_path: Path, metadata_path: Path):
+    def fake_build_source_bundle(
+        source: str, encrypted_path: Path, metadata_path: Path
+    ):
         calls.append((source, encrypted_path, metadata_path))
         return build_offline_db.OfflineBundleOutput(
             source=source,
