@@ -19,6 +19,7 @@ import {
     OFFLINE_CHANNEL_NAME,
     primeOfflineShellCache,
 } from '../offlineDatabaseSync';
+import { isFiscalSourceId } from '../offlineSources';
 import type {
     OfflineDatabaseChannelMessage,
     OfflineDatabaseInitResult,
@@ -26,6 +27,8 @@ import type {
     OfflineDatabaseWorkerRequest,
     OfflineDatabaseWorkerResponse,
 } from '../offlineDatabase.types';
+
+const LEGACY_MONOLITHIC_BUNDLE_SOURCE = 'nesh';
 
 type UseOfflineDatabaseBroadcastChannelArgs = {
     isSupported: boolean;
@@ -78,6 +81,7 @@ export function useOfflineDatabaseBroadcastChannel({
     setDbSizeBytes,
 }: UseOfflineDatabaseBroadcastChannelArgs) {
     const channelRef = useRef<BroadcastChannel | null>(null);
+    const activeSourceRef = useRef(LEGACY_MONOLITHIC_BUNDLE_SOURCE);
 
     const broadcast = useCallback((message: OfflineDatabaseChannelMessage) => {
         channelRef.current?.postMessage(message);
@@ -92,6 +96,12 @@ export function useOfflineDatabaseBroadcastChannel({
         channel.onmessage = (event: MessageEvent<LegacyOfflineDatabaseChannelMessage>) => {
             const message = event.data;
             if (!message || (message.senderId ?? message.source) === instanceId) return;
+            if (
+                isFiscalSourceId(message.source)
+                && message.source !== activeSourceRef.current
+            ) {
+                return;
+            }
 
             if (message.type === 'INSTALLING') {
                 const nextStatus =
@@ -135,7 +145,9 @@ export function useOfflineDatabaseBroadcastChannel({
                                 {
                                     type: 'REMOVE',
                                     id: null,
-                                    payload: {},
+                                    payload: isFiscalSourceId(message.source)
+                                        ? { source: message.source }
+                                        : {},
                                 },
                                 10_000,
                             );

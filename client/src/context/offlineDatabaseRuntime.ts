@@ -9,6 +9,7 @@ import {
 import {
     compareOfflineVersions,
     formatOfflineDatabaseErrorMessage,
+    isOfflineSourceMetadata,
     type OfflineDatabaseMetadata,
 } from '../utils/offlineDatabase';
 import {
@@ -16,12 +17,17 @@ import {
     createOfflineDatabaseInstanceId,
     getOfflineDatabaseSupportReport,
     persistStoredOfflineDatabaseMetadata,
+    persistStoredOfflineSourceMetadata,
     readStoredOfflineDatabaseMetadata,
+    readStoredOfflineSourceMetadata,
     runOfflineDatabaseTaskInBackground,
     type OfflineDatabaseSupportReport,
 } from './offlineDatabaseStorage';
 import {
+    fetchOfflineSourceAvailabilityMetadata,
     fetchOfflineDatabaseAvailabilityMetadata,
+    getFiscalR2BaseUrl,
+    getOfflineDbPublicSeed,
     getOfflineDatabaseApiBaseUrl,
     primeOfflineShellCache,
 } from './offlineDatabaseSync';
@@ -33,6 +39,16 @@ import type { OfflineDatabaseOperationsArgs } from './offlineDatabaseOperations.
 import { useOfflineDatabaseBroadcastChannel } from './offlineDatabaseRuntime/useOfflineDatabaseBroadcastChannel';
 import { useOfflineDatabaseSyncWaiter } from './offlineDatabaseRuntime/useOfflineDatabaseSyncWaiter';
 import { useOfflineDatabaseWorkerBridge } from './offlineDatabaseRuntime/useOfflineDatabaseWorkerBridge';
+
+const LEGACY_MONOLITHIC_BUNDLE_SOURCE = 'nesh';
+
+function readInitialOfflineMetadata(): OfflineDatabaseMetadata | null {
+    if (getFiscalR2BaseUrl() && getOfflineDbPublicSeed()) {
+        return readStoredOfflineSourceMetadata(LEGACY_MONOLITHIC_BUNDLE_SOURCE);
+    }
+
+    return readStoredOfflineDatabaseMetadata();
+}
 
 export interface OfflineDatabaseRuntimeState {
     status: OfflineDatabaseStatus;
@@ -65,7 +81,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
     const instanceIdRef = useRef(createOfflineDatabaseInstanceId());
     const remoteCheckRef = useRef<Promise<OfflineDatabaseMetadata | null> | null>(null);
     const remoteMetaRef = useRef<OfflineDatabaseMetadata | null>(
-        readStoredOfflineDatabaseMetadata(),
+        readInitialOfflineMetadata(),
     );
 
     const [status, setStatus] = useState<OfflineDatabaseStatus>(
@@ -119,7 +135,14 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
         (metadata: OfflineDatabaseMetadata | null) => {
             if (!metadata) return;
             remoteMetaRef.current = metadata;
-            persistStoredOfflineDatabaseMetadata(metadata);
+            if (isOfflineSourceMetadata(metadata)) {
+                persistStoredOfflineSourceMetadata(
+                    metadata.source,
+                    metadata,
+                );
+            } else {
+                persistStoredOfflineDatabaseMetadata(metadata);
+            }
             setLocalVersion(metadata.version);
             setRemoteVersion(metadata.version);
             setDbSizeBytes(metadata.size_bytes ?? null);
@@ -138,6 +161,14 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
                 metadata ?? remoteMetaRef.current ?? readStoredOfflineDatabaseMetadata();
             try {
                 const seed = sessionStorage.getItem('offline_db_seed');
+                const publicSeed = getOfflineDbPublicSeed();
+                const sourcePayload =
+                    publicSeed && isOfflineSourceMetadata(initMetadata)
+                        ? {
+                            source: initMetadata.source,
+                            publicSeed,
+                        }
+                        : {};
                 await sendToWorker(
                     {
                         type: 'INIT',
@@ -145,6 +176,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
                         payload: {
                             ...buildOfflineDatabaseInitPayload(initMetadata),
                             seed: seed || undefined,
+                            ...sourcePayload,
                         },
                     },
                     30_000,
@@ -172,10 +204,29 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
 
             const request = (async () => {
                 try {
-                    const metadata = await fetchOfflineDatabaseAvailabilityMetadata(
+                    const r2BaseUrl = getFiscalR2BaseUrl();
+                    const publicSeed = getOfflineDbPublicSeed();
+                    let metadata: OfflineDatabaseMetadata | null = null;
+                    if (r2BaseUrl && publicSeed) {
+                        try {
+                            metadata = await fetchOfflineSourceAvailabilityMetadata(
+                                r2BaseUrl,
+                                LEGACY_MONOLITHIC_BUNDLE_SOURCE,
+                            );
+                        } catch (sourceErr) {
+                            console.warn(
+                                'fetchOfflineSourceAvailabilityMetadata failed',
+                                sourceErr,
+                            );
+                        }
+                    }
+                    metadata ||= await fetchOfflineDatabaseAvailabilityMetadata(
                         getOfflineDatabaseApiBaseUrl(),
                     );
                     remoteMetaRef.current = metadata;
+                    if (isOfflineSourceMetadata(metadata)) {
+                        persistStoredOfflineSourceMetadata(metadata.source, metadata);
+                    }
                     setRemoteVersion(metadata?.version ?? null);
                     setDbSizeBytes((current) => current ?? metadata?.size_bytes ?? null);
                     return metadata;

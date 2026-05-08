@@ -3,9 +3,14 @@ import { getLocalNbsDetail } from "./catalogSearch.js";
 import {
   readFromOpfs,
   readSeed,
+  readSourceFromOpfs,
+  readSourceVersion,
   readVersion,
   removeFromOpfs,
+  removeSourceFromOpfs,
   saveSeed,
+  saveSourceToOpfs,
+  saveSourceVersion,
   saveToOpfs,
   saveVersion,
 } from "./opfs.js";
@@ -13,6 +18,12 @@ import { postWorkerError, postWorkerProgress, postWorkerResult, postWorkerStatus
 import { getStructuredSearchWithCache } from "./searchRuntime.js";
 import { loadDatabaseFromBytes } from "./sqlite.js";
 import { clearSearchCache, closeWorkerDb, getWorkerDb, getWorkerStatus, getWorkerVersion, setWorkerStatus, setWorkerVersion } from "./state.js";
+
+const FISCAL_SOURCE_IDS = new Set(["nesh", "tipi", "nbs", "unspsc"]);
+
+function isFiscalSourceId(value) {
+  return typeof value === "string" && FISCAL_SOURCE_IDS.has(value);
+}
 
 const OFFLINE_FETCH_TIMEOUT_MS = 60_000;
 
@@ -80,10 +91,11 @@ export async function fetchWithTimeout(
 }
 
 async function handleInitMessage(id, payload) {
-  const encData = await readFromOpfs();
-  const version = await readVersion();
-  const opfsSeed = await readSeed();
-  const seed = opfsSeed || payload?.seed;
+  const source = isFiscalSourceId(payload?.source) ? payload.source : null;
+  const encData = source ? await readSourceFromOpfs(source) : await readFromOpfs();
+  const version = source ? await readSourceVersion(source) : await readVersion();
+  const opfsSeed = source ? null : await readSeed();
+  const seed = source ? payload?.publicSeed : opfsSeed || payload?.seed;
   const usedPayloadSeedFallback = !opfsSeed && Boolean(payload?.seed);
 
   if (!encData || !version || !seed) {
@@ -111,7 +123,9 @@ async function handleInitMessage(id, payload) {
     closeWorkerDb();
     setWorkerVersion(null);
     setWorkerStatus("error");
-    if (usedPayloadSeedFallback) {
+    if (source) {
+      await removeSourceFromOpfs(source);
+    } else if (usedPayloadSeedFallback) {
       await removeFromOpfs();
     }
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -237,6 +251,78 @@ async function fetchEncryptedDatabaseBundle(apiBase, id) {
   throw lastError instanceof Error ? lastError : new Error("Offline database download failed");
 }
 
+function buildFiscalBundleUrls(r2BaseUrl, source) {
+  const normalizedBaseUrl = trimTrailingSlashes(String(r2BaseUrl || ""));
+  return {
+    encryptedUrl: `${normalizedBaseUrl}/${source}/${source}.enc`,
+  };
+}
+
+function trimTrailingSlashes(value) {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
+function getSourceAwareInstallPayloadIntent(payload) {
+  return Boolean(
+    payload
+      && typeof payload === "object"
+      && "source" in payload
+      && "r2BaseUrl" in payload
+  );
+}
+
+export function validateSourceAwareInstallPayload(payload) {
+  if (!payload || typeof payload !== "object") {
+    return { ok: false, error: "Source-aware install payload is incomplete" };
+  }
+
+  if (!isFiscalSourceId(payload.source)) {
+    return { ok: false, error: "Invalid source-aware install source" };
+  }
+
+  if (
+    typeof payload.r2BaseUrl !== "string"
+      || !payload.r2BaseUrl.trim()
+      || typeof payload.publicSeed !== "string"
+      || !payload.publicSeed.trim()
+      || !payload.metadata
+      || typeof payload.metadata !== "object"
+      || typeof payload.metadata.version !== "string"
+      || !payload.metadata.version.trim()
+      || typeof payload.metadata.encrypted_sha256 !== "string"
+      || !payload.metadata.encrypted_sha256.trim()
+  ) {
+    return { ok: false, error: "Source-aware install payload is incomplete" };
+  }
+
+  if (payload.metadata.source !== payload.source) {
+    return { ok: false, error: "Source metadata does not match install source" };
+  }
+
+  return { ok: true };
+}
+
+async function fetchEncryptedSourceBundle(r2BaseUrl, source) {
+  const { encryptedUrl } = buildFiscalBundleUrls(r2BaseUrl, source);
+  const dlResp = await fetch(encryptedUrl, {
+    method: "GET",
+    headers: { Accept: "application/octet-stream" },
+  });
+
+  if (dlResp.ok) {
+    return dlResp;
+  }
+
+  const errText = await dlResp.text();
+  throw new Error(
+    `Offline source bundle retrieval failed (${dlResp.status}): ${errText}`
+  );
+}
+
 async function updateInstalledVersion(apiBase) {
   let nextVersion = null;
 
@@ -263,7 +349,81 @@ async function updateInstalledVersion(apiBase) {
   await saveVersion(nextVersion || "unknown");
 }
 
-async function handleInstallMessage(id, payload) {
+async function handleSourceAwareInstallMessage(id, payload) {
+  setWorkerStatus("installing");
+  postWorkerProgress(id, 0, "fetching_database");
+
+  const {
+    source,
+    r2BaseUrl,
+    publicSeed,
+    metadata,
+  } = payload;
+  /** @type {Uint8Array | null} */
+  let plaintext = null;
+
+  try {
+    const dlResp = await fetchEncryptedSourceBundle(r2BaseUrl, source);
+    const encryptedBlob = await readEncryptedDatabaseBlob(dlResp, id);
+    const {
+      encrypted_sha256: expectedEncryptedSha256,
+      chunk_size: chunkSize = 65536,
+      pbkdf2_iterations: iterations = 600000,
+    } = metadata;
+
+    postWorkerProgress(id, 72, "verifying_integrity");
+    const actualEncryptedSha256 = await sha256Hex(encryptedBlob);
+    if (actualEncryptedSha256 !== expectedEncryptedSha256) {
+      throw new Error("Offline database integrity verification failed");
+    }
+
+    setAppSeed(publicSeed);
+
+    postWorkerProgress(id, 75, "decrypting");
+    plaintext = await decryptDatabase(encryptedBlob, chunkSize, iterations);
+
+    postWorkerProgress(id, 85, "loading");
+    await loadDatabaseFromBytes(plaintext);
+
+    postWorkerProgress(id, 90, "saving");
+    await removeSourceFromOpfs(source);
+    try {
+      await saveSourceToOpfs(source, encryptedBlob);
+      await saveSourceVersion(source, metadata.version || "unknown");
+    } catch (error) {
+      await removeSourceFromOpfs(source);
+      throw error;
+    }
+
+    setWorkerVersion(metadata.version || "unknown");
+    setWorkerStatus("ready");
+    postWorkerProgress(id, 100, "done");
+    postWorkerStatus(id, {
+      status: "ready",
+      version: getWorkerVersion(),
+      sizeBytes: encryptedBlob.length,
+      seed: publicSeed,
+    });
+  } catch (error) {
+    setWorkerStatus("error");
+    const message = error instanceof Error ? error.message : "Unknown error";
+    const recoverableMessage = `${message}. Reinstale o banco offline para continuar.`;
+    postWorkerStatus(id, {
+      status: "error",
+      error: recoverableMessage,
+      recoverable: true,
+    });
+    postWorkerError(id, recoverableMessage);
+    await removeSourceFromOpfs(source).catch(() => undefined);
+    return;
+  } finally {
+    if (plaintext) {
+      plaintext.fill(0);
+    }
+  }
+}
+
+async function handleLegacyInstallMessage(id, payload) {
   setWorkerStatus("installing");
   postWorkerProgress(id, 0, "requesting_token");
 
@@ -337,6 +497,26 @@ async function handleInstallMessage(id, payload) {
   }
 }
 
+async function handleInstallMessage(id, payload) {
+  if (getSourceAwareInstallPayloadIntent(payload)) {
+    const validation = validateSourceAwareInstallPayload(payload);
+    if (!validation.ok) {
+      setWorkerStatus("error");
+      postWorkerStatus(id, {
+        status: "error",
+        error: validation.error,
+        recoverable: true,
+      });
+      postWorkerError(id, validation.error);
+      return;
+    }
+    await handleSourceAwareInstallMessage(id, payload);
+    return;
+  }
+
+  await handleLegacyInstallMessage(id, payload);
+}
+
 function handleSearchMessage(id, payload) {
   if (!getWorkerDb() || getWorkerStatus() !== "ready") {
     postWorkerResult(id, { results: null, source: "not_ready" });
@@ -401,13 +581,17 @@ function handleGetStatusMessage(id) {
   });
 }
 
-async function handleRemoveMessage(id) {
+async function handleRemoveMessage(id, payload) {
   closeWorkerDb();
   setWorkerVersion(null);
   setWorkerStatus("not_installed");
   clearSearchCache();
 
-  await removeFromOpfs();
+  if (isFiscalSourceId(payload?.source)) {
+    await removeSourceFromOpfs(payload.source);
+  } else {
+    await removeFromOpfs();
+  }
   postWorkerStatus(id, { status: "not_installed" });
 }
 
@@ -430,7 +614,7 @@ export async function dispatchWorkerMessage(type, id, payload) {
       handleGetStatusMessage(id);
       return;
     case "REMOVE":
-      await handleRemoveMessage(id);
+      await handleRemoveMessage(id, payload);
       return;
     default:
       postWorkerError(id, `Unknown message type: ${type}`);

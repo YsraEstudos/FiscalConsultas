@@ -6,6 +6,7 @@ import {
   isOfflineDatabaseWorkerReadyMessage,
   sendOfflineDatabaseWorkerRequest,
 } from '../../src/context/offlineDatabaseWorkerClient';
+import { validateSourceAwareInstallPayload } from '../../src/workers/dbWorker/messages.js';
 import type {
   OfflineDatabaseWorkerRequest,
   PendingOfflineDatabaseRequest,
@@ -68,6 +69,154 @@ describe('offlineDatabaseWorkerClient', () => {
       type: 'RESULT',
       id: message.id,
       payload: { detail: { codigo: '01.001' } },
+    });
+  });
+
+  it('accepts source-aware install payloads', async () => {
+    const postedMessages: OfflineDatabaseWorkerRequest[] = [];
+    const worker = {
+      postMessage: vi.fn((message: OfflineDatabaseWorkerRequest) => {
+        postedMessages.push(message);
+      }),
+    } as unknown as Worker;
+    const pending = new Map<string, PendingOfflineDatabaseRequest>();
+
+    const requestPromise = sendOfflineDatabaseWorkerRequest(
+      worker,
+      pending,
+      {
+        type: 'INSTALL',
+        id: null,
+        payload: {
+          source: 'nbs',
+          r2BaseUrl: 'https://r2.example.com/fiscal',
+          publicSeed: 'public-seed',
+          metadata: {
+            source: 'nbs',
+            version: '2026.05.01',
+            size_bytes: 4096,
+            sha256: 'plain-sha',
+            encrypted_sha256: 'enc-sha',
+            chunk_size: 65536,
+            pbkdf2_iterations: 600000,
+          },
+        },
+      },
+      1000,
+    );
+
+    const message = postedMessages[0] as OfflineDatabaseWorkerRequest & { id: string };
+    expect(message).toMatchObject({
+      type: 'INSTALL',
+      payload: {
+        source: 'nbs',
+        r2BaseUrl: 'https://r2.example.com/fiscal',
+        publicSeed: 'public-seed',
+        metadata: {
+          source: 'nbs',
+          version: '2026.05.01',
+          encrypted_sha256: 'enc-sha',
+        },
+      },
+    });
+
+    const pendingEntry = pending.get(message.id);
+    expect(pendingEntry).toBeDefined();
+    clearTimeout(pendingEntry!.timeout);
+    pending.delete(message.id);
+    pendingEntry!.resolve({
+      type: 'STATUS',
+      id: message.id,
+      payload: { status: 'ready', version: '2026.05.01' },
+    });
+
+    await expect(requestPromise).resolves.toMatchObject({
+      type: 'STATUS',
+      payload: { status: 'ready', version: '2026.05.01' },
+    });
+  });
+
+  it('accepts source-aware init and remove payloads', async () => {
+    const worker = {
+      postMessage: vi.fn(),
+    } as unknown as Worker;
+    const pending = new Map<string, PendingOfflineDatabaseRequest>();
+
+    sendOfflineDatabaseWorkerRequest(
+      worker,
+      pending,
+      {
+        type: 'INIT',
+        id: null,
+        payload: {
+          source: 'nesh',
+          publicSeed: 'public-seed',
+          chunkSize: 65536,
+          pbkdf2Iterations: 600000,
+        },
+      },
+      1000,
+    ).catch(() => undefined);
+
+    sendOfflineDatabaseWorkerRequest(
+      worker,
+      pending,
+      {
+        type: 'REMOVE',
+        id: null,
+        payload: { source: 'nesh' },
+      },
+      1000,
+    ).catch(() => undefined);
+
+    expect(worker.postMessage).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        type: 'INIT',
+        payload: expect.objectContaining({
+          source: 'nesh',
+          publicSeed: 'public-seed',
+        }),
+      }),
+    );
+    expect(worker.postMessage).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        type: 'REMOVE',
+        payload: { source: 'nesh' },
+      }),
+    );
+
+    for (const pendingEntry of pending.values()) {
+      clearTimeout(pendingEntry.timeout);
+    }
+  });
+
+  it('rejects malformed source-aware install payloads before legacy fallback', () => {
+    expect(
+      validateSourceAwareInstallPayload({
+        source: 'nbs',
+        r2BaseUrl: 'https://r2.example.com/fiscal',
+        publicSeed: 'public-seed',
+        metadata: {
+          source: 'tipi',
+          version: '2026.05.01',
+          encrypted_sha256: 'enc-sha',
+        },
+      }),
+    ).toEqual({
+      ok: false,
+      error: 'Source metadata does not match install source',
+    });
+
+    expect(
+      validateSourceAwareInstallPayload({
+        source: 'nbs',
+        r2BaseUrl: 'https://r2.example.com/fiscal',
+      }),
+    ).toEqual({
+      ok: false,
+      error: 'Source-aware install payload is incomplete',
     });
   });
 

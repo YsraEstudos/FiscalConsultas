@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 vi.mock('./crypto.js', () => ({
   decryptDatabase: vi.fn(),
@@ -13,9 +14,14 @@ vi.mock('./catalogSearch.js', () => ({
 vi.mock('./opfs.js', () => ({
   readFromOpfs: vi.fn(),
   readSeed: vi.fn(),
+  readSourceFromOpfs: vi.fn(),
+  readSourceVersion: vi.fn(),
   readVersion: vi.fn(),
   removeFromOpfs: vi.fn(),
+  removeSourceFromOpfs: vi.fn(),
   saveSeed: vi.fn(),
+  saveSourceToOpfs: vi.fn(),
+  saveSourceVersion: vi.fn(),
   saveToOpfs: vi.fn(),
   saveVersion: vi.fn(),
 }));
@@ -148,5 +154,42 @@ describe('dbWorker messages network helpers', () => {
         error: expect.stringContaining(friendlyMessage),
       }),
     );
+  });
+
+  it('treats legacy install payloads with metadata fields as legacy installs', async () => {
+    removeFromOpfs.mockResolvedValue(undefined);
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              token: 'token-1',
+              app_seed: 'seed-1',
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        )
+        .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), { status: 200 })),
+    );
+
+    await dispatchWorkerMessage('INSTALL', 'install-legacy', {
+      apiBase: 'https://api.example.test/api',
+      metadata: null,
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      'https://api.example.test/api/database/token',
+      expect.objectContaining({
+        method: 'POST',
+      }),
+    );
+  });
+
+  it('does not trim fiscal R2 bundle URLs with a trailing-slash regex', () => {
+    const source = readFileSync('src/workers/dbWorker/messages.js', 'utf8');
+
+    expect(source).not.toContain('replace(/\\/+$/, "")');
   });
 });

@@ -20,6 +20,10 @@ export function isFiscalSourceId(value: unknown): value is FiscalSourceId {
   return typeof value === 'string' && FISCAL_SOURCE_IDS.has(value);
 }
 
+export function normalizeFiscalR2BaseUrl(value: string | undefined): string {
+  return trimTrailingSlashes((value || '').trim());
+}
+
 function trimTrailingSlashes(value: string): string {
   let end = value.length;
   while (end > 0 && value.charCodeAt(end - 1) === 47) {
@@ -32,7 +36,7 @@ export function buildFiscalBundleUrls(
   baseUrl: string,
   source: FiscalSourceId,
 ): FiscalBundleUrls {
-  const normalizedBaseUrl = trimTrailingSlashes(baseUrl.trim());
+  const normalizedBaseUrl = normalizeFiscalR2BaseUrl(baseUrl);
   if (!normalizedBaseUrl) {
     throw new Error('baseUrl is required for fiscal bundle URLs');
   }

@@ -144,8 +144,32 @@ function makeVersionResponse(version: string) {
   );
 }
 
+function makeSourceMetadataResponse(version: string) {
+  return new Response(
+    JSON.stringify({
+      source: 'nesh',
+      version,
+      size_bytes: 4096,
+      sha256: 'plain-sha',
+      encrypted_sha256: 'enc-sha',
+      chunk_size: 65536,
+      pbkdf2_iterations: 600000,
+    }),
+    {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    },
+  );
+}
+
 function getWorkerMessages() {
   return MockWorker.instances[0]?.messages.map((message) => message.type) ?? [];
+}
+
+function getPostedWorkerMessages() {
+  return MockWorker.instances[0]?.messages ?? [];
 }
 
 async function flushEffects() {
@@ -186,6 +210,7 @@ describe('LocalDatabaseContext auto-install behavior', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it('auto-installs on first supported visit when the database is missing', async () => {
@@ -232,6 +257,91 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     expect(getWorkerMessages()).not.toContain('INSTALL');
     expect(localStorage.getItem('offline-db:auto-install-opt-out')).toBe('true');
     expect(screen.getByTestId('status')).toHaveTextContent('not_installed');
+  });
+
+  it('uses R2 metadata and public seed for first-time install when configured', async () => {
+    vi.stubEnv('VITE_FISCAL_R2_BASE_URL', 'https://r2.example.com/fiscal');
+    vi.stubEnv('VITE_OFFLINE_DB_PUBLIC_SEED', 'public-seed');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/database/version') || url.includes('/database/token')) {
+          return Promise.reject(new Error(`legacy endpoint called: ${url}`));
+        }
+        return Promise.resolve(makeSourceMetadataResponse('2026.05.01'));
+      }),
+    );
+
+    render(
+      <LocalDatabaseProvider>
+        <Probe />
+      </LocalDatabaseProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('status')).toHaveTextContent('not_installed'),
+    );
+    expect(currentContext).not.toBeNull();
+
+    await act(async () => {
+      await currentContext!.install();
+    });
+
+    const fetchUrls = (fetch as ReturnType<typeof vi.fn>).mock.calls.map((call) =>
+      String(call[0]),
+    );
+    expect(fetchUrls).toContain('https://r2.example.com/fiscal/nesh/nesh.meta.json');
+    expect(fetchUrls.join('\n')).not.toContain('/database/version');
+    expect(fetchUrls.join('\n')).not.toContain('/database/token');
+    expect(getPostedWorkerMessages()).toContainEqual(
+      expect.objectContaining({
+        type: 'INSTALL',
+        payload: {
+          source: 'nesh',
+          r2BaseUrl: 'https://r2.example.com/fiscal',
+          publicSeed: 'public-seed',
+          metadata: expect.objectContaining({
+            source: 'nesh',
+            version: '2026.05.01',
+            encrypted_sha256: 'enc-sha',
+          }),
+        },
+      }),
+    );
+  });
+
+  it('falls back to the legacy install payload when R2 metadata is unavailable', async () => {
+    vi.stubEnv('VITE_FISCAL_R2_BASE_URL', 'https://r2.example.com/fiscal');
+    vi.stubEnv('VITE_OFFLINE_DB_PUBLIC_SEED', 'public-seed');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() => Promise.resolve(makeVersionResponse('2026.05.01'))),
+    );
+
+    render(
+      <LocalDatabaseProvider>
+        <Probe />
+      </LocalDatabaseProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('status')).toHaveTextContent('not_installed'),
+    );
+    expect(currentContext).not.toBeNull();
+
+    await act(async () => {
+      await currentContext!.install();
+    });
+
+    expect(getPostedWorkerMessages()).toContainEqual(
+      expect.objectContaining({
+        type: 'INSTALL',
+        payload: {
+          apiBase: expect.any(String),
+          clerkToken: '',
+        },
+      }),
+    );
   });
 
   it('clears the auto-install opt-out when install is started manually', async () => {

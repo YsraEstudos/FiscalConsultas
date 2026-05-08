@@ -1,5 +1,15 @@
 import { API_BASE_URL } from '../services/api';
-import { sanitizeOfflineMetadata, type OfflineDatabaseMetadata } from '../utils/offlineDatabase';
+import {
+    sanitizeOfflineMetadata,
+    sanitizeOfflineSourceMetadata,
+    type OfflineDatabaseMetadata,
+    type OfflineSourceMetadata,
+} from '../utils/offlineDatabase';
+import {
+    buildFiscalBundleUrls,
+    normalizeFiscalR2BaseUrl,
+    type FiscalSourceId,
+} from './offlineSources';
 
 export const OFFLINE_CHANNEL_NAME = 'offline-db-channel';
 export const OFFLINE_WAIT_TIMEOUT_MS = 240_000;
@@ -7,6 +17,82 @@ const OFFLINE_METADATA_TIMEOUTS_MS = [4_000, 10_000, 20_000] as const;
 
 export function getOfflineDatabaseApiBaseUrl(): string {
     return API_BASE_URL;
+}
+
+export function getFiscalR2BaseUrl(): string {
+    const env = import.meta.env as { VITE_FISCAL_R2_BASE_URL?: string | undefined };
+    return normalizeFiscalR2BaseUrl(env.VITE_FISCAL_R2_BASE_URL);
+}
+
+export function getOfflineDbPublicSeed(): string {
+    const env = import.meta.env as { VITE_OFFLINE_DB_PUBLIC_SEED?: string | undefined };
+    return (env.VITE_OFFLINE_DB_PUBLIC_SEED || '').trim();
+}
+
+export async function fetchOfflineSourceAvailabilityMetadata(
+    r2BaseUrl: string,
+    source: FiscalSourceId,
+): Promise<OfflineSourceMetadata | null> {
+    let lastError: unknown = null;
+    for (const timeoutMs of OFFLINE_METADATA_TIMEOUTS_MS) {
+        try {
+            return await fetchOfflineSourceAvailabilityMetadataOnce(
+                r2BaseUrl,
+                source,
+                timeoutMs,
+            );
+        } catch (err) {
+            lastError = err;
+            if (!isRetryableOfflineMetadataError(err)) break;
+        }
+    }
+
+    throw lastError instanceof Error
+        ? lastError
+        : new Error('Source metadata check failed for an unknown reason');
+}
+
+async function fetchOfflineSourceAvailabilityMetadataOnce(
+    r2BaseUrl: string,
+    source: FiscalSourceId,
+    timeoutMs: number,
+): Promise<OfflineSourceMetadata | null> {
+    const { metadataUrl } = buildFiscalBundleUrls(r2BaseUrl, source);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const response = await fetch(metadataUrl, {
+            method: 'GET',
+            headers: { Accept: 'application/json' },
+            signal: controller.signal,
+        });
+
+        if (!response.ok) {
+            throw new Error(`Source metadata check failed (${response.status})`);
+        }
+
+        return sanitizeOfflineSourceMetadata(source, await response.json());
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+export async function fetchEncryptedFiscalBundle(
+    r2BaseUrl: string,
+    source: FiscalSourceId,
+): Promise<Response> {
+    const { encryptedUrl } = buildFiscalBundleUrls(r2BaseUrl, source);
+    const response = await fetch(encryptedUrl, {
+        method: 'GET',
+        headers: { Accept: 'application/octet-stream' },
+    });
+
+    if (!response.ok) {
+        throw new Error(`Source bundle download failed (${response.status})`);
+    }
+
+    return response;
 }
 
 export async function primeOfflineShellCache(): Promise<void> {

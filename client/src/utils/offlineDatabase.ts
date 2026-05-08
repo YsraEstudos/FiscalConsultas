@@ -20,6 +20,20 @@ export interface OfflineSourceMetadata extends OfflineDatabaseMetadata {
   encrypted_sha256: string;
 }
 
+export function isOfflineSourceMetadata(
+  metadata: unknown
+): metadata is OfflineSourceMetadata {
+  return Boolean(
+    metadata
+      && typeof metadata === "object"
+      && "source" in metadata
+      && isFiscalSourceId((metadata as { source?: unknown }).source)
+      && "encrypted_sha256" in metadata
+      && typeof (metadata as { encrypted_sha256?: unknown }).encrypted_sha256 === "string"
+      && (metadata as { encrypted_sha256: string }).encrypted_sha256.trim()
+  );
+}
+
 export function compareOfflineVersions(
   left: string | null | undefined,
   right: string | null | undefined

@@ -2,7 +2,10 @@ import type {
     NbsCatalogDetailApiResponse,
 } from '../types/api.types';
 import type { FiscalSourceId } from './offlineSources';
-import type { OfflineDatabaseMetadata } from '../utils/offlineDatabase';
+import type {
+    OfflineDatabaseMetadata,
+    OfflineSourceMetadata,
+} from '../utils/offlineDatabase';
 import type { OfflineDatabaseSupportReport } from './offlineDatabaseStorage';
 
 export type OfflineDatabaseStatus =
@@ -110,12 +113,26 @@ export type OfflineDatabaseWorkerRequest =
     | {
         type: 'INIT';
         id: string | null;
-        payload: { chunkSize: number; pbkdf2Iterations: number; seed?: string };
+        payload:
+            | { chunkSize: number; pbkdf2Iterations: number; seed?: string }
+            | {
+                chunkSize: number;
+                pbkdf2Iterations: number;
+                source: OfflineFiscalSourceId;
+                publicSeed: string;
+            };
     }
     | {
         type: 'INSTALL';
         id: string | null;
-        payload: { apiBase: string; clerkToken?: string | null };
+        payload:
+            | { apiBase: string; clerkToken?: string | null }
+            | {
+                source: OfflineFiscalSourceId;
+                r2BaseUrl: string;
+                publicSeed: string;
+                metadata: OfflineSourceMetadata;
+            };
     }
     | {
         type: 'TOKEN_RESPONSE';
@@ -131,7 +148,7 @@ export type OfflineDatabaseWorkerRequest =
     | {
         type: 'REMOVE';
         id: string | null;
-        payload: Record<string, never>;
+        payload: Record<string, never> | { source: OfflineFiscalSourceId };
     }
     | {
         type: 'SEARCH';

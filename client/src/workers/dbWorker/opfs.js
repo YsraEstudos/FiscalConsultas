@@ -1,4 +1,10 @@
-import { DB_OPFS_FILENAME, DB_SEED_KEY, DB_VERSION_KEY } from "./constants.js";
+import {
+  DB_OPFS_FILENAME,
+  DB_SEED_KEY,
+  DB_SOURCE_OPFS_PREFIX,
+  DB_SOURCE_VERSION_PREFIX,
+  DB_VERSION_KEY,
+} from "./constants.js";
 
 /**
  * @returns {Promise<FileSystemDirectoryHandle>}
@@ -18,6 +24,44 @@ export async function saveToOpfs(data) {
   const writable = await fileHandle.createWritable();
   await writable.write(data);
   await writable.close();
+}
+
+function getSourceFilename(source) {
+  return `${DB_SOURCE_OPFS_PREFIX}${source}`;
+}
+
+function getSourceVersionFilename(source) {
+  return `${DB_SOURCE_VERSION_PREFIX}${source}`;
+}
+
+/**
+ * @param {string} source
+ * @param {Uint8Array} data
+ */
+export async function saveSourceToOpfs(source, data) {
+  const root = await getOpfsRoot();
+  const fileHandle = await root.getFileHandle(getSourceFilename(source), {
+    create: true,
+  });
+  const writable = await fileHandle.createWritable();
+  await writable.write(data);
+  await writable.close();
+}
+
+/**
+ * @param {string} source
+ * @returns {Promise<Uint8Array | null>}
+ */
+export async function readSourceFromOpfs(source) {
+  try {
+    const root = await getOpfsRoot();
+    const fileHandle = await root.getFileHandle(getSourceFilename(source));
+    const file = await fileHandle.getFile();
+    const buffer = await file.arrayBuffer();
+    return new Uint8Array(buffer);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -59,6 +103,25 @@ export async function removeFromOpfs() {
 }
 
 /**
+ * @param {string} source
+ */
+export async function removeSourceFromOpfs(source) {
+  try {
+    const root = await getOpfsRoot();
+    await root.removeEntry(getSourceFilename(source));
+  } catch {
+    // File already absent.
+  }
+
+  try {
+    const root = await getOpfsRoot();
+    await root.removeEntry(getSourceVersionFilename(source));
+  } catch {
+    // Version marker already absent.
+  }
+}
+
+/**
  * @param {string} version
  */
 export async function saveVersion(version) {
@@ -76,6 +139,35 @@ export async function readVersion() {
   try {
     const root = await getOpfsRoot();
     const fileHandle = await root.getFileHandle(DB_VERSION_KEY);
+    const file = await fileHandle.getFile();
+    return await file.text();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {string} source
+ * @param {string} version
+ */
+export async function saveSourceVersion(source, version) {
+  const root = await getOpfsRoot();
+  const fileHandle = await root.getFileHandle(getSourceVersionFilename(source), {
+    create: true,
+  });
+  const writable = await fileHandle.createWritable();
+  await writable.write(version);
+  await writable.close();
+}
+
+/**
+ * @param {string} source
+ * @returns {Promise<string | null>}
+ */
+export async function readSourceVersion(source) {
+  try {
+    const root = await getOpfsRoot();
+    const fileHandle = await root.getFileHandle(getSourceVersionFilename(source));
     const file = await fileHandle.getFile();
     return await file.text();
   } catch {

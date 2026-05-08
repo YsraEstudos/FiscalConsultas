@@ -3,17 +3,24 @@ import { useCallback } from 'react';
 import {
     compareOfflineVersions,
     formatOfflineDatabaseErrorMessage,
+    isOfflineSourceMetadata,
 } from '../utils/offlineDatabase';
 
 import {
     clearOfflineDatabaseAutoInstallOptOut,
     persistStoredOfflineDatabaseMetadata,
+    persistStoredOfflineSourceMetadata,
     readStoredOfflineDatabaseMetadata,
     runOfflineDatabaseTaskInBackground,
     setOfflineDatabaseAutoInstallOptOut,
 } from './offlineDatabaseStorage';
+import {
+    getFiscalR2BaseUrl,
+    getOfflineDbPublicSeed,
+    getOfflineDatabaseApiBaseUrl,
+    primeOfflineShellCache,
+} from './offlineDatabaseSync';
 import { runCoordinatedOfflineDatabaseInstall } from './offlineDatabaseInstallCoordinator';
-import { getOfflineDatabaseApiBaseUrl, primeOfflineShellCache } from './offlineDatabaseSync';
 import type { OfflineDatabaseOperations } from './offlineDatabaseOperations.shared';
 import type { OfflineDatabaseOperationsArgs } from './offlineDatabaseOperations.shared';
 
@@ -79,14 +86,26 @@ export function useOfflineDatabaseMutations({
 
             runOfflineDatabaseTaskInBackground(primeOfflineShellCache());
 
+            const r2BaseUrl = getFiscalR2BaseUrl();
+            const publicSeed = getOfflineDbPublicSeed();
+            const installPayload =
+                r2BaseUrl && publicSeed && isOfflineSourceMetadata(metadata)
+                    ? {
+                        source: metadata.source,
+                        r2BaseUrl,
+                        publicSeed,
+                        metadata,
+                    }
+                    : {
+                        apiBase: getOfflineDatabaseApiBaseUrl(),
+                        clerkToken: '',
+                    };
+
             await sendToWorker(
                 {
                     type: 'INSTALL',
                     id: null,
-                    payload: {
-                        apiBase: getOfflineDatabaseApiBaseUrl(),
-                        clerkToken: '',
-                    },
+                    payload: installPayload,
                 },
                 600_000,
             );
@@ -156,11 +175,14 @@ export function useOfflineDatabaseMutations({
                 {
                     type: 'REMOVE',
                     id: null,
-                    payload: {},
+                    payload: getFiscalR2BaseUrl() && getOfflineDbPublicSeed()
+                        ? { source: LEGACY_MONOLITHIC_BUNDLE_SOURCE }
+                        : {},
                 },
                 10_000,
             );
             persistStoredOfflineDatabaseMetadata(null);
+            persistStoredOfflineSourceMetadata(LEGACY_MONOLITHIC_BUNDLE_SOURCE, null);
             setOfflineDatabaseAutoInstallOptOut();
             sessionStorage.removeItem('offline_db_seed');
             setLocalVersion(null);
