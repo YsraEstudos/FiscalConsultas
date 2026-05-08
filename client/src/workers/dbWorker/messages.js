@@ -252,10 +252,18 @@ async function fetchEncryptedDatabaseBundle(apiBase, id) {
 }
 
 function buildFiscalBundleUrls(r2BaseUrl, source) {
-  const normalizedBaseUrl = String(r2BaseUrl || "").replace(/\/+$/, "");
+  const normalizedBaseUrl = trimTrailingSlashes(String(r2BaseUrl || ""));
   return {
     encryptedUrl: `${normalizedBaseUrl}/${source}/${source}.enc`,
   };
+}
+
+function trimTrailingSlashes(value) {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return value.slice(0, end);
 }
 
 function getSourceAwareInstallPayloadIntent(payload) {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 vi.mock('./crypto.js', () => ({
   decryptDatabase: vi.fn(),
@@ -184,5 +185,11 @@ describe('dbWorker messages network helpers', () => {
         method: 'POST',
       }),
     );
+  });
+
+  it('does not trim fiscal R2 bundle URLs with a trailing-slash regex', () => {
+    const source = readFileSync('src/workers/dbWorker/messages.js', 'utf8');
+
+    expect(source).not.toContain('replace(/\\/+$/, "")');
   });
 });
