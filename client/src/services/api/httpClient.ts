@@ -3,6 +3,7 @@ import axios from 'axios';
 import { configureApiAuthTransport } from './authTransport';
 
 const explicitBaseUrl = import.meta.env.VITE_API_FILTER_URL || import.meta.env.VITE_API_URL;
+const DEFAULT_PAGES_API_URL = 'https://fiscal-api-5eok.onrender.com';
 
 const isLocalHost = (host: string) => host === 'localhost' || host === '127.0.0.1';
 
@@ -12,11 +13,16 @@ const isExplicitLocalApi =
 
 const shouldUseDevProxyApi = import.meta.env.DEV;
 const hasGlobalLocation = typeof globalThis.location !== 'undefined';
+const isCloudflarePagesHost =
+    hasGlobalLocation && /\.pages\.dev$/i.test(globalThis.location.hostname);
 const shouldUseProxyApi =
     shouldUseDevProxyApi
     || (hasGlobalLocation && isExplicitLocalApi && !isLocalHost(globalThis.location.hostname));
 
-const rawBaseUrl = shouldUseProxyApi ? '/api' : (explicitBaseUrl || '/api');
+const fallbackBaseUrl = isCloudflarePagesHost ? DEFAULT_PAGES_API_URL : '/api';
+const rawBaseUrl = shouldUseProxyApi && !isCloudflarePagesHost
+    ? '/api'
+    : (explicitBaseUrl || fallbackBaseUrl);
 
 function normalizeApiUrl(base: string): string {
     const trimmed = base.replace(/\/$/, '');

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildOfflineDatabaseNetworkErrorMessage,
   compareOfflineVersions,
   formatOfflineDatabaseErrorMessage,
   sanitizeOfflineMetadata,
@@ -69,5 +70,20 @@ describe('offlineDatabase utils', () => {
     expect(formatOfflineDatabaseErrorMessage(new Error('  boom  '))).toBe('boom');
     expect(formatOfflineDatabaseErrorMessage({ message: '  boom  ' })).toBe('boom');
     expect(formatOfflineDatabaseErrorMessage({ message: '   ' })).toBe('Unknown error');
+  });
+
+  it('builds actionable network messages for Cloudflare Pages backend failures', () => {
+    expect(
+      buildOfflineDatabaseNetworkErrorMessage(
+        'https://fiscal-api-5eok.onrender.com/api/database/token',
+        'token',
+      ),
+    ).toContain('Verifique se o backend permite esta origem:');
+    expect(
+      buildOfflineDatabaseNetworkErrorMessage(
+        'https://fiscal-api-5eok.onrender.com/api/database/token',
+        'token',
+      ),
+    ).toContain('https://fiscal-api-5eok.onrender.com');
   });
 });

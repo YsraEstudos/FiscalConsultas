@@ -60,7 +60,12 @@ class MockWorker {
     });
   }
 
-  terminate(): void {}
+  terminate(): void {
+    // Mirror Worker termination by detaching handlers from this test double.
+    this.onmessage = null;
+    this.onerror = null;
+    this.messageListeners.clear();
+  }
 
   private respond(message: WorkerPayload): void {
     if (message.type === 'INIT') {
@@ -194,6 +199,9 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     vi.stubGlobal('Worker', MockWorker as unknown as typeof Worker);
     vi.stubGlobal('BroadcastChannel', undefined);
     vi.stubGlobal('SharedArrayBuffer', class SharedArrayBufferMock {});
+    vi.stubGlobal('isSecureContext', true);
+    vi.stubGlobal('crossOriginIsolated', true);
+    vi.stubGlobal('crypto', { subtle: {}, randomUUID: vi.fn(() => 'mock-instance') });
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation(() => Promise.resolve(makeVersionResponse('2026.04'))),
@@ -205,7 +213,7 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     vi.unstubAllEnvs();
   });
 
-  it('does not auto-install on first visit when the database is missing', async () => {
+  it('auto-installs on first supported visit when the database is missing', async () => {
     render(
       <LocalDatabaseProvider>
         <Probe />
@@ -213,12 +221,12 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByTestId('status')).toHaveTextContent('not_installed'),
+      expect(screen.getByTestId('status')).toHaveTextContent('ready'),
     );
     await flushEffects();
 
-    expect(getWorkerMessages()).not.toContain('INSTALL');
-    expect(screen.getByTestId('status')).toHaveTextContent('not_installed');
+    expect(getWorkerMessages()).toContain('INSTALL');
+    expect(screen.getByTestId('status')).toHaveTextContent('ready');
   });
 
   it('does not reinstall immediately after remove()', async () => {
@@ -247,6 +255,7 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     await flushEffects();
 
     expect(getWorkerMessages()).not.toContain('INSTALL');
+    expect(localStorage.getItem('offline-db:auto-install-opt-out')).toBe('true');
     expect(screen.getByTestId('status')).toHaveTextContent('not_installed');
   });
 
@@ -301,7 +310,7 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     );
   });
 
-  it('reports corrupted R2 metadata without sending an install request', async () => {
+  it('falls back to the legacy install payload when R2 metadata is malformed', async () => {
     vi.stubEnv('VITE_FISCAL_R2_BASE_URL', 'https://r2.example.com/fiscal');
     vi.stubEnv('VITE_OFFLINE_DB_PUBLIC_SEED', 'public-seed');
     vi.stubGlobal(
@@ -335,10 +344,78 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     );
     expect(currentContext).not.toBeNull();
 
-    await expect(currentContext!.install()).rejects.toThrow(
-      'Metadados da fonte fiscal estão corrompidos. Limpe o cache do navegador e tente novamente.',
+    await act(async () => {
+      await currentContext!.install();
+    });
+
+    expect(getPostedWorkerMessages()).toContainEqual(
+      expect.objectContaining({
+        type: 'INSTALL',
+        payload: {
+          apiBase: expect.any(String),
+          clerkToken: '',
+        },
+      }),
+    );
+  });
+
+  it('falls back to the legacy install payload when R2 metadata is unavailable', async () => {
+    vi.stubEnv('VITE_FISCAL_R2_BASE_URL', 'https://r2.example.com/fiscal');
+    vi.stubEnv('VITE_OFFLINE_DB_PUBLIC_SEED', 'public-seed');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/nesh/nesh.meta.json')) {
+          return Promise.reject(new Error('source metadata unavailable'));
+        }
+        return Promise.resolve(makeVersionResponse('2026.05.01'));
+      }),
     );
 
-    expect(getPostedWorkerMessages().map((message) => message.type)).not.toContain('INSTALL');
+    render(
+      <LocalDatabaseProvider>
+        <Probe />
+      </LocalDatabaseProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('status')).toHaveTextContent('not_installed'),
+    );
+    expect(currentContext).not.toBeNull();
+
+    await act(async () => {
+      await currentContext!.install();
+    });
+
+    expect(getPostedWorkerMessages()).toContainEqual(
+      expect.objectContaining({
+        type: 'INSTALL',
+        payload: {
+          apiBase: expect.any(String),
+          clerkToken: '',
+        },
+      }),
+    );
+  });
+
+  it('clears the auto-install opt-out when install is started manually', async () => {
+    localStorage.setItem('offline-db:auto-install-opt-out', 'true');
+
+    render(
+      <LocalDatabaseProvider>
+        <Probe />
+      </LocalDatabaseProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('status')).toHaveTextContent('not_installed'),
+    );
+
+    await act(async () => {
+      await currentContext!.install();
+    });
+
+    expect(localStorage.getItem('offline-db:auto-install-opt-out')).toBeNull();
+    expect(getWorkerMessages()).toContain('INSTALL');
   });
 });

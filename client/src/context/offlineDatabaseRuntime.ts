@@ -15,12 +15,13 @@ import {
 import {
     buildOfflineDatabaseInitPayload,
     createOfflineDatabaseInstanceId,
-    isOfflineDatabaseSupported,
+    getOfflineDatabaseSupportReport,
     persistStoredOfflineDatabaseMetadata,
     persistStoredOfflineSourceMetadata,
     readStoredOfflineDatabaseMetadata,
     readStoredOfflineSourceMetadata,
     runOfflineDatabaseTaskInBackground,
+    type OfflineDatabaseSupportReport,
 } from './offlineDatabaseStorage';
 import {
     fetchOfflineSourceAvailabilityMetadata,
@@ -59,6 +60,7 @@ export interface OfflineDatabaseRuntimeState {
     error: string | null;
     dbSizeBytes: number | null;
     isSupported: boolean;
+    supportReport: OfflineDatabaseSupportReport;
     isRemoving: boolean;
 }
 
@@ -74,7 +76,8 @@ export interface OfflineDatabaseRuntimeValue {
 }
 
 export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
-    const isSupported = useMemo(() => isOfflineDatabaseSupported(), []);
+    const supportReport = useMemo(() => getOfflineDatabaseSupportReport(), []);
+    const isSupported = supportReport.supported;
     const instanceIdRef = useRef(createOfflineDatabaseInstanceId());
     const remoteCheckRef = useRef<Promise<OfflineDatabaseMetadata | null> | null>(null);
     const remoteMetaRef = useRef<OfflineDatabaseMetadata | null>(
@@ -82,7 +85,9 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
     );
 
     const [status, setStatus] = useState<OfflineDatabaseStatus>(
-        isSupported ? 'checking' : 'unsupported',
+        isSupported || supportReport.canRecoverWithIsolationReload
+            ? 'checking'
+            : 'unsupported',
     );
     const [progress, setProgress] = useState(0);
     const [progressStep, setProgressStep] = useState('');
@@ -130,12 +135,13 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
         (metadata: OfflineDatabaseMetadata | null) => {
             if (!metadata) return;
             remoteMetaRef.current = metadata;
-            persistStoredOfflineDatabaseMetadata(metadata);
             if (isOfflineSourceMetadata(metadata)) {
                 persistStoredOfflineSourceMetadata(
                     metadata.source,
                     metadata,
                 );
+            } else {
+                persistStoredOfflineDatabaseMetadata(metadata);
             }
             setLocalVersion(metadata.version);
             setRemoteVersion(metadata.version);
@@ -200,14 +206,23 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
                 try {
                     const r2BaseUrl = getFiscalR2BaseUrl();
                     const publicSeed = getOfflineDbPublicSeed();
-                    const metadata = r2BaseUrl && publicSeed
-                        ? await fetchOfflineSourceAvailabilityMetadata(
-                            r2BaseUrl,
-                            LEGACY_MONOLITHIC_BUNDLE_SOURCE,
-                        )
-                        : await fetchOfflineDatabaseAvailabilityMetadata(
-                            getOfflineDatabaseApiBaseUrl(),
-                        );
+                    let metadata: OfflineDatabaseMetadata | null = null;
+                    if (r2BaseUrl && publicSeed) {
+                        try {
+                            metadata = await fetchOfflineSourceAvailabilityMetadata(
+                                r2BaseUrl,
+                                LEGACY_MONOLITHIC_BUNDLE_SOURCE,
+                            );
+                        } catch (sourceErr) {
+                            console.warn(
+                                'fetchOfflineSourceAvailabilityMetadata failed',
+                                sourceErr,
+                            );
+                        }
+                    }
+                    metadata ||= await fetchOfflineDatabaseAvailabilityMetadata(
+                        getOfflineDatabaseApiBaseUrl(),
+                    );
                     remoteMetaRef.current = metadata;
                     if (isOfflineSourceMetadata(metadata)) {
                         persistStoredOfflineSourceMetadata(metadata.source, metadata);
@@ -278,6 +293,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             error,
             dbSizeBytes,
             isSupported,
+            supportReport,
             isRemoving,
         }),
         [
@@ -285,11 +301,13 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             error,
             isRemoving,
             isSupported,
+            supportReport,
             localVersion,
             progress,
             progressStep,
             remoteVersion,
             status,
+            supportReport,
             updateAvailable,
         ],
     );
