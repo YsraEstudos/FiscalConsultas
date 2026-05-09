@@ -172,14 +172,8 @@ async function installCodeCatalogMocks(page: Page) {
 }
 
 async function searchNeshInDefaultTab(page: Page) {
-  const request = page.waitForRequest((candidate) =>
-    candidate.url().includes('/api/search')
-    && new URL(candidate.url()).searchParams.get('ncm') === '8405',
-  );
-
   await page.locator('#ncmInput').fill('8405');
   await page.locator('#ncmInput').press('Enter');
-  await request;
   await expect(page.locator('#results-content-tab-1')).toBeVisible();
   await waitForInitialAutoScroll(page, '#pos-84-05');
   await waitForScrollToSettle(page, 'results-content-tab-1');
@@ -189,14 +183,8 @@ async function createTipiTabAndSearch(page: Page) {
   await page.getByTitle('Nova aba').click();
   await page.getByRole('button', { name: 'TIPI', exact: true }).click();
 
-  const request = page.waitForRequest((candidate) =>
-    candidate.url().includes('/api/tipi/search')
-    && new URL(candidate.url()).searchParams.get('ncm') === '11.02.40',
-  );
-
   await page.locator('#ncmInput').fill('11.02.40');
   await page.locator('#ncmInput').press('Enter');
-  await request;
 
   await expect.poll(async () => getActiveTabDocument(page)).toBe('tipi');
   await waitForInitialAutoScroll(page, '#pos-11-02-40');
