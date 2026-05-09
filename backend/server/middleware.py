@@ -348,9 +348,7 @@ class TenantMiddleware:
         "/api/glossary",
         "/api/webhooks",
     }
-    PUBLIC_PREFIX_PATHS = (
-        "/api/webhooks/",
-    )
+    PUBLIC_PREFIX_PATHS = ("/api/webhooks/",)
 
     def __init__(self, app):
         self.app = app
