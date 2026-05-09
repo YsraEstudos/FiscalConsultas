@@ -306,7 +306,6 @@ async function handleSourceAwareInstallMessage(id, payload) {
     await loadDatabaseFromBytes(plaintext);
 
     postWorkerProgress(id, 90, "saving");
-    await removeSourceFromOpfs(source);
     try {
       setAppSeed(publicSeed);
       await saveSourceToOpfs(source, encryptedBlob);

@@ -882,6 +882,7 @@ def _source_text_expr(columns: set[str], column: str, fallback: str = "NULL") ->
 
 
 def _consolidate_unspsc_database(output_path: Path) -> None:
+    _require_source_db("unspsc", UNSPSC_DB)
     conn = _initialize_output_db(output_path)
     cursor = conn.cursor()
 
@@ -901,52 +902,51 @@ def _consolidate_unspsc_database(output_path: Path) -> None:
     _create_db_metadata(cursor, "unspsc")
     conn.commit()
 
-    if UNSPSC_DB.exists():
-        cursor.execute("ATTACH DATABASE ? AS unspsc", (str(UNSPSC_DB),))  # nosec B608
-        cursor.execute("""
-            SELECT 1 FROM unspsc.sqlite_master
-            WHERE type='table' AND name='unspsc_items' LIMIT 1
-        """)
-        if cursor.fetchone():
-            columns = _source_columns(cursor, "unspsc", "unspsc_items")
-            code_clean_fallback = "code" if "code" in columns else "''"
-            title_fallback = "description" if "description" in columns else "NULL"
-            code_clean_expr = _source_text_expr(
-                columns,
-                "code_clean",
-                code_clean_fallback,
-            )
-            title_expr = _source_text_expr(columns, "title", title_fallback)
-            description_expr = _source_text_expr(columns, "description")
-            segment_expr = _source_text_expr(columns, "segment")
-            family_expr = _source_text_expr(columns, "family")
-            class_expr = _source_text_expr(columns, "class")
-            commodity_expr = _source_text_expr(columns, "commodity")
-            cursor.execute(f"""
-                INSERT OR IGNORE INTO unspsc_items
-                    (
-                        code,
-                        code_clean,
-                        title,
-                        description,
-                        segment,
-                        family,
-                        class,
-                        commodity
-                    )
-                SELECT
+    cursor.execute("ATTACH DATABASE ? AS unspsc", (str(UNSPSC_DB),))  # nosec B608
+    cursor.execute("""
+        SELECT 1 FROM unspsc.sqlite_master
+        WHERE type='table' AND name='unspsc_items' LIMIT 1
+    """)
+    if cursor.fetchone():
+        columns = _source_columns(cursor, "unspsc", "unspsc_items")
+        code_clean_fallback = "code" if "code" in columns else "''"
+        title_fallback = "description" if "description" in columns else "NULL"
+        code_clean_expr = _source_text_expr(
+            columns,
+            "code_clean",
+            code_clean_fallback,
+        )
+        title_expr = _source_text_expr(columns, "title", title_fallback)
+        description_expr = _source_text_expr(columns, "description")
+        segment_expr = _source_text_expr(columns, "segment")
+        family_expr = _source_text_expr(columns, "family")
+        class_expr = _source_text_expr(columns, "class")
+        commodity_expr = _source_text_expr(columns, "commodity")
+        cursor.execute(f"""
+            INSERT OR IGNORE INTO unspsc_items
+                (
                     code,
-                    COALESCE({code_clean_expr}, code),
-                    COALESCE({title_expr}, ''),
-                    {description_expr},
-                    {segment_expr},
-                    {family_expr},
-                    {class_expr},
-                    {commodity_expr}
-                FROM unspsc.unspsc_items
-            """)  # nosec B608
-        conn.commit()
-        cursor.execute("DETACH DATABASE unspsc")
+                    code_clean,
+                    title,
+                    description,
+                    segment,
+                    family,
+                    class,
+                    commodity
+                )
+            SELECT
+                code,
+                COALESCE({code_clean_expr}, code),
+                COALESCE({title_expr}, ''),
+                {description_expr},
+                {segment_expr},
+                {family_expr},
+                {class_expr},
+                {commodity_expr}
+            FROM unspsc.unspsc_items
+        """)  # nosec B608
+    conn.commit()
+    cursor.execute("DETACH DATABASE unspsc")
 
     cursor.execute("""
         CREATE VIRTUAL TABLE unspsc_fts USING fts5(

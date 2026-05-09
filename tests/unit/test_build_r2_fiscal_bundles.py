@@ -7,6 +7,7 @@ from scripts import build_offline_db
 from scripts.build_r2_fiscal_bundles import (
     DEFAULT_OUTPUT_ROOT,
     FISCAL_SOURCES,
+    normalize_source_filter,
     resolve_bundle_paths,
 )
 
@@ -30,7 +31,9 @@ def test_build_source_bundle_metadata_excludes_app_seed(
     tmp_path: Path,
     monkeypatch,
 ):
-    monkeypatch.setattr(build_offline_db, "UNSPSC_DB", tmp_path / "missing.db")
+    source_db = tmp_path / "unspsc-source.db"
+    _create_minimal_unspsc_source_db(source_db)
+    monkeypatch.setattr(build_offline_db, "UNSPSC_DB", source_db)
     monkeypatch.setattr(build_offline_db, "_encrypt_database", _copy_plaintext)
 
     build_offline_db.build_source_bundle(
@@ -62,8 +65,10 @@ def test_build_source_bundle_removes_plaintext_when_encryption_fails(
 ):
     encrypted_path = tmp_path / "unspsc.enc"
     plaintext_path = tmp_path / "unspsc.db"
+    source_db = tmp_path / "unspsc-source.db"
 
-    monkeypatch.setattr(build_offline_db, "UNSPSC_DB", tmp_path / "missing.db")
+    _create_minimal_unspsc_source_db(source_db)
+    monkeypatch.setattr(build_offline_db, "UNSPSC_DB", source_db)
     monkeypatch.setattr(build_offline_db, "_encrypt_database", _fail_encryption)
 
     try:
@@ -80,37 +85,29 @@ def test_build_source_bundle_removes_plaintext_when_encryption_fails(
     assert not plaintext_path.exists()
 
 
-def test_build_source_bundle_creates_empty_unspsc_schema_when_source_missing(
+def test_build_source_bundle_requires_unspsc_source_db(
     tmp_path: Path,
     monkeypatch,
 ):
     monkeypatch.setattr(build_offline_db, "UNSPSC_DB", tmp_path / "missing.db")
     monkeypatch.setattr(build_offline_db, "_encrypt_database", _copy_plaintext)
 
-    build_offline_db.build_source_bundle(
-        "unspsc",
-        tmp_path / "unspsc.enc",
-        tmp_path / "unspsc.meta.json",
-    )
-
-    conn = sqlite3.connect(tmp_path / "unspsc.enc")
     try:
-        table_names = {
-            row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type IN ('table', 'virtual')"
-            )
-        }
-        metadata_rows = dict(conn.execute("SELECT key, value FROM db_metadata"))
-    finally:
-        conn.close()
-
-    assert {"unspsc_items", "unspsc_fts", "db_metadata"} <= table_names
-    assert metadata_rows["source"] == "unspsc"
+        build_offline_db.build_source_bundle(
+            "unspsc",
+            tmp_path / "unspsc.enc",
+            tmp_path / "unspsc.meta.json",
+        )
+    except RuntimeError as exc:
+        assert str(exc) == "Missing required UNSPSC DB input: missing.db"
+    else:
+        raise AssertionError("Expected missing UNSPSC source DB to fail")
 
 
-def test_empty_unspsc_schema_uses_planned_columns(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(build_offline_db, "UNSPSC_DB", tmp_path / "missing.db")
+def test_unspsc_schema_uses_planned_columns(tmp_path: Path, monkeypatch):
+    source_db = tmp_path / "unspsc-source.db"
+    _create_minimal_unspsc_source_db(source_db)
+    monkeypatch.setattr(build_offline_db, "UNSPSC_DB", source_db)
     monkeypatch.setattr(build_offline_db, "_encrypt_database", _copy_plaintext)
 
     build_offline_db.build_source_bundle(
@@ -192,6 +189,45 @@ def test_populated_unspsc_uses_safe_fallbacks_for_missing_optional_columns(
     )
 
 
+def test_missing_unspsc_source_does_not_write_bundle(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(build_offline_db, "UNSPSC_DB", tmp_path / "missing.db")
+    monkeypatch.setattr(build_offline_db, "_encrypt_database", _copy_plaintext)
+    encrypted_path = tmp_path / "unspsc.enc"
+
+    try:
+        build_offline_db.build_source_bundle(
+            "unspsc",
+            encrypted_path,
+            tmp_path / "unspsc.meta.json",
+        )
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("Expected missing UNSPSC source DB to fail")
+
+    assert not encrypted_path.exists()
+
+
+def test_source_column_filter_rejects_unsafe_identifiers():
+    assert build_offline_db.SQL_IDENTIFIER_RE.fullmatch("code_clean")
+    assert not build_offline_db.SQL_IDENTIFIER_RE.fullmatch("code; DROP TABLE x")
+
+
+def test_normalize_source_filter_accepts_single_or_multiple_sources():
+    assert normalize_source_filter(None) is None
+    assert normalize_source_filter("nbs") == {"nbs"}
+    assert normalize_source_filter("nesh, tipi") == {"nesh", "tipi"}
+
+
+def test_normalize_source_filter_rejects_unknown_sources():
+    try:
+        normalize_source_filter("nbs,unknown")
+    except ValueError as exc:
+        assert str(exc) == "Unknown fiscal source(s): unknown"
+    else:
+        raise AssertionError("Expected unknown source to fail")
+
+
 def test_build_all_builds_each_source_with_resolved_paths(tmp_path: Path, monkeypatch):
     calls = []
 
@@ -242,6 +278,24 @@ def _create_metadata_db(output_path: Path) -> None:
                 ("version", "test-version"),
                 ("built_at", "2026-05-06T00:00:00Z"),
             ],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _create_minimal_unspsc_source_db(output_path: Path) -> None:
+    conn = sqlite3.connect(output_path)
+    try:
+        conn.execute("""
+            CREATE TABLE unspsc_items (
+                code TEXT PRIMARY KEY,
+                description TEXT
+            )
+        """)
+        conn.execute(
+            "INSERT INTO unspsc_items (code, description) VALUES (?, ?)",
+            ("10101501", "Live bovine cattle"),
         )
         conn.commit()
     finally:

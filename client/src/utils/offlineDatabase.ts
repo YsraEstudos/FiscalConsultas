@@ -88,7 +88,13 @@ export function sanitizeOfflineSourceMetadata(
   source: unknown,
   metadata: Partial<OfflineDatabaseMetadata> | null | undefined
 ): OfflineSourceMetadata | null {
-  if (!isFiscalSourceId(source) || !metadata?.version || !metadata.encrypted_sha256) {
+  const encryptedSha256 = metadata?.encrypted_sha256;
+  if (
+    !isFiscalSourceId(source)
+    || !metadata?.version
+    || typeof encryptedSha256 !== 'string'
+    || !encryptedSha256.trim()
+  ) {
     return null;
   }
 
