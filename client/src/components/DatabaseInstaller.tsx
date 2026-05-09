@@ -6,6 +6,7 @@
  */
 import { useCallback } from "react";
 import { useLocalDatabase } from "../context/LocalDatabaseContext";
+import type { OfflineDatabaseMissingFeature } from "../context/offlineDatabaseStorage";
 import styles from "./DatabaseInstaller.module.css";
 
 const STEP_LABELS: Record<string, string> = {
@@ -39,6 +40,27 @@ function formatDatabaseVersion(version: string): string {
   return `${day}/${month}/${year}`;
 }
 
+function getUnsupportedMessage(
+  missingFeatures: OfflineDatabaseMissingFeature[],
+): string {
+  if (missingFeatures.includes("secure-context")) {
+    return "A busca local precisa de uma origem segura. Abra o app em http://127.0.0.1:5173/, localhost ou HTTPS para usar esta funcionalidade.";
+  }
+
+  if (missingFeatures.includes("opfs")) {
+    return "Seu navegador não liberou OPFS, o armazenamento local necessário para a busca offline. Use uma versão atual do Edge, Chrome ou outro navegador baseado em Chromium.";
+  }
+
+  if (
+    missingFeatures.includes("shared-array-buffer")
+    || missingFeatures.includes("cross-origin-isolation")
+  ) {
+    return "Seu navegador ainda não liberou SharedArrayBuffer para esta página. Aguarde alguns segundos e recarregue; se persistir, use Edge ou Chrome atualizados em HTTPS.";
+  }
+
+  return "Seu navegador não suporta todos os recursos necessários para busca offline. Use Edge, Chrome ou outro navegador baseado em Chromium atualizado.";
+}
+
 /**
  * Displays the status and management interface for the offline search database.
  *
@@ -57,10 +79,14 @@ export default function DatabaseInstaller() {
     error,
     dbSizeBytes,
     isSupported,
+    supportReport,
     install,
   } = useLocalDatabase();
 
   const progressWidth = progress > 0 ? Math.max(progress, 2) : 0;
+  const missingFeatures = supportReport?.missingFeatures ?? [];
+  const canRecoverWithIsolationReload =
+    supportReport?.canRecoverWithIsolationReload === true;
 
   const handleInstall = useCallback(async () => {
     try {
@@ -70,8 +96,30 @@ export default function DatabaseInstaller() {
     }
   }, [install]);
 
+  // ---------- Recoverable isolation setup ----------
+  if (!isSupported && canRecoverWithIsolationReload) {
+    return (
+      <div className={styles.installerCard}>
+        <div className={styles.cardHeader}>
+          <span className={styles.cardIcon}>⚡</span>
+          <span className={styles.cardTitle}>Busca local</span>
+          <span className={`${styles.statusBadge} ${styles.statusInstalling}`}>
+            🔄 Preparando…
+          </span>
+        </div>
+        <p className={styles.unsupportedInfo}>
+          O navegador parece compatível, mas ainda precisa ativar o isolamento
+          de origem para liberar a busca local. Aguarde alguns segundos e
+          recarregue esta página se ela não atualizar automaticamente.
+        </p>
+      </div>
+    );
+  }
+
   // ---------- Unsupported browser ----------
   if (!isSupported) {
+    const unsupportedMessage = getUnsupportedMessage(missingFeatures);
+
     return (
       <div className={styles.installerCard}>
         <div className={styles.cardHeader}>
@@ -82,9 +130,7 @@ export default function DatabaseInstaller() {
           </span>
         </div>
         <p className={styles.unsupportedInfo}>
-          Seu navegador não suporta os recursos necessários para busca offline
-          (SharedArrayBuffer, OPFS). Use Chrome, Edge, ou outro navegador
-          baseado em Chromium para esta funcionalidade.
+          {unsupportedMessage}
         </p>
       </div>
     );
@@ -233,9 +279,10 @@ export default function DatabaseInstaller() {
       </div>
 
       <p className={styles.cardDescription}>
-        Instale o banco de dados localmente para buscar NBS, TIPI e NESH
-        instantaneamente, sem depender de conexão de internet. A preparação é
-        feita uma única vez{dbSizeBytes ? ` (~${formatBytes(dbSizeBytes)})` : " (~24 MB)"}.
+        A busca local é instalada automaticamente na primeira visita para manter
+        NBS, TIPI e NESH rápidos e disponíveis neste computador. Se você removeu
+        a base local, pode reinstalar quando quiser
+        {dbSizeBytes ? ` (~${formatBytes(dbSizeBytes)})` : " (~24 MB)"}.
       </p>
 
       <div className={styles.actions}>
@@ -245,7 +292,7 @@ export default function DatabaseInstaller() {
           onClick={handleInstall}
           id="db-installer-install"
         >
-          ⚡ Instalar Busca Instantânea
+          ⚡ Instalar agora
         </button>
       </div>
     </div>

@@ -38,8 +38,8 @@ describe('offlineDatabaseSync', () => {
     expect(getOfflineDbPublicSeed()).toBe('public-seed')
   })
 
-  it('falls back to the static fiscal bundle base when R2 env is absent', () => {
-    expect(getFiscalR2BaseUrl()).toBe('/fiscal-bases')
+  it('returns an empty R2 base URL when the R2 env is absent', () => {
+    expect(getFiscalR2BaseUrl()).toBe('')
   })
 
   it('retries metadata checks after a transient abort', async () => {
@@ -122,6 +122,37 @@ describe('offlineDatabaseSync', () => {
         headers: { Accept: 'application/json' },
       })
     )
+  })
+
+  it('retries source metadata checks after a transient abort', async () => {
+    const abortError = new DOMException(
+      'signal is aborted without reason',
+      'AbortError'
+    )
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(abortError)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            version: '2026.05.01',
+            size_bytes: 4096,
+            sha256: 'plain-sha',
+            encrypted_sha256: 'enc-sha',
+          }),
+          { status: 200 }
+        )
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      fetchOfflineSourceAvailabilityMetadata('https://r2.example.com/fiscal', 'nbs')
+    ).resolves.toMatchObject({
+      source: 'nbs',
+      version: '2026.05.01',
+      encrypted_sha256: 'enc-sha',
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('does not call the legacy database version endpoint for source metadata', async () => {

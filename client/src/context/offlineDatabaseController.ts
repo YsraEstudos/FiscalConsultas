@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 
 import { useOfflineDatabaseOperations } from './offlineDatabaseOperations';
 import { useOfflineDatabaseRuntime } from './offlineDatabaseRuntime';
+import { hasOfflineDatabaseAutoInstallOptOut } from './offlineDatabaseStorage';
 import type { OfflineDatabaseContextValue } from './offlineDatabase.types';
 
 export function useOfflineDatabaseController(): OfflineDatabaseContextValue {
@@ -13,6 +14,20 @@ export function useOfflineDatabaseController(): OfflineDatabaseContextValue {
         fetchOfflineNeshChapterNotes,
         fetchOfflineNbsCatalogDetail,
     } = useOfflineDatabaseOperations(actions);
+
+    useEffect(() => {
+        if (!state.isSupported || state.status !== 'not_installed') {
+            return;
+        }
+
+        if (hasOfflineDatabaseAutoInstallOptOut()) {
+            return;
+        }
+
+        void installOfflineDatabase().catch(() => {
+            // Install lifecycle errors are already captured in shared state.
+        });
+    }, [installOfflineDatabase, state.isSupported, state.status]);
 
     useEffect(() => {
         if (!state.isSupported || state.status !== 'ready' || !state.updateAvailable) {

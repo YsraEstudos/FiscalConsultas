@@ -22,6 +22,20 @@ const DEFAULT_LOCAL_DATABASE_CONTEXT: OfflineDatabaseContextValue = {
     error: null,
     dbSizeBytes: null,
     isSupported: false,
+    supportReport: {
+        supported: false,
+        missingFeatures: [
+            'secure-context',
+            'cross-origin-isolation',
+            'shared-array-buffer',
+            'worker',
+            'web-crypto',
+            'opfs',
+        ],
+        canRecoverWithIsolationReload: false,
+        isSecureContext: false,
+        crossOriginIsolated: false,
+    },
     isRemoving: false,
     installOfflineDatabase: async () => {
         throw new Error('Offline DB not supported in this browser');

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useMemo, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,6 +16,7 @@ const refs = vi.hoisted(() => ({
   getNbsServiceDetailPageMock: vi.fn(),
   getNbsServiceTreePageMock: vi.fn(),
   toastErrorMock: vi.fn(),
+  getNbsDetailLocalMock: vi.fn(),
   openNewTab: false,
 }));
 
@@ -38,9 +39,9 @@ vi.mock('react-hot-toast', () => ({
 
 vi.mock('../../src/context/LocalDatabaseContext', () => ({
   useLocalDatabase: () => ({
-    status: 'not_installed',
+    status: 'ready',
     searchLocal: vi.fn().mockResolvedValue(null),
-    getNbsDetailLocal: vi.fn().mockResolvedValue(null),
+    getNbsDetailLocal: refs.getNbsDetailLocalMock,
     progress: 0,
     progressStep: '',
     localVersion: null,
@@ -69,6 +70,25 @@ function makeTab(id: string, doc: ServiceDocType, query: string): HarnessTab {
     query,
     data: makeNbsSearch(query),
   };
+}
+
+async function findInlineServiceCode(container: HTMLElement, code: string): Promise<HTMLElement> {
+  const selector = `[data-testid="notes-content"] [data-service-code="${code}"]`;
+  await waitFor(() => {
+    const element = container.querySelector(selector);
+    expect(element).toBeInstanceOf(HTMLElement);
+  });
+
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  const noteCodeLink = container.querySelector(selector);
+  if (!(noteCodeLink instanceof HTMLElement)) {
+    throw new Error(`Expected service code link ${code} inside inline explanatory note`);
+  }
+
+  return noteCodeLink;
 }
 
 function ServicesTabsHarness({
@@ -130,8 +150,10 @@ describe('services tabs flow', () => {
   beforeEach(() => {
     refs.getNbsServiceDetailPageMock.mockReset();
     refs.getNbsServiceTreePageMock.mockReset();
+    refs.getNbsDetailLocalMock.mockReset();
     refs.toastErrorMock.mockReset();
     refs.openNewTab = false;
+    refs.getNbsDetailLocalMock.mockResolvedValue(makeNbsDetail());
     refs.getNbsServiceDetailPageMock.mockResolvedValue(makeNbsDetail());
     refs.getNbsServiceTreePageMock.mockResolvedValue({
       success: true,
@@ -159,8 +181,7 @@ describe('services tabs flow', () => {
     );
 
     await waitFor(() => {
-      expect(refs.getNbsServiceDetailPageMock).toHaveBeenCalledWith('1.0101.11.00', {
-        includeTree: true,
+      expect(refs.getNbsDetailLocalMock).toHaveBeenCalledWith('1.0101.11.00', {
         page: 1,
         pageSize: 50,
       });
@@ -172,7 +193,7 @@ describe('services tabs flow', () => {
 
   it('keeps service-code navigation from inline explanatory notes inside the NBS tab', async () => {
     const detail = makeNbsDetail();
-    refs.getNbsServiceDetailPageMock.mockResolvedValue({
+    refs.getNbsDetailLocalMock.mockResolvedValue({
       ...detail,
       nebs: {
         ...detail.nebs!,
@@ -183,11 +204,7 @@ describe('services tabs flow', () => {
 
     const { container } = render(<ServicesTabsHarness initialDoc="nbs" initialQuery="1.0101.11.00" />);
 
-    await waitFor(() => {
-      expect(container.querySelector('[data-testid="notes-content"] [data-service-code="1.1703.2"]')).not.toBeNull();
-    });
-    const noteCodeLink = container.querySelector('[data-testid="notes-content"] [data-service-code="1.1703.2"]');
-    if (!noteCodeLink) throw new Error('Expected service code link inside inline explanatory note');
+    const noteCodeLink = await findInlineServiceCode(container, '1.1703.2');
     fireEvent.click(noteCodeLink, { bubbles: true });
 
     await waitFor(() => {
@@ -200,7 +217,7 @@ describe('services tabs flow', () => {
     const onOpenDocInNewTab = vi.fn();
     const detail = makeNbsDetail();
     refs.openNewTab = true;
-    refs.getNbsServiceDetailPageMock.mockResolvedValue({
+    refs.getNbsDetailLocalMock.mockResolvedValue({
       ...detail,
       nebs: {
         ...detail.nebs!,
@@ -217,11 +234,7 @@ describe('services tabs flow', () => {
       />,
     );
 
-    await waitFor(() => {
-      expect(container.querySelector('[data-testid="notes-content"] [data-service-code="1.1703.2"]')).not.toBeNull();
-    });
-    const noteCodeLink = container.querySelector('[data-testid="notes-content"] [data-service-code="1.1703.2"]');
-    if (!noteCodeLink) throw new Error('Expected service code link inside inline explanatory note');
+    const noteCodeLink = await findInlineServiceCode(container, '1.1703.2');
     fireEvent.click(noteCodeLink, { bubbles: true, ctrlKey: true });
 
     await waitFor(() => {
@@ -230,11 +243,8 @@ describe('services tabs flow', () => {
     expect(screen.getByTestId('active-tab-meta')).toHaveTextContent('nbs:1.0101.11.00');
   });
 
-  it('maps detail failures with the shared catalog copy instead of a generic toast', async () => {
-    refs.getNbsServiceDetailPageMock.mockRejectedValue({
-      isAxiosError: true,
-      response: { status: 503 },
-    });
+  it('maps detail failures to the local NBS detail guidance', async () => {
+    refs.getNbsDetailLocalMock.mockRejectedValue(new Error('Erro ao pesquisar na base local. Tente reinstalar.'));
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     try {
@@ -242,7 +252,7 @@ describe('services tabs flow', () => {
 
       await waitFor(() => {
         expect(refs.toastErrorMock).toHaveBeenCalledWith(
-          'Catálogo de serviços indisponível no momento. Tente novamente em instantes.',
+          'Instale a base NBS para abrir detalhes e hierarquia localmente.',
         );
       });
 

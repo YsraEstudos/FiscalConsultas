@@ -117,9 +117,11 @@ if (typeof window === "undefined") {
   });
 
   self.addEventListener("message", (event) => {
+    if (event.origin && event.origin !== self.location.origin) return;
+    if (!isTrustedMessageOrigin(event)) return;
+
     const message = event.data;
     if (!message) return;
-    if (!isTrustedMessageOrigin(event)) return;
 
     if (message.type === "deregister") {
       self.registration
@@ -228,7 +230,7 @@ if (typeof window === "undefined") {
     event.respondWith(
       networkWithOptionalCredentials(request).catch(async () => {
         if (!sameOrigin) {
-          throw new Error("Cross-origin request unavailable offline");
+          return Response.error();
         }
         const cache = await caches.open(RUNTIME_CACHE);
         const cachedResponse = await cache.match(request.url);
@@ -282,7 +284,12 @@ if (typeof window === "undefined") {
       const isViteDevClientPresent = Boolean(
         document.querySelector('script[src*="/@vite/client"]')
       );
-      if (isLocalhost && isViteDevClientPresent) {
+      if (
+        isLocalhost &&
+        isViteDevClientPresent &&
+        window.crossOriginIsolated === true &&
+        typeof window.SharedArrayBuffer !== "undefined"
+      ) {
         console.info("[coi] Local dev detected. Bypassing SW to prevent Vite conflicts.");
         navigator.serviceWorker.getRegistrations().then((registrations) => {
           for (const reg of registrations) {
@@ -315,8 +322,7 @@ if (typeof window === "undefined") {
                 if (
                   newSW.state === "activated" &&
                   !window.SharedArrayBuffer &&
-                  !alreadyRetried &&
-                  !navigator.serviceWorker.controller
+                  !alreadyRetried
                 ) {
                   window.sessionStorage.setItem("coiReloadedBySelf", "reload");
                   window.location.reload();
@@ -336,8 +342,7 @@ if (typeof window === "undefined") {
             if (
               registration.active &&
               !window.SharedArrayBuffer &&
-              !alreadyRetried &&
-              !navigator.serviceWorker.controller
+              !alreadyRetried
             ) {
               window.sessionStorage.setItem("coiReloadedBySelf", "reload");
               window.location.reload();

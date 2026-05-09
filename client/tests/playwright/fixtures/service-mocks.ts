@@ -32,6 +32,14 @@ export type ServicesMockOptions = {
   unmatchedApiStrategy?: 'abort' | 'continue';
 };
 
+type LocalWorkerMockConfig = {
+  neshSearchResponses: MockResponseEntry[];
+  nebsSearchResponses: MockResponseEntry[];
+  nbsSearchResponses: MockResponseEntry[];
+  tipiSearchResponses: MockResponseEntry[];
+  nbsDetailResponses: Record<string, NbsCatalogDetailApiResponse>;
+};
+
 function makeEmptySearchResponse(query = '') {
   return {
     success: true,
@@ -267,6 +275,184 @@ function getDetailCode(path: string, doc: 'nbs' | 'nebs'): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+async function installLocalSearchWorkerMock(page: Page, config: LocalWorkerMockConfig) {
+  await page.addInitScript((mockConfig) => {
+    type WorkerMessage = {
+      type: string;
+      id: string | null;
+      payload: Record<string, unknown>;
+    };
+
+    type QueueEntry = {
+      abort?: boolean;
+      body?: unknown;
+      status?: number;
+    };
+
+    const queues: Record<string, QueueEntry[]> = {
+      nesh: [...mockConfig.neshSearchResponses],
+      nebs: [...mockConfig.nebsSearchResponses],
+      nbs: [...mockConfig.nbsSearchResponses],
+      tipi: [...mockConfig.tipiSearchResponses],
+    };
+
+    function emitToWorker(
+      worker: {
+        onmessage: ((event: MessageEvent<WorkerMessage>) => void) | null;
+        listeners: Set<(event: MessageEvent<WorkerMessage>) => void>;
+      },
+      message: WorkerMessage,
+    ) {
+      const event = { data: message } as MessageEvent<WorkerMessage>;
+      worker.onmessage?.(event);
+      worker.listeners.forEach((listener) => listener(event));
+    }
+
+    function getSearchPayload(docType: string, query: string, body: unknown) {
+      const response = body && typeof body === 'object'
+        ? body as Record<string, unknown>
+        : {};
+
+      if (docType === 'nesh' || docType === 'tipi') {
+        return {
+          results: response.results ?? {},
+          searchType: response.type === 'code' ? 'code' : 'text',
+          markdown: typeof response.markdown === 'string' ? response.markdown : undefined,
+        };
+      }
+
+      return {
+        results: Array.isArray(response.results) ? response.results : [],
+        searchType: 'text',
+      };
+    }
+
+    function makeEmptySearchPayload(docType: string) {
+      if (docType === 'nesh' || docType === 'tipi') {
+        return { results: {}, searchType: 'code' };
+      }
+      return { results: [], searchType: 'text' };
+    }
+
+    class MockOfflineWorker {
+      public onmessage: ((event: MessageEvent<WorkerMessage>) => void) | null = null;
+
+      public onerror: ((event: ErrorEvent) => void) | null = null;
+
+      public listeners = new Set<(event: MessageEvent<WorkerMessage>) => void>();
+
+      constructor() {
+        queueMicrotask(() => {
+          emitToWorker(this, { type: 'READY', id: null, payload: {} });
+        });
+      }
+
+      addEventListener(type: string, listener: (event: MessageEvent<WorkerMessage>) => void) {
+        if (type !== 'message') return;
+        this.listeners.add(listener);
+      }
+
+      removeEventListener(type: string, listener: (event: MessageEvent<WorkerMessage>) => void) {
+        if (type !== 'message') return;
+        this.listeners.delete(listener);
+      }
+
+      terminate() {
+        this.listeners.clear();
+      }
+
+      postMessage(message: { type?: string; id?: string | null; payload?: Record<string, unknown> }) {
+        const type = message.type || '';
+        const id = message.id || null;
+        const payload = message.payload || {};
+
+        if (type === 'INIT' || type === 'GET_STATUS') {
+          emitToWorker(this, {
+            type: 'STATUS',
+            id,
+            payload: { status: 'ready', version: 'playwright-local', sizeBytes: 1 },
+          });
+          return;
+        }
+
+        if (type === 'SEARCH') {
+          const docType = String(payload.docType || 'nbs');
+          const query = String(payload.query || '').trim();
+          const queue = queues[docType] ?? queues.nbs;
+          const next = query ? queue.shift() : undefined;
+
+          if (next?.abort || (next?.status && next.status >= 400)) {
+            emitToWorker(this, {
+              type: 'ERROR',
+              id,
+              payload: { error: 'Catálogo de serviços indisponível no momento. Tente novamente em instantes.' },
+            });
+            return;
+          }
+
+          if (next && Object.hasOwn(next, 'body') && next.body === null) {
+            emitToWorker(this, {
+              type: 'RESULT',
+              id,
+              payload: { results: null, searchType: 'text' },
+            });
+            return;
+          }
+
+          const body = next?.body ?? (
+            query
+              ? (docType === 'nbs' || docType === 'nebs'
+                ? {
+                  success: true,
+                  query,
+                  normalized: query,
+                  results: [{
+                    code: query,
+                    code_clean: query.replace(/\D/g, ''),
+                    description: 'Serviços de construção de edificações residenciais de um e dois pavimentos',
+                    parent_code: '1.0101.1',
+                    level: 3,
+                  }],
+                  total: 1,
+                }
+                : { success: true, type: 'code', query, results: {}, total_capitulos: 0 })
+              : null
+          );
+
+          emitToWorker(this, {
+            type: 'RESULT',
+            id,
+            payload: body ? getSearchPayload(docType, query, body) : makeEmptySearchPayload(docType),
+          });
+          return;
+        }
+
+        if (type === 'GET_NBS_DETAIL') {
+          const code = String(payload.code || '');
+          emitToWorker(this, {
+            type: 'RESULT',
+            id,
+            payload: { detail: mockConfig.nbsDetailResponses[code] ?? null },
+          });
+          return;
+        }
+
+        emitToWorker(this, {
+          type: 'ERROR',
+          id,
+          payload: { error: `Unknown message type: ${type}` },
+        });
+      }
+    }
+
+    Object.defineProperty(globalThis, 'Worker', {
+      configurable: true,
+      writable: true,
+      value: MockOfflineWorker,
+    });
+  }, config);
+}
+
 export async function installServicesMock(page: Page, options: ServicesMockOptions = {}) {
   const neshQueue = [...(options.neshSearchResponses ?? [])];
   const nbsQueue = [...(options.nbsSearchResponses ?? [])];
@@ -276,6 +462,19 @@ export async function installServicesMock(page: Page, options: ServicesMockOptio
   const nbsDetailResponses = options.nbsDetailResponses ?? {};
   const nebsDetailResponses = options.nebsDetailResponses ?? {};
   const routeScope = page.context();
+
+  await installLocalSearchWorkerMock(page, {
+    neshSearchResponses: neshQueue,
+    nebsSearchResponses: nebsQueue,
+    nbsSearchResponses: nbsQueue,
+    tipiSearchResponses: tipiQueue,
+    nbsDetailResponses: {
+      '1.01': makeNbsDetail('1.01'),
+      '1.0101.11.00': makeNbsDetail('1.0101.11.00'),
+      '1.0101.12.00': makeNbsDetail('1.0101.12.00'),
+      ...nbsDetailResponses,
+    },
+  });
 
   await routeScope.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());

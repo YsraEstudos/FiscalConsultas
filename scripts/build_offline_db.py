@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import sqlite3
 import struct
@@ -45,6 +46,7 @@ NESH_DB = DB_DIR / "nesh.db"
 TIPI_DB = DB_DIR / "tipi.db"
 SERVICES_DB = DB_DIR / "services.db"
 UNSPSC_DB = DB_DIR / "unspsc.db"
+SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 OUTPUT_DB = DB_DIR / "fiscal_offline.db"
 OUTPUT_ENCRYPTED = DB_DIR / "fiscal_offline.enc"
@@ -57,6 +59,8 @@ CHUNK_SIZE = 65536  # 64 KB per encrypted chunk
 PBKDF2_ITERATIONS = 600_000
 MAGIC = b"FCDB"  # File magic bytes
 FORMAT_VERSION = 1
+VERSION_TIMESTAMP_FORMAT = "%Y.%m.%d.%H%M%S"
+BUILT_AT_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 # The app seed is delivered by the authenticated token endpoint and is not
 # embedded in the frontend bundle.
 
@@ -90,7 +94,14 @@ def _resolve_app_seed() -> str:
     return generated
 
 
-APP_SEED = _resolve_app_seed()
+_APP_SEED: str | None = None
+
+
+def _get_app_seed() -> str:
+    global _APP_SEED
+    if _APP_SEED is None:
+        _APP_SEED = _resolve_app_seed()
+    return _APP_SEED
 
 
 def _get_html_renderer():
@@ -191,8 +202,8 @@ def _initialize_output_db(output_path: Path) -> sqlite3.Connection:
 
 
 def _create_db_metadata(cursor: sqlite3.Cursor, source: str) -> tuple[str, str]:
-    version = time.strftime("%Y.%m.%d.%H%M%S", time.gmtime())
-    built_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    version = time.strftime(VERSION_TIMESTAMP_FORMAT, time.gmtime())
+    built_at = time.strftime(BUILT_AT_TIMESTAMP_FORMAT, time.gmtime())
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS db_metadata (
             key TEXT PRIMARY KEY,
@@ -243,12 +254,12 @@ def _read_output_metadata(output_path: Path) -> tuple[str, str]:
     version = (
         version_row[0]
         if version_row
-        else time.strftime("%Y.%m.%d.%H%M%S", time.gmtime())
+        else time.strftime(VERSION_TIMESTAMP_FORMAT, time.gmtime())
     )
     built_at = (
         built_row[0]
         if built_row
-        else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        else time.strftime(BUILT_AT_TIMESTAMP_FORMAT, time.gmtime())
     )
     return version, built_at
 
@@ -458,34 +469,9 @@ def _consolidate_databases(output_path: Path) -> None:
     """)
     has_notes_table = cursor.fetchone() is not None
 
-    notes_by_chapter: dict[str, sqlite3.Row] = {}
-    if has_notes_table:
-        for row in conn.execute(
-            """
-            SELECT chapter_num, notes_content, titulo, notas,
-                   consideracoes, definicoes, parsed_notes_json
-            FROM nesh.chapter_notes
-            """
-        ):
-            notes_by_chapter[str(row["chapter_num"])] = row
-
-    positions_by_chapter: dict[str, list[sqlite3.Row]] = {}
-    for row in conn.execute(
-        """
-        SELECT chapter_num, codigo, descricao
-        FROM nesh.positions
-        ORDER BY chapter_num, codigo
-        """
-    ):
-        positions_by_chapter.setdefault(str(row["chapter_num"]), []).append(row)
-
-    chapter_rows = conn.execute(
-        """
-        SELECT chapter_num, content
-        FROM nesh.chapters
-        ORDER BY chapter_num
-        """
-    ).fetchall()
+    notes_by_chapter, positions_by_chapter, chapter_rows = _load_nesh_render_context(
+        conn, has_notes_table
+    )
     cursor.executemany(
         """
         INSERT OR IGNORE INTO nesh_chapters (chapter_num, content, rendered_html)
@@ -575,12 +561,12 @@ def _consolidate_databases(output_path: Path) -> None:
     conn.commit()
 
     # === Insert metadata ===
-    version = time.strftime("%Y.%m.%d.%H%M%S", time.gmtime())
+    version = time.strftime(VERSION_TIMESTAMP_FORMAT, time.gmtime())
     cursor.executemany(
         "INSERT INTO db_metadata (key, value) VALUES (?, ?)",
         [
             ("version", version),
-            ("built_at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
+            ("built_at", time.strftime(BUILT_AT_TIMESTAMP_FORMAT, time.gmtime())),
         ],
     )
     conn.commit()
@@ -607,9 +593,40 @@ def _consolidate_databases(output_path: Path) -> None:
     _log(f"Consolidated DB: {size_kb:.1f} KB")
 
 
+def _load_nesh_render_context(
+    conn: sqlite3.Connection,
+    has_notes_table: bool,
+) -> tuple[dict[str, sqlite3.Row], dict[str, list[sqlite3.Row]], list[sqlite3.Row]]:
+    notes_by_chapter: dict[str, sqlite3.Row] = {}
+    if has_notes_table:
+        for row in conn.execute("""
+            SELECT chapter_num, notes_content, titulo, notas,
+                   consideracoes, definicoes, parsed_notes_json
+            FROM nesh.chapter_notes
+            """):
+            notes_by_chapter[str(row["chapter_num"])] = row
+
+    positions_by_chapter: dict[str, list[sqlite3.Row]] = {}
+    for row in conn.execute("""
+        SELECT chapter_num, codigo, descricao
+        FROM nesh.positions
+        ORDER BY chapter_num, codigo
+        """):
+        positions_by_chapter.setdefault(str(row["chapter_num"]), []).append(row)
+
+    chapter_rows = conn.execute("""
+        SELECT chapter_num, content
+        FROM nesh.chapters
+        ORDER BY chapter_num
+        """).fetchall()
+    return notes_by_chapter, positions_by_chapter, chapter_rows
+
+
 def _require_source_db(source: str, db_path: Path) -> None:
     if not db_path.exists():
-        raise RuntimeError(f"Missing required {source.upper()} DB input: {db_path.name}")
+        raise RuntimeError(
+            f"Missing required {source.upper()} DB input: {db_path.name}"
+        )
 
 
 def _consolidate_nbs_database(output_path: Path) -> None:
@@ -798,34 +815,9 @@ def _consolidate_nesh_database(output_path: Path) -> None:
     """)
     has_notes_table = cursor.fetchone() is not None
 
-    notes_by_chapter: dict[str, sqlite3.Row] = {}
-    if has_notes_table:
-        for row in conn.execute(
-            """
-            SELECT chapter_num, notes_content, titulo, notas,
-                   consideracoes, definicoes, parsed_notes_json
-            FROM nesh.chapter_notes
-            """
-        ):
-            notes_by_chapter[str(row["chapter_num"])] = row
-
-    positions_by_chapter: dict[str, list[sqlite3.Row]] = {}
-    for row in conn.execute(
-        """
-        SELECT chapter_num, codigo, descricao
-        FROM nesh.positions
-        ORDER BY chapter_num, codigo
-        """
-    ):
-        positions_by_chapter.setdefault(str(row["chapter_num"]), []).append(row)
-
-    chapter_rows = conn.execute(
-        """
-        SELECT chapter_num, content
-        FROM nesh.chapters
-        ORDER BY chapter_num
-        """
-    ).fetchall()
+    notes_by_chapter, positions_by_chapter, chapter_rows = _load_nesh_render_context(
+        conn, has_notes_table
+    )
     cursor.executemany(
         """
         INSERT OR IGNORE INTO nesh_chapters (chapter_num, content, rendered_html)
@@ -869,10 +861,11 @@ def _consolidate_nesh_database(output_path: Path) -> None:
 
 
 def _source_columns(cursor: sqlite3.Cursor, attached_db: str, table: str) -> set[str]:
-    return {
+    columns = {
         str(row[1])
         for row in cursor.execute(f"PRAGMA {attached_db}.table_info({table})")
     }
+    return {column for column in columns if SQL_IDENTIFIER_RE.fullmatch(column)}
 
 
 def _source_text_expr(columns: set[str], column: str, fallback: str = "NULL") -> str:
@@ -979,7 +972,7 @@ def _derive_key(salt: bytes) -> bytes:
         salt=salt,
         iterations=PBKDF2_ITERATIONS,
     )
-    return kdf.derive(APP_SEED.encode("utf-8"))
+    return kdf.derive(_get_app_seed().encode("utf-8"))
 
 
 def _compute_hmac(data: bytes, key: bytes) -> bytes:
@@ -1072,7 +1065,9 @@ def build_source_bundle(
     consolidator = SOURCE_CONSOLIDATORS.get(source_id)
     if consolidator is None:
         supported = ", ".join(sorted(SOURCE_CONSOLIDATORS))
-        raise ValueError(f"Unsupported fiscal source '{source}'. Expected one of: {supported}")
+        raise ValueError(
+            f"Unsupported fiscal source '{source}'. Expected one of: {supported}"
+        )
 
     encrypted_path.parent.mkdir(parents=True, exist_ok=True)
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1128,7 +1123,7 @@ def main() -> int:
     version = (
         version_row[0]
         if version_row
-        else time.strftime("%Y.%m.%d.%H%M%S", time.gmtime())
+        else time.strftime(VERSION_TIMESTAMP_FORMAT, time.gmtime())
     )
 
     cursor.execute("SELECT value FROM db_metadata WHERE key = 'built_at'")
@@ -1136,7 +1131,7 @@ def main() -> int:
     built_at = (
         built_row[0]
         if built_row
-        else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        else time.strftime(BUILT_AT_TIMESTAMP_FORMAT, time.gmtime())
     )
     conn.close()
 
