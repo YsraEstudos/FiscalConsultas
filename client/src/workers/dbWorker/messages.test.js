@@ -56,8 +56,16 @@ import {
   dispatchWorkerMessage,
   fetchWithTimeout,
 } from './messages.js';
-import { removeFromOpfs } from './opfs.js';
+import {
+  removeFromOpfs,
+  removeSourceFromOpfs,
+  saveSourceToOpfs,
+  saveSourceVersion,
+} from './opfs.js';
+import { decryptDatabase, setAppSeed, sha256Hex } from './crypto.js';
 import { postWorkerError, postWorkerStatus } from './protocol.js';
+import { loadDatabaseFromBytes } from './sqlite.js';
+import { getWorkerVersion } from './state.js';
 
 describe('dbWorker messages network helpers', () => {
   afterEach(() => {
@@ -184,6 +192,45 @@ describe('dbWorker messages network helpers', () => {
       expect.objectContaining({
         method: 'POST',
       }),
+    );
+  });
+
+  it('keeps the previous source bundle until the replacement is saved', async () => {
+    const encryptedBlob = new Uint8Array([1, 2, 3]);
+    sha256Hex.mockResolvedValue('encrypted-sha');
+    decryptDatabase.mockResolvedValue(new Uint8Array([4, 5, 6]));
+    loadDatabaseFromBytes.mockResolvedValue(undefined);
+    saveSourceToOpfs.mockResolvedValue(undefined);
+    saveSourceVersion.mockResolvedValue(undefined);
+    getWorkerVersion.mockReturnValue('2026.05.09');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(encryptedBlob, {
+          status: 200,
+          headers: { 'content-length': String(encryptedBlob.length) },
+        }),
+      ),
+    );
+
+    await dispatchWorkerMessage('INSTALL', 'install-source', {
+      source: 'nesh',
+      r2BaseUrl: 'https://r2.example.test/fiscal',
+      publicSeed: 'public-seed',
+      metadata: {
+        source: 'nesh',
+        version: '2026.05.09',
+        encrypted_sha256: 'encrypted-sha',
+      },
+    });
+
+    expect(setAppSeed).toHaveBeenCalledWith('public-seed');
+    expect(saveSourceToOpfs).toHaveBeenCalledWith('nesh', encryptedBlob);
+    expect(saveSourceVersion).toHaveBeenCalledWith('nesh', '2026.05.09');
+    expect(removeSourceFromOpfs).not.toHaveBeenCalled();
+    expect(postWorkerStatus).toHaveBeenCalledWith(
+      'install-source',
+      expect.objectContaining({ status: 'ready' }),
     );
   });
 
