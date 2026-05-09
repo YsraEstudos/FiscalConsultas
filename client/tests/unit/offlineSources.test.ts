@@ -97,6 +97,15 @@ describe('offline fiscal sources', () => {
         encrypted_sha256: '   ',
       }),
     ).toBeNull();
+
+    expect(
+      sanitizeOfflineSourceMetadata('nesh', {
+        version: '2026.05.06.120000',
+        size_bytes: 123,
+        sha256: 'plain',
+        encrypted_sha256: 42 as any,
+      }),
+    ).toBeNull();
   });
 
   it('keeps bundle source ids separate from currently searchable documents', () => {

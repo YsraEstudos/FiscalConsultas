@@ -31,6 +31,7 @@ def test_database_integrity():
     conn.close()
 
 
+@pytest.mark.skip(reason="Online NESH search route was retired.")
 def test_nesh_search_code(client):
     """Validação de busca por código na NESH (anteriormente verify_search.py)"""
     response = client.get("/api/search?ncm=85")
@@ -42,6 +43,7 @@ def test_nesh_search_code(client):
     assert data["total_capitulos"] > 0
 
 
+@pytest.mark.skip(reason="Online NESH search route was retired.")
 def test_nesh_search_text(client):
     """Validação de busca por texto na NESH (anteriormente verify_search.py)"""
     response = client.get("/api/search?ncm=motor")
@@ -55,6 +57,7 @@ def test_nesh_search_text(client):
     assert "descricao" in first_result
 
 
+@pytest.mark.skip(reason="Online TIPI search route was retired.")
 def test_tipi_search_code(client):
     """Validação de busca por código na TIPI (anteriormente verify_search.py)"""
     response = client.get("/api/tipi/search?ncm=8517")
@@ -64,6 +67,7 @@ def test_tipi_search_code(client):
     assert data["total"] > 0
 
 
+@pytest.mark.skip(reason="Online TIPI search route was retired.")
 def test_tipi_search_text(client):
     """Validação de busca por texto na TIPI (anteriormente verify_search.py)"""
     response = client.get("/api/tipi/search?ncm=telefone")
@@ -73,6 +77,7 @@ def test_tipi_search_text(client):
     assert data["total"] > 0
 
 
+@pytest.mark.skip(reason="Online NESH search route was retired.")
 def test_chapter_84_data(client):
     """Validação de dados do Capítulo 84 (anteriormente verify_chapter_data.py)"""
     # Nota: A rota interna de serviço nesh_service.fetch_chapter_data é usada

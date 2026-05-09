@@ -3,7 +3,12 @@ import pytest
 from backend.presentation.renderer import HtmlRenderer
 from backend.presentation.tipi_renderer import TipiRenderer
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skip(
+        reason="Online TIPI route was retired; TIPI search is served from local offline bundles."
+    ),
+]
 
 
 class TestTipiApiIntegration:

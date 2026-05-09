@@ -403,7 +403,6 @@ async function handleSourceAwareInstallMessage(id, payload) {
     await loadDatabaseFromBytes(plaintext);
 
     postWorkerProgress(id, 90, "saving");
-    await removeSourceFromOpfs(source);
     try {
       await saveSourceToOpfs(source, encryptedBlob);
       await saveSourceVersion(source, metadata.version || "unknown");
