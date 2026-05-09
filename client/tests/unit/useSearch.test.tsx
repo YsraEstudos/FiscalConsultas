@@ -138,7 +138,13 @@ describe('useSearch Hook', () => {
         }));
     });
 
-    it('should fetch when navigating to a different chapter', async () => {
+    it('should search locally when navigating to a different chapter', async () => {
+        localDatabaseState.status = 'ready';
+        localDatabaseState.searchLocal.mockResolvedValue({
+            searchType: 'code',
+            results: { '73': createChapterData('73') },
+            markdown: '<h3 id="pos-73-22">73.22</h3>',
+        });
         const updateTab = vi.fn();
         const addToHistory = vi.fn();
         const tabs: Tab[] = [
@@ -156,8 +162,6 @@ describe('useSearch Hook', () => {
         ];
         const tabsById = new Map(tabs.map(tab => [tab.id, tab]));
 
-        searchNCMMock.mockResolvedValue(createCodeResponse('73', '7308'));
-
         const { result } = renderHook(
             () => useSearch(tabsById, updateTab, addToHistory),
             { wrapper }
@@ -167,8 +171,8 @@ describe('useSearch Hook', () => {
             await result.current.executeSearchForTab('tab-1', 'nesh', '7308', true);
         });
 
-        expect(searchNCMMock).toHaveBeenCalledTimes(1);
-        expect(searchNCMMock).toHaveBeenCalledWith('7308');
+        expect(localDatabaseState.searchLocal).toHaveBeenCalledWith('nesh', '7308', expect.any(String));
+        expect(searchNCMMock).not.toHaveBeenCalled();
 
         expect(updateTab.mock.calls[0]).toEqual([
             'tab-1',

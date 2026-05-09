@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import axios from 'axios';
 import { toast } from 'react-hot-toast';
-import { searchNCM, searchNbsServices, searchTipi } from '../services/api';
 import { useTabs, type DocType } from './useTabs';
 import { useHistory } from './useHistory';
 import { useSettings } from '../context/SettingsContext';
@@ -15,17 +13,17 @@ import type {
 } from '../types/api.types';
 import { isCodeSearchApiResponse } from '../services/apiResponseGuards';
 import { buildLocalCodeSearchResponse } from '../utils/searchResultMarkup';
-import {
-    getServiceCatalogErrorInfo,
-    isServiceCatalogDoc,
-    reportServiceCatalogError,
-} from '../utils/servicesCatalog';
 
 const buildLoadedChaptersByDoc = (value?: Record<DocType, string[]>): Record<DocType, string[]> => ({
     nesh: value?.nesh ?? [],
     tipi: value?.tipi ?? [],
     nbs: value?.nbs ?? [],
 });
+
+const getLocalOnlyInstallMessage = (doc: DocType): string =>
+    `Instale a base ${doc.toUpperCase()} para pesquisar localmente.`;
+const LOCAL_SEARCH_EMPTY_MESSAGE = 'Nenhum resultado encontrado na base local.';
+const LOCAL_SEARCH_ERROR_MESSAGE = 'Erro ao pesquisar na base local. Tente reinstalar.';
 
 /**
  * Normalize local Worker search results into the fiscal API response format.
@@ -164,7 +162,7 @@ export function useSearch(
             let data: FiscalSearchApiResponse | null = null;
             const isOfflineScopedDoc = doc === 'nesh' || doc === 'tipi' || doc === 'nbs';
 
-            // === HYBRID SEARCH: Local DB first, API fallback ===
+            // Local-only fiscal search: no backend API fallback.
             if (dbStatus === 'ready' && isOfflineScopedDoc) {
                 try {
                     const searchStart = performance.now();
@@ -194,21 +192,16 @@ export function useSearch(
                             data = normalizeLocalResults(doc, query, localResponse.results as Record<string, unknown>[]);
                         }
                     }
-                } catch { /* silent fallback to API */ }
+                } catch {
+                    throw new Error(LOCAL_SEARCH_ERROR_MESSAGE);
+                }
             }
 
-            // Fallback to API if local returned nothing
             if (!data) {
-                const searchHandlers: Record<DocType, () => Promise<FiscalSearchApiResponse>> = {
-                    nesh: () => searchNCM(query),
-                    tipi: () => searchTipi(query, tipiViewModeRef.current),
-                    nbs: () => searchNbsServices(query),
-                };
-                const handler = searchHandlers[doc];
-                if (!handler) {
-                    throw new Error(`Unknown document type: ${doc}`);
+                if (dbStatus === 'ready' && isOfflineScopedDoc) {
+                    throw new Error(LOCAL_SEARCH_EMPTY_MESSAGE);
                 }
-                data = await handler();
+                throw new Error(getLocalOnlyInstallMessage(doc));
             }
 
             // Extrai capitulos apenas para respostas do tipo code
@@ -238,18 +231,9 @@ export function useSearch(
             if (import.meta.env.DEV) {
                 console.error(err);
             }
-            let message = 'Não foi possível carregar os dados agora. Tente novamente em instantes.';
-
-            if (isServiceCatalogDoc(doc)) {
-                const serviceError = getServiceCatalogErrorInfo(err, doc);
-                reportServiceCatalogError(err, doc, serviceError);
-                message = serviceError.message;
-            } else if (axios.isAxiosError(err)) {
-                const status = err.response?.status;
-                if (status === 404) {
-                    message = 'Conteúdo indisponível no momento.';
-                }
-            }
+            const message = err instanceof Error && err.message
+                ? err.message
+                : 'Não foi possível carregar os dados agora. Tente novamente em instantes.';
 
             toast.error(message);
             updateTab(tabId, {

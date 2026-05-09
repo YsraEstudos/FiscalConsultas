@@ -28,6 +28,14 @@ import type {
     OfflineDatabaseWorkerResponse,
 } from '../offlineDatabase.types';
 
+export function getOfflineChannelSenderId(
+    message: OfflineDatabaseChannelMessage | { senderId?: unknown; source?: unknown },
+): string | undefined {
+    if (typeof message.senderId === 'string') return message.senderId;
+    if (typeof message.source === 'string') return message.source;
+    return undefined;
+}
+
 const LEGACY_MONOLITHIC_BUNDLE_SOURCE = 'nesh';
 
 type UseOfflineDatabaseBroadcastChannelArgs = {
@@ -95,7 +103,7 @@ export function useOfflineDatabaseBroadcastChannel({
 
         channel.onmessage = (event: MessageEvent<LegacyOfflineDatabaseChannelMessage>) => {
             const message = event.data;
-            if (!message || (message.senderId ?? message.source) === instanceId) return;
+            if (!message || getOfflineChannelSenderId(message) === instanceId) return;
             if (
                 isFiscalSourceId(message.source)
                 && message.source !== activeSourceRef.current

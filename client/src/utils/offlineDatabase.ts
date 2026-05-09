@@ -21,16 +21,18 @@ export interface OfflineSourceMetadata extends OfflineDatabaseMetadata {
 }
 
 export function isOfflineSourceMetadata(
-  metadata: unknown
+  metadata: unknown,
 ): metadata is OfflineSourceMetadata {
+  if (!metadata || typeof metadata !== 'object') return false;
+  const candidate = metadata as {
+    source?: unknown;
+    encrypted_sha256?: unknown;
+  };
+
   return Boolean(
-    metadata
-      && typeof metadata === "object"
-      && "source" in metadata
-      && isFiscalSourceId((metadata as { source?: unknown }).source)
-      && "encrypted_sha256" in metadata
-      && typeof (metadata as { encrypted_sha256?: unknown }).encrypted_sha256 === "string"
-      && (metadata as { encrypted_sha256: string }).encrypted_sha256.trim()
+    isFiscalSourceId(candidate.source)
+    && typeof candidate.encrypted_sha256 === 'string'
+    && candidate.encrypted_sha256.trim()
   );
 }
 
@@ -127,12 +129,16 @@ export function sanitizeOfflineSourceMetadata(
   source: unknown,
   metadata: Partial<OfflineDatabaseMetadata> | null | undefined
 ): OfflineSourceMetadata | null {
-  if (!isFiscalSourceId(source) || !metadata?.version || !metadata.encrypted_sha256) {
+  if (
+    !isFiscalSourceId(source)
+    || !metadata?.version
+    || !metadata.encrypted_sha256?.trim()
+  ) {
     return null;
   }
 
   const sanitized = sanitizeOfflineMetadata(metadata);
-  if (!sanitized) return null;
+  if (!sanitized?.encrypted_sha256?.trim()) return null;
 
   return {
     ...sanitized,

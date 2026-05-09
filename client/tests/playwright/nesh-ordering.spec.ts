@@ -3,29 +3,6 @@ import { expect, test, type Page } from '@playwright/test';
 import { installServicesMock, makeNeshChapterData } from './fixtures/service-mocks';
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => {
-    try {
-      Object.defineProperty(globalThis, 'SharedArrayBuffer', {
-        value: undefined,
-        configurable: true,
-      });
-    } catch {
-      // Ignore environments where this global cannot be redefined.
-    }
-
-    try {
-      const storage = navigator.storage as unknown as { getDirectory?: unknown } | undefined;
-      if (storage) {
-        Object.defineProperty(storage, 'getDirectory', {
-          value: undefined,
-          configurable: true,
-        });
-      }
-    } catch {
-      // Ignore environments where navigator.storage is read-only.
-    }
-  });
-
   await installServicesMock(page, {
     neshSearchResponses: [
       {
@@ -113,14 +90,8 @@ test('renders NESH chapter 84 navigation items in order', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'NESH' })).toHaveClass(/docButtonActive/);
 
-  const searchRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/search')
-    && new URL(request.url()).searchParams.get('ncm') === '8404',
-  );
-
   await page.locator('#ncmInput').fill('8404');
   await page.locator('#ncmInput').press('Enter');
-  await searchRequest;
 
   await expect.poll(async () => {
     const targetCodes = new Set(['84.03', '8404', '8404.10.10', '84.05']);
@@ -133,14 +104,8 @@ test('navigates to a NESH position from sidebar click and highlights target anch
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
 
-  const searchRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/search')
-    && new URL(request.url()).searchParams.get('ncm') === '8404',
-  );
-
   await page.locator('#ncmInput').fill('8404');
   await page.locator('#ncmInput').press('Enter');
-  await searchRequest;
 
   const resultsContainer = page.locator('#results-content-tab-1');
   const targetAnchor = page.locator('#pos-84-05');
@@ -219,14 +184,8 @@ test('auto-scrolls to target position right after NESH search in real browser fl
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
 
-  const searchRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/search')
-    && new URL(request.url()).searchParams.get('ncm') === '8405',
-  );
-
   await page.locator('#ncmInput').fill('8405');
   await page.locator('#ncmInput').press('Enter');
-  await searchRequest;
 
   const resultsContainer = page.locator('#results-content-tab-1');
   const targetAnchor = page.locator('#pos-84-05');

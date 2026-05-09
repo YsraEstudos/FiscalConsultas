@@ -266,7 +266,7 @@ function trimTrailingSlashes(value) {
   return value.slice(0, end);
 }
 
-function getSourceAwareInstallPayloadIntent(payload) {
+export function getSourceAwareInstallPayloadIntent(payload) {
   return Boolean(
     payload
       && typeof payload === "object"
@@ -323,6 +323,23 @@ async function fetchEncryptedSourceBundle(r2BaseUrl, source) {
   );
 }
 
+async function fetchEncryptedSourceBundleWithRetry(r2BaseUrl, source, id) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await fetchEncryptedSourceBundle(r2BaseUrl, source);
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableOfflineDownloadError(error) || attempt === 1) break;
+      postWorkerProgress(id, 10, "retrying_download");
+      await waitBeforeOfflineDownloadRetry();
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Offline source bundle download failed");
+}
+
 async function updateInstalledVersion(apiBase) {
   let nextVersion = null;
 
@@ -363,7 +380,7 @@ async function handleSourceAwareInstallMessage(id, payload) {
   let plaintext = null;
 
   try {
-    const dlResp = await fetchEncryptedSourceBundle(r2BaseUrl, source);
+    const dlResp = await fetchEncryptedSourceBundleWithRetry(r2BaseUrl, source, id);
     const encryptedBlob = await readEncryptedDatabaseBlob(dlResp, id);
     const {
       encrypted_sha256: expectedEncryptedSha256,
@@ -589,8 +606,12 @@ async function handleRemoveMessage(id, payload) {
 
   if (isFiscalSourceId(payload?.source)) {
     await removeSourceFromOpfs(payload.source);
+    await removeFromOpfs().catch(() => undefined);
   } else {
     await removeFromOpfs();
+    for (const source of FISCAL_SOURCE_IDS) {
+      await removeSourceFromOpfs(source).catch(() => undefined);
+    }
   }
   postWorkerStatus(id, { status: "not_installed" });
 }

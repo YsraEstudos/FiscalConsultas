@@ -88,13 +88,26 @@ export function useOfflineDatabaseMutations({
 
             const r2BaseUrl = getFiscalR2BaseUrl();
             const publicSeed = getOfflineDbPublicSeed();
+            const sourceMetadata = isOfflineSourceMetadata(metadata) ? metadata : null;
+            const hasInvalidSourceMetadata = Boolean(
+                metadata
+                && typeof metadata === 'object'
+                && 'source' in metadata
+                && !sourceMetadata,
+            );
+            if (r2BaseUrl && publicSeed && hasInvalidSourceMetadata) {
+                throw new Error(
+                    'Metadados da fonte fiscal estão corrompidos. Limpe o cache do navegador e tente novamente.',
+                );
+            }
+
             const installPayload =
-                r2BaseUrl && publicSeed && isOfflineSourceMetadata(metadata)
+                r2BaseUrl && publicSeed && sourceMetadata
                     ? {
-                        source: metadata.source,
+                        source: sourceMetadata.source,
                         r2BaseUrl,
                         publicSeed,
-                        metadata,
+                        metadata: sourceMetadata,
                     }
                     : {
                         apiBase: getOfflineDatabaseApiBaseUrl(),

@@ -6,7 +6,10 @@ import {
   isOfflineDatabaseWorkerReadyMessage,
   sendOfflineDatabaseWorkerRequest,
 } from '../../src/context/offlineDatabaseWorkerClient';
-import { validateSourceAwareInstallPayload } from '../../src/workers/dbWorker/messages.js';
+import {
+  getSourceAwareInstallPayloadIntent,
+  validateSourceAwareInstallPayload,
+} from '../../src/workers/dbWorker/messages.js';
 import type {
   OfflineDatabaseWorkerRequest,
   PendingOfflineDatabaseRequest,
@@ -218,6 +221,18 @@ describe('offlineDatabaseWorkerClient', () => {
       ok: false,
       error: 'Source-aware install payload is incomplete',
     });
+  });
+
+  it('requires source and R2 base URL before treating install payloads as source-aware', () => {
+    expect(getSourceAwareInstallPayloadIntent({
+      apiBase: '/api',
+      metadata: { version: 'legacy' },
+    })).toBe(false);
+
+    expect(getSourceAwareInstallPayloadIntent({
+      source: 'nbs',
+      r2BaseUrl: 'https://r2.example.com/fiscal',
+    })).toBe(true);
   });
 
   it('extracts ready, search, and detail payloads from worker responses', () => {

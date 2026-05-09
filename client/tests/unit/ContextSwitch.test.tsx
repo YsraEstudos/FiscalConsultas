@@ -3,6 +3,10 @@ import { describe, it, expect, vi } from 'vitest';
 import App from '../../src/../src/App';
 import * as api from '../../src/../src/services/api';
 
+const localDatabaseState = vi.hoisted(() => ({
+    searchLocal: vi.fn(),
+}));
+
 // Mock heavy UI components to keep the test focused and fast
 vi.mock('../../src/components/ResultDisplay', () => ({ ResultDisplay: () => null }));
 vi.mock('../../src/components/GlossaryModal', () => ({ GlossaryModal: () => null }));
@@ -42,6 +46,16 @@ vi.mock('../../src/services/api', () => ({
             nbs: { status: 'online' },
             nebs: { status: 'online' },
         },
+    }),
+}));
+
+vi.mock('../../src/context/LocalDatabaseContext', () => ({
+    useLocalDatabase: () => ({
+        status: 'ready',
+        searchLocal: localDatabaseState.searchLocal,
+    }),
+    useOptionalLocalDatabase: () => ({
+        status: 'ready',
     }),
 }));
 
@@ -89,6 +103,10 @@ vi.mock('../../src/context/CrossChapterNoteContext', () => ({
 }));
 
 describe('App Analysis - Context Switch', () => {
+    beforeEach(() => {
+        localDatabaseState.searchLocal.mockReset();
+    });
+
     it('Scenario 1: Clicking TIPI on an EMPTY tab should update the current tab (no new tab)', async () => {
         const { container } = render(<App />);
 
@@ -110,10 +128,15 @@ describe('App Analysis - Context Switch', () => {
 
     it('Scenario 2: Clicking TIPI on a POPULATED tab should open a NEW tab', async () => {
         // Mock successful search
-        api.searchNCM.mockResolvedValue({
-            type: 'text',
-            results: [{ ncm: '8517', descricao: 'Telefones' }],
-            markdown: '# 8517\nTelefones'
+        localDatabaseState.searchLocal.mockResolvedValue({
+            searchType: 'code',
+            results: {
+                '85': {
+                    capitulo: '85',
+                    posicoes: [{ codigo: '85.17', descricao: 'Telefones' }],
+                },
+            },
+            markdown: '# 8517\nTelefones',
         });
 
         const { container } = render(<App />);
@@ -125,8 +148,9 @@ describe('App Analysis - Context Switch', () => {
 
         // Wait for search to complete (mocked)
         await waitFor(() => {
-            expect(api.searchNCM).toHaveBeenCalled();
+            expect(localDatabaseState.searchLocal).toHaveBeenCalledWith('nesh', '8517', undefined);
         });
+        expect(api.searchNCM).not.toHaveBeenCalled();
 
         // Verify we still have 1 tab initially
         let tabs = container.querySelectorAll('[data-document]');

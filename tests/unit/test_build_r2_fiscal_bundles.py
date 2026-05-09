@@ -7,6 +7,7 @@ from scripts import build_offline_db, build_r2_fiscal_bundles
 from scripts.build_r2_fiscal_bundles import (
     DEFAULT_OUTPUT_ROOT,
     FISCAL_SOURCES,
+    normalize_source_filter,
     resolve_bundle_paths,
 )
 
@@ -198,6 +199,39 @@ def test_populated_unspsc_uses_safe_fallbacks_for_missing_optional_columns(
     )
 
 
+def test_missing_unspsc_source_logs_warning(tmp_path: Path, monkeypatch, capsys):
+    monkeypatch.setattr(build_offline_db, "UNSPSC_DB", tmp_path / "missing.db")
+    monkeypatch.setattr(build_offline_db, "_encrypt_database", _copy_plaintext)
+
+    build_offline_db.build_source_bundle(
+        "unspsc",
+        tmp_path / "unspsc.enc",
+        tmp_path / "unspsc.meta.json",
+    )
+
+    assert "WARNING: unspsc.db not found" in capsys.readouterr().out
+
+
+def test_source_column_filter_rejects_unsafe_identifiers():
+    assert build_offline_db.SQL_IDENTIFIER_RE.fullmatch("code_clean")
+    assert not build_offline_db.SQL_IDENTIFIER_RE.fullmatch("code; DROP TABLE x")
+
+
+def test_normalize_source_filter_accepts_single_or_multiple_sources():
+    assert normalize_source_filter(None) is None
+    assert normalize_source_filter("nbs") == {"nbs"}
+    assert normalize_source_filter("nesh, tipi") == {"nesh", "tipi"}
+
+
+def test_normalize_source_filter_rejects_unknown_sources():
+    try:
+        normalize_source_filter("nbs,unknown")
+    except ValueError as exc:
+        assert str(exc) == "Unknown fiscal source(s): unknown"
+    else:
+        raise AssertionError("Expected unknown source to fail")
+
+
 def test_build_all_builds_each_source_with_resolved_paths(tmp_path: Path, monkeypatch):
     calls = []
 
@@ -233,6 +267,34 @@ def test_build_all_builds_each_source_with_resolved_paths(tmp_path: Path, monkey
     assert [output.source for output in outputs] == [
         source.id for source in FISCAL_SOURCES
     ]
+
+
+def test_build_all_can_filter_sources(tmp_path: Path, monkeypatch):
+    calls = []
+
+    def fake_build_source_bundle(
+        source: str, encrypted_path: Path, metadata_path: Path
+    ):
+        calls.append((source, encrypted_path, metadata_path))
+        return build_offline_db.OfflineBundleOutput(
+            source=source,
+            encrypted_path=encrypted_path,
+            metadata_path=metadata_path,
+            version="v",
+            built_at="now",
+            size_bytes=1,
+        )
+
+    monkeypatch.setattr(
+        build_r2_fiscal_bundles,
+        "build_source_bundle",
+        fake_build_source_bundle,
+    )
+
+    outputs = build_r2_fiscal_bundles.build_all(tmp_path, {"nbs"})
+
+    assert [call[0] for call in calls] == ["nbs"]
+    assert [output.source for output in outputs] == ["nbs"]
 
 
 def test_copy_plaintext_rejects_output_outside_test_bundle_dir(tmp_path: Path):
