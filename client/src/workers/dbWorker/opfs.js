@@ -181,19 +181,22 @@ export async function readSourceVersion(source) {
 // The seed is the root-of-trust for offline DB decryption.  We never write it
 // to OPFS in plaintext.  Instead we derive a wrapping key from a
 // user-specific passphrase (userId) and encrypt the seed before storing.
+//
+// Threat Model:
+// Protection against cross-user reads on shared devices (if one user logs out
+// and another logs in, they cannot decrypt the previous user's OPFS data).
+// It does not protect against a compromised origin or leaked userId.
 // ---------------------------------------------------------------------------
 
-const SEED_SALT = new Uint8Array([
-  0x46, 0x43, 0x53, 0x45, 0x45, 0x44, 0x57, 0x52, // "FCSEEDWR"
-  0x41, 0x50, 0x4b, 0x45, 0x59, 0x21, 0x30, 0x31, // "APKEY!01"
-]);
+const FORMAT_VERSION = 1;
 
 /**
  * Derive a non-extractable AES-GCM wrapping key from a user passphrase.
  * @param {string} passphrase - typically the Clerk userId
+ * @param {Uint8Array} salt - random salt for PBKDF2
  * @returns {Promise<CryptoKey>}
  */
-async function deriveSeedWrappingKey(passphrase) {
+async function deriveSeedWrappingKey(passphrase, salt) {
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(passphrase),
@@ -202,7 +205,7 @@ async function deriveSeedWrappingKey(passphrase) {
     ["deriveKey"]
   );
   return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt: SEED_SALT, iterations: 100_000, hash: "SHA-256" },
+    { name: "PBKDF2", salt, iterations: 600_000, hash: "SHA-256" },
     keyMaterial,
     { name: "AES-GCM", length: 256 },
     false,
@@ -222,20 +225,28 @@ export async function saveSeed(seed, userPassphrase) {
 
   if (userPassphrase) {
     // Encrypted storage
-    const key = await deriveSeedWrappingKey(userPassphrase);
+    const salt = crypto.getRandomValues(new Uint8Array(16));
     const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveSeedWrappingKey(userPassphrase, salt);
+    
     const ciphertext = await crypto.subtle.encrypt(
       { name: "AES-GCM", iv },
       key,
       new TextEncoder().encode(seed)
     );
-    // Format: iv (12 bytes) || ciphertext
-    const output = new Uint8Array(iv.length + ciphertext.byteLength);
-    output.set(iv, 0);
-    output.set(new Uint8Array(ciphertext), iv.length);
+    // Format: Version (1 byte) || Salt (16 bytes) || IV (12 bytes) || Ciphertext
+    const output = new Uint8Array(1 + salt.length + iv.length + ciphertext.byteLength);
+    output[0] = FORMAT_VERSION;
+    output.set(salt, 1);
+    output.set(iv, 1 + salt.length);
+    output.set(new Uint8Array(ciphertext), 1 + salt.length + iv.length);
     await writable.write(output);
   } else {
     // Fallback: plaintext (should only happen in dev/tests)
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env && !import.meta.env.DEV) {
+       throw new Error("userPassphrase is required in production");
+    }
     await writable.write(seed);
   }
 
@@ -254,13 +265,17 @@ export async function readSeed(userPassphrase) {
     const file = await fileHandle.getFile();
 
     if (userPassphrase) {
-      // Encrypted storage: read iv || ciphertext
+      // Encrypted storage: read Version || Salt || IV || Ciphertext
       const buffer = await file.arrayBuffer();
-      if (buffer.byteLength <= 12) return null;
+      if (buffer.byteLength <= 29) return null; // 1 + 16 + 12
       const bytes = new Uint8Array(buffer);
-      const iv = bytes.slice(0, 12);
-      const ciphertext = bytes.slice(12);
-      const key = await deriveSeedWrappingKey(userPassphrase);
+      if (bytes[0] !== FORMAT_VERSION) return null;
+
+      const salt = bytes.slice(1, 17);
+      const iv = bytes.slice(17, 29);
+      const ciphertext = bytes.slice(29);
+      
+      const key = await deriveSeedWrappingKey(userPassphrase, salt);
       try {
         const plaintext = await crypto.subtle.decrypt(
           { name: "AES-GCM", iv },

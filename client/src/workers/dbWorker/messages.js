@@ -709,6 +709,7 @@ async function handleWipeSeedMessage(id) {
   await wipeSeed();
   closeWorkerDb();
   setWorkerVersion(null);
+  await removeFromOpfs().catch(() => undefined);
   setWorkerStatus("not_installed");
   clearSearchCache();
   postWorkerStatus(id, { status: "not_installed" });

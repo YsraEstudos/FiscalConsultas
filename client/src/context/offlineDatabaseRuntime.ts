@@ -179,7 +179,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
                         id: null,
                         payload: {
                             ...buildOfflineDatabaseInitPayload(initMetadata),
-                            userId: userId || undefined,
+                            userId,
                             ...sourcePayload,
                         },
                     },
