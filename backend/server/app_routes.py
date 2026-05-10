@@ -10,6 +10,7 @@ from backend.presentation.routes import (
     auth,
     comments,
     profile,
+    security,
     system,
     webhooks,
 )
@@ -21,6 +22,7 @@ def _configure_routes(app: FastAPI, project_root: str, logger: logging.Logger) -
     app.include_router(webhooks.router, prefix="/api/webhooks", tags=["Webhooks"])
     app.include_router(comments.router, prefix="/api", tags=["Comments"])
     app.include_router(profile.router, prefix="/api", tags=["Profile"])
+    app.include_router(security.router, prefix="/api", tags=["Security"])
 
     static_dir = os.path.join(project_root, "client", "dist")
     index_html = os.path.join(static_dir, "index.html")
