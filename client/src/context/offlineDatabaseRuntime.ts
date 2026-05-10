@@ -77,7 +77,7 @@ export interface OfflineDatabaseRuntimeValue {
 }
 
 export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
-    const { userId } = useAuth();
+    const { userId, isLoading } = useAuth();
     const supportReport = useMemo(() => getOfflineDatabaseSupportReport(), []);
     const isSupported = supportReport.supported;
     const instanceIdRef = useRef(createOfflineDatabaseInstanceId());
@@ -196,7 +196,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
                 return { ok: false, error: message };
             }
         },
-        [isWorkerReady, sendToWorker],
+        [isWorkerReady, sendToWorker, userId],
     );
 
 
@@ -287,16 +287,25 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
         refreshOfflineDatabaseAvailability,
     ]);
 
-    // Wipe in-memory seed and close DB on logout
+    // Wipe in-memory seed and close DB on logout.
+    // We use a ref to track whether the user was previously signed in so that
+    // WIPE_SEED only fires on a real logout transition (signed-in → signed-out)
+    // and not on the initial Clerk hydration frame where userId is still null.
+    const wasSignedInRef = useRef(false);
     useEffect(() => {
-        if (isWorkerReady && !userId && status !== 'not_installed' && status !== 'unsupported') {
+        if (!isLoading && userId) {
+            wasSignedInRef.current = true;
+        }
+        if (!isLoading && !userId && wasSignedInRef.current && isWorkerReady
+            && status !== 'not_installed' && status !== 'unsupported') {
+            wasSignedInRef.current = false;
             runOfflineDatabaseTaskInBackground(
                 sendToWorker({ type: 'WIPE_SEED', id: null, payload: {} }, 5000)
             );
             setStatus('not_installed');
             setLocalVersion(null);
         }
-    }, [userId, isWorkerReady, status, sendToWorker]);
+    }, [isLoading, userId, isWorkerReady, status, sendToWorker]);
 
     const state = useMemo<OfflineDatabaseRuntimeState>(
         () => ({
@@ -323,7 +332,6 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             progressStep,
             remoteVersion,
             status,
-            supportReport,
             updateAvailable,
         ],
     );

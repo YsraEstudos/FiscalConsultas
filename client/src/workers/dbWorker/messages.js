@@ -243,11 +243,18 @@ async function requestInstallToken(apiBase) {
   // We obtain it from the main thread via the REFRESH_TOKEN handshake.
   const clerkToken = await requestClerkTokenFromMainThread();
 
-  /** @type {Record<string, string>} */
-  const headers = { "Content-Type": "application/json" };
-  if (clerkToken) {
-    headers["Authorization"] = `Bearer ${clerkToken}`;
+  // Short-circuit: no token means the user isn’t signed in; skip the
+  // network round-trip that would only return a guaranteed 401.
+  if (!clerkToken) {
+    throw new Error(
+      "Autenticação necessária para baixar o banco offline. Faça login e tente novamente."
+    );
   }
+
+  const headers = {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${clerkToken}`,
+  };
 
   const tokenResp = await fetchWithTimeout(`${apiBase}/database/token`, {
     method: "POST",
@@ -688,8 +695,18 @@ async function handleRemoveMessage(id, payload) {
 }
 
 async function handleWipeSeedMessage(id) {
-  // Secure cleanup on logout: destroy all in-memory key material
+  // Reject any in-flight REFRESH_TOKEN requests immediately so callers do not
+  // wait for the 10-second timeout after logout.
+  for (const [reqId, pending] of _pendingTokenRequests) {
+    pending.reject(new Error("Clerk token request aborted due to WIPE_SEED"));
+    _pendingTokenRequests.delete(reqId);
+  }
+
+  // Secure cleanup on logout: destroy all in-memory key material AND the
+  // persisted encrypted seed in OPFS (wipeSeed was previously imported but
+  // never called, leaving the encrypted blob on disk after logout).
   clearAppSeed();
+  await wipeSeed();
   closeWorkerDb();
   setWorkerVersion(null);
   setWorkerStatus("not_installed");
