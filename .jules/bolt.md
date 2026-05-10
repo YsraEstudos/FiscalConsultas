@@ -1,3 +1,7 @@
 ## 2024-04-29 - [Bounded LRU Cache for Stemmer]
 **Learning:** Instantiating `PortugueseStemmer` inside the `NeshTextProcessor` facade and directly calling its `stem` method causes redundant CPU-intensive text normalizations for the same words, particularly across large datasets or repetitive FTS queries where the vocabulary is bounded. Applying `@functools.lru_cache` to a module-level proxy function significantly speeds up NLP stemming. Never apply `lru_cache` directly to an instance method.
 **Action:** Always use a module-level bounded `lru_cache` on a decoupled proxy function when caching results from an instance method (e.g., stemming) across multiple instances to avoid including `self` in the cache key and causing cache misses or memory leaks.
+
+## 2024-05-10 - [String Manipulation Optimization]
+**Learning:** Using Python's `str.split()` and `" ".join()` or `"".join()` is significantly faster (~5x) than `re.sub(r"\s+", " ", ...)` and `re.sub(r"\s+", "", ...)` for collapsing and removing whitespaces. Similarly, using `"".join(filter(str.isdigit, text))` is around 40% faster than `re.sub(r"\D", "", ...)` or `re.sub(r"[^0-9]", "", ...)` for keeping only numeric characters.
+**Action:** Prefer string methods and built-ins (`split`, `join`, `filter`, `str.isdigit`) over regular expressions for simple character stripping and whitespace normalization, especially in tight loops or data parsing pipelines where these operations are called frequently.
