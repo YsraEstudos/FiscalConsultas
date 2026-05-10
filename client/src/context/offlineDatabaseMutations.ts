@@ -45,6 +45,7 @@ export function useOfflineDatabaseMutations({
     setProgressStep,
     setRemoteVersion,
     setStatus,
+    userId,
     waitForOtherTabSync,
 }: OfflineDatabaseOperationsArgs): Pick<
     OfflineDatabaseOperations,
@@ -108,10 +109,12 @@ export function useOfflineDatabaseMutations({
                         r2BaseUrl,
                         publicSeed,
                         metadata: sourceMetadata,
+                        userId: userId || undefined,
                     }
                     : {
                         apiBase: getOfflineDatabaseApiBaseUrl(),
                         clerkToken: '',
+                        userId: userId || undefined,
                     };
 
             await sendToWorker(
@@ -178,6 +181,7 @@ export function useOfflineDatabaseMutations({
         setProgressStep,
         setRemoteVersion,
         setStatus,
+        userId,
         waitForOtherTabSync,
     ]);
 
@@ -197,7 +201,8 @@ export function useOfflineDatabaseMutations({
             persistStoredOfflineDatabaseMetadata(null);
             persistStoredOfflineSourceMetadata(LEGACY_MONOLITHIC_BUNDLE_SOURCE, null);
             setOfflineDatabaseAutoInstallOptOut();
-            sessionStorage.removeItem('offline_db_seed');
+            // sessionStorage no longer stores the seed (BUG-3 fix — it was plaintext).
+
             setLocalVersion(null);
             setRemoteVersion(remoteMetadataRef.current?.version ?? null);
             setDbSizeBytes(null);

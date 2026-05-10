@@ -15,6 +15,13 @@ export function setAppSeed(seed) {
   appSeed = seed && seed.trim() ? seed.trim() : null;
 }
 
+/**
+ * Securely wipe the in-memory seed.  Call on logout.
+ */
+export function clearAppSeed() {
+  appSeed = null;
+}
+
 function getSeed() {
   if (!appSeed) {
     throw new Error("Offline database key is missing");

@@ -29,3 +29,16 @@ export function postWorkerError(id, error) {
     payload: { error },
   });
 }
+
+/**
+ * Ask the main thread to provide a fresh Clerk JWT.
+ * The main thread will reply with a TOKEN_RESPONSE message containing the same id.
+ * @param {string} id - Unique request id used to match the reply
+ */
+export function postWorkerRefreshToken(id) {
+  postMessage({
+    type: "REFRESH_TOKEN",
+    id,
+    payload: {},
+  });
+}

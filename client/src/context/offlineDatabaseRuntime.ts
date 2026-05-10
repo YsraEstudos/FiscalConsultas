@@ -39,6 +39,7 @@ import type { OfflineDatabaseOperationsArgs } from './offlineDatabaseOperations.
 import { useOfflineDatabaseBroadcastChannel } from './offlineDatabaseRuntime/useOfflineDatabaseBroadcastChannel';
 import { useOfflineDatabaseSyncWaiter } from './offlineDatabaseRuntime/useOfflineDatabaseSyncWaiter';
 import { useOfflineDatabaseWorkerBridge } from './offlineDatabaseRuntime/useOfflineDatabaseWorkerBridge';
+import { useAuth } from './AuthContext';
 
 const LEGACY_MONOLITHIC_BUNDLE_SOURCE = 'nesh';
 
@@ -76,6 +77,7 @@ export interface OfflineDatabaseRuntimeValue {
 }
 
 export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
+    const { userId } = useAuth();
     const supportReport = useMemo(() => getOfflineDatabaseSupportReport(), []);
     const isSupported = supportReport.supported;
     const instanceIdRef = useRef(createOfflineDatabaseInstanceId());
@@ -160,7 +162,9 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             const initMetadata =
                 metadata ?? remoteMetaRef.current ?? readStoredOfflineDatabaseMetadata();
             try {
-                const seed = sessionStorage.getItem('offline_db_seed');
+                // BUG-3 fix: seed is NO LONGER read from sessionStorage here.
+                // The worker reads it directly from OPFS via readSeed(userId),
+                // where it is stored encrypted with user-scoped AES-GCM.
                 const publicSeed = getOfflineDbPublicSeed();
                 const sourcePayload =
                     publicSeed && isOfflineSourceMetadata(initMetadata)
@@ -175,7 +179,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
                         id: null,
                         payload: {
                             ...buildOfflineDatabaseInitPayload(initMetadata),
-                            seed: seed || undefined,
+                            userId: userId || undefined,
                             ...sourcePayload,
                         },
                     },
@@ -194,6 +198,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
         },
         [isWorkerReady, sendToWorker],
     );
+
 
     const refreshOfflineDatabaseAvailability = useCallback(
         async (force = false): Promise<OfflineDatabaseMetadata | null> => {
@@ -282,6 +287,17 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
         refreshOfflineDatabaseAvailability,
     ]);
 
+    // Wipe in-memory seed and close DB on logout
+    useEffect(() => {
+        if (isWorkerReady && !userId && status !== 'not_installed' && status !== 'unsupported') {
+            runOfflineDatabaseTaskInBackground(
+                sendToWorker({ type: 'WIPE_SEED', id: null, payload: {} }, 5000)
+            );
+            setStatus('not_installed');
+            setLocalVersion(null);
+        }
+    }, [userId, isWorkerReady, status, sendToWorker]);
+
     const state = useMemo<OfflineDatabaseRuntimeState>(
         () => ({
             status,
@@ -318,6 +334,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             status,
             localVersion,
             remoteVersion,
+            userId,
             instanceId: instanceIdRef.current,
             remoteMetadataRef: remoteMetaRef,
             broadcast,
@@ -343,6 +360,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             localVersion,
             refreshOfflineDatabaseAvailability,
             remoteVersion,
+            userId,
             sendToWorker,
             status,
             waitForOtherTabSync,

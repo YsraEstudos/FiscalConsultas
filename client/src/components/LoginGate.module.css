@@ -1,0 +1,120 @@
+.backdrop {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+    z-index: 9999;
+    padding: 1rem;
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    max-width: 420px;
+    width: 100%;
+    padding: 2.5rem 2rem;
+    border-radius: 1rem;
+    background: rgba(30, 41, 59, 0.7);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    box-shadow:
+        0 0 0 1px rgba(148, 163, 184, 0.05),
+        0 20px 40px rgba(0, 0, 0, 0.4);
+    text-align: center;
+    animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.iconContainer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.15));
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    margin-bottom: 0.25rem;
+}
+
+.icon {
+    width: 28px;
+    height: 28px;
+    color: #a5b4fc;
+}
+
+.title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin: 0;
+    letter-spacing: -0.02em;
+}
+
+.subtitle {
+    font-size: 0.95rem;
+    color: #94a3b8;
+    margin: 0;
+    line-height: 1.5;
+    max-width: 320px;
+}
+
+.signInButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 2.5rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    border: none;
+    border-radius: 0.625rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    margin-top: 0.5rem;
+}
+
+.signInButton:hover {
+    background: linear-gradient(135deg, #818cf8, #a78bfa);
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+    transform: translateY(-1px);
+}
+
+.signInButton:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+}
+
+.unavailable {
+    font-size: 0.875rem;
+    color: #f87171;
+    margin: 0;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    background: rgba(248, 113, 113, 0.08);
+    border: 1px solid rgba(248, 113, 113, 0.15);
+    line-height: 1.5;
+}
+
+.footer {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin: 0.5rem 0 0;
+}

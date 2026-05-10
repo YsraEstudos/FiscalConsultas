@@ -135,9 +135,10 @@ function handleReadyStatus(
     setProgress(100);
     setProgressStep('done');
     setError(null);
-    if (payload.seed) {
-        sessionStorage.setItem('offline_db_seed', payload.seed);
-    }
+    // BUG-3 fix: the seed must NOT be stored in plaintext sessionStorage.
+    // It is already persisted encrypted in OPFS via saveSeed() (user-scoped
+    // AES-GCM). A plaintext copy in sessionStorage can be trivially read by
+    // any script in the same origin (XSS, extensions, DevTools).
 }
 
 function handleWorkerStatusMessage(
