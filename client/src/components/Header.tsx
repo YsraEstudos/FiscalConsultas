@@ -154,7 +154,7 @@ const logoutButtonLabel = getLogoutButtonLabel(isSigningOut);
         if (typeof __APP_VERSION__ !== 'undefined') {
             return __APP_VERSION__.split('-')[0]; // Pega apenas a versão sem o timestamp
         }
-        return '0.0.1';
+        return '0.1.1';
     }, []);
 
     // Close menu when clicking outside
