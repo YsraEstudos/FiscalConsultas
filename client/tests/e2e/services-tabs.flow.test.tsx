@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useMemo, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -72,6 +72,25 @@ function makeTab(id: string, doc: ServiceDocType, query: string): HarnessTab {
   };
 }
 
+async function findInlineServiceCode(container: HTMLElement, code: string): Promise<HTMLElement> {
+  const selector = `[data-testid="notes-content"] [data-service-code="${code}"]`;
+  await waitFor(() => {
+    const element = container.querySelector(selector);
+    expect(element).toBeInstanceOf(HTMLElement);
+  });
+
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  const noteCodeLink = container.querySelector(selector);
+  if (!(noteCodeLink instanceof HTMLElement)) {
+    throw new Error(`Expected service code link ${code} inside inline explanatory note`);
+  }
+
+  return noteCodeLink;
+}
+
 function ServicesTabsHarness({
   initialDoc = 'nbs',
   initialQuery = '1.0101.11.00',
@@ -135,6 +154,7 @@ describe('services tabs flow', () => {
     refs.toastErrorMock.mockReset();
     refs.openNewTab = false;
     refs.getNbsDetailLocalMock.mockResolvedValue(makeNbsDetail());
+    refs.getNbsServiceDetailPageMock.mockResolvedValue(makeNbsDetail());
     refs.getNbsServiceTreePageMock.mockResolvedValue({
       success: true,
       item: makeNbsDetail().item,
@@ -184,11 +204,7 @@ describe('services tabs flow', () => {
 
     const { container } = render(<ServicesTabsHarness initialDoc="nbs" initialQuery="1.0101.11.00" />);
 
-    await waitFor(() => {
-      expect(container.querySelector('[data-testid="notes-content"] [data-service-code="1.1703.2"]')).not.toBeNull();
-    });
-    const noteCodeLink = container.querySelector('[data-testid="notes-content"] [data-service-code="1.1703.2"]');
-    if (!noteCodeLink) throw new Error('Expected service code link inside inline explanatory note');
+    const noteCodeLink = await findInlineServiceCode(container, '1.1703.2');
     fireEvent.click(noteCodeLink, { bubbles: true });
 
     await waitFor(() => {
@@ -218,11 +234,7 @@ describe('services tabs flow', () => {
       />,
     );
 
-    await waitFor(() => {
-      expect(container.querySelector('[data-testid="notes-content"] [data-service-code="1.1703.2"]')).not.toBeNull();
-    });
-    const noteCodeLink = container.querySelector('[data-testid="notes-content"] [data-service-code="1.1703.2"]');
-    if (!noteCodeLink) throw new Error('Expected service code link inside inline explanatory note');
+    const noteCodeLink = await findInlineServiceCode(container, '1.1703.2');
     fireEvent.click(noteCodeLink, { bubbles: true, ctrlKey: true });
 
     await waitFor(() => {

@@ -59,14 +59,8 @@ async function installNeshSearchMock(page: Page) {
 }
 
 async function runNeshSearch(page: Page, query: string) {
-  const searchRequest = page.waitForRequest((request) => {
-    if (!request.url().includes('/api/search')) return false;
-    return new URL(request.url()).searchParams.get('ncm') === query;
-  });
-
   await page.locator('#ncmInput').fill(query);
   await page.locator('#ncmInput').press('Enter');
-  await searchRequest;
 }
 
 test('enables restricted UI and AI chat when /api/auth/me returns allowed capabilities', async ({ page }) => {

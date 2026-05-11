@@ -138,7 +138,13 @@ describe('useSearch Hook', () => {
         }));
     });
 
-    it('should fetch when navigating to a different chapter', async () => {
+    it('should search locally when navigating to a different chapter', async () => {
+        localDatabaseState.status = 'ready';
+        localDatabaseState.searchLocal.mockResolvedValue({
+            searchType: 'code',
+            results: { '73': createChapterData('73') },
+            markdown: '<h3 id="pos-73-22">73.22</h3>',
+        });
         const updateTab = vi.fn();
         const addToHistory = vi.fn();
         const tabs: Tab[] = [
@@ -155,13 +161,6 @@ describe('useSearch Hook', () => {
             }
         ];
         const tabsById = new Map(tabs.map(tab => [tab.id, tab]));
-
-        localDatabaseState.status = 'ready';
-        localDatabaseState.searchLocal.mockResolvedValue({
-            searchType: 'code',
-            results: createCodeResponse('73', '7308').results,
-            markdown: '<h3 id="pos-73-22">73.22</h3>',
-        });
 
         const { result } = renderHook(
             () => useSearch(tabsById, updateTab, addToHistory),

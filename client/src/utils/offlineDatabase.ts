@@ -20,6 +20,22 @@ export interface OfflineSourceMetadata extends OfflineDatabaseMetadata {
   encrypted_sha256: string;
 }
 
+export function isOfflineSourceMetadata(
+  metadata: unknown,
+): metadata is OfflineSourceMetadata {
+  if (!metadata || typeof metadata !== 'object') return false;
+  const candidate = metadata as {
+    source?: unknown;
+    encrypted_sha256?: unknown;
+  };
+
+  return Boolean(
+    isFiscalSourceId(candidate.source)
+    && typeof candidate.encrypted_sha256 === 'string'
+    && candidate.encrypted_sha256.trim()
+  );
+}
+
 export function compareOfflineVersions(
   left: string | null | undefined,
   right: string | null | undefined
@@ -64,6 +80,31 @@ export function formatOfflineDatabaseErrorMessage(
   return fallbackMessage;
 }
 
+export function buildOfflineDatabaseNetworkErrorMessage(
+  url: string,
+  action: "version" | "token" | "download" | "request" = "request"
+): string {
+  let targetOrigin = url;
+  try {
+    targetOrigin = new URL(url, globalThis.location?.href).origin;
+  } catch {
+    // Keep the original value when it is not URL-like.
+  }
+
+  const currentOrigin =
+    typeof globalThis.location !== "undefined"
+      ? globalThis.location.origin
+      : "esta origem";
+  const actionLabel = {
+    version: "consultar a versão do banco offline",
+    token: "solicitar o token do banco offline",
+    download: "baixar o banco offline",
+    request: "acessar o banco offline",
+  }[action];
+
+  return `Não foi possível ${actionLabel} em ${targetOrigin}. Verifique se o backend permite esta origem: ${currentOrigin}.`;
+}
+
 export function sanitizeOfflineMetadata(
   metadata: Partial<OfflineDatabaseMetadata> | null | undefined
 ): OfflineDatabaseMetadata | null {
@@ -88,17 +129,23 @@ export function sanitizeOfflineSourceMetadata(
   source: unknown,
   metadata: Partial<OfflineDatabaseMetadata> | null | undefined
 ): OfflineSourceMetadata | null {
-  if (!isFiscalSourceId(source) || !metadata?.version || !metadata.encrypted_sha256) {
+  const encryptedSha256 = metadata?.encrypted_sha256;
+  if (
+    !isFiscalSourceId(source)
+    || !metadata?.version
+    || typeof encryptedSha256 !== 'string'
+    || !encryptedSha256.trim()
+  ) {
     return null;
   }
 
   const sanitized = sanitizeOfflineMetadata(metadata);
-  if (!sanitized?.encrypted_sha256) return null;
+  if (!sanitized?.encrypted_sha256?.trim()) return null;
 
   return {
     ...sanitized,
     source,
-    encrypted_sha256: sanitized.encrypted_sha256,
+    encrypted_sha256: sanitized.encrypted_sha256!,
   };
 }
 

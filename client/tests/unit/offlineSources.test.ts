@@ -36,6 +36,12 @@ describe('offline fiscal sources', () => {
     });
   });
 
+  it('rejects empty base URLs for source-scoped R2 URLs', () => {
+    expect(() => buildFiscalBundleUrls('', 'nesh')).toThrow(
+      'baseUrl is required for fiscal bundle URLs',
+    );
+  });
+
   it('sanitizes source metadata with encrypted bundle URL requirements', () => {
     expect(
       sanitizeOfflineSourceMetadata('nesh', {
@@ -59,6 +65,10 @@ describe('offline fiscal sources', () => {
   it('rejects unknown source ids', () => {
     expect(isFiscalSourceId('nesh')).toBe(true);
     expect(isFiscalSourceId('render')).toBe(false);
+    expect(isFiscalSourceId(null)).toBe(false);
+    expect(isFiscalSourceId(undefined)).toBe(false);
+    expect(isFiscalSourceId(42)).toBe(false);
+    expect(isFiscalSourceId('')).toBe(false);
   });
 
   it('rejects source metadata without encrypted hashes or known source ids', () => {
@@ -76,6 +86,24 @@ describe('offline fiscal sources', () => {
         size_bytes: 123,
         sha256: 'plain',
         encrypted_sha256: 'encrypted',
+      }),
+    ).toBeNull();
+
+    expect(
+      sanitizeOfflineSourceMetadata('nesh', {
+        version: '2026.05.06.120000',
+        size_bytes: 123,
+        sha256: 'plain',
+        encrypted_sha256: '   ',
+      }),
+    ).toBeNull();
+
+    expect(
+      sanitizeOfflineSourceMetadata('nesh', {
+        version: '2026.05.06.120000',
+        size_bytes: 123,
+        sha256: 'plain',
+        encrypted_sha256: 42 as any,
       }),
     ).toBeNull();
   });

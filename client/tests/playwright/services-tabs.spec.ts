@@ -69,12 +69,7 @@ test('updates NBS detail when clicking an ancestor in the hierarchy', async ({ p
   const activeNode = page.locator('[data-service-state="active"]');
   await expect(activeNode).toContainText('1.0101.11.00');
 
-  const detailRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/services/nbs/1.01'),
-  );
-
   await page.getByRole('button', { name: /1\.01 - Serviços de construção/ }).first().click();
-  await detailRequest;
 
   await expect(activeNode).toContainText('1.01 - Serviços de construção');
 });
@@ -104,12 +99,7 @@ test('updates NBS detail when clicking a child node in the hierarchy', async ({ 
   const activeNode = page.locator('[data-service-state="active"]');
   await expect(activeNode).toContainText('1.0101.11.00');
 
-  const detailRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/services/nbs/1.0101.11.01'),
-  );
-
   await page.getByRole('button', { name: /1\.0101\.11\.01 - Serviços complementares residenciais/ }).click();
-  await detailRequest;
 
   await expect(activeNode).toContainText('1.0101.11.01');
 });
@@ -134,13 +124,7 @@ test('follows smart-link codes from NBS notes to NBS results', async ({ page }) 
   const smartLink = await openNbsWithSmartLink(page, '1.0101.12.00');
   await expect(smartLink).toBeVisible();
 
-  const nbsRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/services/nbs/search')
-    && new URL(request.url()).searchParams.get('q') === '1.0101.12.00',
-  );
-
   await smartLink.click();
-  await nbsRequest;
 
   await expect(page.getByRole('heading', { name: 'Resultados NBS' })).toBeVisible();
   await expect(page.locator('[data-service-state="active"]')).toContainText('1.0101.12.00');
@@ -151,13 +135,8 @@ test('opens smart-link target in a new tab with Ctrl/Cmd click', async ({ page }
   await expect(smartLink).toBeVisible();
 
   const initialTabCount = await page.locator('div[draggable="true"][data-document]').count();
-  const nbsRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/services/nbs/search')
-    && new URL(request.url()).searchParams.get('q') === '1.0101.12.00',
-  );
 
   await smartLink.click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
-  await nbsRequest;
 
   await expect(page.locator('div[draggable="true"][data-document]')).toHaveCount(initialTabCount + 1);
   await expect(page.getByRole('heading', { name: 'Resultados NBS' })).toBeVisible();
@@ -168,13 +147,8 @@ test('opens smart-link target in a new tab with middle-click', async ({ page }) 
   await expect(smartLink).toBeVisible();
 
   const initialTabCount = await page.locator('div[draggable="true"][data-document]').count();
-  const nbsRequest = page.waitForRequest((request) =>
-    request.url().includes('/api/services/nbs/search')
-    && new URL(request.url()).searchParams.get('q') === '1.0101.12.00',
-  );
 
   await smartLink.click({ button: 'middle' });
-  await nbsRequest;
 
   await expect(page.locator('div[draggable="true"][data-document]')).toHaveCount(initialTabCount + 1);
   await expect(page.getByRole('heading', { name: 'Resultados NBS' })).toBeVisible();

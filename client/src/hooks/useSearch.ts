@@ -22,6 +22,8 @@ const buildLoadedChaptersByDoc = (value?: Record<DocType, string[]>): Record<Doc
 
 const getLocalOnlyInstallMessage = (doc: DocType): string =>
     `Instale a base ${doc.toUpperCase()} para pesquisar localmente.`;
+const LOCAL_SEARCH_EMPTY_MESSAGE = 'Nenhum resultado encontrado na base local.';
+const LOCAL_SEARCH_ERROR_MESSAGE = 'Erro ao pesquisar na base local. Tente reinstalar.';
 
 /**
  * Normalize local Worker search results into the fiscal API response format.
@@ -162,36 +164,43 @@ export function useSearch(
 
             // Local-only fiscal search: no backend API fallback.
             if (dbStatus === 'ready' && isOfflineScopedDoc) {
-                const searchStart = performance.now();
-                const localResponse = await searchLocal(doc as any, query, tipiViewModeRef.current);
-                const searchEnd = performance.now();
-                if (localResponse) {
-                    if (import.meta.env.DEV) {
-                        const e2e = (searchEnd - searchStart).toFixed(1);
-                        const wt = localResponse.timing;
-                        const sql = wt?.sqlDurationMs?.toFixed(1) ?? '?';
-                        const total = wt?.totalDurationMs?.toFixed(1) ?? '?';
-                        const cache = wt?.cacheHit ? '✓ HIT' : '✗ miss';
-                        console.log(
-                            `[search] ${doc}:${query} e2e=${e2e}ms worker=${total}ms sql=${sql}ms cache=${cache}`
-                        );
+                try {
+                    const searchStart = performance.now();
+                    const localResponse = await searchLocal(doc as any, query, tipiViewModeRef.current);
+                    const searchEnd = performance.now();
+                    if (localResponse) {
+                        if (import.meta.env.DEV) {
+                            const e2e = (searchEnd - searchStart).toFixed(1);
+                            const wt = localResponse.timing;
+                            const sql = wt?.sqlDurationMs?.toFixed(1) ?? '?';
+                            const total = wt?.totalDurationMs?.toFixed(1) ?? '?';
+                            const cache = wt?.cacheHit ? '✓ HIT' : '✗ miss';
+                            console.log(
+                                `[search] ${doc}:${query} e2e=${e2e}ms worker=${total}ms sql=${sql}ms cache=${cache}`
+                            );
+                        }
+                        if (localResponse.searchType === 'code') {
+                            data = doc === 'nesh' || doc === 'tipi'
+                                ? buildLocalCodeSearchResponse(
+                                    doc,
+                                    query,
+                                    localResponse.results as Record<string, any>,
+                                    localResponse.markdown,
+                                )
+                                : null;
+                        } else if (Array.isArray(localResponse.results)) {
+                            data = normalizeLocalResults(doc, query, localResponse.results as Record<string, unknown>[]);
+                        }
                     }
-                    if (localResponse.searchType === 'code') {
-                        data = doc === 'nesh' || doc === 'tipi'
-                            ? buildLocalCodeSearchResponse(
-                                doc,
-                                query,
-                                localResponse.results as Record<string, any>,
-                                localResponse.markdown,
-                            )
-                            : null;
-                    } else if (Array.isArray(localResponse.results)) {
-                        data = normalizeLocalResults(doc, query, localResponse.results as Record<string, unknown>[]);
-                    }
+                } catch {
+                    throw new Error(LOCAL_SEARCH_ERROR_MESSAGE);
                 }
             }
 
             if (!data) {
+                if (dbStatus === 'ready' && isOfflineScopedDoc) {
+                    throw new Error(LOCAL_SEARCH_EMPTY_MESSAGE);
+                }
                 throw new Error(getLocalOnlyInstallMessage(doc));
             }
 

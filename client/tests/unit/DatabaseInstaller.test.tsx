@@ -16,6 +16,13 @@ const localDatabaseState = {
   error: null,
   dbSizeBytes: null,
   isSupported: true,
+  supportReport: {
+    supported: true,
+    missingFeatures: [],
+    canRecoverWithIsolationReload: false,
+    isSecureContext: true,
+    crossOriginIsolated: true,
+  },
   isRemoving: false,
   install: installMock,
   remove: removeMock,
@@ -41,18 +48,80 @@ describe('DatabaseInstaller', () => {
       error: null,
       dbSizeBytes: null,
       isSupported: true,
+      supportReport: {
+        supported: true,
+        missingFeatures: [],
+        canRecoverWithIsolationReload: false,
+        isSecureContext: true,
+        crossOriginIsolated: true,
+      },
       isRemoving: false,
     });
   });
 
   it('renders the unsupported browser message', () => {
     localDatabaseState.isSupported = false;
+    localDatabaseState.supportReport = {
+      supported: false,
+      missingFeatures: ['worker'],
+      canRecoverWithIsolationReload: false,
+      isSecureContext: true,
+      crossOriginIsolated: true,
+    };
 
     render(<DatabaseInstaller />);
 
     expect(screen.getByText('Busca local')).toBeInTheDocument();
-    expect(screen.getByText(/Seu navegador não suporta os recursos necessários/i)).toBeInTheDocument();
+    expect(screen.getByText(/Seu navegador não suporta todos os recursos/i)).toBeInTheDocument();
     expect(screen.getByText(/Indisponível/)).toBeInTheDocument();
+  });
+
+  it('renders a recoverable isolation message before marking Edge as incompatible', () => {
+    localDatabaseState.isSupported = false;
+    localDatabaseState.supportReport = {
+      supported: false,
+      missingFeatures: ['cross-origin-isolation', 'shared-array-buffer'],
+      canRecoverWithIsolationReload: true,
+      isSecureContext: true,
+      crossOriginIsolated: false,
+    };
+
+    render(<DatabaseInstaller />);
+
+    expect(screen.getByText(/Preparando/)).toBeInTheDocument();
+    expect(screen.getByText(/precisa ativar o isolamento de origem/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Indisponível/)).not.toBeInTheDocument();
+  });
+
+  it('renders an insecure-origin message when the page is not in a secure context', () => {
+    localDatabaseState.isSupported = false;
+    localDatabaseState.supportReport = {
+      supported: false,
+      missingFeatures: ['secure-context', 'shared-array-buffer'],
+      canRecoverWithIsolationReload: false,
+      isSecureContext: false,
+      crossOriginIsolated: false,
+    };
+
+    render(<DatabaseInstaller />);
+
+    expect(screen.getByText(/precisa de uma origem segura/i)).toBeInTheDocument();
+    expect(screen.getByText(/127\.0\.0\.1:5173/i)).toBeInTheDocument();
+  });
+
+  it('renders an OPFS-specific message when browser storage is unavailable', () => {
+    localDatabaseState.isSupported = false;
+    localDatabaseState.supportReport = {
+      supported: false,
+      missingFeatures: ['opfs'],
+      canRecoverWithIsolationReload: false,
+      isSecureContext: true,
+      crossOriginIsolated: true,
+    };
+
+    render(<DatabaseInstaller />);
+
+    expect(screen.getByText(/não liberou OPFS/i)).toBeInTheDocument();
   });
 
   it('renders the checking state', () => {
@@ -142,11 +211,13 @@ describe('DatabaseInstaller', () => {
     expect(installMock).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the default install state and starts installation', () => {
+  it('describes automatic local search installation when not installed', () => {
+    localDatabaseState.dbSizeBytes = 24 * 1024 * 1024;
+
     render(<DatabaseInstaller />);
 
-    expect(screen.getByText(/Instale o banco de dados localmente/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Instalar Busca Instantânea/i }));
+    expect(screen.getByText(/A busca local é instalada automaticamente/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Instalar agora/i }));
     expect(installMock).toHaveBeenCalledTimes(1);
   });
 });

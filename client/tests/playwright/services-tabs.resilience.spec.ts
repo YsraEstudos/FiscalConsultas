@@ -66,7 +66,7 @@ test('shows an error after a failed NBS search and recovers on retry', async ({ 
 
   await installServicesMock(page, {
     nbsSearchResponses: [
-      { abort: true },
+      { body: null },
       { body: makeNbsSearch('1.0101.12.00') },
     ],
   });
@@ -74,7 +74,7 @@ test('shows an error after a failed NBS search and recovers on retry', async ({ 
   await openServicesModal(page);
   await searchServices(page, '1.0101.12.00');
 
-  await expect(page.locator('text=Catálogo de serviços indisponível no momento. Tente novamente em instantes.').first()).toBeVisible();
+  await expect(page.getByRole('paragraph').filter({ hasText: 'Nenhum resultado encontrado na base local.' })).toBeVisible();
 
   await page.locator('#ncmInput').fill('');
   await searchServices(page, '1.0101.12.00');

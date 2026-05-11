@@ -60,7 +60,12 @@ class MockWorker {
     });
   }
 
-  terminate(): void {}
+  terminate(): void {
+    // Mirror Worker termination by detaching handlers from this test double.
+    this.onmessage = null;
+    this.onerror = null;
+    this.messageListeners.clear();
+  }
 
   private respond(message: WorkerPayload): void {
     if (message.type === 'INIT') {
@@ -173,6 +178,45 @@ async function flushEffects() {
   });
 }
 
+function renderLocalDatabaseProvider() {
+  return render(
+    <LocalDatabaseProvider>
+      <Probe />
+    </LocalDatabaseProvider>,
+  );
+}
+
+async function waitForNotInstalledContext() {
+  await waitFor(() =>
+    expect(screen.getByTestId('status')).toHaveTextContent('not_installed'),
+  );
+  expect(currentContext).not.toBeNull();
+}
+
+async function installCurrentDatabase() {
+  await act(async () => {
+    await currentContext!.install();
+  });
+}
+
+function configureR2Install(fetchImplementation: (url: string) => Promise<Response>) {
+  vi.stubEnv('VITE_FISCAL_R2_BASE_URL', 'https://r2.example.com/fiscal');
+  vi.stubEnv('VITE_OFFLINE_DB_PUBLIC_SEED', 'public-seed');
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(fetchImplementation));
+}
+
+function expectLegacyInstallPayload() {
+  expect(getPostedWorkerMessages()).toContainEqual(
+    expect.objectContaining({
+      type: 'INSTALL',
+      payload: {
+        apiBase: expect.any(String),
+        clerkToken: '',
+      },
+    }),
+  );
+}
+
 describe('LocalDatabaseContext auto-install behavior', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -194,6 +238,9 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     vi.stubGlobal('Worker', MockWorker as unknown as typeof Worker);
     vi.stubGlobal('BroadcastChannel', undefined);
     vi.stubGlobal('SharedArrayBuffer', class SharedArrayBufferMock {});
+    vi.stubGlobal('isSecureContext', true);
+    vi.stubGlobal('crossOriginIsolated', true);
+    vi.stubGlobal('crypto', { subtle: {}, randomUUID: vi.fn(() => 'mock-instance') });
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation(() => Promise.resolve(makeVersionResponse('2026.04'))),
@@ -205,7 +252,7 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     vi.unstubAllEnvs();
   });
 
-  it('does not auto-install on first visit when the database is missing', async () => {
+  it('auto-installs on first supported visit when the database is missing', async () => {
     render(
       <LocalDatabaseProvider>
         <Probe />
@@ -213,12 +260,12 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByTestId('status')).toHaveTextContent('not_installed'),
+      expect(screen.getByTestId('status')).toHaveTextContent('ready'),
     );
     await flushEffects();
 
-    expect(getWorkerMessages()).not.toContain('INSTALL');
-    expect(screen.getByTestId('status')).toHaveTextContent('not_installed');
+    expect(getWorkerMessages()).toContain('INSTALL');
+    expect(screen.getByTestId('status')).toHaveTextContent('ready');
   });
 
   it('does not reinstall immediately after remove()', async () => {
@@ -247,36 +294,21 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     await flushEffects();
 
     expect(getWorkerMessages()).not.toContain('INSTALL');
+    expect(localStorage.getItem('offline-db:auto-install-opt-out')).toBe('true');
     expect(screen.getByTestId('status')).toHaveTextContent('not_installed');
   });
 
   it('uses R2 metadata and public seed for first-time install when configured', async () => {
-    vi.stubEnv('VITE_FISCAL_R2_BASE_URL', 'https://r2.example.com/fiscal');
-    vi.stubEnv('VITE_OFFLINE_DB_PUBLIC_SEED', 'public-seed');
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((url: string) => {
-        if (url.includes('/database/version') || url.includes('/database/token')) {
-          return Promise.reject(new Error(`legacy endpoint called: ${url}`));
-        }
-        return Promise.resolve(makeSourceMetadataResponse('2026.05.01'));
-      }),
-    );
-
-    render(
-      <LocalDatabaseProvider>
-        <Probe />
-      </LocalDatabaseProvider>,
-    );
-
-    await waitFor(() =>
-      expect(screen.getByTestId('status')).toHaveTextContent('not_installed'),
-    );
-    expect(currentContext).not.toBeNull();
-
-    await act(async () => {
-      await currentContext!.install();
+    configureR2Install((url: string) => {
+      if (url.includes('/database/version') || url.includes('/database/token')) {
+        return Promise.reject(new Error(`legacy endpoint called: ${url}`));
+      }
+      return Promise.resolve(makeSourceMetadataResponse('2026.05.01'));
     });
+
+    renderLocalDatabaseProvider();
+    await waitForNotInstalledContext();
+    await installCurrentDatabase();
 
     const fetchUrls = (fetch as ReturnType<typeof vi.fn>).mock.calls.map((call) =>
       String(call[0]),
@@ -299,5 +331,58 @@ describe('LocalDatabaseContext auto-install behavior', () => {
         },
       }),
     );
+  });
+
+  it('falls back to the legacy install payload when R2 metadata is malformed', async () => {
+    configureR2Install(() => Promise.resolve(
+      new Response(
+        JSON.stringify({
+          source: 'nesh',
+          version: '2026.05.01',
+          size_bytes: 4096,
+          sha256: 'plain-sha',
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      ),
+    ));
+
+    renderLocalDatabaseProvider();
+    await waitForNotInstalledContext();
+    await installCurrentDatabase();
+
+    expectLegacyInstallPayload();
+  });
+
+  it('falls back to the legacy install payload when R2 metadata is unavailable', async () => {
+    configureR2Install((url: string) => {
+      if (url.includes('/nesh/nesh.meta.json')) {
+        return Promise.reject(new Error('source metadata unavailable'));
+      }
+      return Promise.resolve(makeVersionResponse('2026.05.01'));
+    });
+
+    renderLocalDatabaseProvider();
+    await waitForNotInstalledContext();
+    await installCurrentDatabase();
+
+    expectLegacyInstallPayload();
+  });
+
+  it('clears the auto-install opt-out when install is started manually', async () => {
+    localStorage.setItem('offline-db:auto-install-opt-out', 'true');
+
+    renderLocalDatabaseProvider();
+
+    await waitForNotInstalledContext();
+
+    await installCurrentDatabase();
+
+    expect(localStorage.getItem('offline-db:auto-install-opt-out')).toBeNull();
+    expect(getWorkerMessages()).toContain('INSTALL');
   });
 });
