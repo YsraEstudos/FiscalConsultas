@@ -119,29 +119,33 @@ export type OfflineDatabaseWorkerRequest =
                 pbkdf2Iterations: number;
                 seed?: string;
                 publicSeed?: string;
+                userId: string | null;
             }
             | {
                 chunkSize: number;
                 pbkdf2Iterations: number;
                 source: OfflineFiscalSourceId;
                 publicSeed: string;
+                userId: string | null;
             };
     }
     | {
         type: 'INSTALL';
         id: string | null;
         payload:
-            | { apiBase: string; clerkToken?: string | null }
+            | { apiBase: string; clerkToken?: string | null; userId: string | null }
             | {
                 r2BaseUrl: string;
                 publicSeed: string;
                 metadata: OfflineDatabaseMetadata;
+                userId: string | null;
             }
             | {
                 source: OfflineFiscalSourceId;
                 r2BaseUrl: string;
                 publicSeed: string;
                 metadata: OfflineSourceMetadata;
+                userId: string | null;
             };
     }
     | {
@@ -159,6 +163,11 @@ export type OfflineDatabaseWorkerRequest =
         type: 'REMOVE';
         id: string | null;
         payload: Record<string, never> | { source: OfflineFiscalSourceId };
+    }
+    | {
+        type: 'WIPE_SEED';
+        id: string | null;
+        payload: Record<string, never>;
     }
     | {
         type: 'SEARCH';

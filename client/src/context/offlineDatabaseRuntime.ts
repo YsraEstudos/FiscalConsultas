@@ -38,6 +38,7 @@ import type { OfflineDatabaseOperationsArgs } from './offlineDatabaseOperations.
 import { useOfflineDatabaseBroadcastChannel } from './offlineDatabaseRuntime/useOfflineDatabaseBroadcastChannel';
 import { useOfflineDatabaseSyncWaiter } from './offlineDatabaseRuntime/useOfflineDatabaseSyncWaiter';
 import { useOfflineDatabaseWorkerBridge } from './offlineDatabaseRuntime/useOfflineDatabaseWorkerBridge';
+import { useAuth } from './AuthContext';
 
 function readInitialOfflineMetadata(): OfflineDatabaseMetadata | null {
     if (getFiscalR2BaseUrl() && getOfflineDbPublicSeed()) {
@@ -73,6 +74,7 @@ export interface OfflineDatabaseRuntimeValue {
 }
 
 export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
+    const { userId, isLoading } = useAuth();
     const supportReport = useMemo(() => getOfflineDatabaseSupportReport(), []);
     const isSupported = supportReport.supported;
     const instanceIdRef = useRef(createOfflineDatabaseInstanceId());
@@ -157,7 +159,9 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             const initMetadata =
                 metadata ?? remoteMetaRef.current ?? readStoredOfflineDatabaseMetadata();
             try {
-                const seed = sessionStorage.getItem('offline_db_seed');
+                // BUG-3 fix: seed is NO LONGER read from sessionStorage here.
+                // The worker reads it directly from OPFS via readSeed(userId),
+                // where it is stored encrypted with user-scoped AES-GCM.
                 const publicSeed = getOfflineDbPublicSeed();
                 await sendToWorker(
                     {
@@ -165,7 +169,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
                         id: null,
                         payload: {
                             ...buildOfflineDatabaseInitPayload(initMetadata),
-                            seed: seed || undefined,
+                            userId,
                             publicSeed: publicSeed || undefined,
                         },
                     },
@@ -182,8 +186,9 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
                 return { ok: false, error: message };
             }
         },
-        [isWorkerReady, sendToWorker],
+        [isWorkerReady, sendToWorker, userId],
     );
+
 
     const refreshOfflineDatabaseAvailability = useCallback(
         async (force = false): Promise<OfflineDatabaseMetadata | null> => {
@@ -263,6 +268,26 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
         refreshOfflineDatabaseAvailability,
     ]);
 
+    // Wipe in-memory seed and close DB on logout.
+    // We use a ref to track whether the user was previously signed in so that
+    // WIPE_SEED only fires on a real logout transition (signed-in → signed-out)
+    // and not on the initial Clerk hydration frame where userId is still null.
+    const wasSignedInRef = useRef(false);
+    useEffect(() => {
+        if (!isLoading && userId) {
+            wasSignedInRef.current = true;
+        }
+        if (!isLoading && !userId && wasSignedInRef.current && isWorkerReady
+            && status !== 'not_installed' && status !== 'unsupported') {
+            wasSignedInRef.current = false;
+            runOfflineDatabaseTaskInBackground(
+                sendToWorker({ type: 'WIPE_SEED', id: null, payload: {} }, 5000)
+            );
+            setStatus('not_installed');
+            setLocalVersion(null);
+        }
+    }, [isLoading, userId, isWorkerReady, status, sendToWorker]);
+
     const state = useMemo<OfflineDatabaseRuntimeState>(
         () => ({
             status,
@@ -288,7 +313,6 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             progressStep,
             remoteVersion,
             status,
-            supportReport,
             updateAvailable,
         ],
     );
@@ -299,6 +323,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             status,
             localVersion,
             remoteVersion,
+            userId,
             instanceId: instanceIdRef.current,
             remoteMetadataRef: remoteMetaRef,
             broadcast,
@@ -324,6 +349,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             localVersion,
             refreshOfflineDatabaseAvailability,
             remoteVersion,
+            userId,
             sendToWorker,
             status,
             waitForOtherTabSync,

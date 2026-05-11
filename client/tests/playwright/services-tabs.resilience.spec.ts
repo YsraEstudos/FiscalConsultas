@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 import { installServicesMock, makeNbsSearch } from './fixtures/service-mocks';
 import { openServicesModal, searchServices } from './fixtures/services-ui';
 
-test('allows signed-out users to open the services catalog without Clerk', async ({ page }) => {
+test('shows the login gate to signed-out users', async ({ page }) => {
   let servicesRequestCount = 0;
   page.on('request', (request) => {
     if (request.url().includes('/api/services/')) {
@@ -17,12 +17,9 @@ test('allows signed-out users to open the services catalog without Clerk', async
 
   await installServicesMock(page);
   await page.goto('/');
-  await expect(page.getByRole('button', { name: /Menu/, exact: true })).toBeVisible();
-
-  await page.getByRole('button', { name: /Menu/, exact: true }).click();
-  await page.getByRole('button', { name: /Serviços \(NBS\)/ }).click();
-
-  await expect(page.getByRole('heading', { name: 'Pronto para buscar' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Acesso Restrito' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Entrar' })).toBeFocused();
+  await expect(page.getByRole('button', { name: /Menu/, exact: true })).toHaveCount(0);
 
   const clerkState = await page.evaluate(() => (
     (globalThis as typeof globalThis & {

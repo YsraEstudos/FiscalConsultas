@@ -1,4 +1,4 @@
-import { decryptDatabase, setAppSeed, sha256Hex } from "./crypto.js";
+import { clearAppSeed, decryptDatabase, setAppSeed, sha256Hex } from "./crypto.js";
 import { getLocalNbsDetail } from "./catalogSearch.js";
 import {
   readFromOpfs,
@@ -10,11 +10,12 @@ import {
   removeSourceFromOpfs,
   saveSeed,
   saveSourceToOpfs,
+  wipeSeed,
   saveSourceVersion,
   saveToOpfs,
   saveVersion,
 } from "./opfs.js";
-import { postWorkerError, postWorkerProgress, postWorkerResult, postWorkerStatus } from "./protocol.js";
+import { postWorkerError, postWorkerProgress, postWorkerRefreshToken, postWorkerResult, postWorkerStatus } from "./protocol.js";
 import { getStructuredSearchWithCache } from "./searchRuntime.js";
 import { loadDatabaseFromBytes } from "./sqlite.js";
 import { clearSearchCache, closeWorkerDb, getWorkerDb, getWorkerStatus, getWorkerVersion, setWorkerStatus, setWorkerVersion } from "./state.js";
@@ -26,6 +27,68 @@ function isFiscalSourceId(value) {
 }
 
 const OFFLINE_FETCH_TIMEOUT_MS = 60_000;
+
+// ---------------------------------------------------------------------------
+// Clerk token request — ask the main thread for a fresh JWT via
+// REFRESH_TOKEN / TOKEN_RESPONSE message handshake.
+// ---------------------------------------------------------------------------
+
+/** @type {Map<string, { resolve: (token: string | null) => void, reject: (err: Error) => void }>} */
+const _pendingTokenRequests = new Map();
+
+let _tokenRequestCounter = 0;
+
+/**
+ * Request a fresh Clerk JWT from the main thread.
+ * Returns the token string or null if the main thread has no active session.
+ * Rejects if the main thread reports an error.
+ * @returns {Promise<string | null>}
+ */
+function requestClerkTokenFromMainThread() {
+  return new Promise((resolve, reject) => {
+    const id = `token-req-${(_tokenRequestCounter += 1)}`;
+    const timeout = setTimeout(() => {
+      _pendingTokenRequests.delete(id);
+      reject(new Error("Clerk token request timed out"));
+    }, 10_000);
+
+    _pendingTokenRequests.set(id, {
+      resolve: (token) => {
+        clearTimeout(timeout);
+        _pendingTokenRequests.delete(id);
+        resolve(token);
+      },
+      reject: (err) => {
+        clearTimeout(timeout);
+        _pendingTokenRequests.delete(id);
+        reject(err);
+      },
+    });
+
+    postWorkerRefreshToken(id);
+  });
+}
+
+function isWipeSeedTokenAbort(error) {
+  return error instanceof Error
+    && error.message === "Clerk token request aborted due to WIPE_SEED";
+}
+
+/**
+ * Resolve a pending token request when the main thread sends TOKEN_RESPONSE.
+ * @param {string} id
+ * @param {{ clerkToken?: string | null, error?: string }} payload
+ */
+export function resolveTokenResponse(id, payload) {
+  const pending = _pendingTokenRequests.get(id);
+  if (!pending) return;
+
+  if (payload.error) {
+    pending.reject(new Error(payload.error));
+  } else {
+    pending.resolve(payload.clerkToken ?? null);
+  }
+}
 
 function getCurrentOrigin() {
   return globalThis.self?.location?.origin || globalThis.location?.origin || "";
@@ -94,7 +157,7 @@ async function handleInitMessage(id, payload) {
   const source = isFiscalSourceId(payload?.source) ? payload.source : null;
   const encData = source ? await readSourceFromOpfs(source) : await readFromOpfs();
   const version = source ? await readSourceVersion(source) : await readVersion();
-  const opfsSeed = source ? null : await readSeed();
+  const opfsSeed = source ? null : await readSeed(payload?.userId);
   const seed = source ? payload?.publicSeed : opfsSeed || payload?.seed || payload?.publicSeed;
   const payloadSeedFallback = payload?.seed || payload?.publicSeed;
   const usedPayloadSeedFallback =
@@ -186,9 +249,26 @@ async function readEncryptedDatabaseBlob(dlResp, id) {
 }
 
 async function requestInstallToken(apiBase) {
+  // BUG-1 fix: the backend now requires a valid Clerk JWT on POST /database/token.
+  // We obtain it from the main thread via the REFRESH_TOKEN handshake.
+  const clerkToken = await requestClerkTokenFromMainThread();
+
+  // Short-circuit: no token means the user isn’t signed in; skip the
+  // network round-trip that would only return a guaranteed 401.
+  if (!clerkToken) {
+    throw new Error(
+      "Autenticação necessária para baixar o banco offline. Faça login e tente novamente."
+    );
+  }
+
+  const headers = {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${clerkToken}`,
+  };
+
   const tokenResp = await fetchWithTimeout(`${apiBase}/database/token`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
   }, OFFLINE_FETCH_TIMEOUT_MS, "token");
 
   if (tokenResp.ok) {
@@ -196,6 +276,11 @@ async function requestInstallToken(apiBase) {
   }
 
   const errText = await tokenResp.text();
+  if (tokenResp.status === 401) {
+    throw new Error(
+      `Autenticação necessária para baixar o banco offline (${tokenResp.status}). Faça login e tente novamente.`
+    );
+  }
   throw new Error(`Token request failed (${tokenResp.status}): ${errText}`);
 }
 
@@ -247,6 +332,7 @@ async function fetchEncryptedDatabaseBundle(apiBase, id) {
       return { tokenData, encryptedBlob };
     } catch (error) {
       lastError = error;
+      if (isWipeSeedTokenAbort(error)) break;
       if (!isRetryableOfflineDownloadError(error) || attempt === 1) break;
       postWorkerProgress(id, 10, "retrying_download");
       await waitBeforeOfflineDownloadRetry();
@@ -478,7 +564,7 @@ async function handleStaticR2InstallMessage(id, payload) {
     fetchBundle: () => fetchEncryptedStaticR2BundleWithRetry(r2BaseUrl, id),
     saveBundle: async (encryptedBlob) => {
       await saveToOpfs(encryptedBlob);
-      await saveSeed(publicSeed);
+      await saveSeed(publicSeed, payload?.userId);
       await saveVersion(metadata.version || "unknown");
     },
     cleanupAfterSaveError: removeFromOpfs,
@@ -600,7 +686,7 @@ async function handleLegacyInstallMessage(id, payload) {
     try {
       setAppSeed(appSeed);
       await saveToOpfs(encryptedBlob);
-      await saveSeed(appSeed);
+      await saveSeed(appSeed, payload?.userId);
       await updateInstalledVersion(apiBase);
     } catch (error) {
       await removeFromOpfs();
@@ -613,7 +699,6 @@ async function handleLegacyInstallMessage(id, payload) {
       status: "ready",
       version: getWorkerVersion(),
       sizeBytes: encryptedBlob.length,
-      seed: appSeed,
     });
   } catch (error) {
     setWorkerStatus("error");
@@ -752,6 +837,27 @@ async function handleRemoveMessage(id, payload) {
   postWorkerStatus(id, { status: "not_installed" });
 }
 
+async function handleWipeSeedMessage(id) {
+  // Reject any in-flight REFRESH_TOKEN requests immediately so callers do not
+  // wait for the 10-second timeout after logout.
+  for (const [reqId, pending] of [..._pendingTokenRequests]) {
+    pending.reject(new Error("Clerk token request aborted due to WIPE_SEED"));
+    _pendingTokenRequests.delete(reqId);
+  }
+
+  // Secure cleanup on logout: destroy all in-memory key material AND the
+  // persisted encrypted seed in OPFS (wipeSeed was previously imported but
+  // never called, leaving the encrypted blob on disk after logout).
+  clearAppSeed();
+  await wipeSeed();
+  closeWorkerDb();
+  setWorkerVersion(null);
+  await removeFromOpfs().catch(() => undefined);
+  setWorkerStatus("not_installed");
+  clearSearchCache();
+  postWorkerStatus(id, { status: "not_installed" });
+}
+
 export async function dispatchWorkerMessage(type, id, payload) {
   switch (type) {
 
@@ -772,6 +878,13 @@ export async function dispatchWorkerMessage(type, id, payload) {
       return;
     case "REMOVE":
       await handleRemoveMessage(id, payload);
+      return;
+    case "WIPE_SEED":
+      await handleWipeSeedMessage(id);
+      return;
+    case "TOKEN_RESPONSE":
+      // Reply from main thread to a REFRESH_TOKEN request.
+      resolveTokenResponse(id, payload ?? {});
       return;
     default:
       postWorkerError(id, `Unknown message type: ${type}`);
