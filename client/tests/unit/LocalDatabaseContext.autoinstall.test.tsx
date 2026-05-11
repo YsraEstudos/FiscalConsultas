@@ -6,6 +6,18 @@ import {
   useLocalDatabase,
 } from '../../src/context/LocalDatabaseContext';
 
+vi.mock('../../src/context/AuthContext', () => ({
+  useAuth: () => ({
+    isSignedIn: true,
+    isLoading: false,
+    userId: 'user-1',
+    isAuthConfigured: true,
+    isAdmin: false,
+    openLogin: vi.fn(),
+    logout: vi.fn(),
+  }),
+}));
+
 type WorkerPayload = {
   type: string;
   id: string | null;
@@ -208,10 +220,11 @@ function expectLegacyInstallPayload() {
   expect(getPostedWorkerMessages()).toContainEqual(
     expect.objectContaining({
       type: 'INSTALL',
-      payload: {
+      payload: expect.objectContaining({
         apiBase: expect.any(String),
         clerkToken: '',
-      },
+        userId: 'user-1',
+      }),
     }),
   );
 }
@@ -318,14 +331,15 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     expect(getPostedWorkerMessages()).toContainEqual(
       expect.objectContaining({
         type: 'INSTALL',
-        payload: {
+        payload: expect.objectContaining({
           r2BaseUrl: 'https://r2.example.com/fiscal',
           publicSeed: 'public-seed',
+          userId: 'user-1',
           metadata: expect.objectContaining({
             version: '2026.05.01',
             encrypted_sha256: 'enc-sha',
           }),
-        },
+        }),
       }),
     );
   });

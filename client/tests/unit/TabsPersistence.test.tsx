@@ -20,7 +20,15 @@ vi.mock('../../src/components/ResultSkeleton', () => ({
 }));
 
 vi.mock('../../src/context/AuthContext', () => ({
-    useAuth: () => ({ isAdmin: false, logout: vi.fn() })
+    useAuth: () => ({
+        isSignedIn: true,
+        isLoading: false,
+        userId: 'user-1',
+        isAuthConfigured: true,
+        isAdmin: false,
+        openLogin: vi.fn(),
+        logout: vi.fn()
+    })
 }));
 
 vi.mock('../../src/hooks/useHistory', () => ({
