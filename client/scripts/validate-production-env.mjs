@@ -54,6 +54,7 @@ export function validateProductionEnv(env = resolveBuildEnv()) {
   const offlineDbPublicSeed = String(env.VITE_OFFLINE_DB_PUBLIC_SEED || '').trim();
   const adminEmail = String(env.VITE_ADMIN_EMAIL || '').trim();
   const requireLivePublishableKey = isRealProductionBuild(env);
+  const requireProductionConfig = isRealProductionBuild(env);
   const allowTestPublishableKey = isCiTestKeyOverrideEnabled(env);
   const isLivePublishableKey = publishableKey.startsWith('pk_live_');
   const isTestPublishableKey = publishableKey.startsWith('pk_test_');
@@ -66,22 +67,23 @@ export function validateProductionEnv(env = resolveBuildEnv()) {
     errors.push('VITE_ADMIN_EMAIL must not be defined for production builds.');
   }
 
-  if (!fiscalR2BaseUrl) {
+  if (requireProductionConfig && !fiscalR2BaseUrl) {
     errors.push('VITE_FISCAL_R2_BASE_URL must be defined for production builds.');
   }
 
-  if (!offlineDbPublicSeed) {
+  if (requireProductionConfig && !offlineDbPublicSeed) {
     errors.push('VITE_OFFLINE_DB_PUBLIC_SEED must be defined for production builds.');
   }
 
-  if (!publishableKey) {
+  if (requireProductionConfig && !publishableKey) {
     errors.push('VITE_CLERK_PUBLISHABLE_KEY must be defined for production builds.');
-  } else if (publishableKey.startsWith('sk_')) {
+  } else if (publishableKey && publishableKey.startsWith('sk_')) {
     errors.push('VITE_CLERK_PUBLISHABLE_KEY must use a Clerk publishable key, never a secret key.');
-  } else if (!isLivePublishableKey && !isTestPublishableKey) {
+  } else if (publishableKey && !isLivePublishableKey && !isTestPublishableKey) {
     errors.push('VITE_CLERK_PUBLISHABLE_KEY must start with pk_live_ or pk_test_.');
   } else if (
-    requireLivePublishableKey
+    publishableKey
+    && requireLivePublishableKey
     && !isLivePublishableKey
     && !(allowTestPublishableKey && isTestPublishableKey)
   ) {
