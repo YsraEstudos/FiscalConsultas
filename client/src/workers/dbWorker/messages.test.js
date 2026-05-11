@@ -57,10 +57,16 @@ import {
   fetchWithTimeout,
 } from './messages.js';
 import {
+  readFromOpfs,
+  readSeed,
+  readVersion,
   removeFromOpfs,
   removeSourceFromOpfs,
+  saveSeed,
   saveSourceToOpfs,
   saveSourceVersion,
+  saveToOpfs,
+  saveVersion,
 } from './opfs.js';
 import { decryptDatabase, setAppSeed, sha256Hex } from './crypto.js';
 import { postWorkerError, postWorkerStatus } from './protocol.js';
@@ -231,6 +237,74 @@ describe('dbWorker messages network helpers', () => {
     expect(postWorkerStatus).toHaveBeenCalledWith(
       'install-source',
       expect.objectContaining({ status: 'ready' }),
+    );
+  });
+
+  it('installs a static consolidated R2 fiscal bundle without requesting backend tokens', async () => {
+    const encryptedBlob = new Uint8Array([9, 8, 7]);
+    sha256Hex.mockResolvedValue('static-encrypted-sha');
+    decryptDatabase.mockResolvedValue(new Uint8Array([6, 5, 4]));
+    loadDatabaseFromBytes.mockResolvedValue(undefined);
+    saveToOpfs.mockResolvedValue(undefined);
+    saveSeed.mockResolvedValue(undefined);
+    saveVersion.mockResolvedValue(undefined);
+    getWorkerVersion.mockReturnValue('2026.05.11');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(encryptedBlob, {
+          status: 200,
+          headers: { 'content-length': String(encryptedBlob.length) },
+        }),
+      ),
+    );
+
+    await dispatchWorkerMessage('INSTALL', 'install-r2-static', {
+      r2BaseUrl: 'https://r2.example.test/fiscal',
+      publicSeed: 'public-seed',
+      metadata: {
+        version: '2026.05.11',
+        encrypted_sha256: 'static-encrypted-sha',
+      },
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      'https://r2.example.test/fiscal/fiscal_offline.enc',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining('/database/token'),
+      expect.anything(),
+    );
+    expect(setAppSeed).toHaveBeenCalledWith('public-seed');
+    expect(saveToOpfs).toHaveBeenCalledWith(encryptedBlob);
+    expect(saveSeed).toHaveBeenCalledWith('public-seed');
+    expect(saveVersion).toHaveBeenCalledWith('2026.05.11');
+    expect(postWorkerStatus).toHaveBeenCalledWith(
+      'install-r2-static',
+      expect.objectContaining({ status: 'ready' }),
+    );
+  });
+
+  it('removes the stale generic bundle when publicSeed fallback cannot decrypt', async () => {
+    readFromOpfs.mockResolvedValue(new Uint8Array([1, 2, 3]));
+    readVersion.mockResolvedValue('2026.05.11');
+    readSeed.mockResolvedValue(null);
+    decryptDatabase.mockRejectedValue(new Error('bad seed'));
+    removeFromOpfs.mockResolvedValue(undefined);
+
+    await dispatchWorkerMessage('INIT', 'init-public-seed', {
+      publicSeed: 'public-seed',
+    });
+
+    expect(setAppSeed).toHaveBeenCalledWith('public-seed');
+    expect(removeFromOpfs).toHaveBeenCalledTimes(1);
+    expect(postWorkerStatus).toHaveBeenCalledWith(
+      'init-public-seed',
+      expect.objectContaining({
+        status: 'error',
+        recoverable: true,
+      }),
     );
   });
 

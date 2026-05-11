@@ -19,12 +19,11 @@ import {
     persistStoredOfflineDatabaseMetadata,
     persistStoredOfflineSourceMetadata,
     readStoredOfflineDatabaseMetadata,
-    readStoredOfflineSourceMetadata,
     runOfflineDatabaseTaskInBackground,
     type OfflineDatabaseSupportReport,
 } from './offlineDatabaseStorage';
 import {
-    fetchOfflineSourceAvailabilityMetadata,
+    fetchFiscalR2DatabaseAvailabilityMetadata,
     fetchOfflineDatabaseAvailabilityMetadata,
     getFiscalR2BaseUrl,
     getOfflineDbPublicSeed,
@@ -40,11 +39,9 @@ import { useOfflineDatabaseBroadcastChannel } from './offlineDatabaseRuntime/use
 import { useOfflineDatabaseSyncWaiter } from './offlineDatabaseRuntime/useOfflineDatabaseSyncWaiter';
 import { useOfflineDatabaseWorkerBridge } from './offlineDatabaseRuntime/useOfflineDatabaseWorkerBridge';
 
-const LEGACY_MONOLITHIC_BUNDLE_SOURCE = 'nesh';
-
 function readInitialOfflineMetadata(): OfflineDatabaseMetadata | null {
     if (getFiscalR2BaseUrl() && getOfflineDbPublicSeed()) {
-        return readStoredOfflineSourceMetadata(LEGACY_MONOLITHIC_BUNDLE_SOURCE);
+        return readStoredOfflineDatabaseMetadata();
     }
 
     return readStoredOfflineDatabaseMetadata();
@@ -162,13 +159,6 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             try {
                 const seed = sessionStorage.getItem('offline_db_seed');
                 const publicSeed = getOfflineDbPublicSeed();
-                const sourcePayload =
-                    publicSeed && isOfflineSourceMetadata(initMetadata)
-                        ? {
-                            source: initMetadata.source,
-                            publicSeed,
-                        }
-                        : {};
                 await sendToWorker(
                     {
                         type: 'INIT',
@@ -176,7 +166,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
                         payload: {
                             ...buildOfflineDatabaseInitPayload(initMetadata),
                             seed: seed || undefined,
-                            ...sourcePayload,
+                            publicSeed: publicSeed || undefined,
                         },
                     },
                     30_000,
@@ -208,25 +198,16 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
                     const publicSeed = getOfflineDbPublicSeed();
                     let metadata: OfflineDatabaseMetadata | null = null;
                     if (r2BaseUrl && publicSeed) {
-                        try {
-                            metadata = await fetchOfflineSourceAvailabilityMetadata(
-                                r2BaseUrl,
-                                LEGACY_MONOLITHIC_BUNDLE_SOURCE,
-                            );
-                        } catch (sourceErr) {
-                            console.warn(
-                                'fetchOfflineSourceAvailabilityMetadata failed',
-                                sourceErr,
-                            );
-                        }
+                        metadata = await fetchFiscalR2DatabaseAvailabilityMetadata(
+                            r2BaseUrl,
+                        );
+                    } else {
+                        metadata = await fetchOfflineDatabaseAvailabilityMetadata(
+                            getOfflineDatabaseApiBaseUrl(),
+                        );
                     }
-                    metadata ||= await fetchOfflineDatabaseAvailabilityMetadata(
-                        getOfflineDatabaseApiBaseUrl(),
-                    );
                     remoteMetaRef.current = metadata;
-                    if (isOfflineSourceMetadata(metadata)) {
-                        persistStoredOfflineSourceMetadata(metadata.source, metadata);
-                    }
+                    persistStoredOfflineDatabaseMetadata(metadata);
                     setRemoteVersion(metadata?.version ?? null);
                     setDbSizeBytes((current) => current ?? metadata?.size_bytes ?? null);
                     return metadata;
