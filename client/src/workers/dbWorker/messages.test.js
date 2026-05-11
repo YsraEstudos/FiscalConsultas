@@ -57,6 +57,9 @@ import {
   fetchWithTimeout,
 } from './messages.js';
 import {
+  readFromOpfs,
+  readSeed,
+  readVersion,
   removeFromOpfs,
   removeSourceFromOpfs,
   saveSeed,
@@ -280,6 +283,28 @@ describe('dbWorker messages network helpers', () => {
     expect(postWorkerStatus).toHaveBeenCalledWith(
       'install-r2-static',
       expect.objectContaining({ status: 'ready' }),
+    );
+  });
+
+  it('removes the stale generic bundle when publicSeed fallback cannot decrypt', async () => {
+    readFromOpfs.mockResolvedValue(new Uint8Array([1, 2, 3]));
+    readVersion.mockResolvedValue('2026.05.11');
+    readSeed.mockResolvedValue(null);
+    decryptDatabase.mockRejectedValue(new Error('bad seed'));
+    removeFromOpfs.mockResolvedValue(undefined);
+
+    await dispatchWorkerMessage('INIT', 'init-public-seed', {
+      publicSeed: 'public-seed',
+    });
+
+    expect(setAppSeed).toHaveBeenCalledWith('public-seed');
+    expect(removeFromOpfs).toHaveBeenCalledTimes(1);
+    expect(postWorkerStatus).toHaveBeenCalledWith(
+      'init-public-seed',
+      expect.objectContaining({
+        status: 'error',
+        recoverable: true,
+      }),
     );
   });
 

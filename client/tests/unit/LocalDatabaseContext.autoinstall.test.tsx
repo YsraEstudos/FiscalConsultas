@@ -144,10 +144,9 @@ function makeVersionResponse(version: string) {
   );
 }
 
-function makeSourceMetadataResponse(version: string) {
+function makeR2MetadataResponse(version: string) {
   return new Response(
     JSON.stringify({
-      source: 'nesh',
       version,
       size_bytes: 4096,
       sha256: 'plain-sha',
@@ -303,7 +302,7 @@ describe('LocalDatabaseContext auto-install behavior', () => {
       if (url.includes('/database/version') || url.includes('/database/token')) {
         return Promise.reject(new Error(`legacy endpoint called: ${url}`));
       }
-      return Promise.resolve(makeSourceMetadataResponse('2026.05.01'));
+      return Promise.resolve(makeR2MetadataResponse('2026.05.01'));
     });
 
     renderLocalDatabaseProvider();
@@ -313,18 +312,16 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     const fetchUrls = (fetch as ReturnType<typeof vi.fn>).mock.calls.map((call) =>
       String(call[0]),
     );
-    expect(fetchUrls).toContain('https://r2.example.com/fiscal/nesh/nesh.meta.json');
+    expect(fetchUrls).toContain('https://r2.example.com/fiscal/fiscal_offline.meta.json');
     expect(fetchUrls.join('\n')).not.toContain('/database/version');
     expect(fetchUrls.join('\n')).not.toContain('/database/token');
     expect(getPostedWorkerMessages()).toContainEqual(
       expect.objectContaining({
         type: 'INSTALL',
         payload: {
-          source: 'nesh',
           r2BaseUrl: 'https://r2.example.com/fiscal',
           publicSeed: 'public-seed',
           metadata: expect.objectContaining({
-            source: 'nesh',
             version: '2026.05.01',
             encrypted_sha256: 'enc-sha',
           }),
@@ -360,7 +357,7 @@ describe('LocalDatabaseContext auto-install behavior', () => {
 
   it('falls back to the legacy install payload when R2 metadata is unavailable', async () => {
     configureR2Install((url: string) => {
-      if (url.includes('/nesh/nesh.meta.json')) {
+      if (url.includes('/fiscal_offline.meta.json')) {
         return Promise.reject(new Error('source metadata unavailable'));
       }
       return Promise.resolve(makeVersionResponse('2026.05.01'));
@@ -371,6 +368,30 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     await installCurrentDatabase();
 
     expectLegacyInstallPayload();
+  });
+
+  it('uses the monolithic remove payload for static R2 installs', async () => {
+    MockWorker.initStatus = 'ready';
+    MockWorker.initVersion = '2026.05.01';
+    MockWorker.initSizeBytes = 4096;
+    configureR2Install(() => Promise.resolve(makeR2MetadataResponse('2026.05.01')));
+
+    renderLocalDatabaseProvider();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('status')).toHaveTextContent('ready'),
+    );
+
+    await act(async () => {
+      await currentContext!.remove();
+    });
+
+    expect(getPostedWorkerMessages()).toContainEqual(
+      expect.objectContaining({
+        type: 'REMOVE',
+        payload: {},
+      }),
+    );
   });
 
   it('clears the auto-install opt-out when install is started manually', async () => {

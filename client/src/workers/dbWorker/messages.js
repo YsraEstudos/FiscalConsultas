@@ -96,7 +96,12 @@ async function handleInitMessage(id, payload) {
   const version = source ? await readSourceVersion(source) : await readVersion();
   const opfsSeed = source ? null : await readSeed();
   const seed = source ? payload?.publicSeed : opfsSeed || payload?.seed || payload?.publicSeed;
-  const usedPayloadSeedFallback = !opfsSeed && Boolean(payload?.seed);
+  const payloadSeedFallback = payload?.seed || payload?.publicSeed;
+  const usedPayloadSeedFallback =
+    !source &&
+    !opfsSeed &&
+    Boolean(payloadSeedFallback) &&
+    seed === payloadSeedFallback;
 
   if (!encData || !version || !seed) {
     setWorkerStatus("not_installed");
@@ -349,61 +354,61 @@ export function validateSourceAwareInstallPayload(payload) {
 
 async function fetchEncryptedSourceBundle(r2BaseUrl, source) {
   const { encryptedUrl } = buildFiscalBundleUrls(r2BaseUrl, source);
-  const dlResp = await fetch(encryptedUrl, {
-    method: "GET",
-    headers: { Accept: "application/octet-stream" },
-  });
-
-  if (dlResp.ok) {
-    return dlResp;
-  }
-
-  const errText = await dlResp.text();
-  throw new Error(
-    `Offline source bundle retrieval failed (${dlResp.status}): ${errText}`
+  return fetchEncryptedR2Bundle(
+    encryptedUrl,
+    "Offline source bundle retrieval failed"
   );
 }
 
 async function fetchEncryptedStaticR2Bundle(r2BaseUrl) {
   const { encryptedUrl } = buildFiscalOfflineDatabaseUrls(r2BaseUrl);
-  const dlResp = await fetch(encryptedUrl, {
-    method: "GET",
-    headers: { Accept: "application/octet-stream" },
-  });
+  return fetchEncryptedR2Bundle(
+    encryptedUrl,
+    "Offline fiscal bundle retrieval failed"
+  );
+}
+
+async function fetchEncryptedR2Bundle(encryptedUrl, errorPrefix) {
+  const dlResp = await fetchWithTimeout(
+    encryptedUrl,
+    {
+      method: "GET",
+      headers: { Accept: "application/octet-stream" },
+    },
+    OFFLINE_FETCH_TIMEOUT_MS,
+    "download",
+  );
 
   if (dlResp.ok) {
     return dlResp;
   }
 
   const errText = await dlResp.text();
-  throw new Error(
-    `Offline fiscal bundle retrieval failed (${dlResp.status}): ${errText}`
-  );
+  throw new Error(`${errorPrefix} (${dlResp.status}): ${errText}`);
 }
 
 async function fetchEncryptedStaticR2BundleWithRetry(r2BaseUrl, id) {
-  let lastError = null;
-
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      return await fetchEncryptedStaticR2Bundle(r2BaseUrl);
-    } catch (error) {
-      lastError = error;
-      if (!isRetryableOfflineDownloadError(error) || attempt === 1) break;
-      postWorkerProgress(id, 10, "retrying_download");
-      await waitBeforeOfflineDownloadRetry();
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error("Offline fiscal bundle download failed");
+  return fetchEncryptedR2BundleWithRetry(
+    () => fetchEncryptedStaticR2Bundle(r2BaseUrl),
+    id,
+    "Offline fiscal bundle download failed"
+  );
 }
 
 async function fetchEncryptedSourceBundleWithRetry(r2BaseUrl, source, id) {
+  return fetchEncryptedR2BundleWithRetry(
+    () => fetchEncryptedSourceBundle(r2BaseUrl, source),
+    id,
+    "Offline source bundle download failed"
+  );
+}
+
+async function fetchEncryptedR2BundleWithRetry(fetchBundle, id, fallbackMessage) {
   let lastError = null;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      return await fetchEncryptedSourceBundle(r2BaseUrl, source);
+      return await fetchBundle();
     } catch (error) {
       lastError = error;
       if (!isRetryableOfflineDownloadError(error) || attempt === 1) break;
@@ -412,7 +417,7 @@ async function fetchEncryptedSourceBundleWithRetry(r2BaseUrl, source, id) {
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error("Offline source bundle download failed");
+  throw lastError instanceof Error ? lastError : new Error(fallbackMessage);
 }
 
 async function updateInstalledVersion(apiBase) {
@@ -442,92 +447,64 @@ async function updateInstalledVersion(apiBase) {
 }
 
 async function handleSourceAwareInstallMessage(id, payload) {
-  setWorkerStatus("installing");
-  postWorkerProgress(id, 0, "fetching_database");
-
   const {
     source,
     r2BaseUrl,
     publicSeed,
     metadata,
   } = payload;
-  /** @type {Uint8Array | null} */
-  let plaintext = null;
 
-  try {
-    const dlResp = await fetchEncryptedSourceBundleWithRetry(r2BaseUrl, source, id);
-    const encryptedBlob = await readEncryptedDatabaseBlob(dlResp, id);
-    const {
-      encrypted_sha256: expectedEncryptedSha256,
-      chunk_size: chunkSize = 65536,
-      pbkdf2_iterations: iterations = 600000,
-    } = metadata;
-
-    postWorkerProgress(id, 72, "verifying_integrity");
-    const actualEncryptedSha256 = await sha256Hex(encryptedBlob);
-    if (actualEncryptedSha256 !== expectedEncryptedSha256) {
-      throw new Error("Offline database integrity verification failed");
-    }
-
-    setAppSeed(publicSeed);
-
-    postWorkerProgress(id, 75, "decrypting");
-    plaintext = await decryptDatabase(encryptedBlob, chunkSize, iterations);
-
-    postWorkerProgress(id, 85, "loading");
-    await loadDatabaseFromBytes(plaintext);
-
-    postWorkerProgress(id, 90, "saving");
-    try {
+  await installR2Bundle(id, {
+    publicSeed,
+    metadata,
+    fetchBundle: () => fetchEncryptedSourceBundleWithRetry(r2BaseUrl, source, id),
+    saveBundle: async (encryptedBlob) => {
       await saveSourceToOpfs(source, encryptedBlob);
       await saveSourceVersion(source, metadata.version || "unknown");
-    } catch (error) {
-      await removeSourceFromOpfs(source);
-      throw error;
-    }
-
-    setWorkerVersion(metadata.version || "unknown");
-    setWorkerStatus("ready");
-    postWorkerProgress(id, 100, "done");
-    postWorkerStatus(id, {
-      status: "ready",
-      version: getWorkerVersion(),
-      sizeBytes: encryptedBlob.length,
-      seed: publicSeed,
-    });
-  } catch (error) {
-    setWorkerStatus("error");
-    const message = error instanceof Error ? error.message : "Unknown error";
-    const recoverableMessage = `${message}. Reinstale o banco offline para continuar.`;
-    postWorkerStatus(id, {
-      status: "error",
-      error: recoverableMessage,
-      recoverable: true,
-    });
-    postWorkerError(id, recoverableMessage);
-    await removeSourceFromOpfs(source).catch(() => undefined);
-    return;
-  } finally {
-    if (plaintext) {
-      plaintext.fill(0);
-    }
-  }
+    },
+    cleanupAfterSaveError: () => removeSourceFromOpfs(source),
+    cleanupAfterInstallError: () => removeSourceFromOpfs(source),
+  });
 }
 
 async function handleStaticR2InstallMessage(id, payload) {
-  setWorkerStatus("installing");
-  postWorkerProgress(id, 0, "fetching_database");
-
   const {
     r2BaseUrl,
     publicSeed,
     metadata,
   } = payload;
+
+  await installR2Bundle(id, {
+    publicSeed,
+    metadata,
+    fetchBundle: () => fetchEncryptedStaticR2BundleWithRetry(r2BaseUrl, id),
+    saveBundle: async (encryptedBlob) => {
+      await saveToOpfs(encryptedBlob);
+      await saveSeed(publicSeed);
+      await saveVersion(metadata.version || "unknown");
+    },
+    cleanupAfterSaveError: removeFromOpfs,
+    cleanupAfterInstallError: removeFromOpfs,
+  });
+}
+
+async function installR2Bundle(id, options) {
+  setWorkerStatus("installing");
+  postWorkerProgress(id, 0, "fetching_database");
+
+  const {
+    publicSeed,
+    metadata,
+    fetchBundle,
+    saveBundle,
+    cleanupAfterSaveError,
+    cleanupAfterInstallError,
+  } = options;
   /** @type {Uint8Array | null} */
   let plaintext = null;
 
   try {
-    const dlResp = await fetchEncryptedStaticR2BundleWithRetry(r2BaseUrl, id);
+    const dlResp = await fetchBundle();
     const encryptedBlob = await readEncryptedDatabaseBlob(dlResp, id);
     const {
       encrypted_sha256: expectedEncryptedSha256,
@@ -551,11 +528,9 @@ async function handleStaticR2InstallMessage(id, payload) {
 
     postWorkerProgress(id, 90, "saving");
     try {
-      await saveToOpfs(encryptedBlob);
-      await saveSeed(publicSeed);
-      await saveVersion(metadata.version || "unknown");
+      await saveBundle(encryptedBlob);
     } catch (error) {
-      await removeFromOpfs();
+      await cleanupAfterSaveError();
       throw error;
     }
 
@@ -578,6 +553,7 @@ async function handleStaticR2InstallMessage(id, payload) {
       recoverable: true,
     });
     postWorkerError(id, recoverableMessage);
+    await cleanupAfterInstallError().catch(() => undefined);
     return;
   } finally {
     if (plaintext) {

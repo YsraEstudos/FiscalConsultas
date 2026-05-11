@@ -92,11 +92,6 @@ export function useOfflineDatabaseMutations({
                     'VITE_OFFLINE_DB_PUBLIC_SEED precisa estar configurado para instalar a base fiscal pelo R2.',
                 );
             }
-            if (r2BaseUrl && publicSeed && !metadata) {
-                throw new Error(
-                    'Metadados da base fiscal no R2 indisponíveis. Verifique VITE_FISCAL_R2_BASE_URL e o arquivo fiscal_offline.meta.json.',
-                );
-            }
 
             const installPayload =
                 r2BaseUrl && publicSeed && metadata
@@ -184,9 +179,7 @@ export function useOfflineDatabaseMutations({
                 {
                     type: 'REMOVE',
                     id: null,
-                    payload: getFiscalR2BaseUrl() && getOfflineDbPublicSeed()
-                        ? { source: LEGACY_MONOLITHIC_BUNDLE_SOURCE }
-                        : {},
+                    payload: {},
                 },
                 10_000,
             );

@@ -299,6 +299,64 @@ def test_build_all_can_filter_sources(tmp_path: Path, monkeypatch):
     assert [output.source for output in outputs] == ["nbs"]
 
 
+def test_build_monolithic_bundle_removes_partial_outputs_when_metadata_fails(
+    tmp_path: Path,
+    monkeypatch,
+):
+    encrypted_path = tmp_path / "fiscal_offline.enc"
+    metadata_path = tmp_path / "fiscal_offline.meta.json"
+    plaintext_path = tmp_path / "fiscal_offline.db"
+    output_db = tmp_path / "build-output.db"
+
+    def fake_consolidate_databases(output_path: Path) -> None:
+        output_path.write_bytes(b"plain")
+        output_db.write_bytes(b"temporary")
+
+    def fake_encrypt_database(source_path: Path, output_path: Path) -> dict:
+        assert source_path == plaintext_path
+        output_path.write_bytes(b"encrypted")
+        return {
+            "sha256": "plain-sha",
+            "encrypted_sha256": "encrypted-sha",
+            "salt": "salt",
+            "size_bytes": output_path.stat().st_size,
+            "chunks": 1,
+        }
+
+    def fake_write_bundle_metadata(*args) -> tuple[str, str]:
+        metadata_path.write_text("{", encoding="utf-8")
+        raise RuntimeError("metadata failed")
+
+    monkeypatch.setattr(
+        build_r2_fiscal_bundles,
+        "_consolidate_databases",
+        fake_consolidate_databases,
+    )
+    monkeypatch.setattr(
+        build_r2_fiscal_bundles,
+        "_encrypt_database",
+        fake_encrypt_database,
+    )
+    monkeypatch.setattr(
+        build_r2_fiscal_bundles,
+        "_write_bundle_metadata",
+        fake_write_bundle_metadata,
+    )
+    monkeypatch.setattr(build_r2_fiscal_bundles, "OUTPUT_DB", output_db)
+
+    try:
+        build_r2_fiscal_bundles.build_monolithic_bundle(tmp_path)
+    except RuntimeError as exc:
+        assert str(exc) == "metadata failed"
+    else:
+        raise AssertionError("Expected metadata failure")
+
+    assert not plaintext_path.exists()
+    assert not output_db.exists()
+    assert not encrypted_path.exists()
+    assert not metadata_path.exists()
+
+
 def test_copy_plaintext_rejects_output_outside_test_bundle_dir(tmp_path: Path):
     plaintext_path = tmp_path / "unspsc.db"
     plaintext_path.write_bytes(b"bundle")

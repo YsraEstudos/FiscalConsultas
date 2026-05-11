@@ -93,7 +93,8 @@ async function fetchFiscalR2DatabaseAvailabilityMetadataOnce(
             throw new Error(`R2 metadata check failed (${response.status})`);
         }
 
-        return sanitizeOfflineMetadata(await response.json());
+        const metadata = sanitizeOfflineMetadata(await response.json());
+        return metadata?.encrypted_sha256?.trim() ? metadata : null;
     } finally {
         clearTimeout(timer);
     }

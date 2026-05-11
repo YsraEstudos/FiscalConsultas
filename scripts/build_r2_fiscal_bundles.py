@@ -114,6 +114,7 @@ def build_monolithic_bundle(
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
 
     _consolidate_databases(plaintext_path)
+    success = False
     try:
         crypto_info = _encrypt_database(plaintext_path, encrypted_path)
         version, built_at = _write_bundle_metadata(
@@ -122,9 +123,13 @@ def build_monolithic_bundle(
             metadata_path,
             crypto_info,
         )
+        success = True
     finally:
         plaintext_path.unlink(missing_ok=True)
         OUTPUT_DB.unlink(missing_ok=True)
+        if not success:
+            encrypted_path.unlink(missing_ok=True)
+            metadata_path.unlink(missing_ok=True)
 
     return OfflineBundleOutput(
         source="fiscal",
