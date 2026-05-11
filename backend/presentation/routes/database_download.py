@@ -67,6 +67,7 @@ def _enforce_email_allowlist(payload: dict) -> None:
         detail="Your account is not authorized to download the offline database",
     )
 
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -381,9 +382,7 @@ async def create_download_token(request: Request):
             key=f"db-download:ip:{client_ip}", limit=_TOKEN_LIMIT_PER_HOUR
         )
         if not allowed:
-            logger.warning(
-                "RATE_LIMIT ip=%s user=%s layer=ip", client_ip, user_id
-            )
+            logger.warning("RATE_LIMIT ip=%s user=%s layer=ip", client_ip, user_id)
             raise HTTPException(
                 status_code=429,
                 detail="Rate limit exceeded for database download tokens. Try again later.",
@@ -395,9 +394,7 @@ async def create_download_token(request: Request):
             key=f"db-download:user:{user_id}", limit=_USER_TOKEN_LIMIT_PER_HOUR
         )
         if not allowed:
-            logger.warning(
-                "RATE_LIMIT ip=%s user=%s layer=user", client_ip, user_id
-            )
+            logger.warning("RATE_LIMIT ip=%s user=%s layer=user", client_ip, user_id)
             raise HTTPException(
                 status_code=429,
                 detail="Download token already issued recently. Try again later.",
@@ -501,5 +498,5 @@ async def download_database(
             },
         )
     except OSError as exc:
-        logger.error("Failed to stream encrypted DB: %s", exc)
+        logger.exception("Failed to stream encrypted DB")
         raise HTTPException(status_code=500, detail="Internal server error") from exc
