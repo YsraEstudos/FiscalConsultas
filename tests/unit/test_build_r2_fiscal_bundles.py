@@ -256,7 +256,7 @@ def test_build_all_builds_each_source_with_resolved_paths(tmp_path: Path, monkey
         fake_build_source_bundle,
     )
 
-    outputs = build_r2_fiscal_bundles.build_all(tmp_path)
+    outputs = build_r2_fiscal_bundles.build_all(tmp_path, split_sources=True)
 
     assert calls == [
         (
@@ -293,7 +293,11 @@ def test_build_all_can_filter_sources(tmp_path: Path, monkeypatch):
         fake_build_source_bundle,
     )
 
-    outputs = build_r2_fiscal_bundles.build_all(tmp_path, {"nbs"})
+    outputs = build_r2_fiscal_bundles.build_all(
+        tmp_path,
+        {"nbs"},
+        split_sources=True,
+    )
 
     assert [call[0] for call in calls] == ["nbs"]
     assert [output.source for output in outputs] == ["nbs"]
