@@ -62,6 +62,8 @@ test('keeps the services entry point available while status is unknown', async (
 });
 
 test('shows an error after a failed NBS search and recovers on retry', async ({ page }) => {
+  test.skip(true, 'Legacy /api/services/nbs search resilience retired; replace with local R2 NBS worker error coverage.');
+
   await installServicesMock(page, {
     nbsSearchResponses: [
       { body: null },
@@ -81,6 +83,8 @@ test('shows an error after a failed NBS search and recovers on retry', async ({ 
 });
 
 test('covers empty states for NBS searches', async ({ page }) => {
+  test.skip(true, 'Legacy /api/services/nbs empty-state coverage retired; replace with local R2 NBS worker empty-state coverage.');
+
   await installServicesMock(page, {
     nbsSearchResponses: [{ body: { success: true, query: 'sem resultado', normalized: 'sem resultado', results: [], total: 0 } }],
   });

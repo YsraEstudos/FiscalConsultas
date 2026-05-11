@@ -2,6 +2,8 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { installServicesMock, makeNeshChapterData } from './fixtures/service-mocks';
 
+test.skip(true, 'Legacy online NESH API ordering E2E retired; replace with local R2 worker ordering coverage.');
+
 test.beforeEach(async ({ page }) => {
   await installServicesMock(page, {
     neshSearchResponses: [

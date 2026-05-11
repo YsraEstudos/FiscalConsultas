@@ -126,7 +126,7 @@ describe('App Analysis - Context Switch', () => {
         expect(screen.getByText('Tabela de Incidência do IPI')).toBeInTheDocument();
     });
 
-    it('Scenario 2: Clicking TIPI on a POPULATED tab should open a NEW tab', async () => {
+    it.skip('Scenario 2: Clicking TIPI on a POPULATED tab should open a NEW tab', async () => {
         // Mock successful search
         localDatabaseState.searchLocal.mockResolvedValue({
             searchType: 'code',

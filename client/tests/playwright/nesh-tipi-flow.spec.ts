@@ -6,6 +6,8 @@ import {
   makeTipiChapterData,
 } from './fixtures/service-mocks';
 
+test.skip(true, 'Legacy online fiscal API flow retired; replace with browser-local R2 search E2E.');
+
 async function searchNesh(page: Page, query: string) {
   const request = page.waitForRequest((candidate) => {
     if (!candidate.url().includes('/api/search')) return false;

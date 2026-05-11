@@ -2,6 +2,8 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { installServicesMock, makeNeshChapterData } from './fixtures/service-mocks';
 
+test.skip(true, 'Legacy search-backed auth capability flow retired; future coverage should use account APIs only.');
+
 type AuthSessionPayload = {
   authenticated: boolean;
   can_use_ai_chat: boolean;

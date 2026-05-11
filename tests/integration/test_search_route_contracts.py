@@ -13,7 +13,10 @@ from backend.services.tipi_service import TipiService
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skip(
-        reason="Online NESH/TIPI search routes were retired; offline bundles now own fiscal search."
+        reason=(
+            "Legacy online fiscal search routes were retired by the offline-first "
+            "R2 migration; active coverage lives in test_offline_first_backend_routes."
+        )
     ),
 ]
 

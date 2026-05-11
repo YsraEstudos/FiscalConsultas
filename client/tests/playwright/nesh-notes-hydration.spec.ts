@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test';
 
 import { installServicesMock, makeNeshChapterData } from './fixtures/service-mocks';
 
+test.skip(true, 'Legacy /api/search chapter hydration E2E retired; replace with local R2 chapter hydration coverage.');
+
 test.beforeEach(async ({ page }) => {
   await installServicesMock(page, {
     unmatchedApiStrategy: 'continue',

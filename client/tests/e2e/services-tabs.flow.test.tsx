@@ -15,8 +15,8 @@ import type {
 const refs = vi.hoisted(() => ({
   getNbsServiceDetailPageMock: vi.fn(),
   getNbsServiceTreePageMock: vi.fn(),
-  toastErrorMock: vi.fn(),
   getNbsDetailLocalMock: vi.fn(),
+  toastErrorMock: vi.fn(),
   openNewTab: false,
 }));
 
@@ -243,8 +243,8 @@ describe('services tabs flow', () => {
     expect(screen.getByTestId('active-tab-meta')).toHaveTextContent('nbs:1.0101.11.00');
   });
 
-  it('maps detail failures to the local NBS detail guidance', async () => {
-    refs.getNbsDetailLocalMock.mockRejectedValue(new Error('Erro ao pesquisar na base local. Tente reinstalar.'));
+  it('maps local detail failures with local installation guidance', async () => {
+    refs.getNbsDetailLocalMock.mockResolvedValue(null);
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     try {

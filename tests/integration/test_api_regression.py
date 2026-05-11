@@ -3,7 +3,16 @@ import json
 
 import pytest
 
-pytestmark = [pytest.mark.integration, pytest.mark.snapshot]
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.snapshot,
+    pytest.mark.skip(
+        reason=(
+            "Snapshot regression targets the retired online /api/search route. "
+            "Regenerate this suite around browser-local R2 search before re-enabling."
+        )
+    ),
+]
 
 # List of test cases to verify against snapshot
 # Ideally, we could extract these keys from the snapshot itself if we want full coverage,  # noqa: E501

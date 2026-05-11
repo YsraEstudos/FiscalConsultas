@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test';
 
 import { installServicesMock } from './fixtures/service-mocks';
 
+test.skip(true, 'Legacy smoke spec depends on retired backend fiscal install/search routes.');
+
 const suspiciousMarkers = [
   'hacked by',
   'owned by',

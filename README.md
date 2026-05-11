@@ -193,7 +193,12 @@ Observações:
 
 ### 4) Subir aplicação
 
-Fluxo recomendado para teste local completo: backend + frontend com API local.
+Fluxo recomendado para teste local da migração offline-first: frontend estático com
+bundles fiscais servidos por uma URL compatível com R2. A busca de NESH, TIPI,
+NBS e UNSPSC deve acontecer no navegador, depois da instalação local das bases.
+
+O backend FastAPI só deve ser iniciado quando você estiver validando rotas
+legadas ou recursos não fiscais.
 
 Comando único (Windows):
 
@@ -201,12 +206,14 @@ Comando único (Windows):
 .\testar_tudo_local.bat
 ```
 
-Esse script:
+Esse script é legado para desenvolvimento full-stack e:
 
 - sobe o backend FastAPI na porta `8000`
 - sobe o frontend Vite na porta `5173`
 - cria `client/.env.development.local` apontando o frontend para a API local
 - abre o navegador quando os dois serviços estão prontos
+
+Ele não representa o caminho de produção da pesquisa fiscal offline-first.
 
 Se você precisar rodar backend localmente (modo de desenvolvimento de API):
 
@@ -359,22 +366,24 @@ Requisitos e checklist:
 
 1. Em `Settings > Pages`, deixe `Source = GitHub Actions`.
 2. Cadastre `Settings > Secrets and variables > Actions > Variables > VITE_CLERK_PUBLISHABLE_KEY` com uma chave `pk_live_...` (ou `pk_test_...` para desenvolvimento). Sem isso, o workflow falhará.
-3. Certifique-se de que o backend permite a origem `https://ysraestudos.github.io` em `SERVER__CORS_ALLOWED_ORIGINS` e `AUTH__CLERK_AUTHORIZED_PARTIES`.
-4. Execute o workflow `Deploy GitHub Pages` na aba `Actions`.
+3. Cadastre `VITE_FISCAL_R2_BASE_URL` e `VITE_OFFLINE_DB_PUBLIC_SEED` como variáveis do workflow.
+4. Configure CORS no R2 para permitir `https://ysraestudos.github.io`.
+5. Execute o workflow `Deploy GitHub Pages` na aba `Actions`.
 
 Observações operacionais:
 
 - O deploy usa o path-base `/FiscalConsultas/` por ser um **project site**.
 - O workflow gera fallback SPA (`404.html`) para recarregamentos em rotas internas.
-- O build do frontend aponta por padrão para `VITE_API_URL=https://fiscal-api-5eok.onrender.com`.
+- O build do frontend baixa bases fiscais de `VITE_FISCAL_R2_BASE_URL`; ele não deve apontar para Render para pesquisa fiscal.
 
-### Ajuste no Backend (CORS/Auth)
+### Ajuste no R2
 
-Se o frontend estiver no GitHub Pages, o backend (ex: Render) deve autorizar o host:
+Se o frontend estiver no GitHub Pages, o R2 deve autorizar o host:
 
-```env
-AUTH__CLERK_AUTHORIZED_PARTIES=["http://localhost:5173","http://127.0.0.1:5173","https://ysraestudos.github.io"]
-SERVER__CORS_ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","https://ysraestudos.github.io"]
+```http
+Access-Control-Allow-Origin: https://ysraestudos.github.io
+Access-Control-Allow-Methods: GET, HEAD, OPTIONS
+Access-Control-Allow-Headers: Content-Type
 ```
 
 ## Deploy no Render (legado)
@@ -462,12 +471,13 @@ sobe normalmente e apenas os recursos de chat IA ficam desativados.
 Se o frontend estiver no GitHub Pages, inclua `https://ysraestudos.github.io` em
 `AUTH__CLERK_AUTHORIZED_PARTIES` e `SERVER__CORS_ALLOWED_ORIGINS`.
 
-### 4) Frontend
+### 4) Frontend legado
 
-Se o frontend continuar no Cloudflare Pages, a URL da API no Pages deve apontar para o Render:
+Se esse backend legado continuar existindo por compatibilidade, não use a URL dele para busca fiscal. O frontend publicado deve apontar para R2:
 
 ```env
-VITE_API_URL=https://fiscal-api-5eok.onrender.com
+VITE_FISCAL_R2_BASE_URL=https://seu-bucket-publico.r2.dev
+VITE_OFFLINE_DB_PUBLIC_SEED=change_me_32_byte_hex
 VITE_CLERK_PUBLISHABLE_KEY=pk_live_sua_chave
 VITE_CLERK_TOKEN_TEMPLATE=backend_api
 ```
@@ -484,7 +494,7 @@ Se o frontend estiver no GitHub Pages, a URL final do project site deste reposit
 - `GOOGLE_API_KEY not found. AI features disabled.`: esperado quando IA não está habilitada nesse ambiente.
 - `Redis connect failed ... localhost:6379`: indica `CACHE__ENABLE_REDIS=true` sem Redis externo configurado. Corrija `CACHE__REDIS_URL` ou desligue Redis explicitamente.
 - `Redis connect failed: invalid username-password pair`: a app chegou ao Redis, mas a `CACHE__REDIS_URL` está no formato errado ou com credencial incorreta. Em Upstash, use a Redis URL TLS (`rediss://default:<password>@<host>:6379`), não a REST URL/token.
-- `OPTIONS /api/search ... 400 Bad Request`: normalmente indica falha de preflight/CORS. Revise `SERVER__CORS_ALLOWED_ORIGINS`, `SERVER__CORS_ALLOWED_ORIGIN_REGEX` e `AUTH__CLERK_AUTHORIZED_PARTIES` para incluir o domínio real do frontend e, se necessário, os previews.
+- `404` ou CORS em `*.meta.json`: revise o domínio público/CORS do R2 e a variável `VITE_FISCAL_R2_BASE_URL`.
 
 ## Workflow de desenvolvimento
 
@@ -693,7 +703,9 @@ Política de rollback local:
 - se a migracao falhar, corrija o problema e repita o `--run`
 - se precisar de recuperacao parcial, recrie o cluster PostgreSQL 18 e rode `alembic upgrade head` seguido de `python scripts/migrate_to_postgres.py`
 
-## Performance NCM (estado atual)
+## Performance NCM (legado)
+
+Os números abaixo são histórico do caminho antigo por API. A meta da arquitetura offline-first é medir a busca local no Worker/browser, não `/api/search`.
 
 Baseline local mais recente para `/api/search?ncm=8481.30.00` (10 de fevereiro de 2026):
 
@@ -710,13 +722,13 @@ Mudanças principais já aplicadas:
 
 | Variável | Uso |
 | :--- | :--- |
-| `DATABASE__ENGINE` | Seleciona engine (`sqlite` ou `postgresql`) |
-| `DATABASE__POSTGRES_URL` | URL asyncpg usada quando engine = `postgresql` |
+| `DATABASE__ENGINE` | Legado/futuro backend de conta; não usado pela busca fiscal offline-first |
+| `DATABASE__POSTGRES_URL` | Legado/futuro backend de conta; não usado pela busca fiscal offline-first |
 | `SERVER__ENV` | Comportamento de middleware/auth (`development` habilita fallbacks) |
 | `SERVER__CORS_ALLOWED_ORIGINS` | Lista JSON de origens permitidas para CORS (produção deve conter apenas domínios oficiais) |
 | `SERVER__CORS_ALLOWED_ORIGIN_REGEX` | Regex opcional para liberar previews controlados (ex.: subdomínios do Cloudflare Pages) |
-| `CACHE__ENABLE_REDIS` | Liga/desliga Redis para cache/rate-limit distribuído |
-| `CACHE__REDIS_URL` | URL do Redis (ex: Upstash) |
+| `CACHE__ENABLE_REDIS` | Legado/futuro backend de conta; não usado pela busca fiscal offline-first |
+| `CACHE__REDIS_URL` | URL do Redis, se algum backend legado/futuro realmente usar cache |
 | `AUTH__CLERK_DOMAIN` | Validação JWT via JWKS do Clerk |
 | `AUTH__CLERK_ISSUER` | Valida `iss` explicitamente (`https://<seu-dominio-clerk>`) |
 | `AUTH__CLERK_AUDIENCE` | Valida `aud` no backend (ex: `fiscal-api`) |
@@ -731,7 +743,8 @@ Mudanças principais já aplicadas:
 | `VITE_CLERK_PUBLISHABLE_KEY` | Obrigatório para o frontend montar com Clerk |
 | `VITE_CLERK_TOKEN_TEMPLATE` | Template usado no `getToken()` do Clerk (recomendado: `backend_api`) |
 | `VITE_AUTH_DEBUG` | (Opcional) habilita logs de diagnóstico JWT no navegador |
-| `VITE_API_URL` / `VITE_API_FILTER_URL` | Base URL de API no frontend (normalizada em runtime) |
+| `VITE_FISCAL_R2_BASE_URL` | Base URL pública dos bundles fiscais no R2 |
+| `VITE_OFFLINE_DB_PUBLIC_SEED` | Semente pública usada para abrir os bundles fiscais no navegador |
 
 ## Estrutura do projeto
 
@@ -739,7 +752,7 @@ Mudanças principais já aplicadas:
 backend/         API FastAPI, serviços, repositórios e config
 client/          React + Vite + TypeScript
 scripts/         Setup de dados, migração e utilitários
-database/        SQLite local + artefatos offline (nesh.db, tipi.db, services.db, fiscal_offline.*)
+database/        SQLite local + bundles R2 (nesh.db, tipi.db, services.db, r2-fiscal-bundles/)
 migrations/      Alembic migrations (PostgreSQL)
 tests/           Suite principal do backend
 docs/            Documentação funcional/técnica
@@ -747,27 +760,28 @@ docs/            Documentação funcional/técnica
 
 ## Deploy/produção
 
-Fluxo operacional atual (cloud-first):
+Fluxo operacional atual (offline-first):
 
-- Banco de dados: PostgreSQL gerenciado (Neon)
-- API: FastAPI em provedor cloud (Render)
-- Frontend: local em desenvolvimento (`npm run dev`) ou hospedado separadamente
+- Frontend: Cloudflare Pages ou outro host estático
+- Bases fiscais: Cloudflare R2
+- Busca fiscal: local no navegador
+- Login: Clerk
+- Dados de usuário futuros: Cloudflare Workers + D1
 
 Suporte técnico confirmado no repositório:
 
 - Build de frontend: `cd client && npm run build`
-- Backend serve `client/dist` automaticamente quando a pasta existe.
+- Geração de bundles R2: `python scripts/build_r2_fiscal_bundles.py`
 
 Checklist mínimo para produção:
 
-1. Configurar `DATABASE__POSTGRES_URL` com SSL (`sslmode=require`).
-2. Configurar Clerk (`AUTH__CLERK_*`) com `AUTHORIZED_PARTIES` incluindo o domínio real do frontend.
-3. Configurar `SERVER__CORS_ALLOWED_ORIGINS` com domínios oficiais (sem curingas em produção).
-4. Configurar Redis (opcional, recomendado): `CACHE__ENABLE_REDIS=true` e `CACHE__REDIS_URL`.
-5. Validar `GET /api/status` após deploy.
-6. Rodar `python scripts/validate_production_env.py` antes do go-live para detectar configuração de produção incoerente.
-7. Configurar `OBSERVABILITY__METRICS_TOKEN` para proteger `GET /api/metrics`.
-8. Se quiser APM externo, configurar `OBSERVABILITY__SENTRY_DSN` e instalar `sentry-sdk` no ambiente.
+1. Publicar `client` no Cloudflare Pages.
+2. Publicar bundles por fonte no R2.
+3. Configurar `VITE_FISCAL_R2_BASE_URL` e `VITE_OFFLINE_DB_PUBLIC_SEED`.
+4. Configurar CORS mínimo no R2 para o domínio do frontend.
+5. Configurar Clerk publishable key no frontend.
+6. Validar download, hash e instalação local das bases.
+7. Validar busca sem backend fiscal online.
 
 Hardening operacional já aplicado no backend:
 

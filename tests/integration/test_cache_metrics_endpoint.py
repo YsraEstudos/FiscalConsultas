@@ -7,7 +7,10 @@ from backend.presentation.routes import tipi as tipi_route
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skip(
-        reason="Online fiscal search/TIPI endpoints were retired; cache metrics for those route payloads no longer apply."
+        reason=(
+            "Legacy fiscal route payload cache metrics were retired with the "
+            "online search backend."
+        )
     ),
 ]
 

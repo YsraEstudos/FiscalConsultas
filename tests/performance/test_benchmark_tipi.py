@@ -1,6 +1,11 @@
 import pytest
 
-pytestmark = pytest.mark.perf
+pytestmark = [
+    pytest.mark.perf,
+    pytest.mark.skip(
+        reason="Legacy online /api/tipi/search benchmarks retired; replace with local R2 worker benchmarks."
+    ),
+]
 
 # --- TIPI Search Benchmarks ---
 

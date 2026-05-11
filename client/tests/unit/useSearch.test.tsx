@@ -171,8 +171,8 @@ describe('useSearch Hook', () => {
             await result.current.executeSearchForTab('tab-1', 'nesh', '7308', true);
         });
 
-        expect(localDatabaseState.searchLocal).toHaveBeenCalledWith('nesh', '7308', expect.any(String));
         expect(searchNCMMock).not.toHaveBeenCalled();
+        expect(localDatabaseState.searchLocal).toHaveBeenCalledWith('nesh', '7308', 'chapter');
 
         expect(updateTab.mock.calls[0]).toEqual([
             'tab-1',

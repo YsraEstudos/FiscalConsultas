@@ -10,7 +10,10 @@ from backend.server.app import app
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skip(
-        reason="Online NBS services routes were retired; NBS catalog access is local/offline."
+        reason=(
+            "Legacy online NBS service routes were retired by the offline-first "
+            "R2 migration; active coverage lives in test_offline_first_backend_routes."
+        )
     ),
 ]
 

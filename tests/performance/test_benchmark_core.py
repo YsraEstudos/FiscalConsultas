@@ -11,7 +11,12 @@ import pytest
 from backend.config import CONFIG
 from backend.config.settings import settings
 
-pytestmark = pytest.mark.perf
+pytestmark = [
+    pytest.mark.perf,
+    pytest.mark.skip(
+        reason="Legacy online /api/search benchmarks retired; replace with local R2 worker benchmarks."
+    ),
+]
 
 # --- NCM Search Benchmarks ---
 

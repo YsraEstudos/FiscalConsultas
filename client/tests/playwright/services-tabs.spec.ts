@@ -3,6 +3,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { installServicesMock, makeNbsDetail } from './fixtures/service-mocks';
 import { openServicesModal, searchServices } from './fixtures/services-ui';
 
+test.skip(true, 'Legacy online NBS API flow retired; replace with browser-local R2 NBS E2E.');
+
 async function setNavigationBehavior(page: Page, mode: 'same-tab' | 'new-tab') {
   await page.getByRole('button', { name: /Menu/, exact: true }).click();
   await page.getByRole('button', { name: /Configurações/ }).click();

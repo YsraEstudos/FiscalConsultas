@@ -6,15 +6,18 @@ import { fileURLToPath } from 'node:url';
 import { installServicesMock } from './fixtures/service-mocks';
 import { expectOfflineReadyInSettings } from './helpers/offlineHarness';
 
+test.skip(true, 'Legacy monolithic offline bundle E2E retired; replace with per-source R2 bundle install coverage.');
+
 const currentDir = dirname(fileURLToPath(import.meta.url));
-const offlineMeta = JSON.parse(
-  readFileSync(resolve(currentDir, '../../../database/fiscal_offline.meta'), 'utf-8'),
-);
-const offlineBundle = readFileSync(
-  resolve(currentDir, '../../../database/fiscal_offline.enc'),
-);
 
 test('opens local and cross-chapter notes without /api after offline install', async ({ page }) => {
+  const offlineMeta = JSON.parse(
+    readFileSync(resolve(currentDir, '../../../database/fiscal_offline.meta'), 'utf-8'),
+  );
+  const offlineBundle = readFileSync(
+    resolve(currentDir, '../../../database/fiscal_offline.enc'),
+  );
+
   await installServicesMock(page, {
     unmatchedApiStrategy: 'continue',
   });
