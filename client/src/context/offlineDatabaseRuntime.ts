@@ -19,12 +19,11 @@ import {
     persistStoredOfflineDatabaseMetadata,
     persistStoredOfflineSourceMetadata,
     readStoredOfflineDatabaseMetadata,
-    readStoredOfflineSourceMetadata,
     runOfflineDatabaseTaskInBackground,
     type OfflineDatabaseSupportReport,
 } from './offlineDatabaseStorage';
 import {
-    fetchOfflineSourceAvailabilityMetadata,
+    fetchFiscalR2DatabaseAvailabilityMetadata,
     fetchOfflineDatabaseAvailabilityMetadata,
     getFiscalR2BaseUrl,
     getOfflineDbPublicSeed,
@@ -41,11 +40,9 @@ import { useOfflineDatabaseSyncWaiter } from './offlineDatabaseRuntime/useOfflin
 import { useOfflineDatabaseWorkerBridge } from './offlineDatabaseRuntime/useOfflineDatabaseWorkerBridge';
 import { useAuth } from './AuthContext';
 
-const LEGACY_MONOLITHIC_BUNDLE_SOURCE = 'nesh';
-
 function readInitialOfflineMetadata(): OfflineDatabaseMetadata | null {
     if (getFiscalR2BaseUrl() && getOfflineDbPublicSeed()) {
-        return readStoredOfflineSourceMetadata(LEGACY_MONOLITHIC_BUNDLE_SOURCE);
+        return readStoredOfflineDatabaseMetadata();
     }
 
     return readStoredOfflineDatabaseMetadata();
@@ -166,13 +163,6 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
                 // The worker reads it directly from OPFS via readSeed(userId),
                 // where it is stored encrypted with user-scoped AES-GCM.
                 const publicSeed = getOfflineDbPublicSeed();
-                const sourcePayload =
-                    publicSeed && isOfflineSourceMetadata(initMetadata)
-                        ? {
-                            source: initMetadata.source,
-                            publicSeed,
-                        }
-                        : {};
                 await sendToWorker(
                     {
                         type: 'INIT',
@@ -180,7 +170,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
                         payload: {
                             ...buildOfflineDatabaseInitPayload(initMetadata),
                             userId,
-                            ...sourcePayload,
+                            publicSeed: publicSeed || undefined,
                         },
                     },
                     30_000,
@@ -213,25 +203,16 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
                     const publicSeed = getOfflineDbPublicSeed();
                     let metadata: OfflineDatabaseMetadata | null = null;
                     if (r2BaseUrl && publicSeed) {
-                        try {
-                            metadata = await fetchOfflineSourceAvailabilityMetadata(
-                                r2BaseUrl,
-                                LEGACY_MONOLITHIC_BUNDLE_SOURCE,
-                            );
-                        } catch (sourceErr) {
-                            console.warn(
-                                'fetchOfflineSourceAvailabilityMetadata failed',
-                                sourceErr,
-                            );
-                        }
+                        metadata = await fetchFiscalR2DatabaseAvailabilityMetadata(
+                            r2BaseUrl,
+                        );
+                    } else {
+                        metadata = await fetchOfflineDatabaseAvailabilityMetadata(
+                            getOfflineDatabaseApiBaseUrl(),
+                        );
                     }
-                    metadata ||= await fetchOfflineDatabaseAvailabilityMetadata(
-                        getOfflineDatabaseApiBaseUrl(),
-                    );
                     remoteMetaRef.current = metadata;
-                    if (isOfflineSourceMetadata(metadata)) {
-                        persistStoredOfflineSourceMetadata(metadata.source, metadata);
-                    }
+                    persistStoredOfflineDatabaseMetadata(metadata);
                     setRemoteVersion(metadata?.version ?? null);
                     setDbSizeBytes((current) => current ?? metadata?.size_bytes ?? null);
                     return metadata;

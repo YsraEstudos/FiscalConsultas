@@ -153,8 +153,13 @@ async function handleInitMessage(id, payload) {
   const encData = source ? await readSourceFromOpfs(source) : await readFromOpfs();
   const version = source ? await readSourceVersion(source) : await readVersion();
   const opfsSeed = source ? null : await readSeed(payload?.userId);
-  const seed = source ? payload?.publicSeed : opfsSeed || payload?.seed;
-  const usedPayloadSeedFallback = !opfsSeed && Boolean(payload?.seed);
+  const seed = source ? payload?.publicSeed : opfsSeed || payload?.seed || payload?.publicSeed;
+  const payloadSeedFallback = payload?.seed || payload?.publicSeed;
+  const usedPayloadSeedFallback =
+    !source &&
+    !opfsSeed &&
+    Boolean(payloadSeedFallback) &&
+    seed === payloadSeedFallback;
 
   if (!encData || !version || !seed) {
     setWorkerStatus("not_installed");
@@ -338,6 +343,13 @@ function buildFiscalBundleUrls(r2BaseUrl, source) {
   };
 }
 
+function buildFiscalOfflineDatabaseUrls(r2BaseUrl) {
+  const normalizedBaseUrl = trimTrailingSlashes(String(r2BaseUrl || ""));
+  return {
+    encryptedUrl: `${normalizedBaseUrl}/fiscal_offline.enc`,
+  };
+}
+
 function trimTrailingSlashes(value) {
   let end = value.length;
   while (end > 0 && value.charCodeAt(end - 1) === 47) {
@@ -355,28 +367,33 @@ export function getSourceAwareInstallPayloadIntent(payload) {
   );
 }
 
+export function getStaticR2InstallPayloadIntent(payload) {
+  return Boolean(
+    payload
+      && typeof payload === "object"
+      && !("source" in payload)
+      && "r2BaseUrl" in payload
+      && "publicSeed" in payload
+      && "metadata" in payload
+  );
+}
+
+export function validateStaticR2InstallPayload(payload) {
+  return validateR2InstallPayloadFields(
+    payload,
+    "Static R2 install payload is incomplete"
+  );
+}
+
 export function validateSourceAwareInstallPayload(payload) {
-  if (!payload || typeof payload !== "object") {
-    return { ok: false, error: "Source-aware install payload is incomplete" };
-  }
+  const fieldValidation = validateR2InstallPayloadFields(
+    payload,
+    "Source-aware install payload is incomplete"
+  );
+  if (!fieldValidation.ok) return fieldValidation;
 
   if (!isFiscalSourceId(payload.source)) {
     return { ok: false, error: "Invalid source-aware install source" };
-  }
-
-  if (
-    typeof payload.r2BaseUrl !== "string"
-      || !payload.r2BaseUrl.trim()
-      || typeof payload.publicSeed !== "string"
-      || !payload.publicSeed.trim()
-      || !payload.metadata
-      || typeof payload.metadata !== "object"
-      || typeof payload.metadata.version !== "string"
-      || !payload.metadata.version.trim()
-      || typeof payload.metadata.encrypted_sha256 !== "string"
-      || !payload.metadata.encrypted_sha256.trim()
-  ) {
-    return { ok: false, error: "Source-aware install payload is incomplete" };
   }
 
   if (payload.metadata.source !== payload.source) {
@@ -386,29 +403,90 @@ export function validateSourceAwareInstallPayload(payload) {
   return { ok: true };
 }
 
+function validateR2InstallPayloadFields(payload, incompleteError) {
+  if (!payload || typeof payload !== "object") {
+    return { ok: false, error: incompleteError };
+  }
+
+  const metadata = payload.metadata;
+  const hasRequiredMetadata =
+    metadata
+    && typeof metadata === "object"
+    && typeof metadata.version === "string"
+    && metadata.version.trim()
+    && typeof metadata.encrypted_sha256 === "string"
+    && metadata.encrypted_sha256.trim();
+
+  if (
+    typeof payload.r2BaseUrl !== "string"
+      || !payload.r2BaseUrl.trim()
+      || typeof payload.publicSeed !== "string"
+      || !payload.publicSeed.trim()
+      || !hasRequiredMetadata
+  ) {
+    return { ok: false, error: incompleteError };
+  }
+
+  return { ok: true };
+}
+
 async function fetchEncryptedSourceBundle(r2BaseUrl, source) {
   const { encryptedUrl } = buildFiscalBundleUrls(r2BaseUrl, source);
-  const dlResp = await fetch(encryptedUrl, {
-    method: "GET",
-    headers: { Accept: "application/octet-stream" },
-  });
+  return fetchEncryptedR2Bundle(
+    encryptedUrl,
+    "Offline source bundle retrieval failed"
+  );
+}
+
+async function fetchEncryptedStaticR2Bundle(r2BaseUrl) {
+  const { encryptedUrl } = buildFiscalOfflineDatabaseUrls(r2BaseUrl);
+  return fetchEncryptedR2Bundle(
+    encryptedUrl,
+    "Offline fiscal bundle retrieval failed"
+  );
+}
+
+async function fetchEncryptedR2Bundle(encryptedUrl, errorPrefix) {
+  const dlResp = await fetchWithTimeout(
+    encryptedUrl,
+    {
+      method: "GET",
+      headers: { Accept: "application/octet-stream" },
+    },
+    OFFLINE_FETCH_TIMEOUT_MS,
+    "download",
+  );
 
   if (dlResp.ok) {
     return dlResp;
   }
 
   const errText = await dlResp.text();
-  throw new Error(
-    `Offline source bundle retrieval failed (${dlResp.status}): ${errText}`
+  throw new Error(`${errorPrefix} (${dlResp.status}): ${errText}`);
+}
+
+async function fetchEncryptedStaticR2BundleWithRetry(r2BaseUrl, id) {
+  return fetchEncryptedR2BundleWithRetry(
+    () => fetchEncryptedStaticR2Bundle(r2BaseUrl),
+    id,
+    "Offline fiscal bundle download failed"
   );
 }
 
 async function fetchEncryptedSourceBundleWithRetry(r2BaseUrl, source, id) {
+  return fetchEncryptedR2BundleWithRetry(
+    () => fetchEncryptedSourceBundle(r2BaseUrl, source),
+    id,
+    "Offline source bundle download failed"
+  );
+}
+
+async function fetchEncryptedR2BundleWithRetry(fetchBundle, id, fallbackMessage) {
   let lastError = null;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      return await fetchEncryptedSourceBundle(r2BaseUrl, source);
+      return await fetchBundle();
     } catch (error) {
       lastError = error;
       if (!isRetryableOfflineDownloadError(error) || attempt === 1) break;
@@ -417,7 +495,7 @@ async function fetchEncryptedSourceBundleWithRetry(r2BaseUrl, source, id) {
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error("Offline source bundle download failed");
+  throw lastError instanceof Error ? lastError : new Error(fallbackMessage);
 }
 
 async function updateInstalledVersion(apiBase) {
@@ -447,20 +525,64 @@ async function updateInstalledVersion(apiBase) {
 }
 
 async function handleSourceAwareInstallMessage(id, payload) {
-  setWorkerStatus("installing");
-  postWorkerProgress(id, 0, "fetching_database");
-
   const {
     source,
     r2BaseUrl,
     publicSeed,
     metadata,
   } = payload;
+
+  await installR2Bundle(id, {
+    publicSeed,
+    metadata,
+    fetchBundle: () => fetchEncryptedSourceBundleWithRetry(r2BaseUrl, source, id),
+    saveBundle: async (encryptedBlob) => {
+      await saveSourceToOpfs(source, encryptedBlob);
+      await saveSourceVersion(source, metadata.version || "unknown");
+    },
+    cleanupAfterSaveError: () => removeSourceFromOpfs(source),
+    cleanupAfterInstallError: () => removeSourceFromOpfs(source),
+  });
+}
+
+async function handleStaticR2InstallMessage(id, payload) {
+  const {
+    r2BaseUrl,
+    publicSeed,
+    metadata,
+  } = payload;
+
+  await installR2Bundle(id, {
+    publicSeed,
+    metadata,
+    fetchBundle: () => fetchEncryptedStaticR2BundleWithRetry(r2BaseUrl, id),
+    saveBundle: async (encryptedBlob) => {
+      await saveToOpfs(encryptedBlob);
+      await saveSeed(publicSeed, payload?.userId);
+      await saveVersion(metadata.version || "unknown");
+    },
+    cleanupAfterSaveError: removeFromOpfs,
+    cleanupAfterInstallError: removeFromOpfs,
+  });
+}
+
+async function installR2Bundle(id, options) {
+  setWorkerStatus("installing");
+  postWorkerProgress(id, 0, "fetching_database");
+
+  const {
+    publicSeed,
+    metadata,
+    fetchBundle,
+    saveBundle,
+    cleanupAfterSaveError,
+    cleanupAfterInstallError,
+  } = options;
   /** @type {Uint8Array | null} */
   let plaintext = null;
 
   try {
-    const dlResp = await fetchEncryptedSourceBundleWithRetry(r2BaseUrl, source, id);
+    const dlResp = await fetchBundle();
     const encryptedBlob = await readEncryptedDatabaseBlob(dlResp, id);
     const {
       encrypted_sha256: expectedEncryptedSha256,
@@ -484,10 +606,9 @@ async function handleSourceAwareInstallMessage(id, payload) {
 
     postWorkerProgress(id, 90, "saving");
     try {
-      await saveSourceToOpfs(source, encryptedBlob);
-      await saveSourceVersion(source, metadata.version || "unknown");
+      await saveBundle(encryptedBlob);
     } catch (error) {
-      await removeSourceFromOpfs(source);
+      await cleanupAfterSaveError();
       throw error;
     }
 
@@ -510,7 +631,7 @@ async function handleSourceAwareInstallMessage(id, payload) {
       recoverable: true,
     });
     postWorkerError(id, recoverableMessage);
-    await removeSourceFromOpfs(source).catch(() => undefined);
+    await cleanupAfterInstallError().catch(() => undefined);
     return;
   } finally {
     if (plaintext) {
@@ -593,6 +714,22 @@ async function handleLegacyInstallMessage(id, payload) {
 }
 
 async function handleInstallMessage(id, payload) {
+  if (getStaticR2InstallPayloadIntent(payload)) {
+    const validation = validateStaticR2InstallPayload(payload);
+    if (!validation.ok) {
+      setWorkerStatus("error");
+      postWorkerStatus(id, {
+        status: "error",
+        error: validation.error,
+        recoverable: true,
+      });
+      postWorkerError(id, validation.error);
+      return;
+    }
+    await handleStaticR2InstallMessage(id, payload);
+    return;
+  }
+
   if (getSourceAwareInstallPayloadIntent(payload)) {
     const validation = validateSourceAwareInstallPayload(payload);
     if (!validation.ok) {

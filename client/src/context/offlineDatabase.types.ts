@@ -114,7 +114,13 @@ export type OfflineDatabaseWorkerRequest =
         type: 'INIT';
         id: string | null;
         payload:
-            | { chunkSize: number; pbkdf2Iterations: number; seed?: string; userId: string | null }
+            | {
+                chunkSize: number;
+                pbkdf2Iterations: number;
+                seed?: string;
+                publicSeed?: string;
+                userId: string | null;
+            }
             | {
                 chunkSize: number;
                 pbkdf2Iterations: number;
@@ -128,6 +134,12 @@ export type OfflineDatabaseWorkerRequest =
         id: string | null;
         payload:
             | { apiBase: string; clerkToken?: string | null; userId: string | null }
+            | {
+                r2BaseUrl: string;
+                publicSeed: string;
+                metadata: OfflineDatabaseMetadata;
+                userId: string | null;
+            }
             | {
                 source: OfflineFiscalSourceId;
                 r2BaseUrl: string;
