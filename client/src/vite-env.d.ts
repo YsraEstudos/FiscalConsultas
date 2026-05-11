@@ -14,6 +14,7 @@ declare module '*.css' {
 
 declare global {
     var nesh: Window['nesh'] | undefined;
+    const __APP_VERSION__: string;
 
     interface Window {
         nesh?: {

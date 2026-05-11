@@ -3,7 +3,6 @@ import { useCallback } from 'react';
 import {
     compareOfflineVersions,
     formatOfflineDatabaseErrorMessage,
-    isOfflineSourceMetadata,
 } from '../utils/offlineDatabase';
 
 import {
@@ -45,6 +44,7 @@ export function useOfflineDatabaseMutations({
     setProgressStep,
     setRemoteVersion,
     setStatus,
+    userId,
     waitForOtherTabSync,
 }: OfflineDatabaseOperationsArgs): Pick<
     OfflineDatabaseOperations,
@@ -88,30 +88,24 @@ export function useOfflineDatabaseMutations({
 
             const r2BaseUrl = getFiscalR2BaseUrl();
             const publicSeed = getOfflineDbPublicSeed();
-            const sourceMetadata = isOfflineSourceMetadata(metadata) ? metadata : null;
-            const hasInvalidSourceMetadata = Boolean(
-                metadata
-                && typeof metadata === 'object'
-                && 'source' in metadata
-                && !sourceMetadata,
-            );
-            if (r2BaseUrl && publicSeed && hasInvalidSourceMetadata) {
+            if (r2BaseUrl && !publicSeed) {
                 throw new Error(
-                    'Metadados da fonte fiscal estão corrompidos. Limpe o cache do navegador e tente novamente.',
+                    'VITE_OFFLINE_DB_PUBLIC_SEED precisa estar configurado para instalar a base fiscal pelo R2.',
                 );
             }
 
             const installPayload =
-                r2BaseUrl && publicSeed && sourceMetadata
+                r2BaseUrl && publicSeed && metadata
                     ? {
-                        source: sourceMetadata.source,
                         r2BaseUrl,
                         publicSeed,
-                        metadata: sourceMetadata,
+                        metadata,
+                        userId: userId ?? null,
                     }
                     : {
                         apiBase: getOfflineDatabaseApiBaseUrl(),
                         clerkToken: '',
+                        userId: userId ?? null,
                     };
 
             await sendToWorker(
@@ -178,6 +172,7 @@ export function useOfflineDatabaseMutations({
         setProgressStep,
         setRemoteVersion,
         setStatus,
+        userId,
         waitForOtherTabSync,
     ]);
 
@@ -188,16 +183,15 @@ export function useOfflineDatabaseMutations({
                 {
                     type: 'REMOVE',
                     id: null,
-                    payload: getFiscalR2BaseUrl() && getOfflineDbPublicSeed()
-                        ? { source: LEGACY_MONOLITHIC_BUNDLE_SOURCE }
-                        : {},
+                    payload: {},
                 },
                 10_000,
             );
             persistStoredOfflineDatabaseMetadata(null);
             persistStoredOfflineSourceMetadata(LEGACY_MONOLITHIC_BUNDLE_SOURCE, null);
             setOfflineDatabaseAutoInstallOptOut();
-            sessionStorage.removeItem('offline_db_seed');
+            // sessionStorage no longer stores the seed (BUG-3 fix — it was plaintext).
+
             setLocalVersion(null);
             setRemoteVersion(remoteMetadataRef.current?.version ?? null);
             setDbSizeBytes(null);

@@ -121,23 +121,21 @@ function handleRefreshTokenMessage(id: string | null, worker: Worker | null): vo
         });
 }
 
-function handleReadyStatus(
-    payload: OfflineDatabaseStatusResponse['payload'],
-    {
-        setError,
-        setProgress,
-        setProgressStep,
-    }: Pick<
-        UseOfflineDatabaseWorkerBridgeArgs,
-        'setError' | 'setProgress' | 'setProgressStep'
-    >,
-): void {
+function handleReadyStatus({
+    setError,
+    setProgress,
+    setProgressStep,
+}: Pick<
+    UseOfflineDatabaseWorkerBridgeArgs,
+    'setError' | 'setProgress' | 'setProgressStep'
+>): void {
     setProgress(100);
     setProgressStep('done');
     setError(null);
-    if (payload.seed) {
-        sessionStorage.setItem('offline_db_seed', payload.seed);
-    }
+    // BUG-3 fix: the seed must NOT be stored in plaintext sessionStorage.
+    // It is already persisted encrypted in OPFS via saveSeed() (user-scoped
+    // AES-GCM). A plaintext copy in sessionStorage can be trivially read by
+    // any script in the same origin (XSS, extensions, DevTools).
 }
 
 function handleWorkerStatusMessage(
@@ -166,7 +164,7 @@ function handleWorkerStatusMessage(
     }
 
     if (payload.status === 'ready') {
-        handleReadyStatus(payload, { setError, setProgress, setProgressStep });
+        handleReadyStatus({ setError, setProgress, setProgressStep });
     }
 
     if (shouldResolveStatusRequest(payload.status)) {

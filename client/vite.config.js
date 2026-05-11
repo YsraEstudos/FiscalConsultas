@@ -1,6 +1,12 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import fs from 'node:fs'
+import path from 'node:path'
+
+const appVersion = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf-8')).version;
+const buildTimestamp = Date.now();
+const uniqueBuildVersion = `${appVersion}-${buildTimestamp}`;
 
 const clerkMockPath = fileURLToPath(
   new URL('./tests/playwright/mocks/clerk.tsx', import.meta.url)
@@ -9,6 +15,31 @@ const clerkMockPath = fileURLToPath(
 const crossOriginIsolationHeaders = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'require-corp',
+};
+
+const generateVersionJsonPlugin = () => {
+  return {
+    name: 'generate-version-json',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const urlWithoutQuery = req.url?.split('?')[0];
+        if (urlWithoutQuery === '/version.json') {
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify({ version: uniqueBuildVersion }));
+        } else {
+          next();
+        }
+      });
+    },
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({ version: uniqueBuildVersion })
+      });
+    }
+  };
 };
 
 // https://vitejs.dev/config/
@@ -29,7 +60,10 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: normalizedPublicBasePath,
-    plugins: [react()],
+    define: {
+      __APP_VERSION__: JSON.stringify(uniqueBuildVersion),
+    },
+    plugins: [react(), generateVersionJsonPlugin()],
     resolve: {
       alias: useE2eMockAuth
         ? {

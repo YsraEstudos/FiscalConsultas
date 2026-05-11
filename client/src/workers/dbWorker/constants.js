@@ -8,8 +8,7 @@ export const DB_OPFS_FILENAME = "fiscal_offline.enc";
 export const DB_VERSION_KEY = "fiscal_offline_version";
 export const DB_SOURCE_OPFS_PREFIX = "fiscal-source-";
 export const DB_SOURCE_VERSION_PREFIX = "fiscal-source-version-";
-// TODO(security): saveSeed/readSeed persist plaintext seed under DB_SEED_KEY.
-// Replace with platform-backed or non-extractable key wrapping when available.
+// Wrapped seed persisted by saveSeed/readSeed; plaintext is allowed only in dev.
 export const DB_SEED_KEY = "fiscal_offline_seed";
 export const MULTI_CODE_MAX_PARTS = 25;
 export const MAX_ANCESTOR_DEPTH = 64;

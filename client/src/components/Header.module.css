@@ -71,6 +71,43 @@
     white-space: nowrap;
 }
 
+.updateBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.16rem 0.5rem;
+    border: 1px solid color-mix(in srgb, var(--accent-primary) 50%, transparent);
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    animation: fadeInZoom 0.3s ease forwards;
+}
+
+.updateBadge:hover {
+    background: color-mix(in srgb, var(--accent-primary) 35%, transparent);
+    border-color: color-mix(in srgb, var(--accent-primary) 80%, transparent);
+}
+
+.updateBadgeIcon {
+    animation: spin 3s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes fadeInZoom {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+}
+
 .logoSubtitle {
     font-size: 0.75rem;
     color: var(--text-muted);
