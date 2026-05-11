@@ -185,7 +185,7 @@ export function AppView({ controller }: { controller: AppControllerState }) {
                     description="A área principal da busca encontrou um erro inesperado. Tente novamente ou mude de aba para continuar."
                     resetKeys={[activeTabId, tabs.length]}
                 >
-                    <div className={styles.resultsSection}>
+                    <div className={`${styles.resultsSection} fiscal-protected`}>
                         {tabs.map((tab) => (
                             <TabPanel
                                 key={tab.id}
