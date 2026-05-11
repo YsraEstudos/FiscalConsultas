@@ -201,6 +201,12 @@ function assertSeedPassphraseAvailable(userPassphrase) {
   throw new Error("userPassphrase is required in production");
 }
 
+function isNotFoundError(error) {
+  return error instanceof DOMException
+    ? error.name === "NotFoundError"
+    : error && typeof error === "object" && error.name === "NotFoundError";
+}
+
 /**
  * Derive a non-extractable AES-GCM wrapping key from a user passphrase.
  * @param {string} passphrase - typically the Clerk userId
@@ -268,9 +274,9 @@ export async function saveSeed(seed, userPassphrase) {
  * @returns {Promise<string | null>}
  */
 export async function readSeed(userPassphrase) {
-  try {
-    assertSeedPassphraseAvailable(userPassphrase);
+  assertSeedPassphraseAvailable(userPassphrase);
 
+  try {
     const root = await getOpfsRoot();
     const fileHandle = await root.getFileHandle(DB_SEED_KEY);
     const file = await fileHandle.getFile();
@@ -314,20 +320,22 @@ export async function readSeed(userPassphrase) {
  * Call on user logout to ensure no residual key material remains.
  */
 export async function wipeSeed() {
+  const root = await getOpfsRoot();
+
+  // Overwrite with zeros before deleting (defence-in-depth)
   try {
-    const root = await getOpfsRoot();
-    // Overwrite with zeros before deleting (defence-in-depth)
-    try {
-      const fileHandle = await root.getFileHandle(DB_SEED_KEY);
-      const writable = await fileHandle.createWritable();
-      await writable.write(new Uint8Array(64));
-      await writable.close();
-    } catch {
-      // File may not exist
-    }
+    const fileHandle = await root.getFileHandle(DB_SEED_KEY);
+    const writable = await fileHandle.createWritable();
+    await writable.write(new Uint8Array(64));
+    await writable.close();
+  } catch (error) {
+    if (!isNotFoundError(error)) throw error;
+  }
+
+  try {
     await root.removeEntry(DB_SEED_KEY);
-  } catch {
-    // Already absent
+  } catch (error) {
+    if (!isNotFoundError(error)) throw error;
   }
 }
 

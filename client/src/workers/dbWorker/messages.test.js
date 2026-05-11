@@ -73,7 +73,12 @@ import {
   saveVersion,
 } from './opfs.js';
 import { decryptDatabase, setAppSeed, sha256Hex } from './crypto.js';
-import { postWorkerError, postWorkerRefreshToken, postWorkerStatus } from './protocol.js';
+import {
+  postWorkerError,
+  postWorkerRefreshToken,
+  postWorkerResult,
+  postWorkerStatus,
+} from './protocol.js';
 import { loadDatabaseFromBytes } from './sqlite.js';
 import { getWorkerVersion } from './state.js';
 
@@ -129,6 +134,34 @@ describe('dbWorker messages network helpers', () => {
 
     expect(message).toContain('https://3fbcaa44.fiscalconsultas.pages.dev');
     expect(message).toContain('/api/database/version');
+  });
+
+  it('cancels an in-flight REFRESH_TOKEN request when WIPE_SEED is dispatched', async () => {
+    removeFromOpfs.mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn());
+
+    const installPromise = dispatchWorkerMessage('INSTALL', 'install-race', {
+      apiBase: '/api',
+      userId: 'user-1',
+    });
+
+    await vi.waitFor(() => expect(postWorkerRefreshToken).toHaveBeenCalledTimes(1));
+    const tokenRequestId = postWorkerRefreshToken.mock.calls[0][0];
+
+    await dispatchWorkerMessage('WIPE_SEED', 'wipe-race');
+    resolveTokenResponse(tokenRequestId, { clerkToken: 'late-token' });
+    await installPromise;
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(postWorkerError).toHaveBeenCalledWith(
+      'install-race',
+      expect.stringContaining('Clerk token request aborted due to WIPE_SEED'),
+    );
+    expect(postWorkerResult).not.toHaveBeenCalled();
+    expect(postWorkerStatus).not.toHaveBeenCalledWith(
+      'install-race',
+      expect.objectContaining({ status: 'ready' }),
+    );
   });
 
   it('shows a recoverable friendly message when the download token is rejected', async () => {

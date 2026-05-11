@@ -69,6 +69,11 @@ function requestClerkTokenFromMainThread() {
   });
 }
 
+function isWipeSeedTokenAbort(error) {
+  return error instanceof Error
+    && error.message === "Clerk token request aborted due to WIPE_SEED";
+}
+
 /**
  * Resolve a pending token request when the main thread sends TOKEN_RESPONSE.
  * @param {string} id
@@ -327,6 +332,7 @@ async function fetchEncryptedDatabaseBundle(apiBase, id) {
       return { tokenData, encryptedBlob };
     } catch (error) {
       lastError = error;
+      if (isWipeSeedTokenAbort(error)) break;
       if (!isRetryableOfflineDownloadError(error) || attempt === 1) break;
       postWorkerProgress(id, 10, "retrying_download");
       await waitBeforeOfflineDownloadRetry();
@@ -834,7 +840,7 @@ async function handleRemoveMessage(id, payload) {
 async function handleWipeSeedMessage(id) {
   // Reject any in-flight REFRESH_TOKEN requests immediately so callers do not
   // wait for the 10-second timeout after logout.
-  for (const [reqId, pending] of _pendingTokenRequests) {
+  for (const [reqId, pending] of [..._pendingTokenRequests]) {
     pending.reject(new Error("Clerk token request aborted due to WIPE_SEED"));
     _pendingTokenRequests.delete(reqId);
   }
