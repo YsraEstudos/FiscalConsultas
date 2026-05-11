@@ -95,7 +95,7 @@ async function handleInitMessage(id, payload) {
   const encData = source ? await readSourceFromOpfs(source) : await readFromOpfs();
   const version = source ? await readSourceVersion(source) : await readVersion();
   const opfsSeed = source ? null : await readSeed();
-  const seed = source ? payload?.publicSeed : opfsSeed || payload?.seed;
+  const seed = source ? payload?.publicSeed : opfsSeed || payload?.seed || payload?.publicSeed;
   const usedPayloadSeedFallback = !opfsSeed && Boolean(payload?.seed);
 
   if (!encData || !version || !seed) {
@@ -258,6 +258,13 @@ function buildFiscalBundleUrls(r2BaseUrl, source) {
   };
 }
 
+function buildFiscalOfflineDatabaseUrls(r2BaseUrl) {
+  const normalizedBaseUrl = trimTrailingSlashes(String(r2BaseUrl || ""));
+  return {
+    encryptedUrl: `${normalizedBaseUrl}/fiscal_offline.enc`,
+  };
+}
+
 function trimTrailingSlashes(value) {
   let end = value.length;
   while (end > 0 && value.charCodeAt(end - 1) === 47) {
@@ -273,6 +280,40 @@ export function getSourceAwareInstallPayloadIntent(payload) {
       && "source" in payload
       && "r2BaseUrl" in payload
   );
+}
+
+export function getStaticR2InstallPayloadIntent(payload) {
+  return Boolean(
+    payload
+      && typeof payload === "object"
+      && !("source" in payload)
+      && "r2BaseUrl" in payload
+      && "publicSeed" in payload
+      && "metadata" in payload
+  );
+}
+
+export function validateStaticR2InstallPayload(payload) {
+  if (!payload || typeof payload !== "object") {
+    return { ok: false, error: "Static R2 install payload is incomplete" };
+  }
+
+  if (
+    typeof payload.r2BaseUrl !== "string"
+      || !payload.r2BaseUrl.trim()
+      || typeof payload.publicSeed !== "string"
+      || !payload.publicSeed.trim()
+      || !payload.metadata
+      || typeof payload.metadata !== "object"
+      || typeof payload.metadata.version !== "string"
+      || !payload.metadata.version.trim()
+      || typeof payload.metadata.encrypted_sha256 !== "string"
+      || !payload.metadata.encrypted_sha256.trim()
+  ) {
+    return { ok: false, error: "Static R2 install payload is incomplete" };
+  }
+
+  return { ok: true };
 }
 
 export function validateSourceAwareInstallPayload(payload) {
@@ -321,6 +362,40 @@ async function fetchEncryptedSourceBundle(r2BaseUrl, source) {
   throw new Error(
     `Offline source bundle retrieval failed (${dlResp.status}): ${errText}`
   );
+}
+
+async function fetchEncryptedStaticR2Bundle(r2BaseUrl) {
+  const { encryptedUrl } = buildFiscalOfflineDatabaseUrls(r2BaseUrl);
+  const dlResp = await fetch(encryptedUrl, {
+    method: "GET",
+    headers: { Accept: "application/octet-stream" },
+  });
+
+  if (dlResp.ok) {
+    return dlResp;
+  }
+
+  const errText = await dlResp.text();
+  throw new Error(
+    `Offline fiscal bundle retrieval failed (${dlResp.status}): ${errText}`
+  );
+}
+
+async function fetchEncryptedStaticR2BundleWithRetry(r2BaseUrl, id) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await fetchEncryptedStaticR2Bundle(r2BaseUrl);
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableOfflineDownloadError(error) || attempt === 1) break;
+      postWorkerProgress(id, 10, "retrying_download");
+      await waitBeforeOfflineDownloadRetry();
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Offline fiscal bundle download failed");
 }
 
 async function fetchEncryptedSourceBundleWithRetry(r2BaseUrl, source, id) {
@@ -439,6 +514,78 @@ async function handleSourceAwareInstallMessage(id, payload) {
   }
 }
 
+async function handleStaticR2InstallMessage(id, payload) {
+  setWorkerStatus("installing");
+  postWorkerProgress(id, 0, "fetching_database");
+
+  const {
+    r2BaseUrl,
+    publicSeed,
+    metadata,
+  } = payload;
+  /** @type {Uint8Array | null} */
+  let plaintext = null;
+
+  try {
+    const dlResp = await fetchEncryptedStaticR2BundleWithRetry(r2BaseUrl, id);
+    const encryptedBlob = await readEncryptedDatabaseBlob(dlResp, id);
+    const {
+      encrypted_sha256: expectedEncryptedSha256,
+      chunk_size: chunkSize = 65536,
+      pbkdf2_iterations: iterations = 600000,
+    } = metadata;
+
+    postWorkerProgress(id, 72, "verifying_integrity");
+    const actualEncryptedSha256 = await sha256Hex(encryptedBlob);
+    if (actualEncryptedSha256 !== expectedEncryptedSha256) {
+      throw new Error("Offline database integrity verification failed");
+    }
+
+    setAppSeed(publicSeed);
+
+    postWorkerProgress(id, 75, "decrypting");
+    plaintext = await decryptDatabase(encryptedBlob, chunkSize, iterations);
+
+    postWorkerProgress(id, 85, "loading");
+    await loadDatabaseFromBytes(plaintext);
+
+    postWorkerProgress(id, 90, "saving");
+    try {
+      await saveToOpfs(encryptedBlob);
+      await saveSeed(publicSeed);
+      await saveVersion(metadata.version || "unknown");
+    } catch (error) {
+      await removeFromOpfs();
+      throw error;
+    }
+
+    setWorkerVersion(metadata.version || "unknown");
+    setWorkerStatus("ready");
+    postWorkerProgress(id, 100, "done");
+    postWorkerStatus(id, {
+      status: "ready",
+      version: getWorkerVersion(),
+      sizeBytes: encryptedBlob.length,
+      seed: publicSeed,
+    });
+  } catch (error) {
+    setWorkerStatus("error");
+    const message = error instanceof Error ? error.message : "Unknown error";
+    const recoverableMessage = `${message}. Reinstale o banco offline para continuar.`;
+    postWorkerStatus(id, {
+      status: "error",
+      error: recoverableMessage,
+      recoverable: true,
+    });
+    postWorkerError(id, recoverableMessage);
+    return;
+  } finally {
+    if (plaintext) {
+      plaintext.fill(0);
+    }
+  }
+}
+
 async function handleLegacyInstallMessage(id, payload) {
   setWorkerStatus("installing");
   postWorkerProgress(id, 0, "requesting_token");
@@ -514,6 +661,22 @@ async function handleLegacyInstallMessage(id, payload) {
 }
 
 async function handleInstallMessage(id, payload) {
+  if (getStaticR2InstallPayloadIntent(payload)) {
+    const validation = validateStaticR2InstallPayload(payload);
+    if (!validation.ok) {
+      setWorkerStatus("error");
+      postWorkerStatus(id, {
+        status: "error",
+        error: validation.error,
+        recoverable: true,
+      });
+      postWorkerError(id, validation.error);
+      return;
+    }
+    await handleStaticR2InstallMessage(id, payload);
+    return;
+  }
+
   if (getSourceAwareInstallPayloadIntent(payload)) {
     const validation = validateSourceAwareInstallPayload(payload);
     if (!validation.ok) {

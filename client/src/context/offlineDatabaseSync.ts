@@ -6,6 +6,7 @@ import {
     type OfflineSourceMetadata,
 } from '../utils/offlineDatabase';
 import {
+    buildFiscalOfflineDatabaseUrls,
     buildFiscalBundleUrls,
     normalizeFiscalR2BaseUrl,
     type FiscalSourceId,
@@ -50,6 +51,52 @@ export async function fetchOfflineSourceAvailabilityMetadata(
     throw lastError instanceof Error
         ? lastError
         : new Error('Source metadata check failed for an unknown reason');
+}
+
+export async function fetchFiscalR2DatabaseAvailabilityMetadata(
+    r2BaseUrl: string,
+): Promise<OfflineDatabaseMetadata | null> {
+    let lastError: unknown = null;
+    for (const timeoutMs of OFFLINE_METADATA_TIMEOUTS_MS) {
+        try {
+            return await fetchFiscalR2DatabaseAvailabilityMetadataOnce(
+                r2BaseUrl,
+                timeoutMs,
+            );
+        } catch (err) {
+            lastError = err;
+            if (!isRetryableOfflineMetadataError(err)) break;
+        }
+    }
+
+    throw lastError instanceof Error
+        ? lastError
+        : new Error('R2 metadata check failed for an unknown reason');
+}
+
+async function fetchFiscalR2DatabaseAvailabilityMetadataOnce(
+    r2BaseUrl: string,
+    timeoutMs: number,
+): Promise<OfflineDatabaseMetadata | null> {
+    const { metadataUrl } = buildFiscalOfflineDatabaseUrls(r2BaseUrl);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const response = await fetch(metadataUrl, {
+            method: 'GET',
+            headers: { Accept: 'application/json' },
+            signal: controller.signal,
+        });
+
+        if (!response.ok) {
+            throw new Error(`R2 metadata check failed (${response.status})`);
+        }
+
+        return sanitizeOfflineMetadata(await response.json());
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 async function fetchOfflineSourceAvailabilityMetadataOnce(

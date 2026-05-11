@@ -3,7 +3,6 @@ import { useCallback } from 'react';
 import {
     compareOfflineVersions,
     formatOfflineDatabaseErrorMessage,
-    isOfflineSourceMetadata,
 } from '../utils/offlineDatabase';
 
 import {
@@ -88,26 +87,23 @@ export function useOfflineDatabaseMutations({
 
             const r2BaseUrl = getFiscalR2BaseUrl();
             const publicSeed = getOfflineDbPublicSeed();
-            const sourceMetadata = isOfflineSourceMetadata(metadata) ? metadata : null;
-            const hasInvalidSourceMetadata = Boolean(
-                metadata
-                && typeof metadata === 'object'
-                && 'source' in metadata
-                && !sourceMetadata,
-            );
-            if (r2BaseUrl && publicSeed && hasInvalidSourceMetadata) {
+            if (r2BaseUrl && !publicSeed) {
                 throw new Error(
-                    'Metadados da fonte fiscal estão corrompidos. Limpe o cache do navegador e tente novamente.',
+                    'VITE_OFFLINE_DB_PUBLIC_SEED precisa estar configurado para instalar a base fiscal pelo R2.',
+                );
+            }
+            if (r2BaseUrl && publicSeed && !metadata) {
+                throw new Error(
+                    'Metadados da base fiscal no R2 indisponíveis. Verifique VITE_FISCAL_R2_BASE_URL e o arquivo fiscal_offline.meta.json.',
                 );
             }
 
             const installPayload =
-                r2BaseUrl && publicSeed && sourceMetadata
+                r2BaseUrl && publicSeed && metadata
                     ? {
-                        source: sourceMetadata.source,
                         r2BaseUrl,
                         publicSeed,
-                        metadata: sourceMetadata,
+                        metadata,
                     }
                     : {
                         apiBase: getOfflineDatabaseApiBaseUrl(),
