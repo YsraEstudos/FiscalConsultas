@@ -99,6 +99,7 @@ export function ResultCodeView({
                 className={`${styles.content} ${contentVisibilityClass} markdown-body`}
                 ref={containerRef}
                 id={containerId}
+                data-protected-fiscal
             >
                 <div style={CONTENT_STACK_STYLE}>
                     {shouldHydrateCodeResults && (isHydratingCodeResults || missingChapterBodies.length > 0) && (

@@ -1,0 +1,43 @@
+/*
+ * fiscalProtection.css
+ *
+ * Applied globally to all fiscal-content containers.
+ * Prevents casual text selection, drag-and-drop extraction,
+ * and printing of sensitive fiscal data.
+ */
+
+/* ------------------------------------------------------------------ */
+/* Anti-select / Anti-copy                                            */
+/* ------------------------------------------------------------------ */
+.fiscal-protected {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
+}
+
+/* Allow selection inside search inputs so the user can still type */
+.fiscal-protected input,
+.fiscal-protected textarea {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+/* ------------------------------------------------------------------ */
+/* Anti-print                                                         */
+/* ------------------------------------------------------------------ */
+@media print {
+    .fiscal-protected {
+        display: none !important;
+    }
+
+    body::after {
+        content: "Impressão de conteúdo fiscal não autorizada.";
+        display: block;
+        font-size: 2rem;
+        font-weight: 700;
+        text-align: center;
+        padding: 30vh 2rem;
+        color: #64748b;
+    }
+}
