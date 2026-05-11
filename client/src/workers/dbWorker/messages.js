@@ -299,54 +299,52 @@ export function getStaticR2InstallPayloadIntent(payload) {
 }
 
 export function validateStaticR2InstallPayload(payload) {
-  if (!payload || typeof payload !== "object") {
-    return { ok: false, error: "Static R2 install payload is incomplete" };
-  }
-
-  if (
-    typeof payload.r2BaseUrl !== "string"
-      || !payload.r2BaseUrl.trim()
-      || typeof payload.publicSeed !== "string"
-      || !payload.publicSeed.trim()
-      || !payload.metadata
-      || typeof payload.metadata !== "object"
-      || typeof payload.metadata.version !== "string"
-      || !payload.metadata.version.trim()
-      || typeof payload.metadata.encrypted_sha256 !== "string"
-      || !payload.metadata.encrypted_sha256.trim()
-  ) {
-    return { ok: false, error: "Static R2 install payload is incomplete" };
-  }
-
-  return { ok: true };
+  return validateR2InstallPayloadFields(
+    payload,
+    "Static R2 install payload is incomplete"
+  );
 }
 
 export function validateSourceAwareInstallPayload(payload) {
-  if (!payload || typeof payload !== "object") {
-    return { ok: false, error: "Source-aware install payload is incomplete" };
-  }
+  const fieldValidation = validateR2InstallPayloadFields(
+    payload,
+    "Source-aware install payload is incomplete"
+  );
+  if (!fieldValidation.ok) return fieldValidation;
 
   if (!isFiscalSourceId(payload.source)) {
     return { ok: false, error: "Invalid source-aware install source" };
   }
 
+  if (payload.metadata.source !== payload.source) {
+    return { ok: false, error: "Source metadata does not match install source" };
+  }
+
+  return { ok: true };
+}
+
+function validateR2InstallPayloadFields(payload, incompleteError) {
+  if (!payload || typeof payload !== "object") {
+    return { ok: false, error: incompleteError };
+  }
+
+  const metadata = payload.metadata;
+  const hasRequiredMetadata =
+    metadata
+    && typeof metadata === "object"
+    && typeof metadata.version === "string"
+    && metadata.version.trim()
+    && typeof metadata.encrypted_sha256 === "string"
+    && metadata.encrypted_sha256.trim();
+
   if (
     typeof payload.r2BaseUrl !== "string"
       || !payload.r2BaseUrl.trim()
       || typeof payload.publicSeed !== "string"
       || !payload.publicSeed.trim()
-      || !payload.metadata
-      || typeof payload.metadata !== "object"
-      || typeof payload.metadata.version !== "string"
-      || !payload.metadata.version.trim()
-      || typeof payload.metadata.encrypted_sha256 !== "string"
-      || !payload.metadata.encrypted_sha256.trim()
+      || !hasRequiredMetadata
   ) {
-    return { ok: false, error: "Source-aware install payload is incomplete" };
-  }
-
-  if (payload.metadata.source !== payload.source) {
-    return { ok: false, error: "Source metadata does not match install source" };
+    return { ok: false, error: incompleteError };
   }
 
   return { ok: true };

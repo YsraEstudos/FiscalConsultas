@@ -21,7 +21,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.build_offline_db import (
+from scripts.build_offline_db import (  # noqa: E402
     DB_DIR,
     OUTPUT_DB,
     OfflineBundleOutput,
