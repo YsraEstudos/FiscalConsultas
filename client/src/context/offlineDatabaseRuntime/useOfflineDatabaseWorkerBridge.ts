@@ -121,17 +121,14 @@ function handleRefreshTokenMessage(id: string | null, worker: Worker | null): vo
         });
 }
 
-function handleReadyStatus(
-    payload: OfflineDatabaseStatusResponse['payload'],
-    {
-        setError,
-        setProgress,
-        setProgressStep,
-    }: Pick<
-        UseOfflineDatabaseWorkerBridgeArgs,
-        'setError' | 'setProgress' | 'setProgressStep'
-    >,
-): void {
+function handleReadyStatus({
+    setError,
+    setProgress,
+    setProgressStep,
+}: Pick<
+    UseOfflineDatabaseWorkerBridgeArgs,
+    'setError' | 'setProgress' | 'setProgressStep'
+>): void {
     setProgress(100);
     setProgressStep('done');
     setError(null);
@@ -167,7 +164,7 @@ function handleWorkerStatusMessage(
     }
 
     if (payload.status === 'ready') {
-        handleReadyStatus(payload, { setError, setProgress, setProgressStep });
+        handleReadyStatus({ setError, setProgress, setProgressStep });
     }
 
     if (shouldResolveStatusRequest(payload.status)) {

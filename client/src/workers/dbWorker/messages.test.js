@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 vi.mock('./crypto.js', () => ({
+  clearAppSeed: vi.fn(),
   decryptDatabase: vi.fn(),
   setAppSeed: vi.fn(),
   sha256Hex: vi.fn(),
@@ -24,11 +25,13 @@ vi.mock('./opfs.js', () => ({
   saveSourceVersion: vi.fn(),
   saveToOpfs: vi.fn(),
   saveVersion: vi.fn(),
+  wipeSeed: vi.fn(),
 }));
 
 vi.mock('./protocol.js', () => ({
   postWorkerError: vi.fn(),
   postWorkerProgress: vi.fn(),
+  postWorkerRefreshToken: vi.fn(),
   postWorkerResult: vi.fn(),
   postWorkerStatus: vi.fn(),
 }));
@@ -55,6 +58,7 @@ import {
   buildOfflineDatabaseNetworkErrorMessage,
   dispatchWorkerMessage,
   fetchWithTimeout,
+  resolveTokenResponse,
 } from './messages.js';
 import {
   removeFromOpfs,
@@ -63,9 +67,17 @@ import {
   saveSourceVersion,
 } from './opfs.js';
 import { decryptDatabase, setAppSeed, sha256Hex } from './crypto.js';
-import { postWorkerError, postWorkerStatus } from './protocol.js';
+import { postWorkerError, postWorkerRefreshToken, postWorkerStatus } from './protocol.js';
 import { loadDatabaseFromBytes } from './sqlite.js';
 import { getWorkerVersion } from './state.js';
+
+async function dispatchInstallWithToken(id, payload, clerkToken = 'clerk-token') {
+  const installPromise = dispatchWorkerMessage('INSTALL', id, payload);
+  await vi.waitFor(() => expect(postWorkerRefreshToken).toHaveBeenCalled());
+  const tokenRequestId = postWorkerRefreshToken.mock.calls.at(-1)?.[0];
+  resolveTokenResponse(tokenRequestId, { clerkToken });
+  await installPromise;
+}
 
 describe('dbWorker messages network helpers', () => {
   afterEach(() => {
@@ -139,7 +151,7 @@ describe('dbWorker messages network helpers', () => {
         ),
     );
 
-    await dispatchWorkerMessage('INSTALL', 'install-1', {
+    await dispatchInstallWithToken('install-1', {
       apiBase: 'https://api.example.test/api',
     });
 
@@ -182,7 +194,7 @@ describe('dbWorker messages network helpers', () => {
         .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), { status: 200 })),
     );
 
-    await dispatchWorkerMessage('INSTALL', 'install-legacy', {
+    await dispatchInstallWithToken('install-legacy', {
       apiBase: 'https://api.example.test/api',
       metadata: null,
     });

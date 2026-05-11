@@ -109,12 +109,12 @@ export function useOfflineDatabaseMutations({
                         r2BaseUrl,
                         publicSeed,
                         metadata: sourceMetadata,
-                        userId: userId || undefined,
+                        userId: userId ?? null,
                     }
                     : {
                         apiBase: getOfflineDatabaseApiBaseUrl(),
                         clerkToken: '',
-                        userId: userId || undefined,
+                        userId: userId ?? null,
                     };
 
             await sendToWorker(

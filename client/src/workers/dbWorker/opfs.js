@@ -190,6 +190,17 @@ export async function readSourceVersion(source) {
 
 const FORMAT_VERSION = 1;
 
+function isDevBuild() {
+  // Vite replaces import.meta.env.DEV at build time; the guards keep worker
+  // tests and non-Vite runners from crashing while defaulting to production.
+  return Boolean(import.meta?.env?.DEV);
+}
+
+function assertSeedPassphraseAvailable(userPassphrase) {
+  if (userPassphrase || isDevBuild()) return;
+  throw new Error("userPassphrase is required in production");
+}
+
 /**
  * Derive a non-extractable AES-GCM wrapping key from a user passphrase.
  * @param {string} passphrase - typically the Clerk userId
@@ -219,6 +230,8 @@ async function deriveSeedWrappingKey(passphrase, salt) {
  * @param {string} [userPassphrase] - user-specific binding (e.g. userId)
  */
 export async function saveSeed(seed, userPassphrase) {
+  assertSeedPassphraseAvailable(userPassphrase);
+
   const root = await getOpfsRoot();
   const fileHandle = await root.getFileHandle(DB_SEED_KEY, { create: true });
   const writable = await fileHandle.createWritable();
@@ -242,11 +255,7 @@ export async function saveSeed(seed, userPassphrase) {
     output.set(new Uint8Array(ciphertext), 1 + salt.length + iv.length);
     await writable.write(output);
   } else {
-    // Fallback: plaintext (should only happen in dev/tests)
-    // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env && !import.meta.env.DEV) {
-       throw new Error("userPassphrase is required in production");
-    }
+    // Fallback: plaintext is limited to dev/tests.
     await writable.write(seed);
   }
 
@@ -260,6 +269,8 @@ export async function saveSeed(seed, userPassphrase) {
  */
 export async function readSeed(userPassphrase) {
   try {
+    assertSeedPassphraseAvailable(userPassphrase);
+
     const root = await getOpfsRoot();
     const fileHandle = await root.getFileHandle(DB_SEED_KEY);
     const file = await fileHandle.getFile();
@@ -290,7 +301,7 @@ export async function readSeed(userPassphrase) {
       }
     }
 
-    // Fallback: plaintext
+    // Fallback: plaintext is limited to dev/tests.
     const seed = (await file.text()).trim();
     return seed || null;
   } catch {
