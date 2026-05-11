@@ -11,6 +11,7 @@
 
 const DEVTOOLS_CHECK_INTERVAL_MS = 4_000;
 const RESIZE_THRESHOLD_PX = 200;
+const PROTECTED_FISCAL_CONTENT_SELECTOR = '[data-protected-fiscal]';
 
 let _installed = false;
 let _detected = false;
@@ -80,23 +81,29 @@ function checkConsoleRedirect(): boolean {
 // ---------------------------------------------------------------------------
 
 function blockDevToolsShortcuts(e: KeyboardEvent) {
+    const primary = e.ctrlKey || e.metaKey;
+    const normalizedKey = e.key.toLowerCase();
+
     // F12
-    if (e.key === 'F12') {
+    if (normalizedKey === 'f12') {
         e.preventDefault();
         return;
     }
     // Ctrl+Shift+I / Ctrl+Shift+J / Ctrl+Shift+C  (Chrome/Edge/Firefox)
-    if (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key)) {
+    if (primary && e.shiftKey && ['i', 'j', 'c'].includes(normalizedKey)) {
         e.preventDefault();
         return;
     }
     // Ctrl+U  (View Source)
-    if (e.ctrlKey && e.key === 'u') {
+    if (primary && normalizedKey === 'u') {
         e.preventDefault();
     }
 }
 
 function blockContextMenu(e: MouseEvent) {
+    if (!(e.target instanceof Element)) return;
+    if (!e.target.closest(PROTECTED_FISCAL_CONTENT_SELECTOR)) return;
+
     e.preventDefault();
 }
 
