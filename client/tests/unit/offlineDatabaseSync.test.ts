@@ -39,6 +39,8 @@ describe('offlineDatabaseSync', () => {
   })
 
   it('returns an empty R2 base URL when the R2 env is absent', () => {
+    vi.stubEnv('VITE_FISCAL_R2_BASE_URL', '')
+
     expect(getFiscalR2BaseUrl()).toBe('')
   })
 

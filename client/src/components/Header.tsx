@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { SearchBar } from './SearchBar';
 import { HistoryItem } from '../hooks/useHistory';
 import { useAuth } from '../context/AuthContext';
 import { useIsAdmin } from '../hooks/useIsAdmin';
 import { Modal } from './Modal';
+import { ReloadPrompt } from './ReloadPrompt';
 import styles from './Header.module.css';
 
 const DOC_SUBTITLES: Record<string, string> = {
@@ -149,6 +150,13 @@ authUnavailableReason,
 );
 const logoutButtonLabel = getLogoutButtonLabel(isSigningOut);
 
+    const displayVersion = useMemo(() => {
+        if (typeof __APP_VERSION__ !== 'undefined') {
+            return __APP_VERSION__.split('-')[0]; // Pega apenas a versão sem o timestamp
+        }
+        return '0.1.2';
+    }, []);
+
     // Close menu when clicking outside
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -190,7 +198,8 @@ const logoutButtonLabel = getLogoutButtonLabel(isSigningOut);
                     <div className={styles.logoText}>
                         <div className={styles.logoTitleRow}>
                             <h1>FiscalConsultas</h1>
-                            <span className={styles.versionBadge}>0.0.1</span>
+                            <span className={styles.versionBadge}>{displayVersion}</span>
+                            <ReloadPrompt />
                         </div>
                         <span className={styles.logoSubtitle}>{titleSubtitle}</span>
                     </div>

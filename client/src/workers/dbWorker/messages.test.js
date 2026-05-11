@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 vi.mock('./crypto.js', () => ({
+  clearAppSeed: vi.fn(),
   decryptDatabase: vi.fn(),
   setAppSeed: vi.fn(),
   sha256Hex: vi.fn(),
@@ -24,11 +25,13 @@ vi.mock('./opfs.js', () => ({
   saveSourceVersion: vi.fn(),
   saveToOpfs: vi.fn(),
   saveVersion: vi.fn(),
+  wipeSeed: vi.fn(),
 }));
 
 vi.mock('./protocol.js', () => ({
   postWorkerError: vi.fn(),
   postWorkerProgress: vi.fn(),
+  postWorkerRefreshToken: vi.fn(),
   postWorkerResult: vi.fn(),
   postWorkerStatus: vi.fn(),
 }));
@@ -55,17 +58,37 @@ import {
   buildOfflineDatabaseNetworkErrorMessage,
   dispatchWorkerMessage,
   fetchWithTimeout,
+  resolveTokenResponse,
 } from './messages.js';
 import {
+  readFromOpfs,
+  readSeed,
+  readVersion,
   removeFromOpfs,
   removeSourceFromOpfs,
+  saveSeed,
   saveSourceToOpfs,
   saveSourceVersion,
+  saveToOpfs,
+  saveVersion,
 } from './opfs.js';
 import { decryptDatabase, setAppSeed, sha256Hex } from './crypto.js';
-import { postWorkerError, postWorkerStatus } from './protocol.js';
+import {
+  postWorkerError,
+  postWorkerRefreshToken,
+  postWorkerResult,
+  postWorkerStatus,
+} from './protocol.js';
 import { loadDatabaseFromBytes } from './sqlite.js';
 import { getWorkerVersion } from './state.js';
+
+async function dispatchInstallWithToken(id, payload, clerkToken = 'clerk-token') {
+  const installPromise = dispatchWorkerMessage('INSTALL', id, payload);
+  await vi.waitFor(() => expect(postWorkerRefreshToken).toHaveBeenCalled());
+  const tokenRequestId = postWorkerRefreshToken.mock.calls.at(-1)?.[0];
+  resolveTokenResponse(tokenRequestId, { clerkToken });
+  await installPromise;
+}
 
 describe('dbWorker messages network helpers', () => {
   afterEach(() => {
@@ -113,6 +136,34 @@ describe('dbWorker messages network helpers', () => {
     expect(message).toContain('/api/database/version');
   });
 
+  it('cancels an in-flight REFRESH_TOKEN request when WIPE_SEED is dispatched', async () => {
+    removeFromOpfs.mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn());
+
+    const installPromise = dispatchWorkerMessage('INSTALL', 'install-race', {
+      apiBase: '/api',
+      userId: 'user-1',
+    });
+
+    await vi.waitFor(() => expect(postWorkerRefreshToken).toHaveBeenCalledTimes(1));
+    const tokenRequestId = postWorkerRefreshToken.mock.calls[0][0];
+
+    await dispatchWorkerMessage('WIPE_SEED', 'wipe-race');
+    resolveTokenResponse(tokenRequestId, { clerkToken: 'late-token' });
+    await installPromise;
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(postWorkerError).toHaveBeenCalledWith(
+      'install-race',
+      expect.stringContaining('Clerk token request aborted due to WIPE_SEED'),
+    );
+    expect(postWorkerResult).not.toHaveBeenCalled();
+    expect(postWorkerStatus).not.toHaveBeenCalledWith(
+      'install-race',
+      expect.objectContaining({ status: 'ready' }),
+    );
+  });
+
   it('shows a recoverable friendly message when the download token is rejected', async () => {
     removeFromOpfs.mockResolvedValue(undefined);
     vi.stubGlobal(
@@ -139,7 +190,7 @@ describe('dbWorker messages network helpers', () => {
         ),
     );
 
-    await dispatchWorkerMessage('INSTALL', 'install-1', {
+    await dispatchInstallWithToken('install-1', {
       apiBase: 'https://api.example.test/api',
     });
 
@@ -182,7 +233,7 @@ describe('dbWorker messages network helpers', () => {
         .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), { status: 200 })),
     );
 
-    await dispatchWorkerMessage('INSTALL', 'install-legacy', {
+    await dispatchInstallWithToken('install-legacy', {
       apiBase: 'https://api.example.test/api',
       metadata: null,
     });
@@ -231,6 +282,75 @@ describe('dbWorker messages network helpers', () => {
     expect(postWorkerStatus).toHaveBeenCalledWith(
       'install-source',
       expect.objectContaining({ status: 'ready' }),
+    );
+  });
+
+  it('installs a static consolidated R2 fiscal bundle without requesting backend tokens', async () => {
+    const encryptedBlob = new Uint8Array([9, 8, 7]);
+    sha256Hex.mockResolvedValue('static-encrypted-sha');
+    decryptDatabase.mockResolvedValue(new Uint8Array([6, 5, 4]));
+    loadDatabaseFromBytes.mockResolvedValue(undefined);
+    saveToOpfs.mockResolvedValue(undefined);
+    saveSeed.mockResolvedValue(undefined);
+    saveVersion.mockResolvedValue(undefined);
+    getWorkerVersion.mockReturnValue('2026.05.11');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(encryptedBlob, {
+          status: 200,
+          headers: { 'content-length': String(encryptedBlob.length) },
+        }),
+      ),
+    );
+
+    await dispatchWorkerMessage('INSTALL', 'install-r2-static', {
+      r2BaseUrl: 'https://r2.example.test/fiscal',
+      publicSeed: 'public-seed',
+      userId: 'user-1',
+      metadata: {
+        version: '2026.05.11',
+        encrypted_sha256: 'static-encrypted-sha',
+      },
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      'https://r2.example.test/fiscal/fiscal_offline.enc',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining('/database/token'),
+      expect.anything(),
+    );
+    expect(setAppSeed).toHaveBeenCalledWith('public-seed');
+    expect(saveToOpfs).toHaveBeenCalledWith(encryptedBlob);
+    expect(saveSeed).toHaveBeenCalledWith('public-seed', 'user-1');
+    expect(saveVersion).toHaveBeenCalledWith('2026.05.11');
+    expect(postWorkerStatus).toHaveBeenCalledWith(
+      'install-r2-static',
+      expect.objectContaining({ status: 'ready' }),
+    );
+  });
+
+  it('removes the stale generic bundle when publicSeed fallback cannot decrypt', async () => {
+    readFromOpfs.mockResolvedValue(new Uint8Array([1, 2, 3]));
+    readVersion.mockResolvedValue('2026.05.11');
+    readSeed.mockResolvedValue(null);
+    decryptDatabase.mockRejectedValue(new Error('bad seed'));
+    removeFromOpfs.mockResolvedValue(undefined);
+
+    await dispatchWorkerMessage('INIT', 'init-public-seed', {
+      publicSeed: 'public-seed',
+    });
+
+    expect(setAppSeed).toHaveBeenCalledWith('public-seed');
+    expect(removeFromOpfs).toHaveBeenCalledTimes(1);
+    expect(postWorkerStatus).toHaveBeenCalledWith(
+      'init-public-seed',
+      expect.objectContaining({
+        status: 'error',
+        recoverable: true,
+      }),
     );
   });
 
