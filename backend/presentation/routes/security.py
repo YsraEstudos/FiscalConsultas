@@ -25,11 +25,27 @@ _incident_tracker = RedisBackedRateLimiter(
     window_seconds=_INCIDENT_WINDOW, redis_prefix="sec-incident"
 )
 _INCIDENT_THRESHOLD = 3
+_ALLOWED_INCIDENT_TYPES = frozenset(
+    {
+        "access",
+        "devtools",
+        "login",
+        "payment",
+        "tamper",
+    }
+)
 
 
 class SecurityIncidentReport(BaseModel):
     type: str = Field(min_length=1, max_length=64)
     ts: int | None = None
+
+
+def _normalize_incident_type(raw_type: str | None) -> str:
+    incident_type = (raw_type or "").strip().lower()
+    if incident_type in _ALLOWED_INCIDENT_TYPES:
+        return incident_type
+    return "other"
 
 
 @router.post("/security/incident")
@@ -49,7 +65,8 @@ async def report_security_incident(
 
     # Active monitoring: track frequency of incidents per IP without logging
     # request-controlled values such as headers or report payload fields.
-    key = f"{client_ip}:{report.type}"
+    incident_type = _normalize_incident_type(report.type)
+    key = f"{client_ip}:{incident_type}"
     allowed, _ = await _incident_tracker.consume(key=key, limit=_INCIDENT_THRESHOLD)
 
     if not allowed:

@@ -39,6 +39,24 @@ logger = logging.getLogger("routes.database_download")
 router = APIRouter()
 
 
+def _email_log_fingerprint(email: str | None) -> str:
+    """Build a stable non-reversible email identifier for logs."""
+    if not email:
+        return "unknown"
+    secret = (
+        os.environ.get("OFFLINE_DB_LOG_HASH_SECRET")
+        or os.environ.get("OFFLINE_DB_TOKEN_SECRET")
+        or settings.auth.secret_key
+        or "offline-db-log"
+    )
+    digest = hmac.new(
+        secret.encode("utf-8"),
+        email.strip().lower().encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"hmac-sha256:{digest[:16]}"
+
+
 def _extract_email(payload: dict | None) -> str | None:
     """Extract and normalize the user email from a Clerk JWT payload."""
     if not payload:
@@ -60,7 +78,8 @@ def _enforce_email_allowlist(payload: dict) -> None:
     if email and email in allowed:
         return
     logger.warning(
-        "Download blocked for email=%s (not in restricted_ui allowlist)", email
+        "Download blocked for email_fingerprint=%s (not in restricted_ui allowlist)",
+        _email_log_fingerprint(email),
     )
     raise HTTPException(
         status_code=403,
@@ -361,7 +380,8 @@ async def create_download_token(request: Request):
 
     Requires a valid Clerk JWT. The authenticated user's email must be in the
     restricted-UI allowlist (SECURITY__RESTRICTED_UI_ALLOWED_EMAILS).
-    Rate limited to 3 per hour per IP to prevent abuse.
+    Rate limited by IP (3/hour), authenticated user (1/hour), and
+    organization (10/day) to prevent abuse.
     The token expires after 5 minutes and can only be used once.
     """
     _enforce_secure_request(request)
@@ -371,9 +391,11 @@ async def create_download_token(request: Request):
     _enforce_email_allowlist(jwt_payload)
 
     user_id = jwt_payload.get("sub") or "unknown"
-    org_id = jwt_payload.get("org_id") or "personal"
-    email = _extract_email(jwt_payload) or "unknown"
+    email = _extract_email(jwt_payload)
     client_ip = extract_client_ip(request)
+    email_fingerprint = _email_log_fingerprint(email)
+    personal_quota_id = user_id if user_id != "unknown" else email_fingerprint
+    org_id = jwt_payload.get("org_id") or f"personal:{personal_quota_id}"
 
     # --- Layered rate limiting ---
     if _should_rate_limit_token_request(request):
@@ -430,10 +452,10 @@ async def create_download_token(request: Request):
 
     # --- Audit log ---
     logger.info(
-        "AUDIT db_download_token_issued user=%s org=%s email=%s ip=%s",
+        "AUDIT db_download_token_issued user=%s org=%s email_fingerprint=%s ip=%s",
         user_id,
         org_id,
-        email,
+        email_fingerprint,
         client_ip,
     )
 

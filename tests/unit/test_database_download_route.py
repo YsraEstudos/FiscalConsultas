@@ -365,6 +365,65 @@ async def test_nonlocal_development_requests_are_rate_limited_for_download_token
 
 
 @pytest.mark.asyncio
+async def test_personal_download_org_quota_is_scoped_per_user(
+    offline_bundle, monkeypatch: pytest.MonkeyPatch
+):
+    captured_org_keys: list[str] = []
+
+    async def capture_org_key(*, key: str, limit: int) -> tuple[bool, int]:
+        assert limit == database_download._ORG_TOKEN_LIMIT_PER_DAY
+        captured_org_keys.append(key)
+        return True, 0
+
+    monkeypatch.setattr(database_download._org_rate_limiter, "consume", capture_org_key)
+
+    for user_id in ("user_a", "user_b"):
+        request = _build_request(
+            "/api/database/token",
+            headers={"host": "fiscal.example.com"},
+            auth_header=_auth_header_for(user_id),
+            client_host="203.0.113.10",
+        )
+        payload = await database_download.create_download_token(request)
+        assert payload["token"]
+
+    assert captured_org_keys == [
+        "db-download:org:personal:user_a",
+        "db-download:org:personal:user_b",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_personal_download_org_quota_falls_back_to_email_fingerprint(
+    offline_bundle, monkeypatch: pytest.MonkeyPatch
+):
+    captured_org_keys: list[str] = []
+
+    async def fake_decode_clerk_jwt(_token: str) -> dict[str, str]:
+        return {"email": "person@example.com"}
+
+    async def capture_org_key(*, key: str, limit: int) -> tuple[bool, int]:
+        assert limit == database_download._ORG_TOKEN_LIMIT_PER_DAY
+        captured_org_keys.append(key)
+        return True, 0
+
+    monkeypatch.setattr(database_download, "decode_clerk_jwt", fake_decode_clerk_jwt)
+    monkeypatch.setattr(database_download._org_rate_limiter, "consume", capture_org_key)
+
+    request = _build_request(
+        "/api/database/token",
+        headers={"host": "fiscal.example.com"},
+        client_host="203.0.113.10",
+    )
+
+    payload = await database_download.create_download_token(request)
+
+    assert payload["token"]
+    assert len(captured_org_keys) == 1
+    assert captured_org_keys[0].startswith("db-download:org:personal:hmac-sha256:")
+
+
+@pytest.mark.asyncio
 async def test_https_is_required_in_production_for_non_local_requests(
     offline_bundle, monkeypatch: pytest.MonkeyPatch
 ):

@@ -61,3 +61,20 @@ async def test_report_security_incident_escalates_after_threshold(monkeypatch, c
 
     assert payload == {"acknowledged": True}
     assert "SECURITY_ESCALATION threshold_exceeded=true" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_report_security_incident_buckets_unknown_types(monkeypatch):
+    async def allow_once(*, key: str, limit: int) -> tuple[bool, int]:
+        assert key == "203.0.113.10:other"
+        assert limit == security._INCIDENT_THRESHOLD
+        return True, 0
+
+    monkeypatch.setattr(security._incident_tracker, "consume", allow_once)
+
+    payload = await security.report_security_incident(
+        _build_request(),
+        security.SecurityIncidentReport(type="new-random-value", ts=123),
+    )
+
+    assert payload == {"acknowledged": True}
