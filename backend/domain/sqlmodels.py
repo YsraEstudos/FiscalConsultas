@@ -8,7 +8,7 @@ Cada modelo serve simultaneamente como:
 Este módulo coexiste com models.py (TypedDict) para migração gradual.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import ClassVar, List, Optional
 
 from sqlalchemy import Column, Text
@@ -16,6 +16,11 @@ from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlmodel import Field, Relationship, SQLModel
 
 TENANT_ID_FOREIGN_KEY = "tenants.id"
+
+
+def _utc_now_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 # ============================================================
 # Core Multi-Tenant Models
@@ -80,8 +85,8 @@ class Subscription(SQLModel, table=True):
     last_payment_date: Optional[datetime] = Field(default=None)
     last_event: Optional[str] = Field(default=None, max_length=64)
     raw_payload: Optional[str] = Field(default=None, sa_column=Column(Text))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utc_now_naive)
+    updated_at: datetime = Field(default_factory=_utc_now_naive)
 
     tenant: Tenant = Relationship(back_populates="subscriptions")
 
@@ -278,7 +283,7 @@ class NebsEntry(SQLModel, table=True):
     page_start: int = Field(default=0)
     page_end: int = Field(default=0)
     source_hash: str = Field(max_length=128)
-    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=_utc_now_naive, index=True)
     tenant_id: Optional[str] = Field(
         default=None, foreign_key=TENANT_ID_FOREIGN_KEY, index=True
     )

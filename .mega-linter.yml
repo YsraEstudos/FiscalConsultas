@@ -26,36 +26,60 @@ ENABLE:
 ADDITIONAL_EXCLUDED_DIRECTORIES:
   - .git
   - .agent
+  - .tmp
+  - .pytest_tmp
+  - .worktrees
   - client/node_modules
   - client/dist
+  - client/coverage
+  - client/test-results
+  - client/playwright-report
   - node_modules
   - .venv
+  - .mypy_cache
   - dist
   - build
   - __pycache__
   - .pytest_cache
   - .ruff_cache
+  - .benchmarks
   - coverage
+  - htmlcov
   - raw_data
+  - database/r2
   - megalinter-reports
   - Scripts results
 
-FILTER_REGEX_EXCLUDE: "(^|/)(git_status_output\\.txt|pytest_output\\.txt|ruff_output\\.txt|test_failures\\.log|tests_output\\.txt|tests_output2\\.txt|2ms-report[^/]*\\.json|\\.git/config)$"
+FILTER_REGEX_EXCLUDE: "(^|/)(git_status_output\\.txt|pytest_output\\.txt|ruff_output\\.txt|test_failures\\.log|tests_output\\.txt|tests_output2\\.txt|2ms-report[^/]*\\.json|coverage\\.xml|gitleaks-report[^/]*\\.json|\\.git/config)$"
 
 # Avoid secret-scanner noise from generated local benchmark reports.
-REPOSITORY_CHECKOV_ARGUMENTS: "--skip-path 2ms-report.json --skip-path 2ms-report-filtered.json --skip-path megalinter-reports"
-REPOSITORY_KICS_ARGUMENTS: "--exclude-paths megalinter-reports,.git,node_modules,client/node_modules --exclude-queries 8c978947-0ff6-485c-b0c2-0bfca6026466,ce76b7d0-9e77-464d-b86f-c5c48e03e22d"
+REPOSITORY_CHECKOV_ARGUMENTS: "--skip-path 2ms-report.json --skip-path 2ms-report-filtered.json --skip-path megalinter-reports --skip-path .tmp --skip-path .pytest_tmp --skip-path .worktrees --skip-path .venv --skip-path database/r2"
+REPOSITORY_KICS_ARGUMENTS: "--exclude-paths megalinter-reports,.git,node_modules,client/node_modules,.tmp,.pytest_tmp,.worktrees,.venv,database/r2 --exclude-queries 8c978947-0ff6-485c-b0c2-0bfca6026466,ce76b7d0-9e77-464d-b86f-c5c48e03e22d"
 REPOSITORY_GITLEAKS_ARGUMENTS: "--config=.gitleaks.toml"
+REPOSITORY_GRYPE_ARGUMENTS: "--exclude ./.tmp --exclude ./.pytest_tmp --exclude ./.worktrees --exclude ./.venv --exclude ./database/r2"
+REPOSITORY_TRIVY_ARGUMENTS: "--skip-dirs .tmp --skip-dirs .pytest_tmp --skip-dirs .worktrees --skip-dirs .venv --skip-dirs database/r2"
 PYTHON_BANDIT_ARGUMENTS: "--skip B101,B105,B108,B110,B404,B603,B608"
 
 # Reduce CI/container false positives and duplicate checks.
+# - Ruff is the formatter/import/lint source of truth for Python in CI
 # - flake8/pylint are redundant with Ruff in this repo configuration
+# - mypy/pyright across the whole repo are tracked separately; CI only type-checks migrations with Pyright
 # - ts-standard requires root tsconfig and overlaps with TypeScript/ESLint checks
 # - kingfisher has persistent noise from virtual env dependencies
 # - dustilock intermittently fails on a non-repo `/github/workspace/github_conf` path in CI
+# - stylelint's default rules conflict with CSS Modules camelCase classes
+# - standard does not match the frontend ESLint setup and flags service-worker globals
+# - tsqllint targets T-SQL, but this repo's SQL script is PostgreSQL/RLS
 DISABLE_LINTERS:
+  - PYTHON_BLACK
   - PYTHON_FLAKE8
+  - PYTHON_ISORT
+  - PYTHON_MYPY
+  - PYTHON_PYRIGHT
   - PYTHON_PYLINT
+  - CSS_STYLELINT
+  - JAVASCRIPT_STANDARD
+  - SQL_TSQLLINT
   - TYPESCRIPT_STANDARD
   - REPOSITORY_DUSTILOCK
   - REPOSITORY_KINGFISHER
