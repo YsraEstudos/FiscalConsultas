@@ -2,9 +2,8 @@ import os
 import sys
 from pathlib import Path
 
-import pytest
-
 import Nesh
+import pytest
 
 pytestmark = pytest.mark.unit
 

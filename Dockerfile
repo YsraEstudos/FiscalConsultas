@@ -6,10 +6,6 @@ FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
 RUN groupadd --system app \
     && useradd --system --gid app --create-home --home-dir /home/app --shell /usr/sbin/nologin app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends tzdata \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
 # Copiar arquivos de dependência primeiro para aproveitar cache
