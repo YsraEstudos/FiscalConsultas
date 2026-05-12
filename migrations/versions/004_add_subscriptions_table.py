@@ -31,14 +31,20 @@ def upgrade() -> None:
         sa.Column("amount", sa.Float(), nullable=True),
         sa.Column("billing_cycle", sa.String(32), nullable=True),
         sa.Column("next_due_date", sa.Date(), nullable=True),
-        sa.Column("last_payment_date", sa.DateTime(), nullable=True),
+        sa.Column("last_payment_date", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_event", sa.String(64), nullable=True),
         sa.Column("raw_payload", sa.Text(), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(), nullable=False, server_default=sa.text("now()")
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
         ),
         sa.Column(
-            "updated_at", sa.DateTime(), nullable=False, server_default=sa.text("now()")
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
         ),
     )
 
