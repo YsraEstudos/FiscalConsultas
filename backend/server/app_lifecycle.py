@@ -128,6 +128,26 @@ def _log_runtime_security_warnings() -> None:
             "DATABASE__ENGINE não está em postgresql no ambiente de produção."
         )
 
+    # --- Security hardening: validate critical secrets ---
+    offline_seed = os.environ.get("OFFLINE_DB_APP_SEED", "").strip()
+    if not offline_seed or len(offline_seed) < 16:
+        warnings.append(
+            "OFFLINE_DB_APP_SEED ausente ou muito curto (mínimo 16 chars). "
+            "O banco offline ficará indisponível."
+        )
+
+    if not settings.auth.clerk_domain:
+        warnings.append(
+            "AUTH__CLERK_DOMAIN não configurado — autenticação JWT estará desabilitada."
+        )
+
+    restricted_emails = settings.security.restricted_ui_allowed_emails
+    if not restricted_emails:
+        warnings.append(
+            "SECURITY__RESTRICTED_UI_ALLOWED_EMAILS vazio — todos os "
+            "usuários autenticados terão acesso irrestrito ao download do banco."
+        )
+
     for warning in warnings:
         logger.warning("Runtime security warning: %s", warning)
 

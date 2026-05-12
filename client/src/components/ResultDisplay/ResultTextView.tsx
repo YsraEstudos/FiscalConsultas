@@ -18,7 +18,12 @@ export function ResultTextView({
     query,
 }: ResultTextViewProps) {
     return (
-        <div className={`${styles.content} ${styles.textSearchContent}`} ref={containerRef} id={containerId}>
+        <div
+            className={`${styles.content} ${styles.textSearchContent}`}
+            ref={containerRef}
+            id={containerId}
+            data-protected-fiscal
+        >
             <TextSearchResults
                 results={results}
                 query={query}

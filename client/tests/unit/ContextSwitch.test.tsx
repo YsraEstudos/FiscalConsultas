@@ -74,7 +74,11 @@ vi.mock('../../src/context/SettingsContext', () => ({
 const mockAuth = {
     isAdmin: false,
     logout: vi.fn(),
-    login: vi.fn()
+    login: vi.fn(),
+    isSignedIn: true,
+    isLoading: false,
+    openLogin: vi.fn(),
+    isAuthConfigured: true,
 };
 vi.mock('../../src/context/AuthContext', () => ({
     useAuth: () => mockAuth,

@@ -2,6 +2,7 @@ import { StrictMode, useLayoutEffect, useMemo, useState, type ReactNode } from '
 import { createRoot } from 'react-dom/client'
 import { ClerkProvider } from '@clerk/react'
 import './index.css'
+import './styles/fiscalProtection.css'
 import App from './App'
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthProvider, AnonymousAuthProvider } from './context/AuthContext';
@@ -11,6 +12,7 @@ import { CrossChapterNoteProvider } from './context/CrossChapterNoteContext';
 import { LocalDatabaseProvider } from './context/LocalDatabaseContext';
 import { clerkTheme } from './config/clerkAppearance';
 import { installGlobalErrorMonitoring } from './utils/errorMonitoring';
+import { installDevToolsGuard } from './utils/security/devtoolsGuard';
 import {
     getClerkUnavailableMessage,
     isClerkLoadFailureReason,
@@ -124,6 +126,7 @@ function RootApp() {
 
     useLayoutEffect(() => {
         installGlobalErrorMonitoring();
+        installDevToolsGuard();
     }, []);
 
     if (mode === 'missing-key') {

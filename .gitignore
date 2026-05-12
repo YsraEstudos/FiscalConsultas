@@ -3,6 +3,8 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+.pytest_tmp/
+.tmp/
 .mypy_cache/
 .ruff_cache/
 .benchmarks/
@@ -19,6 +21,7 @@ htmlcov/
 *.db-wal
 *.db-journal
 *.sqlite3
+database/r2/
 
 # Data and Heavy Files
 data/
@@ -60,6 +63,7 @@ git_diff.txt
 coverage.xml
 2ms-report*.json
 gitleaks-report*.json
+megalinter-reports/
 
 # Environment Variables
 .env

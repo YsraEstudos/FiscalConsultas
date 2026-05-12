@@ -2,9 +2,8 @@ import os
 import sys
 from pathlib import Path
 
-import pytest
-
 import Nesh
+import pytest
 
 pytestmark = pytest.mark.unit
 
@@ -17,7 +16,7 @@ def test_main_runs_uvicorn_with_app_instance_when_reload_disabled(monkeypatch):
         captured["kwargs"] = kwargs
 
     monkeypatch.delenv("NESH_RELOAD", raising=False)
-    monkeypatch.setenv("SERVER__HOST", "0.0.0.0")
+    monkeypatch.setenv("SERVER__HOST", "0.0.0.0")  # nosec B104
     monkeypatch.setenv("SERVER__PORT", "10000")
     monkeypatch.setattr(Nesh.uvicorn, "run", _fake_run)
 
@@ -26,7 +25,7 @@ def test_main_runs_uvicorn_with_app_instance_when_reload_disabled(monkeypatch):
     kwargs = captured["kwargs"]
     assert captured["app_target"] is not None
     assert not isinstance(captured["app_target"], str)
-    assert kwargs["host"] == "0.0.0.0"
+    assert kwargs["host"] == "0.0.0.0"  # nosec B104
     assert kwargs["port"] == 10000
     assert kwargs["reload"] is False
 

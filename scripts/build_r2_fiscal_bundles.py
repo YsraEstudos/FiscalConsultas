@@ -1,7 +1,11 @@
 """
 Build R2-ready per-source fiscal bundles.
 
-Each fiscal source is written to its own directory:
+The default output is a single SQLite bundle containing every fiscal source:
+    database/r2/fiscal_offline.enc
+    database/r2/fiscal_offline.meta.json
+
+Per-source bundles can also be generated for future source-scoped installs:
     database/r2/<source>/<source>.enc
     database/r2/<source>/<source>.meta.json
 """
@@ -9,12 +13,26 @@ Each fiscal source is written to its own directory:
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from scripts.build_offline_db import DB_DIR, OfflineBundleOutput, build_source_bundle
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.build_offline_db import (  # noqa: E402
+    DB_DIR,
+    OUTPUT_DB,
+    OfflineBundleOutput,
+    _consolidate_databases,
+    _encrypt_database,
+    _write_bundle_metadata,
+    build_source_bundle,
+)
 
 DEFAULT_OUTPUT_ROOT = DB_DIR / "r2"
+DEFAULT_BUNDLE_NAME = "fiscal_offline"
 
 
 @dataclass(frozen=True)
@@ -64,7 +82,11 @@ def normalize_source_filter(source: str | None) -> set[str] | None:
 def build_all(
     output_root: Path = DEFAULT_OUTPUT_ROOT,
     source_filter: set[str] | None = None,
+    split_sources: bool = False,
 ) -> list[OfflineBundleOutput]:
+    if not split_sources:
+        return [build_monolithic_bundle(output_root)]
+
     outputs: list[OfflineBundleOutput] = []
     for source in FISCAL_SOURCES:
         if source_filter is not None and source.id not in source_filter:
@@ -80,11 +102,55 @@ def build_all(
     return outputs
 
 
+def build_monolithic_bundle(
+    output_root: Path = DEFAULT_OUTPUT_ROOT,
+    bundle_name: str = DEFAULT_BUNDLE_NAME,
+) -> OfflineBundleOutput:
+    encrypted_path = output_root / f"{bundle_name}.enc"
+    metadata_path = output_root / f"{bundle_name}.meta.json"
+    plaintext_path = output_root / f"{bundle_name}.db"
+
+    encrypted_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+
+    _consolidate_databases(plaintext_path)
+    success = False
+    try:
+        crypto_info = _encrypt_database(plaintext_path, encrypted_path)
+        version, built_at = _write_bundle_metadata(
+            "fiscal",
+            plaintext_path,
+            metadata_path,
+            crypto_info,
+        )
+        success = True
+    finally:
+        plaintext_path.unlink(missing_ok=True)
+        OUTPUT_DB.unlink(missing_ok=True)
+        if not success:
+            encrypted_path.unlink(missing_ok=True)
+            metadata_path.unlink(missing_ok=True)
+
+    return OfflineBundleOutput(
+        source="fiscal",
+        encrypted_path=encrypted_path,
+        metadata_path=metadata_path,
+        version=version,
+        built_at=built_at,
+        size_bytes=int(crypto_info["size_bytes"]),
+    )
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build R2-ready fiscal bundles")
     parser.add_argument(
         "--source",
         help="Build only one source, or a comma-separated list of sources",
+    )
+    parser.add_argument(
+        "--split-sources",
+        action="store_true",
+        help="Build source-scoped bundles instead of the consolidated fiscal bundle",
     )
     parser.add_argument(
         "--output-root",
@@ -103,7 +169,11 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc))
         return 2
 
-    outputs = build_all(args.output_root, source_filter)
+    if source_filter and not args.split_sources:
+        print("--source requires --split-sources")
+        return 2
+
+    outputs = build_all(args.output_root, source_filter, args.split_sources)
     for output in outputs:
         print(f"{output.source}: {output.encrypted_path} ({output.size_bytes} bytes)")
     return 0

@@ -46,3 +46,15 @@ export function buildFiscalBundleUrls(
     encryptedUrl: `${normalizedBaseUrl}/${source}/${source}.enc`,
   };
 }
+
+export function buildFiscalOfflineDatabaseUrls(baseUrl: string): FiscalBundleUrls {
+  const normalizedBaseUrl = normalizeFiscalR2BaseUrl(baseUrl);
+  if (!normalizedBaseUrl) {
+    throw new Error('baseUrl is required for fiscal database URLs');
+  }
+
+  return {
+    metadataUrl: `${normalizedBaseUrl}/fiscal_offline.meta.json`,
+    encryptedUrl: `${normalizedBaseUrl}/fiscal_offline.enc`,
+  };
+}

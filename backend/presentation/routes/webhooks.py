@@ -4,17 +4,20 @@ import re
 import secrets
 from datetime import date, datetime, timezone
 from typing import Protocol, TypedDict, Unpack, cast
+from zoneinfo import ZoneInfo
 
-from backend.config.settings import settings
-from backend.domain.sqlmodels import Subscription, Tenant
-from backend.infrastructure.db_engine import get_session
 from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.config.settings import settings
+from backend.domain.sqlmodels import Subscription, Tenant
+from backend.infrastructure.db_engine import get_session
+
 router = APIRouter()
 logger = logging.getLogger("routes.webhooks")
 _TENANT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{3,128}$")
+_ASAAS_LOCAL_TZ = ZoneInfo("America/Sao_Paulo")
 _asaas_token_warning_logged = False
 
 
@@ -117,10 +120,9 @@ def _parse_datetime(value: object | None) -> datetime | None:
         if raw.endswith("Z"):
             raw = raw[:-1] + "+00:00"
         parsed = datetime.fromisoformat(raw)
-        if parsed.tzinfo is not None:
-            # Persistimos como UTC naive para compatibilidade com DateTime sem timezone.
-            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
-        return parsed
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=_ASAAS_LOCAL_TZ).astimezone(timezone.utc)
+        return parsed.astimezone(timezone.utc)
     except ValueError as exc:
         logger.warning("Invalid datetime format in Asaas payload %r: %s", raw, exc)
         return None
@@ -283,7 +285,7 @@ async def process_asaas_payment_confirmed(
             raw_payload = raw_payload.encode("utf-8")[:max_payload].decode(
                 "utf-8", errors="ignore"
             )
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(timezone.utc)
 
         _upsert_subscription(
             session,
