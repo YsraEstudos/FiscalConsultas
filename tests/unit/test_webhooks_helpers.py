@@ -36,6 +36,20 @@ def test_parse_datetime_normalizes_utc_timezone():
     assert parsed.tzinfo == timezone.utc
 
 
+def test_parse_datetime_treats_naive_asaas_values_as_sao_paulo_time():
+    parsed = webhooks._parse_datetime("2026-02-07T03:04:05")
+    assert isinstance(parsed, datetime)
+    assert parsed.isoformat() == "2026-02-07T06:04:05+00:00"
+    assert parsed.tzinfo == timezone.utc
+
+
+def test_parse_datetime_treats_date_only_asaas_values_as_local_midnight():
+    parsed = webhooks._parse_datetime("2026-02-07")
+    assert isinstance(parsed, datetime)
+    assert parsed.isoformat() == "2026-02-07T03:00:00+00:00"
+    assert parsed.tzinfo == timezone.utc
+
+
 def test_parse_datetime_returns_none_for_invalid_values():
     assert webhooks._parse_datetime("bad-value") is None
     assert webhooks._parse_datetime("") is None

@@ -4,6 +4,7 @@ import re
 import secrets
 from datetime import date, datetime, timezone
 from typing import Protocol, TypedDict, Unpack, cast
+from zoneinfo import ZoneInfo
 
 from backend.config.settings import settings
 from backend.domain.sqlmodels import Subscription, Tenant
@@ -15,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 router = APIRouter()
 logger = logging.getLogger("routes.webhooks")
 _TENANT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{3,128}$")
+_ASAAS_LOCAL_TZ = ZoneInfo("America/Sao_Paulo")
 _asaas_token_warning_logged = False
 
 
@@ -118,7 +120,7 @@ def _parse_datetime(value: object | None) -> datetime | None:
             raw = raw[:-1] + "+00:00"
         parsed = datetime.fromisoformat(raw)
         if parsed.tzinfo is None:
-            return parsed.replace(tzinfo=timezone.utc)
+            return parsed.replace(tzinfo=_ASAAS_LOCAL_TZ).astimezone(timezone.utc)
         return parsed.astimezone(timezone.utc)
     except ValueError as exc:
         logger.warning("Invalid datetime format in Asaas payload %r: %s", raw, exc)
