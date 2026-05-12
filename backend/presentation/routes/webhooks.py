@@ -117,10 +117,9 @@ def _parse_datetime(value: object | None) -> datetime | None:
         if raw.endswith("Z"):
             raw = raw[:-1] + "+00:00"
         parsed = datetime.fromisoformat(raw)
-        if parsed.tzinfo is not None:
-            # Persistimos como UTC naive para compatibilidade com DateTime sem timezone.
-            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
-        return parsed
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
     except ValueError as exc:
         logger.warning("Invalid datetime format in Asaas payload %r: %s", raw, exc)
         return None
@@ -283,7 +282,7 @@ async def process_asaas_payment_confirmed(
             raw_payload = raw_payload.encode("utf-8")[:max_payload].decode(
                 "utf-8", errors="ignore"
             )
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(timezone.utc)
 
         _upsert_subscription(
             session,

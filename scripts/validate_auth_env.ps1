@@ -25,7 +25,7 @@ $ok = $true
 foreach ($check in $checks) {
     $path = $check.Path
     if (-not (Test-Path -LiteralPath $path)) {
-        Write-Output ("[ERROR] Arquivo obrigatorio ausente: " + $path)
+        Write-Error -Message ("[ERROR] Arquivo obrigatorio ausente: " + $path) -ErrorAction Continue
         $ok = $false
         continue
     }
@@ -39,7 +39,7 @@ foreach ($check in $checks) {
 
     foreach ($key in $check.Keys) {
         if (-not $vars.ContainsKey($key) -or [string]::IsNullOrWhiteSpace($vars[$key])) {
-            Write-Output ("[ERROR] Defina " + $key + " em " + $path)
+            Write-Error -Message ("[ERROR] Defina " + $key + " em " + $path) -ErrorAction Continue
             $ok = $false
         }
     }
@@ -48,10 +48,14 @@ foreach ($check in $checks) {
         $clockSkewRaw = $vars["AUTH__CLERK_CLOCK_SKEW_SECONDS"]
         $clockSkew = 0
         if (-not [int]::TryParse($clockSkewRaw, [ref]$clockSkew)) {
-            Write-Output ("[ERROR] AUTH__CLERK_CLOCK_SKEW_SECONDS deve ser inteiro (valor atual: " + $clockSkewRaw + ")")
+            Write-Error `
+                -Message ("[ERROR] AUTH__CLERK_CLOCK_SKEW_SECONDS deve ser inteiro (valor atual: " + $clockSkewRaw + ")") `
+                -ErrorAction Continue
             $ok = $false
         } elseif ($clockSkew -lt 0) {
-            Write-Output ("[ERROR] AUTH__CLERK_CLOCK_SKEW_SECONDS nao pode ser negativo.")
+            Write-Error `
+                -Message "[ERROR] AUTH__CLERK_CLOCK_SKEW_SECONDS nao pode ser negativo." `
+                -ErrorAction Continue
             $ok = $false
         } elseif ($clockSkew -lt 120) {
             Write-Warning ("AUTH__CLERK_CLOCK_SKEW_SECONDS=" + $clockSkew + " pode gerar 'immature_signature' em dev. Recomendado: 120.")

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from backend.config.settings import settings
@@ -32,7 +32,8 @@ def test_parse_date_handles_valid_and_invalid_values():
 def test_parse_datetime_normalizes_utc_timezone():
     parsed = webhooks._parse_datetime("2026-02-07T03:04:05Z")
     assert isinstance(parsed, datetime)
-    assert parsed.isoformat() == "2026-02-07T03:04:05"
+    assert parsed.isoformat() == "2026-02-07T03:04:05+00:00"
+    assert parsed.tzinfo == timezone.utc
 
 
 def test_parse_datetime_returns_none_for_invalid_values():
