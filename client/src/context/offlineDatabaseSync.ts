@@ -30,6 +30,22 @@ export function getOfflineDbPublicSeed(): string {
     return (env.VITE_OFFLINE_DB_PUBLIC_SEED || '').trim();
 }
 
+export function getMissingStaticOfflineDatabaseConfig(): string[] {
+    const missing: string[] = [];
+    if (!getFiscalR2BaseUrl()) missing.push('VITE_FISCAL_R2_BASE_URL');
+    if (!getOfflineDbPublicSeed()) missing.push('VITE_OFFLINE_DB_PUBLIC_SEED');
+    return missing;
+}
+
+export function assertStaticOfflineDatabaseConfig(): void {
+    const missing = getMissingStaticOfflineDatabaseConfig();
+    if (missing.length > 0) {
+        throw new Error(
+            `Configuração de bundles fiscais R2 incompleta: ${missing.join(', ')}.`,
+        );
+    }
+}
+
 export async function fetchOfflineSourceAvailabilityMetadata(
     r2BaseUrl: string,
     source: FiscalSourceId,

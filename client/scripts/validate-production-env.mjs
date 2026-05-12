@@ -5,6 +5,10 @@ function isTruthyFlag(value) {
   return String(value || '').trim().toLowerCase() === 'true';
 }
 
+function normalizeOptionalValue(value) {
+  return String(value || '').trim();
+}
+
 function isCiTestKeyOverrideEnabled(env) {
   return isTruthyFlag(env.ALLOW_TEST_CLERK_KEY) && isTruthyFlag(env.GITHUB_ACTIONS);
 }
@@ -49,8 +53,10 @@ function isRealProductionBuild(env) {
 
 export function validateProductionEnv(env = resolveBuildEnv()) {
   const errors = [];
-  const publishableKey = String(env.VITE_CLERK_PUBLISHABLE_KEY || '').trim();
-  const adminEmail = String(env.VITE_ADMIN_EMAIL || '').trim();
+  const publishableKey = normalizeOptionalValue(env.VITE_CLERK_PUBLISHABLE_KEY);
+  const adminEmail = normalizeOptionalValue(env.VITE_ADMIN_EMAIL);
+  const fiscalR2BaseUrl = normalizeOptionalValue(env.VITE_FISCAL_R2_BASE_URL);
+  const offlinePublicSeed = normalizeOptionalValue(env.VITE_OFFLINE_DB_PUBLIC_SEED);
   const requireLivePublishableKey = isRealProductionBuild(env);
   const allowTestPublishableKey = isCiTestKeyOverrideEnabled(env);
   const isLivePublishableKey = publishableKey.startsWith('pk_live_');
@@ -62,6 +68,16 @@ export function validateProductionEnv(env = resolveBuildEnv()) {
 
   if (adminEmail) {
     errors.push('VITE_ADMIN_EMAIL must not be defined for production builds.');
+  }
+
+  if (requireLivePublishableKey && !fiscalR2BaseUrl) {
+    errors.push('VITE_FISCAL_R2_BASE_URL must be defined for production builds.');
+  } else if (fiscalR2BaseUrl && !/^https:\/\//i.test(fiscalR2BaseUrl)) {
+    errors.push('VITE_FISCAL_R2_BASE_URL must use an HTTPS URL for production builds.');
+  }
+
+  if (requireLivePublishableKey && !offlinePublicSeed) {
+    errors.push('VITE_OFFLINE_DB_PUBLIC_SEED must be defined for production builds.');
   }
 
   if (!publishableKey) {

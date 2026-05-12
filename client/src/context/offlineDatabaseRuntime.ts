@@ -24,10 +24,9 @@ import {
 } from './offlineDatabaseStorage';
 import {
     fetchFiscalR2DatabaseAvailabilityMetadata,
-    fetchOfflineDatabaseAvailabilityMetadata,
+    getMissingStaticOfflineDatabaseConfig,
     getFiscalR2BaseUrl,
     getOfflineDbPublicSeed,
-    getOfflineDatabaseApiBaseUrl,
     primeOfflineShellCache,
 } from './offlineDatabaseSync';
 import type {
@@ -200,17 +199,15 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             const request = (async () => {
                 try {
                     const r2BaseUrl = getFiscalR2BaseUrl();
-                    const publicSeed = getOfflineDbPublicSeed();
-                    let metadata: OfflineDatabaseMetadata | null = null;
-                    if (r2BaseUrl && publicSeed) {
-                        metadata = await fetchFiscalR2DatabaseAvailabilityMetadata(
-                            r2BaseUrl,
-                        );
-                    } else {
-                        metadata = await fetchOfflineDatabaseAvailabilityMetadata(
-                            getOfflineDatabaseApiBaseUrl(),
+                    const missingStaticConfig = getMissingStaticOfflineDatabaseConfig();
+                    if (missingStaticConfig.length > 0) {
+                        throw new Error(
+                            `Configuração de bundles fiscais R2 incompleta: ${missingStaticConfig.join(', ')}.`,
                         );
                     }
+                    const metadata = await fetchFiscalR2DatabaseAvailabilityMetadata(
+                        r2BaseUrl,
+                    );
                     remoteMetaRef.current = metadata;
                     persistStoredOfflineDatabaseMetadata(metadata);
                     setRemoteVersion(metadata?.version ?? null);
