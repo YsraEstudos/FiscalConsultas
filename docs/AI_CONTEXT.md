@@ -144,6 +144,7 @@ If there is no formatter, agree on one and add it to CI.
 - Do not rely on `beforeunload`/`unload` to release install state; abandoned owners must expire and be taken over.
 - Fiscal search is offline-first: NESH, TIPI, NBS, and UNSPSC must be downloaded from static R2 bundles and queried locally in the browser.
 - Do not add Render, FastAPI route, Postgres, Redis, Upstash, Neon, or any online backend dependency back into fiscal search.
+- `/api/database/*` remains public only as a legacy offline installer compatibility path; keep new fiscal search work on static R2 bundles.
 - Cloud backend work is reserved for future user-account features only: comments, favorites, profile, and preferences via Clerk, Cloudflare Workers, and Cloudflare D1.
 - R2 bundle layout is source-scoped: `nesh/nesh.meta.json`, `nesh/nesh.enc`, `tipi/tipi.meta.json`, `tipi/tipi.enc`, `nbs/nbs.meta.json`, `nbs/nbs.enc`, `unspsc/unspsc.meta.json`, and `unspsc/unspsc.enc`.
 

@@ -21,9 +21,6 @@ def test_fiscal_backend_routes_are_not_registered(tmp_path):
         "/api/services/nbs/search?q=construcao",
         "/api/services/nbs/1.01",
         "/api/services/nbs/1.01/tree",
-        "/api/database/version",
-        "/api/database/token",
-        "/api/database/download",
     ]
 
     for route in retired_routes:
@@ -41,6 +38,9 @@ def test_account_and_system_routes_remain_registered(tmp_path):
 
     assert "/api/auth/me" in paths
     assert "/api/status" in paths
+    assert "/api/database/version" in paths
+    assert "/api/database/token" in paths
+    assert "/api/database/download" in paths
     assert "/api/webhooks/asaas" in paths
     assert "/api/comments/" in paths
     assert "/api/profile/me" in paths
