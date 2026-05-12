@@ -47,6 +47,8 @@ def _build_content_security_policy(server_env: str) -> str:
                 "frame-src 'self' https://*.clerk.accounts.dev "
                 "https://*.clerk.com https://challenges.cloudflare.com"
             ),
+            "upgrade-insecure-requests",
+            "block-all-mixed-content",
         )
     )
 
@@ -78,6 +80,17 @@ def _apply_security_headers(
         response.headers["Strict-Transport-Security"] = (
             "max-age=63072000; includeSubDomains; preload"
         )
+
+    # Anti-cache headers for API responses — prevent browsers/proxies from
+    # persisting sensitive fiscal data to disk cache.
+    request_path = request.url.path
+    if request_path.startswith("/api/"):
+        response.headers["Cache-Control"] = (
+            "no-store, no-cache, must-revalidate, private, max-age=0"
+        )
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        response.headers["X-Download-Options"] = "noopen"
 
 
 def _build_cors_configuration(

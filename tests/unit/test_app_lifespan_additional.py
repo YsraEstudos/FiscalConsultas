@@ -143,7 +143,7 @@ def core_mocks(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_no_cache_html_sets_headers_for_html_paths_only():
+async def test_no_cache_html_sets_headers_for_html_and_api_paths():
     async def _next(_request):
         await asyncio.sleep(0)
         return Response("ok")
@@ -165,7 +165,11 @@ async def test_no_cache_html_sets_headers_for_html_paths_only():
     assert html_response.headers["X-Content-Type-Options"] == "nosniff"
     assert "frame-ancestors 'none'" in html_response.headers["Content-Security-Policy"]
     assert api_response.headers["X-Frame-Options"] == "DENY"
-    assert "Cache-Control" not in api_response.headers
+    assert (
+        api_response.headers["Cache-Control"]
+        == "no-store, no-cache, must-revalidate, private, max-age=0"
+    )
+    assert api_response.headers["Pragma"] == "no-cache"
 
 
 @pytest.mark.asyncio
