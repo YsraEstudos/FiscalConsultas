@@ -24,8 +24,7 @@ COPY Nesh.py alembic.ini README.md ./
 RUN test -f /app/backend/server/app.py \
     && test -f /app/database/fiscal_offline.enc \
     && test -f /app/database/fiscal_offline.meta \
-    && mkdir -p database \
-    && chown -R app:app /app
+    && mkdir -p database
 
 # Configurações de ambiente para o container
 ENV PYTHONUNBUFFERED=1

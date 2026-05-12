@@ -1,4 +1,4 @@
-import { decryptDatabase, setAppSeed, sha256Hex } from "./crypto.js";
+import { clearAppSeed, decryptDatabase, setAppSeed, sha256Hex } from "./crypto.js";
 import { getLocalNbsDetail } from "./catalogSearch.js";
 import {
   readFromOpfs,
@@ -10,11 +10,12 @@ import {
   removeSourceFromOpfs,
   saveSeed,
   saveSourceToOpfs,
+  wipeSeed,
   saveSourceVersion,
   saveToOpfs,
   saveVersion,
 } from "./opfs.js";
-import { postWorkerError, postWorkerProgress, postWorkerResult, postWorkerStatus } from "./protocol.js";
+import { postWorkerError, postWorkerProgress, postWorkerRefreshToken, postWorkerResult, postWorkerStatus } from "./protocol.js";
 import { getStructuredSearchWithCache } from "./searchRuntime.js";
 import { loadDatabaseFromBytes } from "./sqlite.js";
 import { clearSearchCache, closeWorkerDb, getWorkerDb, getWorkerStatus, getWorkerVersion, setWorkerStatus, setWorkerVersion } from "./state.js";
@@ -26,6 +27,68 @@ function isFiscalSourceId(value) {
 }
 
 const OFFLINE_FETCH_TIMEOUT_MS = 60_000;
+
+// ---------------------------------------------------------------------------
+// Clerk token request — ask the main thread for a fresh JWT via
+// REFRESH_TOKEN / TOKEN_RESPONSE message handshake.
+// ---------------------------------------------------------------------------
+
+/** @type {Map<string, { resolve: (token: string | null) => void, reject: (err: Error) => void }>} */
+const _pendingTokenRequests = new Map();
+
+let _tokenRequestCounter = 0;
+
+/**
+ * Request a fresh Clerk JWT from the main thread.
+ * Returns the token string or null if the main thread has no active session.
+ * Rejects if the main thread reports an error.
+ * @returns {Promise<string | null>}
+ */
+function requestClerkTokenFromMainThread() {
+  return new Promise((resolve, reject) => {
+    const id = `token-req-${(_tokenRequestCounter += 1)}`;
+    const timeout = setTimeout(() => {
+      _pendingTokenRequests.delete(id);
+      reject(new Error("Clerk token request timed out"));
+    }, 10_000);
+
+    _pendingTokenRequests.set(id, {
+      resolve: (token) => {
+        clearTimeout(timeout);
+        _pendingTokenRequests.delete(id);
+        resolve(token);
+      },
+      reject: (err) => {
+        clearTimeout(timeout);
+        _pendingTokenRequests.delete(id);
+        reject(err);
+      },
+    });
+
+    postWorkerRefreshToken(id);
+  });
+}
+
+function isWipeSeedTokenAbort(error) {
+  return error instanceof Error
+    && error.message === "Clerk token request aborted due to WIPE_SEED";
+}
+
+/**
+ * Resolve a pending token request when the main thread sends TOKEN_RESPONSE.
+ * @param {string} id
+ * @param {{ clerkToken?: string | null, error?: string }} payload
+ */
+export function resolveTokenResponse(id, payload) {
+  const pending = _pendingTokenRequests.get(id);
+  if (!pending) return;
+
+  if (payload.error) {
+    pending.reject(new Error(payload.error));
+  } else {
+    pending.resolve(payload.clerkToken ?? null);
+  }
+}
 
 function getCurrentOrigin() {
   return globalThis.self?.location?.origin || globalThis.location?.origin || "";
@@ -94,9 +157,14 @@ async function handleInitMessage(id, payload) {
   const source = isFiscalSourceId(payload?.source) ? payload.source : null;
   const encData = source ? await readSourceFromOpfs(source) : await readFromOpfs();
   const version = source ? await readSourceVersion(source) : await readVersion();
-  const opfsSeed = source ? null : await readSeed();
-  const seed = source ? payload?.publicSeed : opfsSeed || payload?.seed;
-  const usedPayloadSeedFallback = !opfsSeed && Boolean(payload?.seed);
+  const opfsSeed = source ? null : await readSeed(payload?.userId);
+  const seed = source ? payload?.publicSeed : opfsSeed || payload?.seed || payload?.publicSeed;
+  const payloadSeedFallback = payload?.seed || payload?.publicSeed;
+  const usedPayloadSeedFallback =
+    !source &&
+    !opfsSeed &&
+    Boolean(payloadSeedFallback) &&
+    seed === payloadSeedFallback;
 
   if (!encData || !version || !seed) {
     setWorkerStatus("not_installed");
@@ -181,9 +249,26 @@ async function readEncryptedDatabaseBlob(dlResp, id) {
 }
 
 async function requestInstallToken(apiBase) {
+  // BUG-1 fix: the backend now requires a valid Clerk JWT on POST /database/token.
+  // We obtain it from the main thread via the REFRESH_TOKEN handshake.
+  const clerkToken = await requestClerkTokenFromMainThread();
+
+  // Short-circuit: no token means the user isn’t signed in; skip the
+  // network round-trip that would only return a guaranteed 401.
+  if (!clerkToken) {
+    throw new Error(
+      "Autenticação necessária para baixar o banco offline. Faça login e tente novamente."
+    );
+  }
+
+  const headers = {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${clerkToken}`,
+  };
+
   const tokenResp = await fetchWithTimeout(`${apiBase}/database/token`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
   }, OFFLINE_FETCH_TIMEOUT_MS, "token");
 
   if (tokenResp.ok) {
@@ -191,6 +276,11 @@ async function requestInstallToken(apiBase) {
   }
 
   const errText = await tokenResp.text();
+  if (tokenResp.status === 401) {
+    throw new Error(
+      `Autenticação necessária para baixar o banco offline (${tokenResp.status}). Faça login e tente novamente.`
+    );
+  }
   throw new Error(`Token request failed (${tokenResp.status}): ${errText}`);
 }
 
@@ -242,6 +332,7 @@ async function fetchEncryptedDatabaseBundle(apiBase, id) {
       return { tokenData, encryptedBlob };
     } catch (error) {
       lastError = error;
+      if (isWipeSeedTokenAbort(error)) break;
       if (!isRetryableOfflineDownloadError(error) || attempt === 1) break;
       postWorkerProgress(id, 10, "retrying_download");
       await waitBeforeOfflineDownloadRetry();
@@ -255,6 +346,13 @@ function buildFiscalBundleUrls(r2BaseUrl, source) {
   const normalizedBaseUrl = trimTrailingSlashes(String(r2BaseUrl || ""));
   return {
     encryptedUrl: `${normalizedBaseUrl}/${source}/${source}.enc`,
+  };
+}
+
+function buildFiscalOfflineDatabaseUrls(r2BaseUrl) {
+  const normalizedBaseUrl = trimTrailingSlashes(String(r2BaseUrl || ""));
+  return {
+    encryptedUrl: `${normalizedBaseUrl}/fiscal_offline.enc`,
   };
 }
 
@@ -275,28 +373,33 @@ export function getSourceAwareInstallPayloadIntent(payload) {
   );
 }
 
+export function getStaticR2InstallPayloadIntent(payload) {
+  return Boolean(
+    payload
+      && typeof payload === "object"
+      && !("source" in payload)
+      && "r2BaseUrl" in payload
+      && "publicSeed" in payload
+      && "metadata" in payload
+  );
+}
+
+export function validateStaticR2InstallPayload(payload) {
+  return validateR2InstallPayloadFields(
+    payload,
+    "Static R2 install payload is incomplete"
+  );
+}
+
 export function validateSourceAwareInstallPayload(payload) {
-  if (!payload || typeof payload !== "object") {
-    return { ok: false, error: "Source-aware install payload is incomplete" };
-  }
+  const fieldValidation = validateR2InstallPayloadFields(
+    payload,
+    "Source-aware install payload is incomplete"
+  );
+  if (!fieldValidation.ok) return fieldValidation;
 
   if (!isFiscalSourceId(payload.source)) {
     return { ok: false, error: "Invalid source-aware install source" };
-  }
-
-  if (
-    typeof payload.r2BaseUrl !== "string"
-      || !payload.r2BaseUrl.trim()
-      || typeof payload.publicSeed !== "string"
-      || !payload.publicSeed.trim()
-      || !payload.metadata
-      || typeof payload.metadata !== "object"
-      || typeof payload.metadata.version !== "string"
-      || !payload.metadata.version.trim()
-      || typeof payload.metadata.encrypted_sha256 !== "string"
-      || !payload.metadata.encrypted_sha256.trim()
-  ) {
-    return { ok: false, error: "Source-aware install payload is incomplete" };
   }
 
   if (payload.metadata.source !== payload.source) {
@@ -306,29 +409,90 @@ export function validateSourceAwareInstallPayload(payload) {
   return { ok: true };
 }
 
+function validateR2InstallPayloadFields(payload, incompleteError) {
+  if (!payload || typeof payload !== "object") {
+    return { ok: false, error: incompleteError };
+  }
+
+  const metadata = payload.metadata;
+  const hasRequiredMetadata =
+    metadata
+    && typeof metadata === "object"
+    && typeof metadata.version === "string"
+    && metadata.version.trim()
+    && typeof metadata.encrypted_sha256 === "string"
+    && metadata.encrypted_sha256.trim();
+
+  if (
+    typeof payload.r2BaseUrl !== "string"
+      || !payload.r2BaseUrl.trim()
+      || typeof payload.publicSeed !== "string"
+      || !payload.publicSeed.trim()
+      || !hasRequiredMetadata
+  ) {
+    return { ok: false, error: incompleteError };
+  }
+
+  return { ok: true };
+}
+
 async function fetchEncryptedSourceBundle(r2BaseUrl, source) {
   const { encryptedUrl } = buildFiscalBundleUrls(r2BaseUrl, source);
-  const dlResp = await fetch(encryptedUrl, {
-    method: "GET",
-    headers: { Accept: "application/octet-stream" },
-  });
+  return fetchEncryptedR2Bundle(
+    encryptedUrl,
+    "Offline source bundle retrieval failed"
+  );
+}
+
+async function fetchEncryptedStaticR2Bundle(r2BaseUrl) {
+  const { encryptedUrl } = buildFiscalOfflineDatabaseUrls(r2BaseUrl);
+  return fetchEncryptedR2Bundle(
+    encryptedUrl,
+    "Offline fiscal bundle retrieval failed"
+  );
+}
+
+async function fetchEncryptedR2Bundle(encryptedUrl, errorPrefix) {
+  const dlResp = await fetchWithTimeout(
+    encryptedUrl,
+    {
+      method: "GET",
+      headers: { Accept: "application/octet-stream" },
+    },
+    OFFLINE_FETCH_TIMEOUT_MS,
+    "download",
+  );
 
   if (dlResp.ok) {
     return dlResp;
   }
 
   const errText = await dlResp.text();
-  throw new Error(
-    `Offline source bundle retrieval failed (${dlResp.status}): ${errText}`
+  throw new Error(`${errorPrefix} (${dlResp.status}): ${errText}`);
+}
+
+async function fetchEncryptedStaticR2BundleWithRetry(r2BaseUrl, id) {
+  return fetchEncryptedR2BundleWithRetry(
+    () => fetchEncryptedStaticR2Bundle(r2BaseUrl),
+    id,
+    "Offline fiscal bundle download failed"
   );
 }
 
 async function fetchEncryptedSourceBundleWithRetry(r2BaseUrl, source, id) {
+  return fetchEncryptedR2BundleWithRetry(
+    () => fetchEncryptedSourceBundle(r2BaseUrl, source),
+    id,
+    "Offline source bundle download failed"
+  );
+}
+
+async function fetchEncryptedR2BundleWithRetry(fetchBundle, id, fallbackMessage) {
   let lastError = null;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      return await fetchEncryptedSourceBundle(r2BaseUrl, source);
+      return await fetchBundle();
     } catch (error) {
       lastError = error;
       if (!isRetryableOfflineDownloadError(error) || attempt === 1) break;
@@ -337,7 +501,7 @@ async function fetchEncryptedSourceBundleWithRetry(r2BaseUrl, source, id) {
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error("Offline source bundle download failed");
+  throw lastError instanceof Error ? lastError : new Error(fallbackMessage);
 }
 
 async function updateInstalledVersion(apiBase) {
@@ -367,20 +531,64 @@ async function updateInstalledVersion(apiBase) {
 }
 
 async function handleSourceAwareInstallMessage(id, payload) {
-  setWorkerStatus("installing");
-  postWorkerProgress(id, 0, "fetching_database");
-
   const {
     source,
     r2BaseUrl,
     publicSeed,
     metadata,
   } = payload;
+
+  await installR2Bundle(id, {
+    publicSeed,
+    metadata,
+    fetchBundle: () => fetchEncryptedSourceBundleWithRetry(r2BaseUrl, source, id),
+    saveBundle: async (encryptedBlob) => {
+      await saveSourceToOpfs(source, encryptedBlob);
+      await saveSourceVersion(source, metadata.version || "unknown");
+    },
+    cleanupAfterSaveError: () => removeSourceFromOpfs(source),
+    cleanupAfterInstallError: () => removeSourceFromOpfs(source),
+  });
+}
+
+async function handleStaticR2InstallMessage(id, payload) {
+  const {
+    r2BaseUrl,
+    publicSeed,
+    metadata,
+  } = payload;
+
+  await installR2Bundle(id, {
+    publicSeed,
+    metadata,
+    fetchBundle: () => fetchEncryptedStaticR2BundleWithRetry(r2BaseUrl, id),
+    saveBundle: async (encryptedBlob) => {
+      await saveToOpfs(encryptedBlob);
+      await saveSeed(publicSeed, payload?.userId);
+      await saveVersion(metadata.version || "unknown");
+    },
+    cleanupAfterSaveError: removeFromOpfs,
+    cleanupAfterInstallError: removeFromOpfs,
+  });
+}
+
+async function installR2Bundle(id, options) {
+  setWorkerStatus("installing");
+  postWorkerProgress(id, 0, "fetching_database");
+
+  const {
+    publicSeed,
+    metadata,
+    fetchBundle,
+    saveBundle,
+    cleanupAfterSaveError,
+    cleanupAfterInstallError,
+  } = options;
   /** @type {Uint8Array | null} */
   let plaintext = null;
 
   try {
-    const dlResp = await fetchEncryptedSourceBundleWithRetry(r2BaseUrl, source, id);
+    const dlResp = await fetchBundle();
     const encryptedBlob = await readEncryptedDatabaseBlob(dlResp, id);
     const {
       encrypted_sha256: expectedEncryptedSha256,
@@ -404,10 +612,9 @@ async function handleSourceAwareInstallMessage(id, payload) {
 
     postWorkerProgress(id, 90, "saving");
     try {
-      await saveSourceToOpfs(source, encryptedBlob);
-      await saveSourceVersion(source, metadata.version || "unknown");
+      await saveBundle(encryptedBlob);
     } catch (error) {
-      await removeSourceFromOpfs(source);
+      await cleanupAfterSaveError();
       throw error;
     }
 
@@ -430,7 +637,7 @@ async function handleSourceAwareInstallMessage(id, payload) {
       recoverable: true,
     });
     postWorkerError(id, recoverableMessage);
-    await removeSourceFromOpfs(source).catch(() => undefined);
+    await cleanupAfterInstallError().catch(() => undefined);
     return;
   } finally {
     if (plaintext) {
@@ -479,7 +686,7 @@ async function handleLegacyInstallMessage(id, payload) {
     try {
       setAppSeed(appSeed);
       await saveToOpfs(encryptedBlob);
-      await saveSeed(appSeed);
+      await saveSeed(appSeed, payload?.userId);
       await updateInstalledVersion(apiBase);
     } catch (error) {
       await removeFromOpfs();
@@ -492,7 +699,6 @@ async function handleLegacyInstallMessage(id, payload) {
       status: "ready",
       version: getWorkerVersion(),
       sizeBytes: encryptedBlob.length,
-      seed: appSeed,
     });
   } catch (error) {
     setWorkerStatus("error");
@@ -514,6 +720,22 @@ async function handleLegacyInstallMessage(id, payload) {
 }
 
 async function handleInstallMessage(id, payload) {
+  if (getStaticR2InstallPayloadIntent(payload)) {
+    const validation = validateStaticR2InstallPayload(payload);
+    if (!validation.ok) {
+      setWorkerStatus("error");
+      postWorkerStatus(id, {
+        status: "error",
+        error: validation.error,
+        recoverable: true,
+      });
+      postWorkerError(id, validation.error);
+      return;
+    }
+    await handleStaticR2InstallMessage(id, payload);
+    return;
+  }
+
   if (getSourceAwareInstallPayloadIntent(payload)) {
     const validation = validateSourceAwareInstallPayload(payload);
     if (!validation.ok) {
@@ -615,6 +837,27 @@ async function handleRemoveMessage(id, payload) {
   postWorkerStatus(id, { status: "not_installed" });
 }
 
+async function handleWipeSeedMessage(id) {
+  // Reject any in-flight REFRESH_TOKEN requests immediately so callers do not
+  // wait for the 10-second timeout after logout.
+  for (const [reqId, pending] of [..._pendingTokenRequests]) {
+    pending.reject(new Error("Clerk token request aborted due to WIPE_SEED"));
+    _pendingTokenRequests.delete(reqId);
+  }
+
+  // Secure cleanup on logout: destroy all in-memory key material AND the
+  // persisted encrypted seed in OPFS (wipeSeed was previously imported but
+  // never called, leaving the encrypted blob on disk after logout).
+  clearAppSeed();
+  await wipeSeed();
+  closeWorkerDb();
+  setWorkerVersion(null);
+  await removeFromOpfs().catch(() => undefined);
+  setWorkerStatus("not_installed");
+  clearSearchCache();
+  postWorkerStatus(id, { status: "not_installed" });
+}
+
 export async function dispatchWorkerMessage(type, id, payload) {
   switch (type) {
 
@@ -635,6 +878,13 @@ export async function dispatchWorkerMessage(type, id, payload) {
       return;
     case "REMOVE":
       await handleRemoveMessage(id, payload);
+      return;
+    case "WIPE_SEED":
+      await handleWipeSeedMessage(id);
+      return;
+    case "TOKEN_RESPONSE":
+      // Reply from main thread to a REFRESH_TOKEN request.
+      resolveTokenResponse(id, payload ?? {});
       return;
     default:
       postWorkerError(id, `Unknown message type: ${type}`);

@@ -90,6 +90,35 @@ export default defineConfig(({ mode }) => {
     worker: {
       format: 'es',
     },
+    build: {
+      // --- Security hardening: never expose source maps in production ---
+      sourcemap: false,
+      minify: 'terser',
+      terserOptions: {
+        compress: {
+          drop_console: false,
+          pure_funcs: mode === 'production'
+            ? ['console.log', 'console.info', 'console.warn', 'console.error']
+            : [],
+          drop_debugger: true,
+          passes: 2,
+        },
+        mangle: {
+          toplevel: true,
+        },
+        format: {
+          comments: false,
+        },
+      },
+      rollupOptions: {
+        output: {
+          // Hashed filenames make it harder to correlate builds
+          entryFileNames: 'assets/[hash:16].js',
+          chunkFileNames: 'assets/[hash:16].js',
+          assetFileNames: 'assets/[hash:16].[ext]',
+        },
+      },
+    },
     test: {
       globals: true,
       environment: 'jsdom',

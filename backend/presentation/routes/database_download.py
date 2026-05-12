@@ -38,6 +38,55 @@ logger = logging.getLogger("routes.database_download")
 
 router = APIRouter()
 
+
+def _email_log_fingerprint(email: str | None) -> str:
+    """Build a stable non-reversible email identifier for logs."""
+    if not email:
+        return "unknown"
+    secret = (
+        os.environ.get("OFFLINE_DB_LOG_HASH_SECRET")
+        or os.environ.get("OFFLINE_DB_TOKEN_SECRET")
+        or settings.auth.secret_key
+        or "offline-db-log"
+    )
+    digest = hmac.new(
+        secret.encode("utf-8"),
+        email.strip().lower().encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"hmac-sha256:{digest[:16]}"
+
+
+def _extract_email(payload: dict | None) -> str | None:
+    """Extract and normalize the user email from a Clerk JWT payload."""
+    if not payload:
+        return None
+    for key in ("email", "email_address", "primary_email_address"):
+        candidate = payload.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip().lower()
+    return None
+
+
+def _enforce_email_allowlist(payload: dict) -> None:
+    """Reject the request if the authenticated user is not in the allowlist."""
+    email = _extract_email(payload)
+    allowed = settings.security.restricted_ui_allowed_email_set
+    if not allowed:
+        # If no allowlist is configured, allow all authenticated users.
+        return
+    if email and email in allowed:
+        return
+    logger.warning(
+        "Download blocked for email_fingerprint=%s (not in restricted_ui allowlist)",
+        _email_log_fingerprint(email),
+    )
+    raise HTTPException(
+        status_code=403,
+        detail="Your account is not authorized to download the offline database",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -47,13 +96,27 @@ ENCRYPTED_DB = DB_DIR / "fiscal_offline.enc"
 META_FILE = DB_DIR / "fiscal_offline.meta"
 
 # ---------------------------------------------------------------------------
-# Rate limiting (strict: 3 tokens per hour per IP)
+# Rate limiting (layered: IP + user + org)
 # ---------------------------------------------------------------------------
 _token_rate_limiter = RedisBackedRateLimiter(
     window_seconds=3600,
     redis_prefix="rate:db-download-token",
 )
 _TOKEN_LIMIT_PER_HOUR = 3
+
+# Per-user: 1 download token per hour (each user only needs one)
+_user_rate_limiter = RedisBackedRateLimiter(
+    window_seconds=3600,
+    redis_prefix="rate:db-download-user",
+)
+_USER_TOKEN_LIMIT_PER_HOUR = 1
+
+# Per-org: 10 download tokens per day across all org members
+_org_rate_limiter = RedisBackedRateLimiter(
+    window_seconds=86400,
+    redis_prefix="rate:db-download-org",
+)
+_ORG_TOKEN_LIMIT_PER_DAY = 10
 
 # ---------------------------------------------------------------------------
 # Token management (in-memory fallback + Redis)
@@ -315,21 +378,62 @@ async def create_download_token(request: Request):
     """
     Generate a one-time download token.
 
-    Rate limited to 3 per hour per IP to prevent abuse.
+    Requires a valid Clerk JWT. The authenticated user's email must be in the
+    restricted-UI allowlist (SECURITY__RESTRICTED_UI_ALLOWED_EMAILS).
+    Rate limited by IP (3/hour), authenticated user (1/hour), and
+    organization (10/day) to prevent abuse.
     The token expires after 5 minutes and can only be used once.
     """
     _enforce_secure_request(request)
-    client_ip = extract_client_ip(request)
-    limiter_key = f"db-download:ip:{client_ip}"
 
+    # --- Authentication gate (P0 security) ---
+    jwt_payload = await _require_auth_payload(request)
+    _enforce_email_allowlist(jwt_payload)
+
+    user_id = jwt_payload.get("sub") or "unknown"
+    email = _extract_email(jwt_payload)
+    client_ip = extract_client_ip(request)
+    email_fingerprint = _email_log_fingerprint(email)
+    personal_quota_id = user_id if user_id != "unknown" else email_fingerprint
+    org_id = jwt_payload.get("org_id") or f"personal:{personal_quota_id}"
+
+    # --- Layered rate limiting ---
     if _should_rate_limit_token_request(request):
+        # Layer 1: per-IP (3/hour)
         allowed, retry_after = await _token_rate_limiter.consume(
-            key=limiter_key, limit=_TOKEN_LIMIT_PER_HOUR
+            key=f"db-download:ip:{client_ip}", limit=_TOKEN_LIMIT_PER_HOUR
         )
         if not allowed:
+            logger.warning("RATE_LIMIT ip=%s user=%s layer=ip", client_ip, user_id)
             raise HTTPException(
                 status_code=429,
                 detail="Rate limit exceeded for database download tokens. Try again later.",
+                headers={"Retry-After": str(retry_after)},
+            )
+
+        # Layer 2: per-user (1/hour)
+        allowed, retry_after = await _user_rate_limiter.consume(
+            key=f"db-download:user:{user_id}", limit=_USER_TOKEN_LIMIT_PER_HOUR
+        )
+        if not allowed:
+            logger.warning("RATE_LIMIT ip=%s user=%s layer=user", client_ip, user_id)
+            raise HTTPException(
+                status_code=429,
+                detail="Download token already issued recently. Try again later.",
+                headers={"Retry-After": str(retry_after)},
+            )
+
+        # Layer 3: per-org (10/day)
+        allowed, retry_after = await _org_rate_limiter.consume(
+            key=f"db-download:org:{org_id}", limit=_ORG_TOKEN_LIMIT_PER_DAY
+        )
+        if not allowed:
+            logger.warning(
+                "RATE_LIMIT ip=%s user=%s org=%s layer=org", client_ip, user_id, org_id
+            )
+            raise HTTPException(
+                status_code=429,
+                detail="Organization download limit exceeded for today.",
                 headers={"Retry-After": str(retry_after)},
             )
 
@@ -344,6 +448,15 @@ async def create_download_token(request: Request):
     jti = _generate_token_jti()
     token = await _store_token(
         jti, meta, allow_memory_fallback=_is_local_request(request)
+    )
+
+    # --- Audit log ---
+    logger.info(
+        "AUDIT db_download_token_issued user=%s org=%s email_fingerprint=%s ip=%s",
+        user_id,
+        org_id,
+        email_fingerprint,
+        client_ip,
     )
 
     return {
@@ -371,12 +484,17 @@ async def download_database(
     The token is consumed upon use and cannot be reused.
     """
     _enforce_secure_request(request)
+    client_ip = extract_client_ip(request)
     token = payload.token.strip()
     if not token:
         raise HTTPException(status_code=400, detail="Invalid token format")
 
     is_valid = await _consume_token(token)
     if not is_valid:
+        logger.warning(
+            "AUDIT db_download_token_rejected ip=%s reason=invalid_or_expired",
+            client_ip,
+        )
         raise HTTPException(
             status_code=403,
             detail="Token invalid, expired, or already used",
@@ -384,6 +502,8 @@ async def download_database(
 
     if not ENCRYPTED_DB.exists():
         raise HTTPException(status_code=503, detail="Offline database file missing")
+
+    logger.info("AUDIT db_download_started ip=%s", client_ip)
 
     try:
         return FileResponse(
@@ -396,8 +516,9 @@ async def download_database(
                 "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
                 "Pragma": "no-cache",
                 "Cross-Origin-Resource-Policy": "same-origin",
+                "X-Download-Options": "noopen",
             },
         )
     except OSError as exc:
-        logger.error("Failed to stream encrypted DB: %s", exc)
+        logger.exception("Failed to stream encrypted DB")
         raise HTTPException(status_code=500, detail="Internal server error") from exc

@@ -52,6 +52,12 @@ vi.mock('../../src/context/AuthContext', () => ({
       {children}
     </div>
   ),
+  useAuth: () => ({
+    isSignedIn: true,
+    isLoading: false,
+    isAuthConfigured: true,
+    openLogin: vi.fn(),
+  }),
 }));
 
 vi.mock('../../src/context/SettingsContext', () => ({

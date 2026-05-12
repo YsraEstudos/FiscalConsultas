@@ -22,6 +22,7 @@ export interface OfflineDatabaseOperationsArgs {
     status: OfflineDatabaseStatus;
     localVersion: string | null;
     remoteVersion: string | null;
+    userId: string | null;
     instanceId: string;
     remoteMetadataRef: MutableRefObject<OfflineDatabaseMetadata | null>;
     broadcast: (message: OfflineDatabaseChannelMessage) => void;

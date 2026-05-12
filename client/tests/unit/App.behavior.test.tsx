@@ -67,6 +67,18 @@ vi.mock('react-hot-toast', () => ({
   toast: mocks.toastMock,
 }));
 
+vi.mock('../../src/context/AuthContext', () => ({
+  useAuth: () => ({
+    isSignedIn: true,
+    isLoading: false,
+    userId: 'user-1',
+    isAuthConfigured: true,
+    isAdmin: false,
+    openLogin: vi.fn(),
+    logout: vi.fn(),
+  }),
+}));
+
 vi.mock('../../src/components/Layout', () => ({
   Layout: ({
     children,

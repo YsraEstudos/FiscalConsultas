@@ -5,8 +5,6 @@ import shutil
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
-
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
@@ -48,13 +46,21 @@ def _build_request(
     return Request(scope)
 
 
+def _auth_header_for(user_id: str) -> str:
+    return f"Bearer token:{user_id}"
+
+
 @pytest.fixture(autouse=True)
 def _reset_token_store():
     database_download._memory_tokens.clear()
     database_download._token_rate_limiter.reset()
+    database_download._user_rate_limiter.reset()
+    database_download._org_rate_limiter.reset()
     yield
     database_download._memory_tokens.clear()
     database_download._token_rate_limiter.reset()
+    database_download._user_rate_limiter.reset()
+    database_download._org_rate_limiter.reset()
 
 
 @pytest.fixture
@@ -85,11 +91,12 @@ def offline_bundle(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(database_download, "ENCRYPTED_DB", enc_path)
     monkeypatch.setattr(database_download.settings.server, "env", "development")
     monkeypatch.setattr(database_download.redis_cache, "_client", None)
-    monkeypatch.setattr(
-        database_download,
-        "decode_clerk_jwt",
-        AsyncMock(return_value={"sub": "user_test"}),
-    )
+
+    async def fake_decode_clerk_jwt(token: str) -> dict[str, str]:
+        user_id = token.removeprefix("token:") or "user_test"
+        return {"sub": user_id, "email": f"{user_id}@example.com"}
+
+    monkeypatch.setattr(database_download, "decode_clerk_jwt", fake_decode_clerk_jwt)
 
     try:
         yield meta_path, enc_path
@@ -126,14 +133,22 @@ async def test_download_accepts_fresh_token(offline_bundle):
 
 
 @pytest.mark.asyncio
-async def test_download_token_flow_does_not_require_authorization_header(
+async def test_download_token_requires_authorization_but_download_does_not(
     offline_bundle,
 ):
     token_request = _build_request(
         "/api/database/token",
         auth_header=None,
     )
-    token_payload = await database_download.create_download_token(token_request)
+    with pytest.raises(HTTPException) as exc:
+        await database_download.create_download_token(token_request)
+
+    assert exc.value.status_code == 401
+
+    authorized_token_request = _build_request("/api/database/token")
+    token_payload = await database_download.create_download_token(
+        authorized_token_request
+    )
 
     response = await database_download.download_database(
         _build_request(
@@ -326,21 +341,86 @@ async def test_ipv4_mapped_loopback_is_treated_as_local_for_download_tokens(
 async def test_nonlocal_development_requests_are_rate_limited_for_download_tokens(
     offline_bundle,
 ):
+    for index in range(database_download._TOKEN_LIMIT_PER_HOUR):
+        request = _build_request(
+            "/api/database/token",
+            headers={"host": "fiscal.example.com"},
+            auth_header=_auth_header_for(f"user_{index}"),
+            client_host="203.0.113.10",
+        )
+        payload = await database_download.create_download_token(request)
+        assert payload["token"]
+
+    request = _build_request(
+        "/api/database/token",
+        headers={"host": "fiscal.example.com"},
+        auth_header=_auth_header_for("user_over_limit"),
+        client_host="203.0.113.10",
+    )
+    with pytest.raises(HTTPException) as exc:
+        await database_download.create_download_token(request)
+
+    assert exc.value.status_code == 429
+    assert int(exc.value.headers["Retry-After"]) >= 1
+
+
+@pytest.mark.asyncio
+async def test_personal_download_org_quota_is_scoped_per_user(
+    offline_bundle, monkeypatch: pytest.MonkeyPatch
+):
+    captured_org_keys: list[str] = []
+
+    async def capture_org_key(*, key: str, limit: int) -> tuple[bool, int]:
+        assert limit == database_download._ORG_TOKEN_LIMIT_PER_DAY
+        captured_org_keys.append(key)
+        return True, 0
+
+    monkeypatch.setattr(database_download._org_rate_limiter, "consume", capture_org_key)
+
+    for user_id in ("user_a", "user_b"):
+        request = _build_request(
+            "/api/database/token",
+            headers={"host": "fiscal.example.com"},
+            auth_header=_auth_header_for(user_id),
+            client_host="203.0.113.10",
+        )
+        payload = await database_download.create_download_token(request)
+        assert payload["token"]
+
+    assert captured_org_keys == [
+        "db-download:org:personal:user_a",
+        "db-download:org:personal:user_b",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_personal_download_org_quota_falls_back_to_email_fingerprint(
+    offline_bundle, monkeypatch: pytest.MonkeyPatch
+):
+    captured_org_keys: list[str] = []
+
+    async def fake_decode_clerk_jwt(_token: str) -> dict[str, str]:
+        return {"email": "person@example.com"}
+
+    async def capture_org_key(*, key: str, limit: int) -> tuple[bool, int]:
+        assert limit == database_download._ORG_TOKEN_LIMIT_PER_DAY
+        captured_org_keys.append(key)
+        return True, 0
+
+    monkeypatch.setattr(database_download, "decode_clerk_jwt", fake_decode_clerk_jwt)
+    monkeypatch.setattr(database_download._org_rate_limiter, "consume", capture_org_key)
+
     request = _build_request(
         "/api/database/token",
         headers={"host": "fiscal.example.com"},
         client_host="203.0.113.10",
     )
 
-    for _ in range(database_download._TOKEN_LIMIT_PER_HOUR):
-        payload = await database_download.create_download_token(request)
-        assert payload["token"]
+    payload = await database_download.create_download_token(request)
 
-    with pytest.raises(HTTPException) as exc:
-        await database_download.create_download_token(request)
-
-    assert exc.value.status_code == 429
-    assert int(exc.value.headers["Retry-After"]) >= 1
+    assert payload["token"]
+    assert len(captured_org_keys) == 1
+    assert captured_org_keys[0].startswith("db-download:org:personal:hmac-sha256:")
 
 
 @pytest.mark.asyncio
