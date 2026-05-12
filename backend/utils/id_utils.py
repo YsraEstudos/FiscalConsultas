@@ -18,14 +18,13 @@ def generate_anchor_id(ncm_code: str) -> str:
     Returns:
         String formatada para uso em id="" e href="#..."
     """
-    import re
 
     if not ncm_code:
         return ""
 
     # Security: Remove any character that is not alphanumeric, dot, or dash
     # This prevents HTML injection vulnerabilities via ID attributes
-    safe_chars = re.sub(r"[^a-zA-Z0-9\.\-]", "", ncm_code)
+    safe_chars = "".join(c for c in ncm_code if c.isalnum() or c in ".-")
 
     clean_code = safe_chars.strip().replace(".", "-")
     return f"pos-{clean_code}"
