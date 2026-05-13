@@ -22,6 +22,10 @@ htmlcov/
 *.db-journal
 *.sqlite3
 database/r2/
+!database/r2/
+database/r2/*
+!database/r2/fiscal_offline.meta.json
+!database/r2/fiscal_offline.enc
 
 # Data and Heavy Files
 data/
