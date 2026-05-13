@@ -687,7 +687,7 @@ async def test_dispatch_allows_only_non_fiscal_public_routes_in_prod_postgres_wi
         await response(scope, receive, send)
 
     mw = middleware.TenantMiddleware(app=app)
-    public_paths = ["/api/glossary"]
+    public_paths = ["/api/glossary", "/api/security/incident"]
 
     for path in public_paths:
         status, _ = await _invoke_middleware(mw, _build_scope(path))
