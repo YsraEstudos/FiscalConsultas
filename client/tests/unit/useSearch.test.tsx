@@ -5,6 +5,7 @@ import { useSearch } from '../../src/hooks/useSearch';
 import type { CodeSearchResponse, ChapterData } from '../../src/types/api.types';
 import type { Tab } from '../../src/hooks/useTabs';
 import { searchNCM, searchTipi } from '../../src/services/api';
+import { setAppDebugLoggingUser } from '../../src/utils/debug';
 
 const localDatabaseState = vi.hoisted(() => ({
     status: 'not_installed',
@@ -97,6 +98,7 @@ describe('useSearch Hook', () => {
     });
 
     afterEach(() => {
+        setAppDebugLoggingUser(null);
         vi.clearAllMocks();
     });
 
@@ -307,6 +309,7 @@ describe('useSearch Hook', () => {
         ];
         const tabsById = new Map(tabs.map(tab => [tab.id, tab]));
 
+        setAppDebugLoggingUser('israelsena2@gmail.com');
         const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
         const { result } = renderHook(
@@ -356,6 +359,7 @@ describe('useSearch Hook', () => {
         ];
         const tabsById = new Map(tabs.map(tab => [tab.id, tab]));
 
+        setAppDebugLoggingUser('israelsena2@gmail.com');
         const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
         const { result } = renderHook(

@@ -19,15 +19,30 @@ describe('debug logging access', () => {
         expect(canUseAppDebugLogging('ISRAELSENA2@GMAIL.COM')).toBe(true);
     });
 
-    it('does not write debug logs in test mode', () => {
+    it('does not write debug logs for non-allowed users', () => {
         const consoleDebug = vi
-            .spyOn(console, 'debug')
+            .spyOn(console, 'log')
+            .mockImplementation(() => undefined);
+
+        setAppDebugLoggingUser('other@example.com');
+        debug.log('[Sidebar] Rendering with results keys:', 1);
+
+        expect(isAppDebugLoggingEnabled()).toBe(false);
+        expect(consoleDebug).not.toHaveBeenCalled();
+    });
+
+    it('writes debug logs for the support email', () => {
+        const consoleLog = vi
+            .spyOn(console, 'log')
             .mockImplementation(() => undefined);
 
         setAppDebugLoggingUser('israelsena2@gmail.com');
         debug.log('[Sidebar] Rendering with results keys:', 1);
 
-        expect(isAppDebugLoggingEnabled()).toBe(false);
-        expect(consoleDebug).not.toHaveBeenCalled();
+        expect(isAppDebugLoggingEnabled()).toBe(true);
+        expect(consoleLog).toHaveBeenCalledWith(
+            '[Sidebar] Rendering with results keys:',
+            1,
+        );
     });
 });
