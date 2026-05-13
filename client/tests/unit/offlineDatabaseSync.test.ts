@@ -4,6 +4,7 @@ import {
   fetchOfflineDatabaseAvailabilityMetadata,
   fetchOfflineSourceAvailabilityMetadata,
   getFiscalR2BaseUrl,
+  getMissingStaticOfflineDatabaseConfig,
   getOfflineDbPublicSeed,
 } from '../../src/context/offlineDatabaseSync'
 
@@ -42,6 +43,22 @@ describe('offlineDatabaseSync', () => {
     vi.stubEnv('VITE_FISCAL_R2_BASE_URL', '')
 
     expect(getFiscalR2BaseUrl()).toBe('')
+  })
+
+  it('allows the bundled fiscal fallback when only the R2 base URL is absent', () => {
+    vi.stubEnv('VITE_FISCAL_R2_BASE_URL', '')
+    vi.stubEnv('VITE_OFFLINE_DB_PUBLIC_SEED', 'public-seed')
+
+    expect(getMissingStaticOfflineDatabaseConfig()).toEqual([])
+  })
+
+  it('still requires the public seed for bundled fiscal fallback installs', () => {
+    vi.stubEnv('VITE_FISCAL_R2_BASE_URL', '')
+    vi.stubEnv('VITE_OFFLINE_DB_PUBLIC_SEED', '')
+
+    expect(getMissingStaticOfflineDatabaseConfig()).toEqual([
+      'VITE_OFFLINE_DB_PUBLIC_SEED',
+    ])
   })
 
   it('retries metadata checks after a transient abort', async () => {

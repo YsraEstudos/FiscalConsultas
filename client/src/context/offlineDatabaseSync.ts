@@ -55,7 +55,6 @@ export function getOfflineDbPublicSeed(): string {
 
 export function getMissingStaticOfflineDatabaseConfig(): string[] {
     const missing: string[] = [];
-    if (!getFiscalR2BaseUrl()) missing.push('VITE_FISCAL_R2_BASE_URL');
     if (!getOfflineDbPublicSeed()) missing.push('VITE_OFFLINE_DB_PUBLIC_SEED');
     return missing;
 }
