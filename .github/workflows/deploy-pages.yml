@@ -66,8 +66,24 @@ jobs:
         run: |
           metadata_url="${VITE_FISCAL_R2_BASE_URL%/}/fiscal_offline.meta.json"
           bundle_url="${VITE_FISCAL_R2_BASE_URL%/}/fiscal_offline.enc"
-          curl --fail --silent --show-error --head --connect-timeout 10 --max-time 30 "$metadata_url" >/dev/null
-          curl --fail --silent --show-error --head --connect-timeout 10 --max-time 30 "$bundle_url" >/dev/null
+          check_public_url() {
+            label="$1"
+            url="$2"
+            if ! status="$(curl --silent --show-error --head --connect-timeout 10 --max-time 30 --output /dev/null --write-out "%{http_code}" "$url")"; then
+              echo "::error::$label check failed at $url"
+              exit 1
+            fi
+            if [ "$status" = "404" ]; then
+              echo "::warning::$label not found at $url"
+              return
+            fi
+            if [ "${status#2}" = "$status" ] && [ "${status#3}" = "$status" ]; then
+              echo "::error::$label returned HTTP $status at $url"
+              exit 1
+            fi
+          }
+          check_public_url "R2 offline metadata" "$metadata_url"
+          check_public_url "R2 offline bundle" "$bundle_url"
 
       - name: Patch app for GitHub Pages project path
         run: |
