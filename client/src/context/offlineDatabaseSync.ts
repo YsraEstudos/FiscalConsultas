@@ -105,6 +105,10 @@ async function fetchFiscalR2DatabaseAvailabilityMetadataOnce(
             signal: controller.signal,
         });
 
+        if (response.status === 404) {
+            return null;
+        }
+
         if (!response.ok) {
             throw new Error(`R2 metadata check failed (${response.status})`);
         }
@@ -131,6 +135,10 @@ async function fetchOfflineSourceAvailabilityMetadataOnce(
             headers: { Accept: 'application/json' },
             signal: controller.signal,
         });
+
+        if (response.status === 404) {
+            return null;
+        }
 
         if (!response.ok) {
             throw new Error(`Source metadata check failed (${response.status})`);

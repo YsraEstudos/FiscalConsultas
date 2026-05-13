@@ -30,7 +30,9 @@ jobs:
       VITE_OFFLINE_DB_PUBLIC_SEED: ${{ vars.VITE_OFFLINE_DB_PUBLIC_SEED }}
       VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
       VITE_CLERK_TOKEN_TEMPLATE: backend_api
-      ALLOW_TEST_CLERK_KEY: "true" # Temporary explicit override while using pk_test on Pages
+      # Temporary: GitHub Pages is deployed without a custom domain, so Clerk pk_live cannot be used yet.
+      # Remove this override after moving Pages to a Clerk production domain and setting pk_live.
+      ALLOW_TEST_CLERK_KEY: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -59,6 +61,13 @@ jobs:
             echo "Missing GitHub repository variable VITE_OFFLINE_DB_PUBLIC_SEED"
             exit 1
           fi
+
+      - name: Validate public R2 offline bundle
+        run: |
+          metadata_url="${VITE_FISCAL_R2_BASE_URL%/}/fiscal_offline.meta.json"
+          bundle_url="${VITE_FISCAL_R2_BASE_URL%/}/fiscal_offline.enc"
+          curl --fail --silent --show-error --head --connect-timeout 10 --max-time 30 "$metadata_url" >/dev/null
+          curl --fail --silent --show-error --head --connect-timeout 10 --max-time 30 "$bundle_url" >/dev/null
 
       - name: Patch app for GitHub Pages project path
         run: |
