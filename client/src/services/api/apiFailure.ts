@@ -13,8 +13,27 @@ function isCanceledRequestError(error: AxiosError | Error | unknown): boolean {
     return candidate?.code === 'ERR_CANCELED' || candidate?.name === 'CanceledError';
 }
 
-function shouldReportApiFailure(status: number | undefined, error: AxiosError): boolean {
+function isRecoverableStartupTimeout(
+    error: AxiosError,
+    originalRequest: InternalAxiosRequestConfig | undefined,
+): boolean {
+    const rawPath = getRequestPath(originalRequest?.url);
+    const normalizedPath = rawPath ? normalizeRequestPath(rawPath) : undefined;
+    return normalizedPath === '/auth/me'
+        && error.code === 'ECONNABORTED'
+        && !error.response;
+}
+
+function shouldReportApiFailure(
+    status: number | undefined,
+    error: AxiosError,
+    originalRequest: InternalAxiosRequestConfig | undefined,
+): boolean {
     if (isCanceledRequestError(error)) {
+        return false;
+    }
+
+    if (isRecoverableStartupTimeout(error, originalRequest)) {
         return false;
     }
 
@@ -31,7 +50,7 @@ export function reportApiFailure(
     requestId: string | undefined,
     status: number | undefined,
 ): void {
-    if (!shouldReportApiFailure(status, error)) {
+    if (!shouldReportApiFailure(status, error, originalRequest)) {
         return;
     }
 

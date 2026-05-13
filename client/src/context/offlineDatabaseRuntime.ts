@@ -209,7 +209,9 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
                         r2BaseUrl,
                     );
                     remoteMetaRef.current = metadata;
-                    persistStoredOfflineDatabaseMetadata(metadata);
+                    if (metadata) {
+                        persistStoredOfflineDatabaseMetadata(metadata);
+                    }
                     setRemoteVersion(metadata?.version ?? null);
                     setDbSizeBytes((current) => current ?? metadata?.size_bytes ?? null);
                     return metadata;
