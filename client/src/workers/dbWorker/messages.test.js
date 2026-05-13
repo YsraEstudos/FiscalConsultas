@@ -332,6 +332,52 @@ describe('dbWorker messages network helpers', () => {
     );
   });
 
+  it('downloads the static consolidated bundle from the same-origin Pages fallback URL', async () => {
+    const encryptedBlob = new Uint8Array([7, 8, 9]);
+    sha256Hex.mockResolvedValue('fallback-encrypted-sha');
+    decryptDatabase.mockResolvedValue(new Uint8Array([6, 5, 4]));
+    loadDatabaseFromBytes.mockResolvedValue(undefined);
+    saveToOpfs.mockResolvedValue(undefined);
+    saveSeed.mockResolvedValue(undefined);
+    saveVersion.mockResolvedValue(undefined);
+    getWorkerVersion.mockReturnValue('2026.05.14');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(encryptedBlob, {
+          status: 200,
+          headers: { 'content-length': String(encryptedBlob.length) },
+        }),
+      ),
+    );
+
+    await dispatchWorkerMessage('INSTALL', 'install-pages-fallback', {
+      r2BaseUrl: 'https://ysraestudos.github.io/FiscalConsultas/fiscal-bases',
+      publicSeed: 'public-seed',
+      userId: 'user-1',
+      metadata: {
+        version: '2026.05.14',
+        encrypted_sha256: 'fallback-encrypted-sha',
+      },
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      'https://ysraestudos.github.io/FiscalConsultas/fiscal-bases/fiscal_offline.enc',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining('/database/token'),
+      expect.anything(),
+    );
+    expect(saveToOpfs).toHaveBeenCalledWith(encryptedBlob);
+    expect(saveSeed).toHaveBeenCalledWith('public-seed', 'user-1');
+    expect(saveVersion).toHaveBeenCalledWith('2026.05.14');
+    expect(postWorkerStatus).toHaveBeenCalledWith(
+      'install-pages-fallback',
+      expect.objectContaining({ status: 'ready' }),
+    );
+  });
+
   it('removes the stale generic bundle when publicSeed fallback cannot decrypt', async () => {
     readFromOpfs.mockResolvedValue(new Uint8Array([1, 2, 3]));
     readVersion.mockResolvedValue('2026.05.11');

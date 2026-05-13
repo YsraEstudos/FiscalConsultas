@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite --port 5173 --strictPort --host",
     "build": "node ./scripts/validate-production-env.mjs && vite build",
+    "postbuild": "node ./scripts/copy-fiscal-fallback-assets.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run --exclude \"tests/performance/**\"",

@@ -374,6 +374,48 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     );
   });
 
+  it('uses the bundled fiscal bundle when the R2 base URL is not configured', async () => {
+    vi.stubEnv('VITE_FISCAL_R2_BASE_URL', '');
+    vi.stubEnv('VITE_OFFLINE_DB_PUBLIC_SEED', 'public-seed');
+    vi.stubEnv('BASE_URL', '/FiscalConsultas/');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (
+          url === 'http://localhost:3000/FiscalConsultas/fiscal-bases/fiscal_offline.meta.json'
+        ) {
+          return Promise.resolve(makeR2MetadataResponse('2026.05.14'));
+        }
+        if (url.includes('/database/version') || url.includes('/database/token')) {
+          return Promise.reject(new Error(`legacy endpoint called: ${url}`));
+        }
+        return Promise.reject(new Error(`unexpected request: ${url}`));
+      }),
+    );
+
+    renderLocalDatabaseProvider();
+    await waitForNotInstalledContext();
+    await installCurrentDatabase();
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:3000/FiscalConsultas/fiscal-bases/fiscal_offline.meta.json',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(getPostedWorkerMessages()).toContainEqual(
+      expect.objectContaining({
+        type: 'INSTALL',
+        payload: expect.objectContaining({
+          r2BaseUrl: 'http://localhost:3000/FiscalConsultas/fiscal-bases',
+          publicSeed: 'public-seed',
+          metadata: expect.objectContaining({
+            version: '2026.05.14',
+            encrypted_sha256: 'enc-sha',
+          }),
+        }),
+      }),
+    );
+  });
+
   it('fails the install when R2 metadata is malformed', async () => {
     configureR2Install(() => Promise.resolve(
       new Response(
