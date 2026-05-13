@@ -717,7 +717,6 @@ async def test_dispatch_protects_retired_fiscal_routes_in_prod_postgres_without_
         "/api/tipi/chapters",
         "/api/nesh/chapter/84/notes",
         "/api/services/nbs/search",
-        "/api/database/download",
     ]
 
     for path in retired_paths:

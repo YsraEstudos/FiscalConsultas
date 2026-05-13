@@ -151,8 +151,9 @@ test.describe('live offline reopen with active service worker', () => {
     test.skip(!(await hasServiceWorkerSupport(page)), 'Current browser environment lost service worker support after reload.');
 
     await installOfflineFromSettings(page, 15_000);
-    expect(counters.token).toBe(1);
-    expect(counters.download).toBe(1);
+    expect(counters.token).toBe(0);
+    expect(counters.download).toBe(0);
+    expect(counters.bundle).toBe(1);
 
     await page.keyboard.press('Escape');
     await expectOfflineMetadataPersisted(page);

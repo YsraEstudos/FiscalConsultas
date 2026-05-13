@@ -40,15 +40,17 @@ test.describe('offline install and reopen flow', () => {
 
     await expectOfflineAutoInstalled(page);
 
-    expect(counters.version).toBeGreaterThanOrEqual(2);
-    expect(counters.token).toBe(1);
-    expect(counters.download).toBe(1);
+    expect(counters.metadata || 0).toBeGreaterThanOrEqual(1);
+    expect(counters.bundle).toBe(1);
+    expect(counters.version).toBe(0);
+    expect(counters.token).toBe(0);
+    expect(counters.download).toBe(0);
 
     await page.keyboard.press('Escape');
     await expectOfflineMetadataPersisted(page);
   });
 
-  test('shows an actionable error when backend CORS blocks offline install', async ({ page }) => {
+  test('shows an actionable error when static offline install fails', async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.setItem('offline-db:auto-install-opt-out', 'true');
 
@@ -101,10 +103,10 @@ test.describe('offline install and reopen flow', () => {
               payload: { status: 'not_installed' },
             });
             return;
-          }
+        }
 
-          if (message.type === 'INSTALL') {
-            const error = 'Não foi possível solicitar o token do banco offline em https://fiscal-api-5eok.onrender.com. Verifique se o backend permite esta origem: https://3fbcaa44.fiscalconsultas.pages.dev. Reinstale o banco offline para continuar.';
+        if (message.type === 'INSTALL') {
+            const error = 'Não foi possível instalar o bundle fiscal R2. Verifique se os arquivos estáticos estão disponíveis. Reinstale o banco offline para continuar.';
             emitToWorker(this, {
               type: 'STATUS',
               id: message.id,
@@ -126,7 +128,7 @@ test.describe('offline install and reopen flow', () => {
       });
     });
 
-    await page.context().route('**/api/database/version', async (route) => {
+    await page.context().route('**/fiscal_offline.meta.json', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -138,7 +140,7 @@ test.describe('offline install and reopen flow', () => {
     await openSettings(page);
     await page.locator('#db-installer-install').click();
 
-    await expect(page.getByText(/Verifique se o backend permite esta origem/i)).toBeVisible();
+    await expect(page.getByText(/Verifique se os arquivos estáticos estão disponíveis/i)).toBeVisible();
     await expect(page.getByText(/Solicitando token/i)).not.toBeVisible();
   });
 
@@ -159,7 +161,7 @@ test.describe('offline install and reopen flow', () => {
     await expect(page.getByRole('heading', { name: 'FiscalConsultas' })).toBeVisible();
     await installOfflineFromSettings(page);
 
-    expect(counters.download).toBe(1);
+    expect(counters.bundle).toBe(1);
   });
 
   test('reopens with offline DB ready when backend API is unavailable', async ({ page, context }) => {
@@ -221,6 +223,6 @@ test.describe('offline install and reopen flow', () => {
     await closingOwnerPage.close();
 
     await expectOfflineReadyInSettings(page);
-    expect(counters.download).toBe(1);
+    expect(counters.bundle || 0).toBeGreaterThanOrEqual(1);
   });
 });

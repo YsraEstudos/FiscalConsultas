@@ -4,6 +4,8 @@ export type OfflineApiCounters = {
   version: number;
   token: number;
   download: number;
+  metadata?: number;
+  bundle?: number;
 };
 
 export const OFFLINE_METADATA = {
@@ -20,6 +22,27 @@ export const OFFLINE_METADATA = {
 export async function installOfflineApiMock(page: Page, counters: OfflineApiCounters) {
   const encryptedBytes = Buffer.from('mock-encrypted-offline-bundle', 'utf-8');
   const routeScope = page.context();
+
+  await routeScope.route('**/fiscal_offline.meta.json', async (route) => {
+    counters.metadata = (counters.metadata || 0) + 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(OFFLINE_METADATA),
+    });
+  });
+
+  await routeScope.route('**/fiscal_offline.enc', async (route) => {
+    counters.bundle = (counters.bundle || 0) + 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/octet-stream',
+      headers: {
+        'content-length': String(encryptedBytes.length),
+      },
+      body: encryptedBytes,
+    });
+  });
 
   await routeScope.route('**/api/**', async (route) => {
     const request = route.request();
@@ -205,8 +228,38 @@ export async function installOfflineWorkerMock(page: Page) {
             emitToWorker(this, {
               type: 'PROGRESS',
               id,
-              payload: { progress: 0, step: 'requesting_token' },
+              payload: { progress: 0, step: 'downloading' },
             });
+
+            if (typeof payload.r2BaseUrl === 'string' && payload.r2BaseUrl.trim()) {
+              const bundleResponse = await fetch(`${payload.r2BaseUrl}/fiscal_offline.enc`);
+              await bundleResponse.arrayBuffer();
+
+              const installedMeta = {
+                ...metadata,
+                ...(payload.metadata && typeof payload.metadata === 'object'
+                  ? payload.metadata
+                  : {}),
+              };
+
+              globalThis.localStorage.setItem(OFFLINE_META_KEY, JSON.stringify(installedMeta));
+
+              emitToWorker(this, {
+                type: 'PROGRESS',
+                id,
+                payload: { progress: 100, step: 'done' },
+              });
+              emitToWorker(this, {
+                type: 'STATUS',
+                id,
+                payload: {
+                  status: 'ready',
+                  version: installedMeta.version,
+                  sizeBytes: installedMeta.size_bytes,
+                },
+              });
+              return;
+            }
 
             const apiBase =
               typeof payload.apiBase === 'string' && payload.apiBase.trim()

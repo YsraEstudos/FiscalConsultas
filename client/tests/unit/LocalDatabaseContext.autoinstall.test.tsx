@@ -216,19 +216,6 @@ function configureR2Install(fetchImplementation: (url: string) => Promise<Respon
   vi.stubGlobal('fetch', vi.fn().mockImplementation(fetchImplementation));
 }
 
-function expectLegacyInstallPayload() {
-  expect(getPostedWorkerMessages()).toContainEqual(
-    expect.objectContaining({
-      type: 'INSTALL',
-      payload: expect.objectContaining({
-        apiBase: expect.any(String),
-        clerkToken: '',
-        userId: 'user-1',
-      }),
-    }),
-  );
-}
-
 describe('LocalDatabaseContext auto-install behavior', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -265,6 +252,13 @@ describe('LocalDatabaseContext auto-install behavior', () => {
   });
 
   it('auto-installs on first supported visit when the database is missing', async () => {
+    configureR2Install((url: string) => {
+      if (url.includes('/database/version') || url.includes('/database/token')) {
+        return Promise.reject(new Error(`legacy endpoint called: ${url}`));
+      }
+      return Promise.resolve(makeR2MetadataResponse('2026.04'));
+    });
+
     render(
       <LocalDatabaseProvider>
         <Probe />
@@ -344,7 +338,7 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     );
   });
 
-  it('falls back to the legacy install payload when R2 metadata is malformed', async () => {
+  it('fails the install when R2 metadata is malformed', async () => {
     configureR2Install(() => Promise.resolve(
       new Response(
         JSON.stringify({
@@ -364,12 +358,14 @@ describe('LocalDatabaseContext auto-install behavior', () => {
 
     renderLocalDatabaseProvider();
     await waitForNotInstalledContext();
-    await installCurrentDatabase();
 
-    expectLegacyInstallPayload();
+    await expect(installCurrentDatabase()).rejects.toThrow(
+      /Metadados R2 da base fiscal indisponíveis/,
+    );
+    expect(getWorkerMessages()).not.toContain('INSTALL');
   });
 
-  it('falls back to the legacy install payload when R2 metadata is unavailable', async () => {
+  it('fails the install when R2 metadata is unavailable', async () => {
     configureR2Install((url: string) => {
       if (url.includes('/fiscal_offline.meta.json')) {
         return Promise.reject(new Error('source metadata unavailable'));
@@ -379,9 +375,11 @@ describe('LocalDatabaseContext auto-install behavior', () => {
 
     renderLocalDatabaseProvider();
     await waitForNotInstalledContext();
-    await installCurrentDatabase();
 
-    expectLegacyInstallPayload();
+    await expect(installCurrentDatabase()).rejects.toThrow(
+      /Metadados R2 da base fiscal indisponíveis/,
+    );
+    expect(getWorkerMessages()).not.toContain('INSTALL');
   });
 
   it('uses the monolithic remove payload for static R2 installs', async () => {
@@ -410,6 +408,12 @@ describe('LocalDatabaseContext auto-install behavior', () => {
 
   it('clears the auto-install opt-out when install is started manually', async () => {
     localStorage.setItem('offline-db:auto-install-opt-out', 'true');
+    configureR2Install((url: string) => {
+      if (url.includes('/database/version') || url.includes('/database/token')) {
+        return Promise.reject(new Error(`legacy endpoint called: ${url}`));
+      }
+      return Promise.resolve(makeR2MetadataResponse('2026.05.01'));
+    });
 
     renderLocalDatabaseProvider();
 

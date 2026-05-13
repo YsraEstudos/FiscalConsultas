@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.presentation.routes import (
     auth,
     comments,
+    database_download,
     profile,
     security,
     system,
@@ -20,6 +21,9 @@ def _configure_routes(app: FastAPI, project_root: str, logger: logging.Logger) -
     app.include_router(auth.router, prefix="/api", tags=["Auth"])
     app.include_router(system.router, prefix="/api", tags=["System"])
     app.include_router(webhooks.router, prefix="/api/webhooks", tags=["Webhooks"])
+    app.include_router(
+        database_download.router, prefix="/api/database", tags=["Database"]
+    )
     app.include_router(comments.router, prefix="/api", tags=["Comments"])
     app.include_router(profile.router, prefix="/api", tags=["Profile"])
     app.include_router(security.router, prefix="/api", tags=["Security"])

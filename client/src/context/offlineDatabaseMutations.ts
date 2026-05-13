@@ -14,16 +14,16 @@ import {
     setOfflineDatabaseAutoInstallOptOut,
 } from './offlineDatabaseStorage';
 import {
+    assertStaticOfflineDatabaseConfig,
     getFiscalR2BaseUrl,
     getOfflineDbPublicSeed,
-    getOfflineDatabaseApiBaseUrl,
     primeOfflineShellCache,
 } from './offlineDatabaseSync';
 import { runCoordinatedOfflineDatabaseInstall } from './offlineDatabaseInstallCoordinator';
 import type { OfflineDatabaseOperations } from './offlineDatabaseOperations.shared';
 import type { OfflineDatabaseOperationsArgs } from './offlineDatabaseOperations.shared';
 
-// Current installs still use the legacy monolithic bundle until source-scoped installs land.
+// Published installs must use the static R2 bundle, not the legacy backend route.
 const LEGACY_MONOLITHIC_BUNDLE_SOURCE = 'nesh';
 
 export function useOfflineDatabaseMutations({
@@ -85,28 +85,23 @@ export function useOfflineDatabaseMutations({
             }
 
             runOfflineDatabaseTaskInBackground(primeOfflineShellCache());
+            assertStaticOfflineDatabaseConfig();
 
             const r2BaseUrl = getFiscalR2BaseUrl();
             const publicSeed = getOfflineDbPublicSeed();
-            if (r2BaseUrl && !publicSeed) {
+
+            if (!metadata) {
                 throw new Error(
-                    'VITE_OFFLINE_DB_PUBLIC_SEED precisa estar configurado para instalar a base fiscal pelo R2.',
+                    'Metadados R2 da base fiscal indisponíveis. Verifique os bundles estáticos e tente novamente.',
                 );
             }
 
-            const installPayload =
-                r2BaseUrl && publicSeed && metadata
-                    ? {
-                        r2BaseUrl,
-                        publicSeed,
-                        metadata,
-                        userId: userId ?? null,
-                    }
-                    : {
-                        apiBase: getOfflineDatabaseApiBaseUrl(),
-                        clerkToken: '',
-                        userId: userId ?? null,
-                    };
+            const installPayload = {
+                r2BaseUrl,
+                publicSeed,
+                metadata,
+                userId: userId ?? null,
+            };
 
             await sendToWorker(
                 {
