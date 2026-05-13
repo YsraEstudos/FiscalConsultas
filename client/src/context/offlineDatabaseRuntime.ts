@@ -256,15 +256,11 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
         if (!isSupported || !isWorkerReady) return;
 
         runOfflineDatabaseTaskInBackground(initializeInstalledDatabase());
-        runOfflineDatabaseTaskInBackground(
-            refreshOfflineDatabaseAvailability(false),
-        );
         runOfflineDatabaseTaskInBackground(primeOfflineShellCache());
     }, [
         initializeInstalledDatabase,
         isSupported,
         isWorkerReady,
-        refreshOfflineDatabaseAvailability,
     ]);
 
     // Wipe in-memory seed and close DB on logout.
