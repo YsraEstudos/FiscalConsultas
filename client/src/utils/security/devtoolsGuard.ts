@@ -40,7 +40,7 @@ function reportIncidentToServer(type: string) {
 function onDevToolsDetected() {
     if (_detected) return; // fire once per session
     _detected = true;
-    reportIncidentToServer('devtools_detected');
+    reportIncidentToServer('devtools');
 }
 
 // ---------------------------------------------------------------------------

@@ -346,6 +346,7 @@ class TenantMiddleware:
         "/api/admin/reload-secrets",
         "/api/debug/anchors",
         "/api/glossary",
+        "/api/security/incident",
         "/api/webhooks",
     }
     PUBLIC_PREFIX_PATHS = ("/api/database/", "/api/webhooks/")
