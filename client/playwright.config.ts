@@ -40,6 +40,8 @@ export default defineConfig({
       VITE_E2E_MOCK_AUTH: 'true',
       VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_e2e',
       VITE_AUTH_DEBUG: 'false',
+      VITE_FISCAL_R2_BASE_URL: 'https://example.r2.dev/fiscal',
+      VITE_OFFLINE_DB_PUBLIC_SEED: 'e2e-public-seed',
     },
   },
   projects: [
