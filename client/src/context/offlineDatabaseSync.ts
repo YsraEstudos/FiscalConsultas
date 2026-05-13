@@ -15,6 +15,12 @@ import {
 export const OFFLINE_CHANNEL_NAME = 'offline-db-channel';
 export const OFFLINE_WAIT_TIMEOUT_MS = 240_000;
 const OFFLINE_METADATA_TIMEOUTS_MS = [4_000, 10_000, 20_000] as const;
+const BUNDLED_FISCAL_BASE_PATH = 'fiscal-bases';
+
+export interface FiscalR2DatabaseAvailability {
+    metadata: OfflineDatabaseMetadata | null;
+    r2BaseUrl: string;
+}
 
 export function getOfflineDatabaseApiBaseUrl(): string {
     return API_BASE_URL;
@@ -25,6 +31,23 @@ export function getFiscalR2BaseUrl(): string {
     return normalizeFiscalR2BaseUrl(env.VITE_FISCAL_R2_BASE_URL);
 }
 
+export function getBundledFiscalR2BaseUrl(): string {
+    const env = import.meta.env as { BASE_URL?: string | undefined };
+    const basePath = env.BASE_URL || '/';
+    const normalizedBasePath = basePath.endsWith('/') ? basePath : `${basePath}/`;
+
+    if (typeof window === 'undefined') {
+        return normalizeFiscalR2BaseUrl(`${normalizedBasePath}${BUNDLED_FISCAL_BASE_PATH}`);
+    }
+
+    return normalizeFiscalR2BaseUrl(
+        new URL(
+            `${normalizedBasePath}${BUNDLED_FISCAL_BASE_PATH}`,
+            window.location.origin,
+        ).toString(),
+    );
+}
+
 export function getOfflineDbPublicSeed(): string {
     const env = import.meta.env as { VITE_OFFLINE_DB_PUBLIC_SEED?: string | undefined };
     return (env.VITE_OFFLINE_DB_PUBLIC_SEED || '').trim();
@@ -32,7 +55,6 @@ export function getOfflineDbPublicSeed(): string {
 
 export function getMissingStaticOfflineDatabaseConfig(): string[] {
     const missing: string[] = [];
-    if (!getFiscalR2BaseUrl()) missing.push('VITE_FISCAL_R2_BASE_URL');
     if (!getOfflineDbPublicSeed()) missing.push('VITE_OFFLINE_DB_PUBLIC_SEED');
     return missing;
 }
@@ -44,6 +66,39 @@ export function assertStaticOfflineDatabaseConfig(): void {
             `Configuração de bundles fiscais R2 incompleta: ${missing.join(', ')}.`,
         );
     }
+}
+
+export async function fetchAvailableFiscalR2DatabaseMetadata(
+    r2BaseUrls = [getFiscalR2BaseUrl(), getBundledFiscalR2BaseUrl()],
+): Promise<FiscalR2DatabaseAvailability> {
+    const candidates = [...new Set(
+        r2BaseUrls
+            .map((baseUrl) => normalizeFiscalR2BaseUrl(baseUrl))
+            .filter(Boolean),
+    )];
+    let lastError: unknown = null;
+
+    for (const r2BaseUrl of candidates) {
+        try {
+            const metadata = await fetchFiscalR2DatabaseAvailabilityMetadata(r2BaseUrl);
+            if (metadata) {
+                return { metadata, r2BaseUrl };
+            }
+        } catch (err) {
+            lastError = err;
+        }
+    }
+
+    if (lastError) {
+        throw lastError instanceof Error
+            ? lastError
+            : new Error('R2 metadata check failed for an unknown reason');
+    }
+
+    return {
+        metadata: null,
+        r2BaseUrl: candidates[0] ?? '',
+    };
 }
 
 export async function fetchOfflineSourceAvailabilityMetadata(

@@ -147,7 +147,7 @@ If there is no formatter, agree on one and add it to CI.
 - `/api/database/*` remains public only as a legacy offline installer compatibility path; keep new fiscal search work on static R2 bundles.
 - Cloud backend work is reserved for future user-account features only: comments, favorites, profile, and preferences via Clerk, Cloudflare Workers, and Cloudflare D1.
 - GitHub Pages currently runs without a custom domain. Clerk `pk_test_` is an accepted temporary tradeoff there; `pk_live_` requires a Clerk production domain, so keep `ALLOW_TEST_CLERK_KEY` until a custom domain exists.
-- The current Pages production deploy uses the consolidated static R2 bundle: `fiscal_offline.meta.json` and `fiscal_offline.enc` must exist at `VITE_FISCAL_R2_BASE_URL` before publishing the frontend.
+- The current Pages production deploy prefers the consolidated static R2 bundle at `VITE_FISCAL_R2_BASE_URL`, but also publishes `database/r2/fiscal_offline.meta.json` and `database/r2/fiscal_offline.enc` under `BASE_URL/fiscal-bases/` as a same-origin fallback.
 - Future/source-scoped R2 layout is: `nesh/nesh.meta.json`, `nesh/nesh.enc`, `tipi/tipi.meta.json`, `tipi/tipi.enc`, `nbs/nbs.meta.json`, `nbs/nbs.enc`, `unspsc/unspsc.meta.json`, and `unspsc/unspsc.enc`.
 
 ## Git hygiene

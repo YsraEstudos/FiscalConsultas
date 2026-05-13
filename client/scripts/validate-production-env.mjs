@@ -70,9 +70,7 @@ export function validateProductionEnv(env = resolveBuildEnv()) {
     errors.push('VITE_ADMIN_EMAIL must not be defined for production builds.');
   }
 
-  if (requireLivePublishableKey && !fiscalR2BaseUrl) {
-    errors.push('VITE_FISCAL_R2_BASE_URL must be defined for production builds.');
-  } else if (fiscalR2BaseUrl && !/^https:\/\//i.test(fiscalR2BaseUrl)) {
+  if (fiscalR2BaseUrl && !/^https:\/\//i.test(fiscalR2BaseUrl)) {
     errors.push('VITE_FISCAL_R2_BASE_URL must use an HTTPS URL for production builds.');
   }
 

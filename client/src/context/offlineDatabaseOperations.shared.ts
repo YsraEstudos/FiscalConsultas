@@ -25,6 +25,7 @@ export interface OfflineDatabaseOperationsArgs {
     userId: string | null;
     instanceId: string;
     remoteMetadataRef: MutableRefObject<OfflineDatabaseMetadata | null>;
+    remoteBundleBaseUrlRef: MutableRefObject<string>;
     broadcast: (message: OfflineDatabaseChannelMessage) => void;
     waitForOtherTabSync: () => Promise<void>;
     sendToWorker: (

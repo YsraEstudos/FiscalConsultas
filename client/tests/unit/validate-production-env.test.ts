@@ -48,13 +48,24 @@ describe('validateProductionEnv', () => {
     })).toThrow(/never a secret key/i);
   });
 
-  it('blocks production builds without static R2 bundle settings', () => {
+  it('blocks production builds without the offline public seed', () => {
     expect(() => validateProductionEnv({
       GITHUB_ACTIONS: 'true',
       VITE_AUTH_DEBUG: 'false',
       VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_valid',
-    })).toThrow(/VITE_FISCAL_R2_BASE_URL[\s\S]*VITE_OFFLINE_DB_PUBLIC_SEED/);
+    })).toThrow(/VITE_OFFLINE_DB_PUBLIC_SEED/);
+  });
 
+  it('allows production builds without R2 URL when the bundled fallback seed is configured', () => {
+    expect(() => validateProductionEnv({
+      GITHUB_ACTIONS: 'true',
+      VITE_AUTH_DEBUG: 'false',
+      VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_valid',
+      VITE_OFFLINE_DB_PUBLIC_SEED: 'change_me_32_byte_hex',
+    })).not.toThrow();
+  });
+
+  it('blocks non-HTTPS static R2 bundle URLs', () => {
     expect(() => validateProductionEnv({
       GITHUB_ACTIONS: 'true',
       VITE_AUTH_DEBUG: 'false',

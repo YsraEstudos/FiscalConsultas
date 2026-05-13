@@ -30,6 +30,7 @@ jobs:
       VITE_OFFLINE_DB_PUBLIC_SEED: ${{ vars.VITE_OFFLINE_DB_PUBLIC_SEED }}
       VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
       VITE_CLERK_TOKEN_TEMPLATE: backend_api
+      REQUIRE_FISCAL_FALLBACK_ASSETS: "true"
       # Temporary: GitHub Pages is deployed without a custom domain, so Clerk pk_live cannot be used yet.
       # Remove this override after moving Pages to a Clerk production domain and setting pk_live.
       ALLOW_TEST_CLERK_KEY: "true"
@@ -53,10 +54,6 @@ jobs:
             echo "Missing GitHub repository variable VITE_CLERK_PUBLISHABLE_KEY"
             exit 1
           fi
-          if [ -z "${VITE_FISCAL_R2_BASE_URL}" ]; then
-            echo "Missing GitHub repository variable VITE_FISCAL_R2_BASE_URL"
-            exit 1
-          fi
           if [ -z "${VITE_OFFLINE_DB_PUBLIC_SEED}" ]; then
             echo "Missing GitHub repository variable VITE_OFFLINE_DB_PUBLIC_SEED"
             exit 1
@@ -64,6 +61,12 @@ jobs:
 
       - name: Validate public R2 offline bundle
         run: |
+          bundled_metadata="../database/r2/fiscal_offline.meta.json"
+          bundled_bundle="../database/r2/fiscal_offline.enc"
+          if [ ! -f "$bundled_metadata" ] || [ ! -f "$bundled_bundle" ]; then
+            echo "::error::Bundled offline fallback is missing. Run scripts/build_r2_fiscal_bundles.py and commit database/r2/fiscal_offline.*"
+            exit 1
+          fi
           metadata_url="${VITE_FISCAL_R2_BASE_URL%/}/fiscal_offline.meta.json"
           bundle_url="${VITE_FISCAL_R2_BASE_URL%/}/fiscal_offline.enc"
           check_public_url() {
@@ -82,8 +85,12 @@ jobs:
               exit 1
             fi
           }
-          check_public_url "R2 offline metadata" "$metadata_url"
-          check_public_url "R2 offline bundle" "$bundle_url"
+          if [ -n "${VITE_FISCAL_R2_BASE_URL}" ]; then
+            check_public_url "R2 offline metadata" "$metadata_url"
+            check_public_url "R2 offline bundle" "$bundle_url"
+          else
+            echo "::notice::VITE_FISCAL_R2_BASE_URL is not set; Pages will rely on bundled fiscal-bases fallback."
+          fi
 
       - name: Patch app for GitHub Pages project path
         run: |
@@ -97,6 +104,11 @@ jobs:
         run: |
           cp dist/index.html dist/404.html
           touch dist/.nojekyll
+
+      - name: Validate Pages offline fallback assets
+        run: |
+          test -s dist/fiscal-bases/fiscal_offline.meta.json
+          test -s dist/fiscal-bases/fiscal_offline.enc
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5

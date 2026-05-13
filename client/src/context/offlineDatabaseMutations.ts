@@ -32,6 +32,7 @@ export function useOfflineDatabaseMutations({
     instanceId,
     isSupported,
     localVersion,
+    remoteBundleBaseUrlRef,
     refreshOfflineDatabaseAvailability,
     remoteMetadataRef,
     remoteVersion,
@@ -87,7 +88,7 @@ export function useOfflineDatabaseMutations({
             runOfflineDatabaseTaskInBackground(primeOfflineShellCache());
             assertStaticOfflineDatabaseConfig();
 
-            const r2BaseUrl = getFiscalR2BaseUrl();
+            const r2BaseUrl = remoteBundleBaseUrlRef.current || getFiscalR2BaseUrl();
             const publicSeed = getOfflineDbPublicSeed();
 
             if (!metadata) {
@@ -159,6 +160,7 @@ export function useOfflineDatabaseMutations({
         isSupported,
         localVersion,
         refreshOfflineDatabaseAvailability,
+        remoteBundleBaseUrlRef,
         remoteMetadataRef,
         remoteVersion,
         sendToWorker,

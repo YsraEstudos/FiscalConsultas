@@ -90,6 +90,43 @@ async function dispatchInstallWithToken(id, payload, clerkToken = 'clerk-token')
   await installPromise;
 }
 
+async function installStaticBundle({
+  id,
+  baseUrl,
+  version,
+  encryptedSha,
+  encryptedBlob = new Uint8Array([9, 8, 7]),
+}) {
+  sha256Hex.mockResolvedValue(encryptedSha);
+  decryptDatabase.mockResolvedValue(new Uint8Array([6, 5, 4]));
+  loadDatabaseFromBytes.mockResolvedValue(undefined);
+  saveToOpfs.mockResolvedValue(undefined);
+  saveSeed.mockResolvedValue(undefined);
+  saveVersion.mockResolvedValue(undefined);
+  getWorkerVersion.mockReturnValue(version);
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(
+      new Response(encryptedBlob, {
+        status: 200,
+        headers: { 'content-length': String(encryptedBlob.length) },
+      }),
+    ),
+  );
+
+  await dispatchWorkerMessage('INSTALL', id, {
+    r2BaseUrl: baseUrl,
+    publicSeed: 'public-seed',
+    userId: 'user-1',
+    metadata: {
+      version,
+      encrypted_sha256: encryptedSha,
+    },
+  });
+
+  return encryptedBlob;
+}
+
 describe('dbWorker messages network helpers', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -286,32 +323,11 @@ describe('dbWorker messages network helpers', () => {
   });
 
   it('installs a static consolidated R2 fiscal bundle without requesting backend tokens', async () => {
-    const encryptedBlob = new Uint8Array([9, 8, 7]);
-    sha256Hex.mockResolvedValue('static-encrypted-sha');
-    decryptDatabase.mockResolvedValue(new Uint8Array([6, 5, 4]));
-    loadDatabaseFromBytes.mockResolvedValue(undefined);
-    saveToOpfs.mockResolvedValue(undefined);
-    saveSeed.mockResolvedValue(undefined);
-    saveVersion.mockResolvedValue(undefined);
-    getWorkerVersion.mockReturnValue('2026.05.11');
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(encryptedBlob, {
-          status: 200,
-          headers: { 'content-length': String(encryptedBlob.length) },
-        }),
-      ),
-    );
-
-    await dispatchWorkerMessage('INSTALL', 'install-r2-static', {
-      r2BaseUrl: 'https://r2.example.test/fiscal',
-      publicSeed: 'public-seed',
-      userId: 'user-1',
-      metadata: {
-        version: '2026.05.11',
-        encrypted_sha256: 'static-encrypted-sha',
-      },
+    const encryptedBlob = await installStaticBundle({
+      id: 'install-r2-static',
+      baseUrl: 'https://r2.example.test/fiscal',
+      version: '2026.05.11',
+      encryptedSha: 'static-encrypted-sha',
     });
 
     expect(fetch).toHaveBeenCalledWith(
@@ -328,6 +344,32 @@ describe('dbWorker messages network helpers', () => {
     expect(saveVersion).toHaveBeenCalledWith('2026.05.11');
     expect(postWorkerStatus).toHaveBeenCalledWith(
       'install-r2-static',
+      expect.objectContaining({ status: 'ready' }),
+    );
+  });
+
+  it('downloads the static consolidated bundle from the same-origin Pages fallback URL', async () => {
+    const encryptedBlob = await installStaticBundle({
+      id: 'install-pages-fallback',
+      baseUrl: 'https://ysraestudos.github.io/FiscalConsultas/fiscal-bases',
+      version: '2026.05.14',
+      encryptedSha: 'fallback-encrypted-sha',
+      encryptedBlob: new Uint8Array([7, 8, 9]),
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      'https://ysraestudos.github.io/FiscalConsultas/fiscal-bases/fiscal_offline.enc',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining('/database/token'),
+      expect.anything(),
+    );
+    expect(saveToOpfs).toHaveBeenCalledWith(encryptedBlob);
+    expect(saveSeed).toHaveBeenCalledWith('public-seed', 'user-1');
+    expect(saveVersion).toHaveBeenCalledWith('2026.05.14');
+    expect(postWorkerStatus).toHaveBeenCalledWith(
+      'install-pages-fallback',
       expect.objectContaining({ status: 'ready' }),
     );
   });
