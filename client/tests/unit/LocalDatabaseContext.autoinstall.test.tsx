@@ -338,6 +338,42 @@ describe('LocalDatabaseContext auto-install behavior', () => {
     );
   });
 
+  it('uses the bundled fiscal bundle when configured R2 metadata is missing', async () => {
+    vi.stubEnv('BASE_URL', '/FiscalConsultas/');
+    configureR2Install((url: string) => {
+      if (url === 'https://r2.example.com/fiscal/fiscal_offline.meta.json') {
+        return Promise.resolve(new Response('not found', { status: 404 }));
+      }
+      if (
+        url === 'http://localhost:3000/FiscalConsultas/fiscal-bases/fiscal_offline.meta.json'
+      ) {
+        return Promise.resolve(makeR2MetadataResponse('2026.05.13'));
+      }
+      if (url.includes('/database/version') || url.includes('/database/token')) {
+        return Promise.reject(new Error(`legacy endpoint called: ${url}`));
+      }
+      return Promise.reject(new Error(`unexpected request: ${url}`));
+    });
+
+    renderLocalDatabaseProvider();
+    await waitForNotInstalledContext();
+    await installCurrentDatabase();
+
+    expect(getPostedWorkerMessages()).toContainEqual(
+      expect.objectContaining({
+        type: 'INSTALL',
+        payload: expect.objectContaining({
+          r2BaseUrl: 'http://localhost:3000/FiscalConsultas/fiscal-bases',
+          publicSeed: 'public-seed',
+          metadata: expect.objectContaining({
+            version: '2026.05.13',
+            encrypted_sha256: 'enc-sha',
+          }),
+        }),
+      }),
+    );
+  });
+
   it('fails the install when R2 metadata is malformed', async () => {
     configureR2Install(() => Promise.resolve(
       new Response(

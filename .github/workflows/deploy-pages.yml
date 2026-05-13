@@ -64,6 +64,12 @@ jobs:
 
       - name: Validate public R2 offline bundle
         run: |
+          bundled_metadata="../database/r2/fiscal_offline.meta.json"
+          bundled_bundle="../database/r2/fiscal_offline.enc"
+          if [ ! -f "$bundled_metadata" ] || [ ! -f "$bundled_bundle" ]; then
+            echo "::error::Bundled offline fallback is missing. Run scripts/build_r2_fiscal_bundles.py and commit database/r2/fiscal_offline.*"
+            exit 1
+          fi
           metadata_url="${VITE_FISCAL_R2_BASE_URL%/}/fiscal_offline.meta.json"
           bundle_url="${VITE_FISCAL_R2_BASE_URL%/}/fiscal_offline.enc"
           check_public_url() {
@@ -95,6 +101,9 @@ jobs:
 
       - name: Add SPA fallback
         run: |
+          mkdir -p dist/fiscal-bases
+          cp ../database/r2/fiscal_offline.meta.json dist/fiscal-bases/fiscal_offline.meta.json
+          cp ../database/r2/fiscal_offline.enc dist/fiscal-bases/fiscal_offline.enc
           cp dist/index.html dist/404.html
           touch dist/.nojekyll
 

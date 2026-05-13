@@ -23,7 +23,7 @@ import {
     type OfflineDatabaseSupportReport,
 } from './offlineDatabaseStorage';
 import {
-    fetchFiscalR2DatabaseAvailabilityMetadata,
+    fetchAvailableFiscalR2DatabaseMetadata,
     getMissingStaticOfflineDatabaseConfig,
     getFiscalR2BaseUrl,
     getOfflineDbPublicSeed,
@@ -81,6 +81,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
     const remoteMetaRef = useRef<OfflineDatabaseMetadata | null>(
         readInitialOfflineMetadata(),
     );
+    const remoteBundleBaseUrlRef = useRef(getFiscalR2BaseUrl());
 
     const [status, setStatus] = useState<OfflineDatabaseStatus>(
         isSupported || supportReport.canRecoverWithIsolationReload
@@ -198,18 +199,17 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
 
             const request = (async () => {
                 try {
-                    const r2BaseUrl = getFiscalR2BaseUrl();
                     const missingStaticConfig = getMissingStaticOfflineDatabaseConfig();
                     if (missingStaticConfig.length > 0) {
                         throw new Error(
                             `Configuração de bundles fiscais R2 incompleta: ${missingStaticConfig.join(', ')}.`,
                         );
                     }
-                    const metadata = await fetchFiscalR2DatabaseAvailabilityMetadata(
-                        r2BaseUrl,
-                    );
+                    const availability = await fetchAvailableFiscalR2DatabaseMetadata();
+                    const metadata = availability.metadata;
                     remoteMetaRef.current = metadata;
                     if (metadata) {
+                        remoteBundleBaseUrlRef.current = availability.r2BaseUrl;
                         persistStoredOfflineDatabaseMetadata(metadata);
                     }
                     setRemoteVersion(metadata?.version ?? null);
@@ -321,6 +321,7 @@ export function useOfflineDatabaseRuntime(): OfflineDatabaseRuntimeValue {
             userId,
             instanceId: instanceIdRef.current,
             remoteMetadataRef: remoteMetaRef,
+            remoteBundleBaseUrlRef,
             broadcast,
             waitForOtherTabSync,
             sendToWorker,
