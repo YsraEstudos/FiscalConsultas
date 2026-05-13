@@ -57,25 +57,6 @@ function checkWindowSizeAnomaly(): boolean {
     return widthDiff > RESIZE_THRESHOLD_PX || heightDiff > RESIZE_THRESHOLD_PX;
 }
 
-/**
- * 2) console.log timing — DevTools intercepts console calls;
- *    on some engines the toString() of a logged object fires only when the
- *    console panel is open.
- */
-function checkConsoleRedirect(): boolean {
-    let opened = false;
-    const el = new Image();
-    Object.defineProperty(el, 'id', {
-        get() {
-            opened = true;
-            return '';
-        },
-    });
-    // eslint-disable-next-line no-console
-    console.debug('%c', el as unknown as string);
-    return opened;
-}
-
 // ---------------------------------------------------------------------------
 // Keyboard / context-menu blockers
 // ---------------------------------------------------------------------------
@@ -122,7 +103,7 @@ export function installDevToolsGuard(): void {
 
     // Periodic heuristic check
     setInterval(() => {
-        if (checkWindowSizeAnomaly() || checkConsoleRedirect()) {
+        if (checkWindowSizeAnomaly()) {
             onDevToolsDetected();
         }
     }, DEVTOOLS_CHECK_INTERVAL_MS);
