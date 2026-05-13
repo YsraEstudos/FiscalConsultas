@@ -30,6 +30,7 @@ jobs:
       VITE_OFFLINE_DB_PUBLIC_SEED: ${{ vars.VITE_OFFLINE_DB_PUBLIC_SEED }}
       VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
       VITE_CLERK_TOKEN_TEMPLATE: backend_api
+      REQUIRE_FISCAL_FALLBACK_ASSETS: "true"
       # Temporary: GitHub Pages is deployed without a custom domain, so Clerk pk_live cannot be used yet.
       # Remove this override after moving Pages to a Clerk production domain and setting pk_live.
       ALLOW_TEST_CLERK_KEY: "true"
