@@ -12,6 +12,7 @@ import {
     unregisterClerkTokenGetter,
 } from '../services/api';
 import { hasPrivilegedRole } from '../utils/authz';
+import { setAppDebugLoggingUser } from '../utils/debug';
 
 type ClerkGetToken = ReturnType<typeof useClerkAuth>['getToken'];
 type ClerkGetTokenOptions = Parameters<ClerkGetToken>[0];
@@ -189,6 +190,12 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
             unregisterClerkTokenGetter();
         };
     }, [getToken]);
+
+    useEffect(() => {
+        setAppDebugLoggingUser(
+            isSignedIn ? user?.primaryEmailAddress?.emailAddress : null,
+        );
+    }, [isSignedIn, user?.primaryEmailAddress?.emailAddress]);
 
     useEffect(() => {
         if (isLoading || !isSignedIn) {

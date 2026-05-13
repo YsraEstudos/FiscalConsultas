@@ -13,6 +13,7 @@ import type {
 } from '../types/api.types';
 import { isCodeSearchApiResponse } from '../services/apiResponseGuards';
 import { buildLocalCodeSearchResponse } from '../utils/searchResultMarkup';
+import { debug } from '../utils/debug';
 
 const buildLoadedChaptersByDoc = (value?: Record<DocType, string[]>): Record<DocType, string[]> => ({
     nesh: value?.nesh ?? [],
@@ -175,7 +176,7 @@ export function useSearch(
                             const sql = wt?.sqlDurationMs?.toFixed(1) ?? '?';
                             const total = wt?.totalDurationMs?.toFixed(1) ?? '?';
                             const cache = wt?.cacheHit ? '✓ HIT' : '✗ miss';
-                            console.log(
+                            debug.log(
                                 `[search] ${doc}:${query} e2e=${e2e}ms worker=${total}ms sql=${sql}ms cache=${cache}`
                             );
                         }

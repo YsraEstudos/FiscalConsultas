@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { debug } from '../utils/debug';
 
 const POLLING_INTERVAL_MS = 5 * 60 * 1000;
 const MIN_TIME_BETWEEN_CHECKS_MS = 60 * 1000;
@@ -38,7 +39,7 @@ export function useAppUpdate(): AppUpdateResult {
       const data = (await res.json()) as VersionResponse;
 
       if (data?.version && data.version !== __APP_VERSION__) {
-        console.log(`[AppUpdate] Nova versão detectada: ${data.version} (atual: ${__APP_VERSION__})`);
+        debug.log(`[AppUpdate] Nova versão detectada: ${data.version} (atual: ${__APP_VERSION__})`);
         setHasUpdateAvailable(true);
       }
     } catch (err) {
