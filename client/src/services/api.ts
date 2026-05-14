@@ -34,3 +34,8 @@ export {
     getSystemStatus,
 } from './api/system';
 export { searchTipi } from './api/tipi';
+export {
+    logSearchEvent,
+    getAdminDashboard,
+    getDeviceHistory,
+} from './api/adminDashboard';

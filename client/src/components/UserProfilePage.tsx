@@ -23,13 +23,14 @@ import type {
 } from '../types/api.types';
 import styles from './UserProfilePage.module.css';
 import { sanitizeImageUrl } from '../utils/contentSecurity';
+import { AdminDashboard } from './AdminDashboard';
 
 interface UserProfilePageProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
-type TabKey = 'profile' | 'contributions' | 'sessions' | 'organization';
+type TabKey = 'profile' | 'contributions' | 'sessions' | 'organization' | 'admin-dashboard';
 
 // ─── Module-level helpers ─────────────────────────────────────────────────
 
@@ -310,6 +311,7 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
         { key: 'contributions', label: 'Contribuições', icon: '💬', restrictedUiOnly: true },
         { key: 'sessions', label: 'Sessões', icon: '🔐' },
         { key: 'organization', label: 'Organização', icon: '🏢', adminOnly: true },
+        { key: 'admin-dashboard', label: 'Painel Admin', icon: '📊', adminOnly: true },
     ];
 
     return (
@@ -507,6 +509,11 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
                                         }}
                                     />
                                 </div>
+                            )}
+
+                            {/* ─── Admin Dashboard Tab ─── */}
+                            {activeTab === 'admin-dashboard' && isAdmin && (
+                                <AdminDashboard />
                             )}
                         </>
                     )}

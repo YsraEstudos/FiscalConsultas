@@ -161,6 +161,21 @@ if (!globalThis.cancelIdleCallback) {
     globalThis.cancelIdleCallback = (id: number) => clearTimeout(id);
 }
 
+// Mock matchMedia - not implemented in JSDOM but required by react-hot-toast
+Object.defineProperty(globalThis, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation(query => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(), // deprecated
+        removeListener: vi.fn(), // deprecated
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+    })),
+});
+
 let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
 let consoleWarnSpy: ReturnType<typeof vi.spyOn> | null = null;
 let consoleInfoSpy: ReturnType<typeof vi.spyOn> | null = null;

@@ -14,6 +14,8 @@ import type {
 import { isCodeSearchApiResponse } from '../services/apiResponseGuards';
 import { buildLocalCodeSearchResponse } from '../utils/searchResultMarkup';
 import { debug } from '../utils/debug';
+import { logSearchEvent } from '../services/api';
+import { getDeviceFingerprint, getDeviceLabel } from '../utils/deviceFingerprint';
 
 const buildLoadedChaptersByDoc = (value?: Record<DocType, string[]>): Record<DocType, string[]> => ({
     nesh: value?.nesh ?? [],
@@ -227,6 +229,14 @@ export function useSearch(
                     ...loadedChaptersByDoc,
                     [doc]: nextLoadedChaptersForDoc
                 }
+            });
+
+            // Telemetry: fire-and-forget search event for admin dashboard
+            logSearchEvent({
+                search_type: doc,
+                search_query: trimmedQuery,
+                device_fingerprint: getDeviceFingerprint(),
+                device_label: getDeviceLabel(),
             });
         } catch (err: any) {
             if (import.meta.env.DEV) {

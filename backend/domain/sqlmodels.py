@@ -304,6 +304,51 @@ class NebsEntry(SQLModel, table=True):
 
 
 # ============================================================
+# Search Analytics (Admin Dashboard)
+# ============================================================
+
+
+class SearchEvent(SQLModel, table=True):
+    """Evento de pesquisa para telemetria do Admin Dashboard."""
+
+    __tablename__: ClassVar[str] = "search_events"  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: Optional[str] = Field(
+        default=None,
+        max_length=255,
+        index=True,
+        description="Clerk user_id (null para anônimos)",
+    )
+    user_email: Optional[str] = Field(default=None, max_length=255)
+    session_id: Optional[str] = Field(default=None, max_length=255)
+    device_fingerprint: str = Field(
+        max_length=128,
+        index=True,
+        description="Hash estável do dispositivo (UA + tela + timezone)",
+    )
+    device_label: Optional[str] = Field(
+        default=None,
+        max_length=255,
+        description="Descrição legível do dispositivo ex: Chrome 125 / Windows",
+    )
+    search_type: str = Field(
+        max_length=20,
+        description="Tipo da pesquisa: nesh | tipi | nbs | text",
+    )
+    search_query: Optional[str] = Field(default=None, max_length=300)
+    tenant_id: Optional[str] = Field(
+        default=None,
+        foreign_key=TENANT_ID_FOREIGN_KEY,
+        index=True,
+    )
+    created_at: datetime = Field(
+        default_factory=_utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False, index=True),
+    )
+
+
+# ============================================================
 # Response Models (para API - sem table=True)
 # ============================================================
 
