@@ -29,6 +29,7 @@ vi.mock('../../src/services/api', () => ({
     searchNCM: vi.fn(),
     searchTipi: vi.fn(),
     searchNbsServices: vi.fn(),
+    logSearchEvent: vi.fn(),
 }));
 
 vi.mock('../../src/context/LocalDatabaseContext', () => ({

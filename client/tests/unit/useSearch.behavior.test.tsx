@@ -18,6 +18,7 @@ vi.mock('../../src/services/api', () => ({
   searchNCM: refs.searchNCMMock,
   searchTipi: refs.searchTipiMock,
   searchNbsServices: refs.searchNbsServicesMock,
+  logSearchEvent: vi.fn(),
 }));
 
 vi.mock('react-hot-toast', () => ({

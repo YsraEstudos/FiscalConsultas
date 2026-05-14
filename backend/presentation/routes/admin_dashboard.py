@@ -15,9 +15,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, case, and_
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.config.settings import settings
 from backend.domain.sqlmodels import SearchEvent
 from backend.infrastructure.db_engine import get_session
 from backend.server.middleware import decode_clerk_jwt
