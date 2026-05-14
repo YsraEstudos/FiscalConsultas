@@ -92,6 +92,9 @@ jobs:
             echo "::notice::VITE_FISCAL_R2_BASE_URL is not set; Pages will rely on bundled fiscal-bases fallback."
           fi
 
+      - name: Validate bundled fiscal decryptability
+        run: node scripts/validate-fiscal-r2-bundle.mjs ../database/r2
+
       - name: Patch app for GitHub Pages project path
         run: |
           node -e "const fs=require('node:fs'); const indexPath='index.html'; let html=fs.readFileSync(indexPath,'utf8'); html=html.replace('href=\"/vite.svg\"','href=\"./vite.svg\"'); html=html.replace('src=\"/src/main.tsx\"','src=\"./src/main.tsx\"'); fs.writeFileSync(indexPath,html);"
