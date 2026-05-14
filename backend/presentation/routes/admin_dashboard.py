@@ -19,6 +19,7 @@ from sqlalchemy import and_, case, delete, func, select
 from backend.domain.sqlmodels import SearchEvent
 from backend.infrastructure.db_engine import get_session
 from backend.server.middleware import decode_clerk_jwt
+from backend.server.rate_limit import RedisBackedRateLimiter
 from backend.utils.auth import extract_bearer_token, is_admin_payload
 
 router = APIRouter()
@@ -28,6 +29,11 @@ ACTIVE_THRESHOLD_MINUTES = 30
 RETENTION_DAYS = 90
 VALID_SEARCH_TYPES = {"nesh", "tipi", "nbs", "text"}
 
+
+
+_telemetry_rate_limiter = RedisBackedRateLimiter(
+    window_seconds=60, redis_prefix="telemetry_limiter"
+)
 
 # ─── Request / Response schemas ────────────────────────────────────
 
@@ -139,6 +145,16 @@ async def log_search_event(body: SearchEventRequest, request: Request):
     fingerprint = body.device_fingerprint.strip()
     if not fingerprint:
         raise HTTPException(status_code=422, detail="device_fingerprint required")
+
+    # Rate limiting: 60 requests per minute per IP+fingerprint
+    client_ip = request.client.host if request.client else "unknown"
+    rate_key = f"{client_ip}:{fingerprint}"
+    allowed, retry_after = await _telemetry_rate_limiter.consume(rate_key, limit=60)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many requests. Try again in {retry_after} seconds.",
+        )
 
     user_id, email, session_id, org_id = await _extract_user_info(request)
 
