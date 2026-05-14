@@ -35,6 +35,9 @@ from backend.server.app_lifecycle import (
     _init_primary_database as _init_primary_database_impl,
 )
 from backend.server.app_lifecycle import (
+    _run_alembic_migrations as _run_alembic_migrations_impl,
+)
+from backend.server.app_lifecycle import (
     _init_sqlmodel_engine as _init_sqlmodel_engine_impl,
 )
 from backend.server.app_lifecycle import (
@@ -169,6 +172,7 @@ def _build_cors_configuration() -> tuple[list[str], str | None]:
     )
 
 
+_run_alembic_migrations = _sync_lifecycle_async_call(_run_alembic_migrations_impl)
 _init_primary_database = _sync_lifecycle_async_call(_init_primary_database_impl)
 _init_sqlmodel_engine = _sync_lifecycle_async_call(_init_sqlmodel_engine_impl)
 _init_nesh_service = _sync_lifecycle_async_call(_init_nesh_service_impl)
@@ -193,6 +197,7 @@ async def lifespan(app: FastAPI):
         _record_release_metadata(app)
         _log_runtime_security_warnings()
         _validate_dev_tenant_override_safety()
+        await _run_alembic_migrations(project_root)
         await _init_sqlmodel_engine(app)
         app.state.ai_service = AiService()
 

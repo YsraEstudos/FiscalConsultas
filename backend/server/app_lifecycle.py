@@ -165,6 +165,48 @@ def _validate_dev_tenant_override_safety() -> None:
     )
 
 
+async def _run_alembic_migrations(project_root: str) -> None:
+    """Run 'alembic upgrade head' automatically on Postgres startup.
+
+    This ensures DB migrations are applied on every deploy without requiring
+    Render Shell (paid feature) or a pre-deploy command configuration.
+    Failures are logged as warnings — the server still starts.
+    """
+    import asyncio
+
+    if not settings.database.is_postgres:
+        return
+
+    logger.info("Running Alembic migrations (alembic upgrade head)...")
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "alembic",
+            "upgrade",
+            "head",
+            cwd=project_root,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        if proc.returncode == 0:
+            logger.info(
+                "Alembic migrations applied successfully: %s",
+                stdout.decode().strip() or "(no output)",
+            )
+        else:
+            logger.warning(
+                "Alembic migration failed (exit %s): %s",
+                proc.returncode,
+                stderr.decode().strip(),
+            )
+    except asyncio.TimeoutError:
+        logger.warning("Alembic migration timed out after 120s — skipping.")
+    except FileNotFoundError:
+        logger.warning("alembic command not found — skipping auto-migration.")
+    except Exception as exc:
+        logger.warning("Alembic migration error: %s", exc)
+
+
 async def _init_primary_database(app: FastAPI) -> None:
     logger.info("Initializing Database...")
     if settings.database.is_postgres:
