@@ -4,9 +4,8 @@ Revision ID: 015
 Revises: 014_subscriptions_timestamptz
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "015_search_events"
 down_revision = "014_subscriptions_timestamptz"
@@ -21,9 +20,7 @@ def upgrade() -> None:
         sa.Column("user_id", sa.String(255), nullable=True, index=True),
         sa.Column("user_email", sa.String(255), nullable=True),
         sa.Column("session_id", sa.String(255), nullable=True),
-        sa.Column(
-            "device_fingerprint", sa.String(128), nullable=False, index=True
-        ),
+        sa.Column("device_fingerprint", sa.String(128), nullable=False, index=True),
         sa.Column("device_label", sa.String(255), nullable=True),
         sa.Column("search_type", sa.String(20), nullable=False),
         sa.Column("search_query", sa.String(300), nullable=True),
@@ -63,8 +60,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_search_events_fp_created", table_name="search_events")
-    op.drop_index(
-        "ix_search_events_tenant_created", table_name="search_events"
-    )
+    op.drop_index("ix_search_events_tenant_created", table_name="search_events")
     op.drop_index("ix_search_events_user_created", table_name="search_events")
     op.drop_table("search_events")

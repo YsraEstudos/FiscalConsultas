@@ -315,17 +315,21 @@ class SearchEvent(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: Optional[str] = Field(
-        default=None, max_length=255, index=True,
+        default=None,
+        max_length=255,
+        index=True,
         description="Clerk user_id (null para anônimos)",
     )
     user_email: Optional[str] = Field(default=None, max_length=255)
     session_id: Optional[str] = Field(default=None, max_length=255)
     device_fingerprint: str = Field(
-        max_length=128, index=True,
+        max_length=128,
+        index=True,
         description="Hash estável do dispositivo (UA + tela + timezone)",
     )
     device_label: Optional[str] = Field(
-        default=None, max_length=255,
+        default=None,
+        max_length=255,
         description="Descrição legível do dispositivo ex: Chrome 125 / Windows",
     )
     search_type: str = Field(
@@ -334,7 +338,9 @@ class SearchEvent(SQLModel, table=True):
     )
     search_query: Optional[str] = Field(default=None, max_length=300)
     tenant_id: Optional[str] = Field(
-        default=None, foreign_key=TENANT_ID_FOREIGN_KEY, index=True,
+        default=None,
+        foreign_key=TENANT_ID_FOREIGN_KEY,
+        index=True,
     )
     created_at: datetime = Field(
         default_factory=_utc_now,

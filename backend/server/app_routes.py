@@ -28,9 +28,7 @@ def _configure_routes(app: FastAPI, project_root: str, logger: logging.Logger) -
     app.include_router(comments.router, prefix="/api", tags=["Comments"])
     app.include_router(profile.router, prefix="/api", tags=["Profile"])
     app.include_router(security.router, prefix="/api", tags=["Security"])
-    app.include_router(
-        admin_dashboard.router, prefix="/api", tags=["Admin Dashboard"]
-    )
+    app.include_router(admin_dashboard.router, prefix="/api", tags=["Admin Dashboard"])
 
     static_dir = os.path.join(project_root, "client", "dist")
     index_html = os.path.join(static_dir, "index.html")
