@@ -158,6 +158,15 @@ if (typeof window === "undefined") {
 
     const requestUrl = new URL(request.url);
     const sameOrigin = requestUrl.origin === self.location.origin;
+
+    // Cross-origin non-navigational requests (e.g. API calls to Render backend)
+    // must NOT be intercepted by the SW. If we call event.respondWith() here and
+    // the fetch fails, we return Response.error() which has no CORS headers and
+    // the browser misreports it as a CORS policy block.
+    if (!sameOrigin && request.mode !== "navigate") {
+      return;
+    }
+
     const isApiRequest = sameOrigin && requestUrl.pathname.startsWith("/api/");
     const isDocument =
       request.mode === "navigate" || request.destination === "document";
