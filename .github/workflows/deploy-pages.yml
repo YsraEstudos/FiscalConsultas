@@ -131,3 +131,15 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
+
+  deploy-backend:
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && vars.RENDER_DEPLOY_HOOK_URL != ''
+    steps:
+      - name: Trigger Render backend redeploy
+        run: |
+          curl --silent --show-error --fail \
+            --max-time 30 \
+            "${{ vars.RENDER_DEPLOY_HOOK_URL }}"
+          echo "Render deploy triggered successfully"
