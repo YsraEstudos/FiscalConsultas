@@ -15,12 +15,15 @@ const shouldUseDevProxyApi = import.meta.env.DEV;
 const hasGlobalLocation = typeof globalThis.location !== 'undefined';
 const isCloudflarePagesHost =
     hasGlobalLocation && /\.pages\.dev$/i.test(globalThis.location.hostname);
+const isGitHubPagesHost =
+    hasGlobalLocation && /\.github\.io$/i.test(globalThis.location.hostname);
+const isStaticHost = isCloudflarePagesHost || isGitHubPagesHost;
 const shouldUseProxyApi =
     shouldUseDevProxyApi
     || (hasGlobalLocation && isExplicitLocalApi && !isLocalHost(globalThis.location.hostname));
 
-const fallbackBaseUrl = isCloudflarePagesHost ? DEFAULT_PAGES_API_URL : '/api';
-const rawBaseUrl = shouldUseProxyApi && !isCloudflarePagesHost
+const fallbackBaseUrl = isStaticHost ? DEFAULT_PAGES_API_URL : '/api';
+const rawBaseUrl = shouldUseProxyApi && !isStaticHost
     ? '/api'
     : (explicitBaseUrl || fallbackBaseUrl);
 
