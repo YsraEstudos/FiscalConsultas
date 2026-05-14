@@ -30,7 +30,6 @@ RETENTION_DAYS = 90
 VALID_SEARCH_TYPES = {"nesh", "tipi", "nbs", "text"}
 
 
-
 _telemetry_rate_limiter = RedisBackedRateLimiter(
     window_seconds=60, redis_prefix="telemetry_limiter"
 )
