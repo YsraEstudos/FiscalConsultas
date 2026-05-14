@@ -14,7 +14,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select, case, and_
+from sqlalchemy import and_, case, delete, func, select
 
 from backend.domain.sqlmodels import SearchEvent
 from backend.infrastructure.db_engine import get_session
@@ -156,9 +156,9 @@ async def log_search_event(body: SearchEventRequest, request: Request):
         session.add(event)
 
     # Opportunistic cleanup: 1-in-100 chance to purge old events
-    import random
+    import secrets
 
-    if random.randint(1, 100) == 1:
+    if secrets.randbelow(100) == 0:
         try:
             async with get_session() as session:
                 cutoff = _now_utc() - timedelta(days=RETENTION_DAYS)
@@ -319,9 +319,7 @@ async def get_device_history(
             daily_map[date_str][dr.search_type] = dr.cnt
 
         daily_stats = []
-        for date_str, type_counts in sorted(
-            daily_map.items(), reverse=True
-        ):
+        for date_str, type_counts in sorted(daily_map.items(), reverse=True):
             total = sum(type_counts.values())
             daily_stats.append(
                 DailyStats(
