@@ -3,6 +3,7 @@ export * from './apiProfile.types';
 export * from './apiSearch.types';
 export * from './apiServices.types';
 export * from './apiSystem.types';
+export * from './apiAdmin.types';
 
 import type {
     NbsCatalogSearchApiResponse,
