@@ -38,4 +38,5 @@ export {
     logSearchEvent,
     getAdminDashboard,
     getDeviceHistory,
+    prefetchAdminDashboard,
 } from './api/adminDashboard';

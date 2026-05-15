@@ -170,7 +170,7 @@ async def test_dashboard_routes_require_admin(fake_db):
 async def test_dashboard_routes_allow_admin(fake_db, monkeypatch):
     async def fake_decode_jwt(token: str) -> dict[str, Any]:
         return {
-            "email": "israelsena2@gmail.com",
+            "email": "admin@example.com",
             "sub": "admin123",
             "org_role": "org:admin",
         }
@@ -185,3 +185,35 @@ async def test_dashboard_routes_allow_admin(fake_db, monkeypatch):
     res = await admin_dashboard.get_admin_dashboard(req)
     assert res.total_active_devices == 0
     assert res.devices == []
+
+
+@pytest.mark.asyncio
+async def test_dashboard_device_query_uses_retention_window(fake_db, monkeypatch):
+    async def fake_decode_jwt(token: str) -> dict[str, Any]:
+        return {
+            "email": "admin@example.com",
+            "sub": "admin123",
+            "org_role": "org:admin",
+        }
+
+    monkeypatch.setattr(admin_dashboard, "decode_clerk_jwt", fake_decode_jwt)
+    monkeypatch.setattr(
+        admin_dashboard, "extract_bearer_token", lambda req: "fake-token"
+    )
+
+    req = _build_request("/admin/dashboard", auth_header="Bearer fake-token")
+
+    await admin_dashboard.get_admin_dashboard(req)
+
+    device_query = next(
+        (
+            str(stmt)
+            for stmt in fake_db.executed
+            if "GROUP BY search_events.device_fingerprint" in str(stmt)
+            and "search_events.created_at" in str(stmt)
+        ),
+        "",
+    )
+    assert device_query
+    assert "search_events.created_at >= " in device_query
+    assert "IN (SELECT" in device_query
