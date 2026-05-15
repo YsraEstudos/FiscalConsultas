@@ -14,6 +14,7 @@ import {
     updateMyProfile,
     getMyContributions,
     deleteMyAccount,
+    prefetchAdminDashboard,
 } from '../services/api';
 import type {
     MyContributionHistoryApiResponse,
@@ -225,6 +226,12 @@ export function UserProfilePage({ isOpen, onClose }: Readonly<UserProfilePagePro
             .catch(console.error)
             .finally(() => setLoading(false));
     }, [isOpen]);
+
+    useEffect(() => {
+        if (isOpen && isAdmin) {
+            prefetchAdminDashboard();
+        }
+    }, [isOpen, isAdmin]);
 
     // Fetch contributions
     const fetchContributions = useCallback(async (page: number, search: string) => {

@@ -120,6 +120,15 @@ export function useSearch(
         return nextResults;
     }, []);
 
+    const recordSearchEvent = useCallback((doc: DocType, query: string) => {
+        logSearchEvent({
+            search_type: doc,
+            search_query: query,
+            device_fingerprint: getDeviceFingerprint(),
+            device_label: getDeviceLabel(),
+        });
+    }, []);
+
     const executeSearchForTab = useCallback(async (tabId: string, doc: DocType, query: string, saveHistory: boolean = true) => {
         if (!query) return;
 
@@ -150,6 +159,7 @@ export function useSearch(
                 results: updateResultsQuery(currentTab.results, query),
                 isNewSearch: true
             });
+            recordSearchEvent(doc, trimmedQuery);
             return; // Early exit - sem chamada a API
         }
 
@@ -232,12 +242,7 @@ export function useSearch(
             });
 
             // Telemetry: fire-and-forget search event for admin dashboard
-            logSearchEvent({
-                search_type: doc,
-                search_query: trimmedQuery,
-                device_fingerprint: getDeviceFingerprint(),
-                device_label: getDeviceLabel(),
-            });
+            recordSearchEvent(doc, trimmedQuery);
         } catch (err: any) {
             if (import.meta.env.DEV) {
                 console.error(err);
@@ -252,7 +257,7 @@ export function useSearch(
                 loading: false
             });
         }
-    }, [addToHistory, updateResultsQuery, updateTab, dbStatus, searchLocal]);
+    }, [addToHistory, updateResultsQuery, updateTab, recordSearchEvent, dbStatus, searchLocal]);
 
     return { executeSearchForTab };
 }

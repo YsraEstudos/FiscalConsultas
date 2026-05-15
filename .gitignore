@@ -32,6 +32,7 @@ data/
 !client/src/data/
 !client/src/data/*.json
 raw_data/
+database/Raw/
 *.zip
 *.xlsx
 # Specific large markdown from raw_data

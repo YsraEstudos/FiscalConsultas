@@ -9,6 +9,7 @@ const refs = vi.hoisted(() => ({
   searchNCMMock: vi.fn(),
   searchTipiMock: vi.fn(),
   searchNbsServicesMock: vi.fn(),
+  logSearchEventMock: vi.fn(),
   searchLocalMock: vi.fn(),
   toastErrorMock: vi.fn(),
   dbStatus: 'not_installed',
@@ -18,7 +19,7 @@ vi.mock('../../src/services/api', () => ({
   searchNCM: refs.searchNCMMock,
   searchTipi: refs.searchTipiMock,
   searchNbsServices: refs.searchNbsServicesMock,
-  logSearchEvent: vi.fn(),
+  logSearchEvent: refs.logSearchEventMock,
 }));
 
 vi.mock('react-hot-toast', () => ({
@@ -70,6 +71,7 @@ describe('useSearch local-only behavior', () => {
     refs.searchNCMMock.mockReset();
     refs.searchTipiMock.mockReset();
     refs.searchNbsServicesMock.mockReset();
+    refs.logSearchEventMock.mockReset();
     refs.searchLocalMock.mockReset();
     refs.toastErrorMock.mockReset();
     refs.dbStatus = 'not_installed';
@@ -222,6 +224,12 @@ describe('useSearch local-only behavior', () => {
 
     expect(refs.searchLocalMock).not.toHaveBeenCalled();
     expect(refs.searchNCMMock).not.toHaveBeenCalled();
+    expect(refs.logSearchEventMock).toHaveBeenCalledWith(expect.objectContaining({
+      search_type: 'nesh',
+      search_query: '0102',
+      device_fingerprint: expect.any(String),
+      device_label: expect.any(String),
+    }));
     expect(updateTab).toHaveBeenLastCalledWith('tab-1', expect.objectContaining({
       ncm: '0102',
       title: '0102',

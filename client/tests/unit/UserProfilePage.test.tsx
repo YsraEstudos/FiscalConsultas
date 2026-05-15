@@ -18,6 +18,7 @@ vi.mock('../../src/services/api', () => ({
     updateMyProfile: vi.fn(),
     getMyContributions: vi.fn(),
     deleteMyAccount: vi.fn(),
+    prefetchAdminDashboard: vi.fn(),
 }));
 
 // ─── Mocks de Clerk ──────────────────────────────────────────────────────────
@@ -54,12 +55,14 @@ import {
     updateMyProfile,
     getMyContributions,
     deleteMyAccount,
+    prefetchAdminDashboard,
 } from '../../src/services/api';
 
 const mockGetMyProfile = vi.mocked(getMyProfile);
 const mockUpdateMyProfile = vi.mocked(updateMyProfile);
 const mockGetMyContributions = vi.mocked(getMyContributions);
 const mockDeleteMyAccount = vi.mocked(deleteMyAccount);
+const mockPrefetchAdminDashboard = vi.mocked(prefetchAdminDashboard);
 let UserProfilePage: typeof import('../../src/components/UserProfilePage').UserProfilePage;
 
 // ─── Dados de fixture ─────────────────────────────────────────────────────────
@@ -350,6 +353,15 @@ describe('UserProfilePage', () => {
 
         fireEvent.click(screen.getByRole('button', { name: /organização/i }));
         expect(screen.getByTestId('clerk-org-profile')).toBeInTheDocument();
+    });
+
+    it('precarrega o Painel Admin ao abrir o modal para administradores', async () => {
+        isAdminRef.value = true;
+        render(<UserProfilePage isOpen={true} onClose={vi.fn()} />);
+
+        await waitFor(() => expect(mockGetMyProfile).toHaveBeenCalled());
+
+        expect(mockPrefetchAdminDashboard).toHaveBeenCalledTimes(1);
     });
 
     // --- Delete Account (double-confirmation) ---
