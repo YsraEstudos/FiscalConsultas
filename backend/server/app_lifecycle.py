@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
@@ -170,16 +172,16 @@ async def _run_alembic_migrations(project_root: str) -> None:
 
     This ensures DB migrations are applied on every deploy without requiring
     Render Shell (paid feature) or a pre-deploy command configuration.
-    Failures are logged as warnings — the server still starts.
+    Failures abort startup so production never serves with a stale schema.
     """
-    import asyncio
-
     if not settings.database.is_postgres:
         return
 
     logger.info("Running Alembic migrations (alembic upgrade head)...")
     try:
         proc = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-m",
             "alembic",
             "upgrade",
             "head",
@@ -194,17 +196,24 @@ async def _run_alembic_migrations(project_root: str) -> None:
                 stdout.decode().strip() or "(no output)",
             )
         else:
-            logger.warning(
-                "Alembic migration failed (exit %s): %s",
-                proc.returncode,
-                stderr.decode().strip(),
+            error_output = stderr.decode().strip() or stdout.decode().strip()
+            message = (
+                f"Alembic migration failed (exit {proc.returncode}): "
+                f"{error_output or '(no output)'}"
             )
+            logger.error(message)
+            raise RuntimeError(message)
     except asyncio.TimeoutError:
-        logger.warning("Alembic migration timed out after 120s — skipping.")
+        message = "Alembic migration timed out after 120s"
+        logger.error(message)
+        raise RuntimeError(message) from None
     except FileNotFoundError:
-        logger.warning("alembic command not found — skipping auto-migration.")
+        message = "Python or Alembic command not found while running migrations"
+        logger.error(message)
+        raise RuntimeError(message) from None
     except Exception as exc:
-        logger.warning("Alembic migration error: %s", exc)
+        logger.error("Alembic migration error: %s", exc)
+        raise
 
 
 async def _init_primary_database(app: FastAPI) -> None:
