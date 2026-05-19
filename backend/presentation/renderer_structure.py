@@ -408,12 +408,18 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     if not commented_anchor_keys or not html:
         return html
 
-    for key in commented_anchor_keys:
-        safe_key = re.escape(key)
-        class_attr_pattern = re.compile(r'(?<![\w-])(class=["\'])([^"\']*?)(["\'])')
+    keys_set = set(commented_anchor_keys)
+    # Use [^\s>] to prevent ReDoS as per security guidelines
+    tag_pattern = re.compile(
+        r'<[a-zA-Z][^\s>]*\s+[^>]*\bid=(?:"([^"]*)"|\'([^\']*)\'|([^\s/>]+))(?=[\s/>]|$)[^>]*>'
+    )
+    class_attr_pattern = re.compile(r'(?<![\w-])(class=["\'])([^"\']*?)(["\'])')
 
-        def _add_class(match: re.Match[str]) -> str:
-            tag = match.group(0)
+    def _add_class_if_match(match: re.Match[str]) -> str:
+        tag = match.group(0)
+        element_id = match.group(1) or match.group(2) or match.group(3)
+
+        if element_id in keys_set:
             if class_attr_pattern.search(tag):
                 tag = class_attr_pattern.sub(
                     lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
@@ -422,13 +428,6 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
                 )
             else:
                 tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
-            return tag
+        return tag
 
-        html = re.sub(
-            rf'<[a-zA-Z][^>]*\bid=(?:"{safe_key}"|\'{safe_key}\'|{safe_key})(?=[\s/>]|$)[^>]*>',
-            _add_class,
-            html,
-            count=1,
-        )
-
-    return html
+    return tag_pattern.sub(_add_class_if_match, html)
