@@ -12,7 +12,8 @@ def clean_ncm(ncm: str) -> str:
     Returns:
         String contendo apenas dígitos (ex: "851710")
     """
-    return re.sub(r"[^0-9]", "", (ncm or "").strip())
+    # Optimized: using generator comprehension is faster than re.sub for strict digit filtering
+    return "".join(c for c in (ncm or "").strip() if c in "0123456789")
 
 
 def extract_chapter_from_ncm(ncm: str) -> Tuple[Optional[str], Optional[str]]:
@@ -109,5 +110,6 @@ def split_ncm_query(query: str) -> List[str]:
     Ex: "8517, 8518" -> ["8517", "8518"]
     Ex: "4903.90.00 8417" -> ["4903.90.00", "8417"]
     """
-    parts = [p.strip() for p in re.split(r"[;,\s]+", (query or ""))]
-    return [p for p in parts if p]
+    # Optimized: chained replace and split is significantly faster than re.split for multiple delimiters
+    normalized = (query or "").replace(";", " ").replace(",", " ")
+    return [p for p in normalized.split() if p]
