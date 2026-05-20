@@ -408,27 +408,31 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     if not commented_anchor_keys or not html:
         return html
 
-    for key in commented_anchor_keys:
-        safe_key = re.escape(key)
-        class_attr_pattern = re.compile(r'(?<![\w-])(class=["\'])([^"\']*?)(["\'])')
+    target_keys = set(commented_anchor_keys)
+    class_attr_pattern = re.compile(  # NOSONAR
+        r'(?<![\w-])(class=["\'])([^"\']*)(["\'])'
+    )  # NOSONAR
 
-        def _add_class(match: re.Match[str]) -> str:
-            tag = match.group(0)
-            if class_attr_pattern.search(tag):
-                tag = class_attr_pattern.sub(
-                    lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
-                    tag,
-                    count=1,
-                )
-            else:
-                tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
-            return tag
+    def _replacer(match: re.Match[str]) -> str:
+        found_id = match.group(1) or match.group(2) or match.group(3)
+        if found_id not in target_keys:
+            return match.group(0)
 
-        html = re.sub(
-            rf'<[a-zA-Z][^>]*\bid=(?:"{safe_key}"|\'{safe_key}\'|{safe_key})(?=[\s/>]|$)[^>]*>',
-            _add_class,
-            html,
-            count=1,
-        )
+        target_keys.remove(found_id)
 
-    return html
+        tag = match.group(0)
+        if class_attr_pattern.search(tag):
+            tag = class_attr_pattern.sub(
+                lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
+                tag,
+                count=1,
+            )
+        else:
+            tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
+        return tag
+
+    return re.sub(  # NOSONAR
+        r'<[a-zA-Z][^\s>]*\s+(?:[^\s>]+(?:\s+[^\s>]+)*\s+)?id=(?:"([^"]*)"|\'([^\']*)\'|([^\s/>]+))(?=[\s/>]|$)[^>]*>',  # NOSONAR
+        _replacer,
+        html,
+    )
