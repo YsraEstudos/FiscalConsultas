@@ -1,64 +1,88 @@
-import { marked } from 'marked';
-import { useEffect, useRef } from 'react';
-import { replaceElementWithSanitizedHtml } from '../utils/contentSecurity';
+import { marked } from 'marked'
+import { useEffect, useRef } from 'react'
+import { replaceElementWithSanitizedHtml } from '../utils/contentSecurity'
 
 interface MarkdownPaneProps {
-    markdown: string | null | undefined;
-    className?: string;
+  markdown: string | null | undefined
+  className?: string
+  wrapSections?: boolean
 }
 
-export function MarkdownPane({ markdown, className }: MarkdownPaneProps) {
-    const containerRef = useRef<HTMLDivElement>(null);
+function isFiscalResultHtml(content: string): boolean {
+  const trimmed = content.trimStart()
+  if (!trimmed.startsWith('<')) return false
 
-    useEffect(() => {
-        if (!containerRef.current) return;
+  return /\b(?:nesh-|tipi-|section-notas|section-consideracoes|section-definicoes)/.test(
+    trimmed
+  )
+}
 
-        if (!markdown) {
-            containerRef.current.replaceChildren();
-            return;
-        }
+export function MarkdownPane({
+  markdown,
+  className,
+  wrapSections = true,
+}: MarkdownPaneProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
 
-        try {
-            const rawHtml = marked.parse(markdown) as string;
-            replaceElementWithSanitizedHtml(containerRef.current, rawHtml);
+  useEffect(() => {
+    if (!containerRef.current) return
 
-            const container = containerRef.current;
-            const headings = Array.from(container.querySelectorAll('h3.nesh-section'));
+    if (!markdown) {
+      containerRef.current.replaceChildren()
+      return
+    }
 
-            headings.forEach((heading) => {
-                if (heading.parentElement?.classList.contains('nesh-section-card')) return;
+    try {
+      const rawHtml = isFiscalResultHtml(markdown)
+        ? markdown
+        : (marked.parse(markdown) as string)
+      replaceElementWithSanitizedHtml(containerRef.current, rawHtml)
 
-                const section = document.createElement('section');
-                section.className = 'nesh-section-card';
+      if (wrapSections) {
+        const container = containerRef.current
+        const headings = Array.from(
+          container.querySelectorAll('h3.nesh-section')
+        )
 
-                const dataNcm = heading.getAttribute('data-ncm');
-                if (dataNcm) {
-                    section.setAttribute('data-ncm', dataNcm);
-                }
+        headings.forEach((heading) => {
+          if (heading.parentElement?.classList.contains('nesh-section-card'))
+            return
 
-                const body = document.createElement('div');
-                body.className = 'nesh-section-body';
+          const section = document.createElement('section')
+          section.className = 'nesh-section-card'
 
-                const parent = heading.parentNode;
-                if (!parent) return;
+          const dataNcm = heading.getAttribute('data-ncm')
+          if (dataNcm) {
+            section.setAttribute('data-ncm', dataNcm)
+          }
 
-                parent.insertBefore(section, heading);
-                section.appendChild(heading);
+          const body = document.createElement('div')
+          body.className = 'nesh-section-body'
 
-                let next = section.nextSibling;
-                while (next && !(next instanceof HTMLElement && next.matches('h3.nesh-section'))) {
-                    const current = next;
-                    next = next.nextSibling;
-                    body.appendChild(current);
-                }
+          const parent = heading.parentNode
+          if (!parent) return
 
-                section.appendChild(body);
-            });
-        } catch (e) {
-            console.error('Markdown parse error:', e);
-            containerRef.current.textContent = 'Erro ao renderizar conteúdo.';
-        }
-    }, [markdown]);
+          parent.insertBefore(section, heading)
+          section.appendChild(heading)
 
-    return <div ref={containerRef} className={className} />;
+          let next = section.nextSibling
+          while (
+            next &&
+            !(next instanceof HTMLElement && next.matches('h3.nesh-section'))
+          ) {
+            const current = next
+            next = next.nextSibling
+            body.appendChild(current)
+          }
+
+          section.appendChild(body)
+        })
+      }
+    } catch (e) {
+      console.error('Markdown parse error:', e)
+      containerRef.current.textContent = 'Erro ao renderizar conteúdo.'
+    }
+  }, [markdown, wrapSections])
+
+  return <div ref={containerRef} className={className} />
 }
