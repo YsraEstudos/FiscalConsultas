@@ -211,7 +211,7 @@ export function ComparatorModal({ isOpen, onClose, defaultDoc = 'nesh' }: Compar
                             {leftPanel.loading ? (
                                 <Loading />
                             ) : leftPanel.markdown ? (
-                                <MarkdownPane markdown={leftPanel.markdown} className="markdown-body" />
+                                <MarkdownPane markdown={leftPanel.markdown} className="markdown-body" wrapSections={false} />
                             ) : null}
                         </div>
                     </div>
@@ -224,7 +224,7 @@ export function ComparatorModal({ isOpen, onClose, defaultDoc = 'nesh' }: Compar
                             {rightPanel.loading ? (
                                 <Loading />
                             ) : rightPanel.markdown ? (
-                                <MarkdownPane markdown={rightPanel.markdown} className="markdown-body" />
+                                <MarkdownPane markdown={rightPanel.markdown} className="markdown-body" wrapSections={false} />
                             ) : null}
                         </div>
                     </div>

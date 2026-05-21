@@ -37,6 +37,7 @@ describe('MarkdownPane', () => {
                     </h3>
                     <p class="nesh-paragraph">Conteúdo da posição.</p>
                 `}
+                wrapSections={false}
             />
         );
 
