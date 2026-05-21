@@ -50,4 +50,36 @@ describe('MarkdownPane', () => {
         expect(document.querySelector('.nesh-paragraph')).toHaveTextContent('Conteúdo da posição.');
         expect(document.querySelector('pre code')).not.toBeInTheDocument();
     });
+
+    it('wraps standalone NESH headings in section cards by default', async () => {
+        render(
+            <MarkdownPane
+                className="markdown-body"
+                markdown={`
+                    <h3 class="nesh-section" id="pos-85-02" data-ncm="8502">
+                        <strong><a href="#" class="smart-link" data-ncm="8502">85.02</a></strong> - Grupos eletrogêneos.
+                    </h3>
+                    <p class="nesh-paragraph">Conteúdo da posição.</p>
+                `}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('link', { name: '85.02' })).toBeInTheDocument();
+        });
+
+        const sectionCard = document.querySelector('section.nesh-section-card[data-ncm="8502"]');
+        expect(sectionCard).toBeInTheDocument();
+        expect(sectionCard?.getAttribute('data-ncm')).toBe('8502');
+
+        // The original h3 heading is no longer a top-level child of .markdown-body, but is nested inside the section card
+        expect(document.querySelector('.markdown-body > h3.nesh-section')).not.toBeInTheDocument();
+        expect(sectionCard?.querySelector('h3.nesh-section')).toBeInTheDocument();
+
+        // The subsequent sibling elements are nested within the section body
+        const sectionBody = sectionCard?.querySelector('.nesh-section-body');
+        expect(sectionBody).toBeInTheDocument();
+        expect(sectionBody?.querySelector('.nesh-paragraph')).toHaveTextContent('Conteúdo da posição.');
+        expect(document.querySelector('pre code')).not.toBeInTheDocument();
+    });
 });
