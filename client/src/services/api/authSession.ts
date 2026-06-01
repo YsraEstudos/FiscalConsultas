@@ -3,6 +3,7 @@ import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import {
     AUTH_DEBUG_ENABLED,
     getRequestPath,
+    isOptionalAuthRoutePath,
     isPublicRoutePath,
     logAuthorizationAttached,
     logJwtDebug,
@@ -154,8 +155,8 @@ export function isAuthGetterRegistered(): boolean {
     return !!clerkGetToken;
 }
 
-export function shouldAuthenticateRequest(isPublicRoute: boolean): boolean {
-    return !!clerkGetToken && !isPublicRoute;
+export function shouldAuthenticateRequest(isPublicRoute: boolean, isOptionalAuthRoute = false): boolean {
+    return !!clerkGetToken && !isPublicRoute && !isOptionalAuthRoute;
 }
 
 export async function attachAuthorizationHeader(
@@ -175,6 +176,28 @@ export async function attachAuthorizationHeader(
         logJwtDebug('request', normalizedPath, requestId, token, options);
     } catch (error) {
         logRequestTokenFailure(error);
+    }
+}
+
+export async function attachOptionalAuthorizationHeader(
+    config: InternalAxiosRequestConfig,
+    normalizedPath: string,
+    requestId: string,
+): Promise<void> {
+    if (!clerkGetToken) return;
+
+    try {
+        const options = buildTokenGetterOptions(false);
+        const token = await clerkGetToken(options);
+        if (!token) return;
+
+        config.headers.set('Authorization', `Bearer ${token}`);
+        logAuthorizationAttached(requestId, normalizedPath);
+        logJwtDebug('request', normalizedPath, requestId, token, options);
+    } catch (error) {
+        if (AUTH_DEBUG_ENABLED) {
+            logRequestTokenFailure(error);
+        }
     }
 }
 
@@ -199,7 +222,7 @@ export async function retryUnauthorizedRequest(
     requestId: string | undefined,
 ): Promise<RetryUnauthorizedResult> {
     const normalizedPath = normalizeRequestPath(getRequestPath(originalRequest.url));
-    if (isPublicRoutePath(normalizedPath)) {
+    if (isPublicRoutePath(normalizedPath) || isOptionalAuthRoutePath(normalizedPath)) {
         return {
             response: null,
             refreshAttempt: 'skipped',
