@@ -226,7 +226,7 @@ export function AdminDashboard() {
     const refreshDashboard = useCallback(async (forceRefresh = false, showLoading = false) => {
         if (!mountedRef.current) return;
         if (showLoading) setLoading(true);
-        if (showLoading || !dataRef.current) setError(null);
+        if (showLoading || dataRef.current) setError(null);
         try {
             const dashboard = await getAdminDashboard(forceRefresh);
             if (mountedRef.current) {

@@ -110,6 +110,54 @@ async def test_log_search_event_success(fake_db, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_log_search_event_with_auth_sets_tenant_context(monkeypatch):
+    captured_tenants: list[str] = []
+    session = FakeSession()
+
+    async def fake_decode_jwt(token: str) -> dict[str, Any]:
+        assert token == "fake-token"
+        return {
+            "sub": "user123",
+            "email": "user@example.com",
+            "sid": "session123",
+            "org_id": "org123",
+        }
+
+    async def fake_ensure_entities(payload: dict[str, Any], org_id: str) -> None:
+        assert payload["sub"] == "user123"
+        assert org_id == "org123"
+
+    @asynccontextmanager
+    async def fake_get_session():
+        captured_tenants.append(admin_dashboard.tenant_context.get())
+        yield session
+
+    monkeypatch.setattr(admin_dashboard, "decode_clerk_jwt", fake_decode_jwt)
+    monkeypatch.setattr(admin_dashboard, "ensure_clerk_entities", fake_ensure_entities)
+    monkeypatch.setattr(admin_dashboard, "get_session", fake_get_session)
+    monkeypatch.setattr("secrets.randbelow", lambda _: 1)
+
+    req = _build_request("/admin/search-event", auth_header="Bearer fake-token")
+    body = SearchEventRequest(
+        search_type="nesh",
+        search_query="test",
+        device_fingerprint="fp123",
+        device_label="my-pc",
+    )
+
+    res = await admin_dashboard.log_search_event(body, req)
+
+    assert res is None
+    assert captured_tenants == ["org123"]
+    event = session.added[0]
+    assert event.user_id == "user123"
+    assert event.user_email == "user@example.com"
+    assert event.session_id == "session123"
+    assert event.tenant_id == "org123"
+    assert admin_dashboard.tenant_context.get() == ""
+
+
+@pytest.mark.asyncio
 async def test_log_search_event_invalid_type():
     req = _build_request("/admin/search-event")
     body = SearchEventRequest(

@@ -17,8 +17,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, case, delete, func, select
 
 from backend.domain.sqlmodels import SearchEvent
-from backend.infrastructure.db_engine import get_session
-from backend.server.middleware import decode_clerk_jwt
+from backend.infrastructure.db_engine import get_session, tenant_context
+from backend.server.middleware import decode_clerk_jwt, ensure_clerk_entities
 from backend.server.rate_limit import RedisBackedRateLimiter
 from backend.utils.auth import extract_bearer_token, is_admin_payload
 
@@ -112,6 +112,8 @@ async def _extract_user_info(
     )
     session_id = payload.get("sid")
     org_id = payload.get("org_id")
+    if org_id:
+        await ensure_clerk_entities(payload, org_id)
     return user_id, email, session_id, org_id
 
 
@@ -157,18 +159,23 @@ async def log_search_event(body: SearchEventRequest, request: Request):
 
     user_id, email, session_id, org_id = await _extract_user_info(request)
 
-    async with get_session() as session:
-        event = SearchEvent(
-            user_id=user_id,
-            user_email=email,
-            session_id=session_id,
-            device_fingerprint=fingerprint,
-            device_label=(body.device_label or "").strip()[:255] or None,
-            search_type=search_type,
-            search_query=(body.search_query or "").strip()[:300] or None,
-            tenant_id=org_id,
-        )
-        session.add(event)
+    tenant_token = tenant_context.set(org_id) if org_id else None
+    try:
+        async with get_session() as session:
+            event = SearchEvent(
+                user_id=user_id,
+                user_email=email,
+                session_id=session_id,
+                device_fingerprint=fingerprint,
+                device_label=(body.device_label or "").strip()[:255] or None,
+                search_type=search_type,
+                search_query=(body.search_query or "").strip()[:300] or None,
+                tenant_id=org_id,
+            )
+            session.add(event)
+    finally:
+        if tenant_token is not None:
+            tenant_context.reset(tenant_token)
 
     # Opportunistic cleanup: 1-in-100 chance to purge old events
     import secrets

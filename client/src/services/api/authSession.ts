@@ -46,12 +46,34 @@ function buildTokenGetterOptions(skipCache = false): ClerkTokenGetterOptions {
 }
 
 function canonicalizeAuthDetail(detail: string): string {
-    return detail
+    const withoutDiacritics = detail
         .normalize('NFD')
-        .replaceAll(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replaceAll(/[.!?]+$/g, '')
-        .replaceAll(/\s+/g, ' ')
+        .split('')
+        .filter((char) => {
+            const code = char.charCodeAt(0);
+            return code < 0x0300 || code > 0x036f;
+        })
+        .join('')
+        .toLowerCase();
+
+    let end = withoutDiacritics.length;
+    while (end > 0 && ['.', '!', '?'].includes(withoutDiacritics[end - 1])) {
+        end -= 1;
+    }
+
+    return withoutDiacritics
+        .slice(0, end)
+        .trim()
+        .split('')
+        .reduce<string[]>((parts, char) => {
+            if (char.trim() === '') {
+                if (parts[parts.length - 1] !== ' ') parts.push(' ');
+                return parts;
+            }
+            parts.push(char);
+            return parts;
+        }, [])
+        .join('')
         .trim();
 }
 
