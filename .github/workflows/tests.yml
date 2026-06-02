@@ -155,7 +155,7 @@ jobs:
 
       - name: Install Playwright browser dependencies
         working-directory: client
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps --only-shell chromium
 
       - name: Run Playwright P0 offline/service/scroll/auth specs
         working-directory: client
