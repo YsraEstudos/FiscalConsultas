@@ -109,5 +109,7 @@ def split_ncm_query(query: str) -> List[str]:
     Ex: "8517, 8518" -> ["8517", "8518"]
     Ex: "4903.90.00 8417" -> ["4903.90.00", "8417"]
     """
-    parts = [p.strip() for p in re.split(r"[;,\s]+", (query or ""))]
-    return [p for p in parts if p]
+    if not query:
+        return []
+    # Performance optimization: chaining replace and split is significantly faster than re.split
+    return query.replace(";", " ").replace(",", " ").split()
