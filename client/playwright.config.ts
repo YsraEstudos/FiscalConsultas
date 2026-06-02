@@ -15,6 +15,7 @@ function resolveLiveBaseUrl(): string {
 }
 
 const liveBaseUrl = resolveLiveBaseUrl();
+const ciBrowserChannel = process.env.CI ? 'chrome' : undefined;
 
 export default defineConfig({
   testDir: './tests/playwright',
@@ -48,13 +49,14 @@ export default defineConfig({
     {
       name: 'mocked-chromium',
       testIgnore: '**/*.live.spec.ts',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], channel: ciBrowserChannel },
     },
     {
       name: 'live-chromium',
       testMatch: '**/*.live.spec.ts',
       use: {
         ...devices['Desktop Chrome'],
+        channel: ciBrowserChannel,
         baseURL: liveBaseUrl,
       },
     },
