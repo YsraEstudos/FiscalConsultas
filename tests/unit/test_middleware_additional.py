@@ -63,7 +63,9 @@ def test_public_search_event_path_is_exempt_from_tenant_requirement(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_public_search_event_passes_without_auth_in_production_postgres(monkeypatch):
+async def test_public_search_event_passes_without_auth_in_production_postgres(
+    monkeypatch,
+):
     monkeypatch.setattr(middleware.settings.server, "env", "production", raising=False)
     monkeypatch.setattr(
         middleware.settings.database, "engine", "postgresql", raising=False
