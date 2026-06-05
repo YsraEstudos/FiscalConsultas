@@ -11,6 +11,7 @@ import {
     getRequestPath,
     getOrCreateRequestId,
     getResponseRequestId,
+    isOptionalAuthRoutePath,
     isPublicRoutePath,
     logRequestPrepared,
     logUnauthorizedResponse,
@@ -19,6 +20,7 @@ import {
 } from './authLogging';
 import {
     attachAuthorizationHeader,
+    attachOptionalAuthorizationHeader,
     isAuthGetterRegistered,
     retryUnauthorizedRequest,
     shouldAuthenticateRequest,
@@ -44,6 +46,7 @@ export function configureApiAuthTransport(apiInstance: AxiosInstance): void {
         async (config: InternalAxiosRequestConfig) => {
             const normalizedPath = normalizeRequestPath(getRequestPath(config.url));
             const isPublicRoute = isPublicRoutePath(normalizedPath);
+            const isOptionalAuthRoute = isOptionalAuthRoutePath(normalizedPath);
             const requestId = getOrCreateRequestId();
 
             config.headers.set(REQUEST_ID_HEADER, requestId);
@@ -54,7 +57,9 @@ export function configureApiAuthTransport(apiInstance: AxiosInstance): void {
                 isAuthGetterRegistered(),
             );
 
-            if (shouldAuthenticateRequest(isPublicRoute)) {
+            if (isOptionalAuthRoute) {
+                await attachOptionalAuthorizationHeader(config, normalizedPath, requestId);
+            } else if (shouldAuthenticateRequest(isPublicRoute, isOptionalAuthRoute)) {
                 await attachAuthorizationHeader(config, normalizedPath, requestId);
             }
             return config;

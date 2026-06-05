@@ -150,6 +150,14 @@ If there is no formatter, agree on one and add it to CI.
 - The current Pages production deploy prefers the consolidated static R2 bundle at `VITE_FISCAL_R2_BASE_URL`, but also publishes `database/r2/fiscal_offline.meta.json` and `database/r2/fiscal_offline.enc` under `BASE_URL/fiscal-bases/` as a same-origin fallback.
 - Future/source-scoped R2 layout is: `nesh/nesh.meta.json`, `nesh/nesh.enc`, `tipi/tipi.meta.json`, `tipi/tipi.enc`, `nbs/nbs.meta.json`, `nbs/nbs.enc`, `unspsc/unspsc.meta.json`, and `unspsc/unspsc.enc`.
 
+## Admin Analytics
+
+- `GET /api/admin/dashboard` is admin/account telemetry, not fiscal search. Keep
+  it separate from offline-first fiscal query paths.
+- Dashboard queries over `search_events` must stay bounded by retention windows,
+  limited result counts, and migration-backed indexes; avoid nested aggregate
+  subqueries that scan the same retention range more than once.
+
 ## Git hygiene
 
 - One logical change per commit. Commits must build and pass tests in isolation.

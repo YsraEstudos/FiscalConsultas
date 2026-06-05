@@ -343,6 +343,7 @@ class TenantMiddleware:
         "/api/status/details",
         "/api/cache-metrics",
         "/api/metrics",
+        "/api/admin/search-event",
         "/api/admin/reload-secrets",
         "/api/debug/anchors",
         "/api/glossary",

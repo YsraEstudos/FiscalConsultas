@@ -76,4 +76,45 @@ describe('admin dashboard API cache', () => {
 
         expect(refs.apiGetMock).toHaveBeenCalledTimes(2);
     });
+
+    it('logs telemetry warnings in DEV without throwing', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        refs.apiPostMock.mockRejectedValueOnce(new Error('telemetry failed'));
+
+        const { logSearchEvent } = await import('../../src/services/api/adminDashboard');
+
+        expect(() => logSearchEvent({
+            search_type: 'nesh',
+            search_query: '0101',
+            device_fingerprint: 'fp',
+            device_label: 'Chrome / Windows',
+        })).not.toThrow();
+
+        await vi.waitFor(() => {
+            expect(warnSpy).toHaveBeenCalled();
+        });
+        warnSpy.mockRestore();
+    });
+
+    it('force refresh bypasses warm dashboard cache', async () => {
+        const { getAdminDashboard } = await import('../../src/services/api/adminDashboard');
+
+        await getAdminDashboard();
+        await getAdminDashboard(true);
+
+        expect(refs.apiGetMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('deduplicates concurrent forced dashboard refreshes', async () => {
+        const { getAdminDashboard } = await import('../../src/services/api/adminDashboard');
+
+        const [first, second] = await Promise.all([
+            getAdminDashboard(true),
+            getAdminDashboard(true),
+        ]);
+
+        expect(first).toBe(dashboardResponse);
+        expect(second).toBe(dashboardResponse);
+        expect(refs.apiGetMock).toHaveBeenCalledTimes(1);
+    });
 });

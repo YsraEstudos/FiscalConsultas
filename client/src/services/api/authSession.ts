@@ -3,6 +3,7 @@ import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import {
     AUTH_DEBUG_ENABLED,
     getRequestPath,
+    isOptionalAuthRoutePath,
     isPublicRoutePath,
     logAuthorizationAttached,
     logJwtDebug,
@@ -45,12 +46,34 @@ function buildTokenGetterOptions(skipCache = false): ClerkTokenGetterOptions {
 }
 
 function canonicalizeAuthDetail(detail: string): string {
-    return detail
+    const withoutDiacritics = detail
         .normalize('NFD')
-        .replaceAll(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replaceAll(/[.!?]+$/g, '')
-        .replaceAll(/\s+/g, ' ')
+        .split('')
+        .filter((char) => {
+            const code = char.charCodeAt(0);
+            return code < 0x0300 || code > 0x036f;
+        })
+        .join('')
+        .toLowerCase();
+
+    let end = withoutDiacritics.length;
+    while (end > 0 && ['.', '!', '?'].includes(withoutDiacritics[end - 1])) {
+        end -= 1;
+    }
+
+    return withoutDiacritics
+        .slice(0, end)
+        .trim()
+        .split('')
+        .reduce<string[]>((parts, char) => {
+            if (char.trim() === '') {
+                if (parts[parts.length - 1] !== ' ') parts.push(' ');
+                return parts;
+            }
+            parts.push(char);
+            return parts;
+        }, [])
+        .join('')
         .trim();
 }
 
@@ -154,8 +177,8 @@ export function isAuthGetterRegistered(): boolean {
     return !!clerkGetToken;
 }
 
-export function shouldAuthenticateRequest(isPublicRoute: boolean): boolean {
-    return !!clerkGetToken && !isPublicRoute;
+export function shouldAuthenticateRequest(isPublicRoute: boolean, isOptionalAuthRoute = false): boolean {
+    return !!clerkGetToken && !isPublicRoute && !isOptionalAuthRoute;
 }
 
 export async function attachAuthorizationHeader(
@@ -175,6 +198,28 @@ export async function attachAuthorizationHeader(
         logJwtDebug('request', normalizedPath, requestId, token, options);
     } catch (error) {
         logRequestTokenFailure(error);
+    }
+}
+
+export async function attachOptionalAuthorizationHeader(
+    config: InternalAxiosRequestConfig,
+    normalizedPath: string,
+    requestId: string,
+): Promise<void> {
+    if (!clerkGetToken) return;
+
+    try {
+        const options = buildTokenGetterOptions(false);
+        const token = await clerkGetToken(options);
+        if (!token) return;
+
+        config.headers.set('Authorization', `Bearer ${token}`);
+        logAuthorizationAttached(requestId, normalizedPath);
+        logJwtDebug('request', normalizedPath, requestId, token, options);
+    } catch (error) {
+        if (AUTH_DEBUG_ENABLED) {
+            logRequestTokenFailure(error);
+        }
     }
 }
 
@@ -199,7 +244,7 @@ export async function retryUnauthorizedRequest(
     requestId: string | undefined,
 ): Promise<RetryUnauthorizedResult> {
     const normalizedPath = normalizeRequestPath(getRequestPath(originalRequest.url));
-    if (isPublicRoutePath(normalizedPath)) {
+    if (isPublicRoutePath(normalizedPath) || isOptionalAuthRoutePath(normalizedPath)) {
         return {
             response: null,
             refreshAttempt: 'skipped',

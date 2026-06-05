@@ -6,7 +6,7 @@
  * - Pesquisas hoje por tipo (NESH, TIPI, NBS)
  * - Lista de dispositivos com drill-down
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getAdminDashboard, getDeviceHistory } from '../services/api';
 import type {
     AdminDashboardResponse,
@@ -215,23 +215,48 @@ export function AdminDashboard() {
     const [data, setData] = useState<AdminDashboardResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const mountedRef = useRef(true);
+    const dataRef = useRef<AdminDashboardResponse | null>(null);
 
     // Drill-down state
     const [selectedFp, setSelectedFp] = useState<string | null>(null);
     const [drillData, setDrillData] = useState<DeviceHistoryResponse | null>(null);
     const [drillLoading, setDrillLoading] = useState(false);
 
-    useEffect(() => {
-        setLoading(true);
-        setError(null);
-        getAdminDashboard()
-            .then(setData)
-            .catch((err) => {
-                console.error('Failed to load admin dashboard:', err);
+    const refreshDashboard = useCallback(async (forceRefresh = false, showLoading = false) => {
+        if (!mountedRef.current) return;
+        if (showLoading) setLoading(true);
+        if (showLoading || dataRef.current) setError(null);
+        try {
+            const dashboard = await getAdminDashboard(forceRefresh);
+            if (mountedRef.current) {
+                dataRef.current = dashboard;
+                setData(dashboard);
+                setError(null);
+            }
+        } catch (err) {
+            console.error('Failed to load admin dashboard:', err);
+            if (mountedRef.current && !dataRef.current) {
                 setError('Erro ao carregar o painel de administração.');
-            })
-            .finally(() => setLoading(false));
+            }
+        } finally {
+            if (mountedRef.current) setLoading(false);
+        }
     }, []);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        void refreshDashboard(true, true);
+
+        const intervalId = window.setInterval(() => {
+            void refreshDashboard(true, false);
+        }, 15_000);
+
+        return () => {
+            mountedRef.current = false;
+            window.clearInterval(intervalId);
+        };
+    }, [refreshDashboard]);
 
     const handleDeviceClick = useCallback((fp: string) => {
         setSelectedFp(fp);

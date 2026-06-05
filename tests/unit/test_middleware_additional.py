@@ -49,6 +49,65 @@ async def _invoke_middleware(
     return int(start_message["status"]), sent_messages
 
 
+def test_public_search_event_path_is_exempt_from_tenant_requirement(monkeypatch):
+    monkeypatch.setattr(middleware.settings.server, "env", "production", raising=False)
+    monkeypatch.setattr(
+        middleware.settings.database, "engine", "postgresql", raising=False
+    )
+
+    assert middleware.TenantMiddleware._is_public_path("/api/admin/search-event")
+    assert not middleware.TenantMiddleware._is_public_path("/api/admin/dashboard")
+    assert not middleware.TenantMiddleware._is_public_path(
+        "/api/admin/device/fp123/history"
+    )
+
+
+@pytest.mark.asyncio
+async def test_public_search_event_passes_without_auth_in_production_postgres(
+    monkeypatch,
+):
+    monkeypatch.setattr(middleware.settings.server, "env", "production", raising=False)
+    monkeypatch.setattr(
+        middleware.settings.database, "engine", "postgresql", raising=False
+    )
+
+    async def app(scope, receive, send):
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 204,
+                "headers": [],
+            }
+        )
+
+    mw = middleware.TenantMiddleware(app)
+
+    status, _ = await _invoke_middleware(mw, _build_scope("/api/admin/search-event"))
+    assert status == 204
+
+
+@pytest.mark.asyncio
+async def test_protected_admin_routes_still_require_tenant(monkeypatch):
+    monkeypatch.setattr(middleware.settings.server, "env", "production", raising=False)
+    monkeypatch.setattr(
+        middleware.settings.database, "engine", "postgresql", raising=False
+    )
+
+    async def app(scope, receive, send):
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 204,
+                "headers": [],
+            }
+        )
+
+    mw = middleware.TenantMiddleware(app)
+
+    status, _ = await _invoke_middleware(mw, _build_scope("/api/admin/dashboard"))
+    assert status == 401
+
+
 def test_get_payload_exp_variants():
     assert middleware._get_payload_exp({"exp": 123}) == pytest.approx(123.0)
     assert middleware._get_payload_exp({"exp": "123.5"}) == pytest.approx(123.5)

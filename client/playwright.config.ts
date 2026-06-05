@@ -15,6 +15,8 @@ function resolveLiveBaseUrl(): string {
 }
 
 const liveBaseUrl = resolveLiveBaseUrl();
+const ciBrowserChannel = process.env.CI ? 'chrome' : undefined;
+const failureVideoMode = process.env.CI ? 'off' : 'retain-on-failure';
 
 export default defineConfig({
   testDir: './tests/playwright',
@@ -29,7 +31,7 @@ export default defineConfig({
     baseURL: defaultBaseUrl,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    video: failureVideoMode,
   },
   webServer: {
     command: 'npm run build && npx vite preview --host localhost --port 4173 --strictPort',
@@ -48,13 +50,14 @@ export default defineConfig({
     {
       name: 'mocked-chromium',
       testIgnore: '**/*.live.spec.ts',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], channel: ciBrowserChannel },
     },
     {
       name: 'live-chromium',
       testMatch: '**/*.live.spec.ts',
       use: {
         ...devices['Desktop Chrome'],
+        channel: ciBrowserChannel,
         baseURL: liveBaseUrl,
       },
     },

@@ -3,6 +3,7 @@ import type { InternalAxiosRequestConfig } from 'axios';
 import type { ClerkTokenGetterOptions } from './authTypes';
 
 const PUBLIC_ROUTES = ['/status', '/glossary', '/services/', '/database/'];
+const OPTIONAL_AUTH_ROUTES = ['/admin/search-event'];
 const JWT_DEBUG_FIELDS = ['iss', 'sub', 'sid', 'azp', 'aud', 'org_id', 'exp', 'iat', 'nbf'] as const;
 
 export const AUTH_DEBUG_ENABLED =
@@ -30,6 +31,10 @@ export function normalizeRequestPath(path: string): string {
 
 export function isPublicRoutePath(path: string): boolean {
     return PUBLIC_ROUTES.some((route) => path.startsWith(route));
+}
+
+export function isOptionalAuthRoutePath(path: string): boolean {
+    return OPTIONAL_AUTH_ROUTES.some((route) => path.startsWith(route));
 }
 
 export function logRequestPrepared(

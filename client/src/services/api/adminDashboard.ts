@@ -31,8 +31,10 @@ function isDashboardCacheFresh(): boolean {
 export function logSearchEvent(data: SearchEventPayload): void {
     api.post('/admin/search-event', data).then(() => {
         dashboardCache = null;
-    }).catch(() => {
-        // Intentionally silent — telemetry must never block or toast errors
+    }).catch((error) => {
+        if (import.meta.env.DEV) {
+            console.warn('[adminDashboard] telemetry failed', error);
+        }
     });
 }
 
@@ -41,7 +43,7 @@ export async function getAdminDashboard(forceRefresh = false): Promise<AdminDash
         return dashboardCache.data;
     }
 
-    if (!forceRefresh && dashboardRequest) {
+    if (dashboardRequest) {
         return dashboardRequest;
     }
 
