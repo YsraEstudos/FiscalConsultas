@@ -215,15 +215,6 @@ async def get_admin_dashboard(request: Request) -> DashboardResponse:
             searches_by_type[row[0]] = row[1]
             total_today += row[1]
 
-        recent_device_fingerprints = (
-            select(SearchEvent.device_fingerprint)
-            .where(SearchEvent.created_at >= retention_cutoff)
-            .group_by(SearchEvent.device_fingerprint)
-            .order_by(func.max(SearchEvent.created_at).desc())
-            .limit(200)
-            .subquery()
-        )
-
         # Device summaries stay within the retention window, so stale rows that
         # have not been purged yet cannot make the admin panel slow.
         devices_result = await session.execute(
@@ -241,16 +232,10 @@ async def get_admin_dashboard(request: Request) -> DashboardResponse:
                     )
                 ).label("today"),
             )
-            .where(
-                and_(
-                    SearchEvent.created_at >= retention_cutoff,
-                    SearchEvent.device_fingerprint.in_(
-                        select(recent_device_fingerprints.c.device_fingerprint)
-                    ),
-                )
-            )
+            .where(SearchEvent.created_at >= retention_cutoff)
             .group_by(SearchEvent.device_fingerprint)
             .order_by(func.max(SearchEvent.created_at).desc())
+            .limit(200)
         )
 
         devices: list[DeviceSummary] = []

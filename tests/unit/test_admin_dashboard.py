@@ -188,7 +188,9 @@ async def test_dashboard_routes_allow_admin(fake_db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_dashboard_device_query_uses_retention_window(fake_db, monkeypatch):
+async def test_dashboard_device_query_uses_single_limited_retention_window(
+    fake_db, monkeypatch
+):
     async def fake_decode_jwt(token: str) -> dict[str, Any]:
         return {
             "email": "admin@example.com",
@@ -216,4 +218,7 @@ async def test_dashboard_device_query_uses_retention_window(fake_db, monkeypatch
     )
     assert device_query
     assert "search_events.created_at >= " in device_query
-    assert "IN (SELECT" in device_query
+    assert "GROUP BY search_events.device_fingerprint" in device_query
+    assert "ORDER BY max(search_events.created_at) DESC" in device_query
+    assert "LIMIT " in device_query
+    assert "IN (SELECT" not in device_query

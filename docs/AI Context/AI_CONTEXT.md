@@ -136,6 +136,14 @@ If there is no formatter, agree on one and add it to CI.
   them, never commit them.
 - Apply least-privilege: request only the permissions a module actually needs.
 
+## Admin Analytics
+
+- `GET /api/admin/dashboard` is admin/account telemetry, not fiscal search. Keep
+  it separate from offline-first fiscal query paths.
+- Dashboard queries over `search_events` must stay bounded by retention windows,
+  limited result counts, and migration-backed indexes; avoid nested aggregate
+  subqueries that scan the same retention range more than once.
+
 ## Git hygiene
 
 - One logical change per commit. Commits must build and pass tests in isolation.
