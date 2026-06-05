@@ -1,13 +1,13 @@
 """Add dashboard-friendly search event indexes.
 
-Revision ID: 016_search_events_dashboard_indexes
+Revision ID: 016_search_events_idx
 Revises: 015_search_events
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "016_search_events_dashboard_indexes"
+revision = "016_search_events_idx"
 down_revision = "015_search_events"
 branch_labels = None
 depends_on = None

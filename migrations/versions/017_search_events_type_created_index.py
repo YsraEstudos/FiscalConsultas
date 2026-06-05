@@ -1,14 +1,14 @@
 """Add dashboard search type/date index.
 
-Revision ID: 017_search_events_type_created_index
-Revises: 016_search_events_dashboard_indexes
+Revision ID: 017_search_events_type
+Revises: 016_search_events_idx
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "017_search_events_type_created_index"
-down_revision = "016_search_events_dashboard_indexes"
+revision = "017_search_events_type"
+down_revision = "016_search_events_idx"
 branch_labels = None
 depends_on = None
 
