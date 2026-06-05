@@ -121,6 +121,10 @@ def test_safe_get_unverified_header_parses_payload_and_rejects_malformed():
     assert middleware._safe_get_unverified_header(".payload.sig") == {}
 
 
+def test_admin_search_event_is_public_path():
+    assert middleware.TenantMiddleware._is_public_path("/api/admin/search-event")
+
+
 def test_jwt_observability_logs_do_not_include_token_fingerprint(monkeypatch):
     warning_messages: list[str] = []
     debug_calls: list[tuple[str, str]] = []
@@ -787,6 +791,30 @@ async def test_dispatch_does_not_apply_dev_tenant_fallback_for_remote_client(
     remote_scope["client"] = ("203.0.113.40", 12345)
 
     status, _ = await _invoke_middleware(mw, remote_scope)
+    assert status == 200
+    assert seen == [""]
+    assert tenant_context.get() == ""
+
+
+@pytest.mark.asyncio
+async def test_admin_search_event_bypasses_tenant_rejection_in_prod_postgres(
+    monkeypatch,
+):
+    monkeypatch.setattr(middleware.settings.server, "env", "production", raising=False)
+    monkeypatch.setattr(
+        middleware.settings.database, "engine", "postgresql", raising=False
+    )
+
+    seen = []
+
+    async def app(scope, receive, send):
+        seen.append(tenant_context.get())
+        response = JSONResponse({"ok": True})
+        await response(scope, receive, send)
+
+    mw = middleware.TenantMiddleware(app=app)
+    status, _ = await _invoke_middleware(mw, _build_scope("/api/admin/search-event"))
+
     assert status == 200
     assert seen == [""]
     assert tenant_context.get() == ""
