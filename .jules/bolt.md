@@ -1,3 +1,6 @@
 ## 2024-04-29 - [Bounded LRU Cache for Stemmer]
 **Learning:** Instantiating `PortugueseStemmer` inside the `NeshTextProcessor` facade and directly calling its `stem` method causes redundant CPU-intensive text normalizations for the same words, particularly across large datasets or repetitive FTS queries where the vocabulary is bounded. Applying `@functools.lru_cache` to a module-level proxy function significantly speeds up NLP stemming. Never apply `lru_cache` directly to an instance method.
 **Action:** Always use a module-level bounded `lru_cache` on a decoupled proxy function when caching results from an instance method (e.g., stemming) across multiple instances to avoid including `self` in the cache key and causing cache misses or memory leaks.
+## 2024-04-29 - [String operations are faster than regex in hot paths]
+**Learning:** Using chained `.replace()` and `.split()` is significantly faster than `re.split` for simple delimiters. Furthermore, using generator comprehensions for filtering digits is faster than `re.sub` with regex. Removing whitespaces with `"".join(s.split())` is way faster than `re.sub(r"\s+", "", s)`.
+**Action:** Always prefer basic string operations like `replace`, `split`, `join` and generator comprehensions over regex when the operations are simple, especially in hot paths.
