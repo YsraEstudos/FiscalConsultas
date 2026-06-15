@@ -408,27 +408,45 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     if not commented_anchor_keys or not html:
         return html
 
-    for key in commented_anchor_keys:
-        safe_key = re.escape(key)
-        class_attr_pattern = re.compile(r'(?<![\w-])(class=["\'])([^"\']*?)(["\'])')
+    from collections import Counter
 
-        def _add_class(match: re.Match[str]) -> str:
-            tag = match.group(0)
-            if class_attr_pattern.search(tag):
-                tag = class_attr_pattern.sub(
-                    lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
-                    tag,
-                    count=1,
-                )
-            else:
-                tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
+    keys_counts = Counter(commented_anchor_keys)
+
+    # ⚡ BOLT PERFORMANCE OPTIMIZATION:
+    # Replaced an O(N*M) loop that repeatedly executed `re.sub` across the entire HTML
+    # string with an O(1) set lookup and a single-pass regex replacement.
+    # We strictly match only tags containing the target attribute to avoid slow Python callbacks.
+    tag_pattern = re.compile(r"<[a-zA-Z][^\s>]*\s+[^>]*id=[^>]*>")
+    id_pattern = re.compile(r'(?<=\s)id=(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))')
+    class_attr_pattern = re.compile(r'(?<![\w-])(class=["\'])([^"\']*)(["\'])')
+
+    def _process_tag(match: re.Match[str]) -> str:
+        tag = match.group(0)
+        id_match = id_pattern.search(tag)
+        if not id_match:
             return tag
 
-        html = re.sub(
-            rf'<[a-zA-Z][^>]*\bid=(?:"{safe_key}"|\'{safe_key}\'|{safe_key})(?=[\s/>]|$)[^>]*>',
-            _add_class,
-            html,
-            count=1,
-        )
+        found_id = id_match.group(1) or id_match.group(2) or id_match.group(3)
+        count = keys_counts.get(found_id, 0)
+        if not count:
+            return tag
 
-    return html
+        if class_attr_pattern.search(tag):
+            tag = class_attr_pattern.sub(
+                lambda m: (
+                    f"{m.group(1)}{m.group(2)}{' has-comment' * count}{m.group(3)}"
+                ),
+                tag,
+                count=1,
+            )
+        else:
+            tag = re.sub(
+                r"(\s*/?>)$",
+                f' class="{"has-comment"}{" has-comment" * (count - 1)}"\\1',
+                tag,
+            )
+
+        keys_counts[found_id] = 0
+        return tag
+
+    return tag_pattern.sub(_process_tag, html)
