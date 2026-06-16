@@ -107,7 +107,7 @@ class _CandidateEntry:
 def _clean_page_lines(text: str) -> list[str]:
     lines: list[str] = []
     for raw_line in text.splitlines():
-        line = re.sub(r"\s+", " ", raw_line).strip()
+        line = " ".join(raw_line.split())
         if not line or _is_page_header(line):
             continue
         lines.append(line)
