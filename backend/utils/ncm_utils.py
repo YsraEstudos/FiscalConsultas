@@ -12,7 +12,7 @@ def clean_ncm(ncm: str) -> str:
     Returns:
         String contendo apenas dígitos (ex: "851710")
     """
-    return re.sub(r"[^0-9]", "", (ncm or "").strip())
+    return "".join(c for c in (ncm or "") if c in "0123456789")
 
 
 def extract_chapter_from_ncm(ncm: str) -> Tuple[Optional[str], Optional[str]]:
@@ -34,7 +34,7 @@ def extract_chapter_from_ncm(ncm: str) -> Tuple[Optional[str], Optional[str]]:
           - None quando não há dígitos suficientes.
     """
     raw = (ncm or "").strip()
-    compact = re.sub(r"\s+", "", raw)
+    compact = "".join(raw.split())
     # Preserve short subposition like 8419.8 or 8419.80 if user typed it explicitly
     if re.fullmatch(r"\d{4}\.\d{1,2}", compact):
         chapter = compact[:2].zfill(2)
