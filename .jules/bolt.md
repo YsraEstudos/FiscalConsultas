@@ -1,3 +1,6 @@
 ## 2024-04-29 - [Bounded LRU Cache for Stemmer]
 **Learning:** Instantiating `PortugueseStemmer` inside the `NeshTextProcessor` facade and directly calling its `stem` method causes redundant CPU-intensive text normalizations for the same words, particularly across large datasets or repetitive FTS queries where the vocabulary is bounded. Applying `@functools.lru_cache` to a module-level proxy function significantly speeds up NLP stemming. Never apply `lru_cache` directly to an instance method.
 **Action:** Always use a module-level bounded `lru_cache` on a decoupled proxy function when caching results from an instance method (e.g., stemming) across multiple instances to avoid including `self` in the cache key and causing cache misses or memory leaks.
+## 2025-02-23 - Strict String Replacements
+**Learning:** `str.isdigit()` returns `True` for Unicode digits (like superscripts e.g., `²`), which makes it unsafe as a direct drop-in replacement for strict ASCII regexes like `re.sub(r'[^0-9]', '', s)` or `re.sub(r'\D', '', s)` if the application expects strictly standard decimal digits.
+**Action:** When replacing regexes for removing non-numeric characters for performance, use a generator comprehension checking against a strict ASCII string (e.g., `"".join(c for c in s if c in "0123456789")`) to maintain exact behavior while avoiding regex engine overhead.

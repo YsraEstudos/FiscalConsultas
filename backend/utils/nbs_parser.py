@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import re
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,12 +26,14 @@ def normalize_nbs_text(text: str) -> str:
     """Lowercase, remove accents and collapse whitespace for search."""
     normalized = unicodedata.normalize("NFKD", text or "")
     without_accents = "".join(ch for ch in normalized if not unicodedata.combining(ch))
-    return re.sub(r"\s+", " ", without_accents).strip().lower()
+    # ⚡ Bolt: str.split is faster than regex for collapsing whitespace
+    return " ".join(without_accents.split()).lower()
 
 
 def clean_nbs_code(code: str) -> str:
     """Return an NBS code with punctuation removed."""
-    return re.sub(r"\D", "", code or "")
+    # ⚡ Bolt: str comprehension with ASCII digits is faster and safer than regex/isdigit
+    return "".join(c for c in (code or "") if c in "0123456789")
 
 
 def build_nbs_code_variants(code: str) -> tuple[str, ...]:
