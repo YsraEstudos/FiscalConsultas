@@ -1,3 +1,6 @@
 ## 2024-04-29 - [Bounded LRU Cache for Stemmer]
 **Learning:** Instantiating `PortugueseStemmer` inside the `NeshTextProcessor` facade and directly calling its `stem` method causes redundant CPU-intensive text normalizations for the same words, particularly across large datasets or repetitive FTS queries where the vocabulary is bounded. Applying `@functools.lru_cache` to a module-level proxy function significantly speeds up NLP stemming. Never apply `lru_cache` directly to an instance method.
 **Action:** Always use a module-level bounded `lru_cache` on a decoupled proxy function when caching results from an instance method (e.g., stemming) across multiple instances to avoid including `self` in the cache key and causing cache misses or memory leaks.
+## 2025-02-28 - Optimizing multi-delimiter string splits
+**Learning:** In this codebase's Python environment, for simple delimiter splitting (like semicolons and commas), chaining `.replace(";", " ").replace(",", " ").split()` is roughly 5x faster than using `re.split(r"[;,\s]+", s)` combined with list comprehensions for stripping/filtering empty strings.
+**Action:** When parsing basic query strings or handling multi-delimiter string splits without complex regex requirements, prefer chained `.replace().split()` over `re.split()` to avoid regex compilation and iteration overhead.
