@@ -408,27 +408,36 @@ def inject_comment_marks(html: str, commented_anchor_keys: list[str]) -> str:
     if not commented_anchor_keys or not html:
         return html
 
-    for key in commented_anchor_keys:
-        safe_key = re.escape(key)
-        class_attr_pattern = re.compile(r'(?<![\w-])(class=["\'])([^"\']*?)(["\'])')
+    target_keys = set(commented_anchor_keys)
+    tag_pattern = re.compile(r"<[a-zA-Z][^\s>]*\s+[^>]*id=[^>]*>")
+    id_pattern = re.compile(r'(?<![\w-])id=(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))')
+    class_attr_pattern = re.compile(r'(?<![\w-])(class=["\'])([^"\']*)(["\'])')
 
-        def _add_class(match: re.Match[str]) -> str:
-            tag = match.group(0)
-            if class_attr_pattern.search(tag):
-                tag = class_attr_pattern.sub(
-                    lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
-                    tag,
-                    count=1,
-                )
-            else:
-                tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
+    def _replace_tag(match: re.Match[str]) -> str:
+        tag = match.group(0)
+
+        id_match = id_pattern.search(tag)
+        if not id_match:
             return tag
 
-        html = re.sub(
-            rf'<[a-zA-Z][^>]*\bid=(?:"{safe_key}"|\'{safe_key}\'|{safe_key})(?=[\s/>]|$)[^>]*>',
-            _add_class,
-            html,
-            count=1,
-        )
+        tag_id = None
+        for i in range(1, 4):
+            if id_match.group(i) is not None:
+                tag_id = id_match.group(i)
+                break
 
-    return html
+        if tag_id not in target_keys:
+            return tag
+
+        if class_attr_pattern.search(tag):
+            tag = class_attr_pattern.sub(
+                lambda m: f"{m.group(1)}{m.group(2)} has-comment{m.group(3)}",
+                tag,
+                count=1,
+            )
+        else:
+            tag = re.sub(r"(\s*/?>)$", ' class="has-comment"\\1', tag)
+
+        return tag
+
+    return tag_pattern.sub(_replace_tag, html)

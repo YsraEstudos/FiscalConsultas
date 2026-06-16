@@ -1,3 +1,7 @@
 ## 2024-04-29 - [Bounded LRU Cache for Stemmer]
 **Learning:** Instantiating `PortugueseStemmer` inside the `NeshTextProcessor` facade and directly calling its `stem` method causes redundant CPU-intensive text normalizations for the same words, particularly across large datasets or repetitive FTS queries where the vocabulary is bounded. Applying `@functools.lru_cache` to a module-level proxy function significantly speeds up NLP stemming. Never apply `lru_cache` directly to an instance method.
 **Action:** Always use a module-level bounded `lru_cache` on a decoupled proxy function when caching results from an instance method (e.g., stemming) across multiple instances to avoid including `self` in the cache key and causing cache misses or memory leaks.
+
+## 2024-05-22 - [O(1) lookups for multiple regex injections]
+**Learning:** When injecting classes into an HTML string based on a list of target IDs (e.g., `inject_comment_marks`), iterating over the target keys and running a full regex replacement for each key results in O(N*K) complexity, which becomes a major bottleneck for large strings and many targets. A single-pass regex replacement that locates all opening tags and checks their IDs against an O(1) set of target keys is significantly faster.
+**Action:** Always use a single-pass regex to locate targets and an O(1) set lookup rather than iterating over the keys and running multiple full string replacements when performing batch marker injections on large strings.
