@@ -34,7 +34,8 @@ def extract_chapter_from_ncm(ncm: str) -> Tuple[Optional[str], Optional[str]]:
           - None quando não há dígitos suficientes.
     """
     raw = (ncm or "").strip()
-    compact = re.sub(r"\s+", "", raw)
+    # Performance: Use "".join(raw.split()) instead of re.sub for faster whitespace removal
+    compact = "".join(raw.split())
     # Preserve short subposition like 8419.8 or 8419.80 if user typed it explicitly
     if re.fullmatch(r"\d{4}\.\d{1,2}", compact):
         chapter = compact[:2].zfill(2)

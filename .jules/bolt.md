@@ -1,3 +1,6 @@
 ## 2024-04-29 - [Bounded LRU Cache for Stemmer]
 **Learning:** Instantiating `PortugueseStemmer` inside the `NeshTextProcessor` facade and directly calling its `stem` method causes redundant CPU-intensive text normalizations for the same words, particularly across large datasets or repetitive FTS queries where the vocabulary is bounded. Applying `@functools.lru_cache` to a module-level proxy function significantly speeds up NLP stemming. Never apply `lru_cache` directly to an instance method.
 **Action:** Always use a module-level bounded `lru_cache` on a decoupled proxy function when caching results from an instance method (e.g., stemming) across multiple instances to avoid including `self` in the cache key and causing cache misses or memory leaks.
+## 2024-05-15 - [Faster whitespace normalization in strings]
+**Learning:** For removing or collapsing whitespace from a string, using regex like `re.sub(r"\s+", "", text)` or `re.sub(r"\s+", " ", text).strip()` is significantly slower than string split and join: `"".join(text.split())` or `" ".join(text.split())`.
+**Action:** Always prefer `"".join(text.split())` or `" ".join(text.split())` over `re.sub()` for removing or collapsing whitespace.
