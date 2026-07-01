@@ -27,7 +27,8 @@ def normalize_nbs_text(text: str) -> str:
     """Lowercase, remove accents and collapse whitespace for search."""
     normalized = unicodedata.normalize("NFKD", text or "")
     without_accents = "".join(ch for ch in normalized if not unicodedata.combining(ch))
-    return re.sub(r"\s+", " ", without_accents).strip().lower()
+    # Optimized whitespace collapsing via split/join instead of re.sub
+    return " ".join(without_accents.split()).lower()
 
 
 def clean_nbs_code(code: str) -> str:
