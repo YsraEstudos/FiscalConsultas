@@ -27,12 +27,14 @@ def normalize_nbs_text(text: str) -> str:
     """Lowercase, remove accents and collapse whitespace for search."""
     normalized = unicodedata.normalize("NFKD", text or "")
     without_accents = "".join(ch for ch in normalized if not unicodedata.combining(ch))
-    return re.sub(r"\s+", " ", without_accents).strip().lower()
+    # Bolt optimization: str.split() + join is faster than regex for whitespace collapsing
+    return " ".join(without_accents.split()).lower()
 
 
 def clean_nbs_code(code: str) -> str:
     """Return an NBS code with punctuation removed."""
-    return re.sub(r"\D", "", code or "")
+    # Bolt optimization: generator comprehension avoids regex overhead
+    return "".join(c for c in (code or "") if c in "0123456789")
 
 
 def build_nbs_code_variants(code: str) -> tuple[str, ...]:
