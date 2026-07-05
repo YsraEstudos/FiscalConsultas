@@ -1,3 +1,6 @@
 ## 2024-04-29 - [Bounded LRU Cache for Stemmer]
 **Learning:** Instantiating `PortugueseStemmer` inside the `NeshTextProcessor` facade and directly calling its `stem` method causes redundant CPU-intensive text normalizations for the same words, particularly across large datasets or repetitive FTS queries where the vocabulary is bounded. Applying `@functools.lru_cache` to a module-level proxy function significantly speeds up NLP stemming. Never apply `lru_cache` directly to an instance method.
 **Action:** Always use a module-level bounded `lru_cache` on a decoupled proxy function when caching results from an instance method (e.g., stemming) across multiple instances to avoid including `self` in the cache key and causing cache misses or memory leaks.
+## 2024-05-18 - [Optimizing String Utilities in ncm_utils]
+**Learning:** Using basic string methods like `.split()`, `.replace()`, and generator comprehensions for specific tasks (whitespace removal, splitting by specific characters, retaining numeric characters) is significantly faster than using regular expressions (`re.sub` and `re.split`) in Python.
+**Action:** Always prefer basic string manipulation methods over `re` module equivalents when the logic is straightforward and highly repetitive, as it yields substantial performance improvements.
